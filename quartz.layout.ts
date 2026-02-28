@@ -39,7 +39,17 @@ export const defaultContentPageLayout: PageLayout = {
       ],
     }),
     Component.Explorer({
-      title: "文章导航"}),
+      title: "文章导航",
+      
+      // 🌟 核心优化 1：默认收起所有文件夹，防止浏览器在冷启动时渲染全量 DOM 树
+      folderDefaultState: "collapsed", 
+      
+      // 🌟 核心优化 2：关闭本地状态恢复。阻止 JS 在页面刚加载时去深度遍历几千个节点计算开合状态
+      useSavedState: false, 
+      
+      // 🌟 核心优化 3（可选）：点击文件夹名字时折叠/展开，而不是当做链接跳转
+      folderClickBehavior: "collapse", 
+    }),
   ],
   right: [
     Component.DesktopOnly(Component.TableOfContents()),
@@ -63,7 +73,17 @@ export const defaultListPageLayout: PageLayout = {
       ],
     }),
     Component.Explorer({
-      title: "文章导航"}),
+      title: "文章导航",
+      
+      // 🌟 核心优化 1：默认收起所有文件夹，防止浏览器在冷启动时渲染全量 DOM 树
+      folderDefaultState: "collapsed", 
+      
+      // 🌟 核心优化 2：关闭本地状态恢复。阻止 JS 在页面刚加载时去深度遍历几千个节点计算开合状态
+      useSavedState: false, 
+      
+      // 🌟 核心优化 3（可选）：点击文件夹名字时折叠/展开，而不是当做链接跳转
+      folderClickBehavior: "collapse", 
+    }),
   ],
   right: [],
 }
