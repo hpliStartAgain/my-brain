@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - v4
-  workflow_dispatch:
+  workflow_dispatch: 
 
 jobs:
   build-and-deploy:
@@ -18,36 +18,35 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22 # 升级到 Quartz 4.5.2 所需的 Node 22 环境
+          node-version: 22
 
       - name: Install Dependencies and Build
         run: |
           npm ci
           npx quartz build
 
-      - name: Deploy via Rsync with MTU Bypass
+      - name: Deploy via Single Archive
         env:
           SSH_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
           SERVER_IP: ${{ secrets.SERVER_IP }}
           SERVER_USER: ${{ secrets.SERVER_USER }}
         run: |
           echo "=== 0. SRE 网络底层 Hack: 规避 PMTU 黑洞 ==="
-          # 强行将 GitHub 构建机的网卡 MTU 从 1500 降到 1200，保证每个数据包都能顺利穿透骨干网
           sudo ip link set dev eth0 mtu 1200
-
+          
           echo "=== 1. 初始化 SSH 环境 ==="
           mkdir -p ~/.ssh
           echo "$SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
-
-          echo "=== 2. 信任服务器指纹 ==="
           ssh-keyscan -H "$SERVER_IP" >> ~/.ssh/known_hosts
-
-          echo "=== 3. 握手连通性测试 ==="
-          ssh -i ~/.ssh/id_ed25519 $SERVER_USER@$SERVER_IP "echo 'SSH 控制流连通性测试成功！'"
-
-          echo "=== 4. 开始同步数据 (Rsync 增量模式) ==="
-          # 使用 rsync，开启 -v 显示每个文件的传输进度，加入 ServerAlive 保持 TCP 活性
-          rsync -avz --progress -e "ssh -i ~/.ssh/id_ed25519 -o ServerAliveInterval=15 -o ServerAliveCountMax=3" public/ $SERVER_USER@$SERVER_IP:/opt/blog/html/
-
-          echo "=== 部署完成！ ==="
+          
+          echo "=== 2. 本地打包静态文件 (对抗高延迟小文件风暴) ==="
+          tar -czf blog_dist.tar.gz -C public .
+          
+          echo "=== 3. 传输单一压缩包 ==="
+          rsync -avz --progress -e "ssh -i ~/.ssh/id_ed25519" blog_dist.tar.gz $SERVER_USER@$SERVER_IP:/tmp/
+          
+          echo "=== 4. 远端解压与覆盖部署 ==="
+          ssh -i ~/.ssh/id_ed25519 $SERVER_USER@$SERVER_IP "tar -xzf /tmp/blog_dist.tar.gz -C /opt/blog/html/ && rm -f /tmp/blog_dist.tar.gz"
+          
+          echo "=== 🚀 部署完成！ ==="
