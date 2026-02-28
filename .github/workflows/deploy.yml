@@ -25,9 +25,8 @@ jobs:
           npm ci
           npx quartz build
 
-      - name: Deploy via Native SSH and SCP
+      - name: Deploy via SSH Pipeline
         env:
-          # 将 Secrets 注入为环境变量
           SSH_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
           SERVER_IP: ${{ secrets.SERVER_IP }}
           SERVER_USER: ${{ secrets.SERVER_USER }}
@@ -37,15 +36,14 @@ jobs:
           echo "$SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
 
-          echo "=== 2. 扫描并信任服务器指纹 ==="
-          # 这一步防止 SSH 首次连接时卡在询问 "Are you sure you want to continue connecting (yes/no)?"
+          echo "=== 2. 信任服务器指纹 ==="
           ssh-keyscan -H "$SERVER_IP" >> ~/.ssh/known_hosts
 
-          echo "=== 3. 握手连通性测试 (开启 -v 调试模式) ==="
-          # 如果这里报错，日志会精确显示是密钥不对还是网络不通
-          ssh -v -i ~/.ssh/id_ed25519 $SERVER_USER@$SERVER_IP "echo 'SSH 连通性测试成功！服务器正在响应。'"
+          echo "=== 3. 握手连通性测试 ==="
+          ssh -i ~/.ssh/id_ed25519 $SERVER_USER@$SERVER_IP "echo 'SSH 连通性测试成功！'"
 
-          echo "=== 4. 开始传输静态文件 ==="
-          # 递归传输 public 目录下的所有文件到服务器的 Nginx 挂载目录
-          scp -i ~/.ssh/id_ed25519 -r public/* $SERVER_USER@$SERVER_IP:/opt/blog/html/
+          echo "=== 4. 开始传输静态文件 (SRE Tar Pipe 模式) ==="
+          # 在本地把 public 目录打包，通过 SSH 标准输入流传到服务器，并在服务器直接解压！
+          tar -czf - -C public . | ssh -i ~/.ssh/id_ed25519 $SERVER_USER@$SERVER_IP "tar -xzf - -C /opt/blog/html/"
+
           echo "=== 部署完成！ ==="
