@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - v4
-  workflow_dispatch: # <--- 就是加这一行，它是 GitHub Actions 允许界面手动执行的魔法指令
+  workflow_dispatch:
 
 jobs:
   build-and-deploy:
@@ -18,7 +18,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22 # 升级到 Quartz 4.5.2 所需的 Node 22 环境
 
       - name: Install Dependencies and Build
         run: |
