@@ -34,3 +34,4 @@ jobs:
           source: "public/*"
           target: "/opt/blog/html/"
           strip_components: 1
+          debug: true
