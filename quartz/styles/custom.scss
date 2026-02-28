@@ -1,3 +1,31 @@
 @use "./base.scss";
 
 // put your custom CSS here!
+/* 1. 扩大页面整体中心区域的宽度 (默认较窄，适合纯文本，这里放大以适应架构图和代码块) */
+:root {
+  --pageWidth: 950px; /* 您可以根据显示器大小在 800 - 1200 之间微调 */
+}
+
+/* 2. 优化正文阅读的“呼吸感” */
+article {
+  /* 增加基础行高 */
+  line-height: 1.85; 
+  /* 稍微增大基础字号 */
+  font-size: 1.05rem; 
+  
+  /* 增加段落之间的垂直间距 */
+  p {
+    margin-bottom: 1.5rem; 
+  }
+
+  /* 增加各级标题上方的留白，让结构更分明 */
+  h1, h2, h3, h4 {
+    margin-top: 2.5rem;
+    margin-bottom: 1.2rem;
+  }
+  
+  /* 让列表元素之间也稍微宽松一点 */
+  li {
+    margin-bottom: 0.5rem;
+  }
+}
