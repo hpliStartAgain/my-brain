@@ -28,9 +28,19 @@ export class FileTrieNode<T extends FileTrieData = ContentDetails> {
   }
 
   get displayName(): string {
+    if (this.displayNameOverride) return this.displayNameOverride
+
+    // For file nodes (not folders), prefer the original filename from filePath
+    // so that number prefixes like "08" are preserved
+    if (!this.isFolder && this.data?.filePath) {
+      const parts = this.data.filePath.split("/")
+      const fileName = parts[parts.length - 1].replace(/\.[^.]+$/, "")
+      if (fileName) return fileName
+    }
+
     const nonIndexTitle = this.data?.title === "index" ? undefined : this.data?.title
     return (
-      this.displayNameOverride ?? nonIndexTitle ?? this.fileSegmentHint ?? this.slugSegment ?? ""
+      this.fileSegmentHint ?? nonIndexTitle ?? this.slugSegment ?? ""
     )
   }
 

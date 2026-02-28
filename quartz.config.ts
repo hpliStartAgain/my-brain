@@ -23,35 +23,32 @@ const config: QuartzConfig = {
       fontOrigin: "googleFonts",
       cdnCaching: true,
       typography: {
-        // 建议把标题字体换成更有现代感的无衬线字体
-        header: "Schibsted Grotesk", 
-        // 正文字体
-        body: "Source Sans Pro",
-        // 代码块字体（作为 SRE，等宽代码字体必须好看！）
-        code: "Fira Code", 
+        header: { name: "Noto Serif SC", weights: [400, 700], includeItalic: false },
+        body: { name: "Noto Sans SC", weights: [400, 500, 600], includeItalic: false },
+        code: { name: "JetBrains Mono", weights: [400, 500], includeItalic: false },
       },
       colors: {
         lightMode: {
-          light: "#faf8f8", // 背景色
-          lightgray: "#e5e5e5", // 边框
-          gray: "#b8b8b8", // 辅助文字
-          darkgray: "#4e4e4e", // 正文文字
-          dark: "#2b2b2b", // 标题文字
-          secondary: "#9fbdfd", // 🌟 核心主题色：Vercel 蓝
-          tertiary: "#84a59d", // 悬停/交互色
-          highlight: "rgba(37, 99, 235, 0.15)", // 文本高亮色
-          textHighlight: "#fff23688", // Markdown 语法 ==高亮== 的颜色
+          light: "#faf6f1",
+          lightgray: "#e8e0d8",
+          gray: "#a8a29e",
+          darkgray: "#44403c",
+          dark: "#1c1917",
+          secondary: "#b45309",
+          tertiary: "#d97706",
+          highlight: "rgba(180, 83, 9, 0.08)",
+          textHighlight: "#fbbf2488",
         },
         darkMode: {
-          light: "#161618", // 深邃黑背景
-          lightgray: "#393639",
-          gray: "#646464",
-          darkgray: "#d4d4d4",
-          dark: "#ebebec",
-          secondary: "#9fbdfd", // 🌟 核心主题色：荧光蓝
-          tertiary: "#84a59d",
-          highlight: "rgba(59, 130, 246, 0.15)",
-          textHighlight: "#b3aa0288",
+          light: "#1c1917",
+          lightgray: "#292524",
+          gray: "#78716c",
+          darkgray: "#d6d3d1",
+          dark: "#fafaf9",
+          secondary: "#f59e0b",
+          tertiary: "#fbbf24",
+          highlight: "rgba(245, 158, 11, 0.12)",
+          textHighlight: "#fbbf2488",
         },
       },
     },
