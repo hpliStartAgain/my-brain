@@ -25,13 +25,27 @@ jobs:
           npm ci
           npx quartz build
 
-      - name: Deploy to Server via SCP
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.SERVER_IP }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: "public/*"
-          target: "/opt/blog/html/"
-          strip_components: 1
-          debug: true
+      - name: Deploy via Native SSH and SCP
+        env:
+          # 将 Secrets 注入为环境变量
+          SSH_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SERVER_IP: ${{ secrets.SERVER_IP }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+        run: |
+          echo "=== 1. 初始化 SSH 环境 ==="
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+
+          echo "=== 2. 扫描并信任服务器指纹 ==="
+          # 这一步防止 SSH 首次连接时卡在询问 "Are you sure you want to continue connecting (yes/no)?"
+          ssh-keyscan -H "$SERVER_IP" >> ~/.ssh/known_hosts
+
+          echo "=== 3. 握手连通性测试 (开启 -v 调试模式) ==="
+          # 如果这里报错，日志会精确显示是密钥不对还是网络不通
+          ssh -v -i ~/.ssh/id_ed25519 $SERVER_USER@$SERVER_IP "echo 'SSH 连通性测试成功！服务器正在响应。'"
+
+          echo "=== 4. 开始传输静态文件 ==="
+          # 递归传输 public 目录下的所有文件到服务器的 Nginx 挂载目录
+          scp -i ~/.ssh/id_ed25519 -r public/* $SERVER_USER@$SERVER_IP:/opt/blog/html/
+          echo "=== 部署完成！ ==="
