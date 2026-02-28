@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - v4
+  workflow_dispatch: # <--- 就是加这一行，它是 GitHub Actions 允许界面手动执行的魔法指令
 
 jobs:
   build-and-deploy:
