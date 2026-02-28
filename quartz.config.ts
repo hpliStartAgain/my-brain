@@ -8,7 +8,7 @@ import * as Plugin from "./quartz/plugins"
  */
 const config: QuartzConfig = {
   configuration: {
-    pageTitle: "Quartz 4",
+    pageTitle: "汀的知识碎片",
     pageTitleSuffix: "",
     enableSPA: true,
     enablePopovers: true,
@@ -23,31 +23,34 @@ const config: QuartzConfig = {
       fontOrigin: "googleFonts",
       cdnCaching: true,
       typography: {
-        header: "Schibsted Grotesk",
+        // 建议把标题字体换成更有现代感的无衬线字体
+        header: "Schibsted Grotesk", 
+        // 正文字体
         body: "Source Sans Pro",
-        code: "IBM Plex Mono",
+        // 代码块字体（作为 SRE，等宽代码字体必须好看！）
+        code: "Fira Code", 
       },
       colors: {
         lightMode: {
-          light: "#faf8f8",
-          lightgray: "#e5e5e5",
-          gray: "#b8b8b8",
-          darkgray: "#4e4e4e",
-          dark: "#2b2b2b",
-          secondary: "#284b63",
-          tertiary: "#84a59d",
-          highlight: "rgba(143, 159, 169, 0.15)",
-          textHighlight: "#fff23688",
+          light: "#faf8f8", // 背景色
+          lightgray: "#e5e5e5", // 边框
+          gray: "#b8b8b8", // 辅助文字
+          darkgray: "#4e4e4e", // 正文文字
+          dark: "#2b2b2b", // 标题文字
+          secondary: "#2563eb", // 🌟 核心主题色：Vercel 蓝
+          tertiary: "#84a59d", // 悬停/交互色
+          highlight: "rgba(37, 99, 235, 0.15)", // 文本高亮色
+          textHighlight: "#fff23688", // Markdown 语法 ==高亮== 的颜色
         },
         darkMode: {
-          light: "#161618",
+          light: "#161618", // 深邃黑背景
           lightgray: "#393639",
           gray: "#646464",
           darkgray: "#d4d4d4",
           dark: "#ebebec",
-          secondary: "#7b97aa",
+          secondary: "#3b82f6", // 🌟 核心主题色：荧光蓝
           tertiary: "#84a59d",
-          highlight: "rgba(143, 159, 169, 0.15)",
+          highlight: "rgba(59, 130, 246, 0.15)",
           textHighlight: "#b3aa0288",
         },
       },
