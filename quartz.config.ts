@@ -37,7 +37,7 @@ const config: QuartzConfig = {
           gray: "#b8b8b8", // 辅助文字
           darkgray: "#4e4e4e", // 正文文字
           dark: "#2b2b2b", // 标题文字
-          secondary: "#2563eb", // 🌟 核心主题色：Vercel 蓝
+          secondary: "#9fbdfd", // 🌟 核心主题色：Vercel 蓝
           tertiary: "#84a59d", // 悬停/交互色
           highlight: "rgba(37, 99, 235, 0.15)", // 文本高亮色
           textHighlight: "#fff23688", // Markdown 语法 ==高亮== 的颜色
@@ -48,7 +48,7 @@ const config: QuartzConfig = {
           gray: "#646464",
           darkgray: "#d4d4d4",
           dark: "#ebebec",
-          secondary: "#3b82f6", // 🌟 核心主题色：荧光蓝
+          secondary: "#9fbdfd", // 🌟 核心主题色：荧光蓝
           tertiary: "#84a59d",
           highlight: "rgba(59, 130, 246, 0.15)",
           textHighlight: "#b3aa0288",

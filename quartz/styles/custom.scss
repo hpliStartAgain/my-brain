@@ -1,31 +1,27 @@
-@use "./base.scss";
-
-// put your custom CSS here!
-/* 1. 扩大页面整体中心区域的宽度 (默认较窄，适合纯文本，这里放大以适应架构图和代码块) */
-:root {
-  --pageWidth: 950px; /* 您可以根据显示器大小在 800 - 1200 之间微调 */
+// 🌟 核心优化：显著增加所有内容的行高
+body {
+  line-height: 1.8; // 增加段落和列表项的行高
 }
 
-/* 2. 优化正文阅读的“呼吸感” */
-article {
-  /* 增加基础行高 */
-  line-height: 1.85; 
-  /* 稍微增大基础字号 */
-  font-size: 1.05rem; 
-  
-  /* 增加段落之间的垂直间距 */
-  p {
-    margin-bottom: 1.5rem; 
-  }
+// 🌟 核心优化：增加标题和列表之间的边距
+h1, h2, h3, h4, h5, h6 {
+  margin-top: 2em;
+  margin-bottom: 1em;
+}
 
-  /* 增加各级标题上方的留白，让结构更分明 */
-  h1, h2, h3, h4 {
-    margin-top: 2.5rem;
-    margin-bottom: 1.2rem;
-  }
-  
-  /* 让列表元素之间也稍微宽松一点 */
-  li {
-    margin-bottom: 0.5rem;
-  }
+ul, ol {
+  margin-top: 1.5em;
+  margin-bottom: 1.5em;
+}
+
+// 🌟 核心优化：增加菜单项之间的行间距
+.explorer ul li {
+  line-height: 2; // 增加菜单项的行高
+}
+
+// 🌟 核心优化：使用宽敞、舒适的蓝色圆点
+.explorer ul li a::before {
+  content: "•"; // 使用圆点符号
+  color: #2563eb; // 蓝色高亮
+  margin-right: 0.5em;
 }
