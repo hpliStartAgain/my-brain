@@ -25,12 +25,16 @@ jobs:
           npm ci
           npx quartz build
 
-      - name: Deploy via SSH Pipeline
+      - name: Deploy via Rsync with MTU Bypass
         env:
           SSH_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
           SERVER_IP: ${{ secrets.SERVER_IP }}
           SERVER_USER: ${{ secrets.SERVER_USER }}
         run: |
+          echo "=== 0. SRE 网络底层 Hack: 规避 PMTU 黑洞 ==="
+          # 强行将 GitHub 构建机的网卡 MTU 从 1500 降到 1200，保证每个数据包都能顺利穿透骨干网
+          sudo ip link set dev eth0 mtu 1200
+
           echo "=== 1. 初始化 SSH 环境 ==="
           mkdir -p ~/.ssh
           echo "$SSH_KEY" > ~/.ssh/id_ed25519
@@ -40,10 +44,10 @@ jobs:
           ssh-keyscan -H "$SERVER_IP" >> ~/.ssh/known_hosts
 
           echo "=== 3. 握手连通性测试 ==="
-          ssh -i ~/.ssh/id_ed25519 $SERVER_USER@$SERVER_IP "echo 'SSH 连通性测试成功！'"
+          ssh -i ~/.ssh/id_ed25519 $SERVER_USER@$SERVER_IP "echo 'SSH 控制流连通性测试成功！'"
 
-          echo "=== 4. 开始传输静态文件 (SRE Tar Pipe 模式) ==="
-          # 在本地把 public 目录打包，通过 SSH 标准输入流传到服务器，并在服务器直接解压！
-          tar -czf - -C public . | ssh -i ~/.ssh/id_ed25519 $SERVER_USER@$SERVER_IP "tar -xzf - -C /opt/blog/html/"
+          echo "=== 4. 开始同步数据 (Rsync 增量模式) ==="
+          # 使用 rsync，开启 -v 显示每个文件的传输进度，加入 ServerAlive 保持 TCP 活性
+          rsync -avz --progress -e "ssh -i ~/.ssh/id_ed25519 -o ServerAliveInterval=15 -o ServerAliveCountMax=3" public/ $SERVER_USER@$SERVER_IP:/opt/blog/html/
 
           echo "=== 部署完成！ ==="
