@@ -141,14 +141,14 @@ Driver 端运行着 `BlockManagerMaster`，负责维护集群内所有 `BlockMan
 ```mermaid
 graph TD
     subgraph "Driver"
-        BM_MASTER["BlockManagerMaster\n全局状态索引\n(blockId → executor 映射)"]
+        BM_MASTER["BlockManagerMaster</br>全局状态索引</br>(blockId → executor 映射)"]
     end
 
     subgraph "Executor 1"
         BM1["BlockManager"]
-        MS1["MemoryStore\n(堆内/堆外)"]
-        DS1["DiskStore\n(本地磁盘)"]
-        BTS1["BlockTransferService\n(Netty)"]
+        MS1["MemoryStore</br>(堆内/堆外)"]
+        DS1["DiskStore</br>(本地磁盘)"]
+        BTS1["BlockTransferService</br>(Netty)"]
         BM1 --> MS1
         BM1 --> DS1
         BM1 --> BTS1
@@ -166,7 +166,7 @@ graph TD
 
     BM1 -->|"汇报/查询"| BM_MASTER
     BM2 -->|"汇报/查询"| BM_MASTER
-    BTS1 <-->|"数据传输\n(副本/远程读取)"| BTS2
+    BTS1 <-->|"数据传输</br>(副本/远程读取)"| BTS2
 
     classDef driver fill:#d4f9d4,stroke:#2c8a2c,stroke-width:2px;
     classDef executor fill:#d4f1f9,stroke:#2c6e8a,stroke-width:2px;

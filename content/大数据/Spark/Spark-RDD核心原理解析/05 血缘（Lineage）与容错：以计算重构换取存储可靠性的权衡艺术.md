@@ -101,8 +101,8 @@ sequenceDiagram
     participant NewExec as "新 Executor"
 
     Exec->>DAG: Executor 失联 (心跳超时)
-    DAG->>DAG: 查询 MapOutputTracker\n确定哪些 RDD 分区的数据在故障 Executor 上
-    DAG->>DAG: 遍历这些分区的 dependencies\n确定重算路径
+    DAG->>DAG: 查询 MapOutputTracker</br>确定哪些 RDD 分区的数据在故障 Executor 上
+    DAG->>DAG: 遍历这些分区的 dependencies</br>确定重算路径
     DAG->>TS: 重新提交需要重算的 Task
     TS->>NewExec: 将 Task 分配给可用 Executor
     NewExec->>NewExec: 执行 Task: 调用 rdd.iterator(split, ctx)
@@ -173,7 +173,7 @@ graph TD
         A1["P0 (完好)"] --> B1["C0 (完好)"]
         A2["P1 (完好)"] --> B2["C1 (完好)"]
         A3["P2 (完好)"] --> B3["C2 (丢失)"]
-        A3 -.->|"只重算 C2\n其他不受影响"| B3
+        A3 -.->|"只重算 C2</br>其他不受影响"| B3
     end
 
     subgraph "宽依赖容错 -- 最坏情况代价大"
@@ -183,7 +183,7 @@ graph TD
         C2 --> D1
         C3["P2 (完好)"] --> D0
         C3 --> D1
-        C1 -.->|"P0 的 Shuffle 文件丢失\nP0 必须重算\nR0 和 R1 都需重跑"| D0
+        C1 -.->|"P0 的 Shuffle 文件丢失</br>P0 必须重算</br>R0 和 R1 都需重跑"| D0
     end
 
     classDef lost fill:#f9d4d4,stroke:#cc3333,stroke-width:2px;

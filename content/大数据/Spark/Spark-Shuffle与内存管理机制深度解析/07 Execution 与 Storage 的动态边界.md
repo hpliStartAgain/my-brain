@@ -108,17 +108,17 @@ Shuffle、Sort、Aggregation 等执行操作是当前计算任务的核心，不
 ```mermaid
 %%{init: {"theme": "dracula", "themeVariables": {"primaryColor": "#6272a4", "primaryTextColor": "#f8f8f2", "primaryBorderColor": "#bd93f9", "lineColor": "#ff79c6", "secondaryColor": "#44475a", "tertiaryColor": "#282a36"}}}%%
 sequenceDiagram
-    participant ES as "ExternalSorter\n(MemoryConsumer)"
+    participant ES as "ExternalSorter</br>(MemoryConsumer)"
     participant TMM as "TaskMemoryManager"
     participant UMM as "UnifiedMemoryManager"
     participant SP as "StorageMemoryPool"
-    participant MS as "MemoryStore\n(RDD Cache)"
+    participant MS as "MemoryStore</br>(RDD Cache)"
 
     ES->>TMM: "acquireExecutionMemory(500MB)"
     TMM->>UMM: "acquireExecutionMemory(500MB)"
     UMM->>UMM: "执行内存池剩余 100MB，不足"
     UMM->>SP: "storagePool.memoryUsed > 保护区?"
-    SP-->>UMM: "是：memoryUsed=3000MB > 保护区2368MB\n可驱逐 632MB"
+    SP-->>UMM: "是：memoryUsed=3000MB > 保护区2368MB</br>可驱逐 632MB"
     UMM->>MS: "evictBlocksToFreeSpace(400MB)"
     MS->>MS: "按 LRU 顺序选择 RDD 块驱逐"
     MS-->>UMM: "成功释放 420MB"

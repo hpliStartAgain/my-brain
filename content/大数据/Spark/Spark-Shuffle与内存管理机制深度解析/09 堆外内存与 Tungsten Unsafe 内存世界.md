@@ -339,13 +339,13 @@ transferTo() 的工作原理：
 %%{init: {"theme": "dracula", "themeVariables": {"primaryColor": "#6272a4", "primaryTextColor": "#f8f8f2", "primaryBorderColor": "#bd93f9", "lineColor": "#ff79c6", "secondaryColor": "#44475a", "tertiaryColor": "#282a36"}}}%%
 graph TD
     subgraph "SortShuffleWriter（普通 Spill 路径）"
-        A1["Java 对象插入\nPartitionedAppendOnlyMap"] --> B1["内存满时：\n对象排序（对象比较）\n→ 序列化写 Spill 文件"]
-        B1 --> C1["Merge：\n反序列化 → 归并 → 重序列化\n写最终 .data 文件"]
+        A1["Java 对象插入</br>PartitionedAppendOnlyMap"] --> B1["内存满时：</br>对象排序（对象比较）</br>→ 序列化写 Spill 文件"]
+        B1 --> C1["Merge：</br>反序列化 → 归并 → 重序列化</br>写最终 .data 文件"]
     end
 
     subgraph "UnsafeShuffleWriter（Tungsten Spill 路径）"
-        A2["数据插入时即序列化\n写入堆外 MemoryBlock\nLongArray 追加指针"] --> B2["内存满时：\nLongArray 基数排序（定长指针比较）\n→ 直接字节拷贝写 Spill 文件（无需序列化）"]
-        B2 --> C2["Merge：\nFileChannel.transferTo() 零拷贝\n拼接字节块写最终 .data 文件"]
+        A2["数据插入时即序列化</br>写入堆外 MemoryBlock</br>LongArray 追加指针"] --> B2["内存满时：</br>LongArray 基数排序（定长指针比较）</br>→ 直接字节拷贝写 Spill 文件（无需序列化）"]
+        B2 --> C2["Merge：</br>FileChannel.transferTo() 零拷贝</br>拼接字节块写最终 .data 文件"]
     end
 
     classDef normal fill:#6272a4,stroke:#bd93f9,color:#f8f8f2

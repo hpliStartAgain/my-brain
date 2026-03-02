@@ -31,7 +31,7 @@ Spark 的解法是经典的**面向接口编程**：定义一套所有数据集�
 | **这个分区的数据在哪台机器上？** | `getPreferredLocations(split)` | TaskScheduler 做本地化调度 |
 
 **关键认知**：RDD 不存储数据，它存储的是"如何获取和计算数据"的完整描述。这就是为什么 RDD 是"逻辑视图"而非"物理容器"。
-nini
+
 ```mermaid
 graph TD
     subgraph "RDD 抽象层 -- 调度器的统一接口"

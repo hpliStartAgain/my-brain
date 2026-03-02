@@ -102,12 +102,12 @@ Unified Pool: (8192MB - 300MB) × 0.6 ≈ 4735MB
 ```mermaid
 %%{init: {"theme": "dracula", "themeVariables": {"primaryColor": "#6272a4", "primaryTextColor": "#f8f8f2", "primaryBorderColor": "#bd93f9", "lineColor": "#ff79c6", "secondaryColor": "#44475a", "tertiaryColor": "#282a36"}}}%%
 graph TD
-    A["spark.executor.memory\n= 8GB (JVM -Xmx)"] --> B["系统预留内存\n300MB（硬编码）"]
-    A --> C["可用内存\n≈ 7892MB"]
-    C --> D["用户内存 User Memory\n≈ 3157MB（40%）\n用户代码、内部元数据"]
-    C --> E["统一内存池 Unified Pool\n≈ 4735MB（60%）\n由 UnifiedMemoryManager 管理"]
-    E --> F["存储内存 Storage Memory\n初始 ≈ 2368MB（50%）\nRDD Cache、广播变量"]
-    E --> G["执行内存 Execution Memory\n初始 ≈ 2368MB（50%）\nShuffle、Sort、Agg"]
+    A["spark.executor.memory</br>= 8GB (JVM -Xmx)"] --> B["系统预留内存</br>300MB（硬编码）"]
+    A --> C["可用内存</br>≈ 7892MB"]
+    C --> D["用户内存 User Memory</br>≈ 3157MB（40%）</br>用户代码、内部元数据"]
+    C --> E["统一内存池 Unified Pool</br>≈ 4735MB（60%）</br>由 UnifiedMemoryManager 管理"]
+    E --> F["存储内存 Storage Memory</br>初始 ≈ 2368MB（50%）</br>RDD Cache、广播变量"]
+    E --> G["执行内存 Execution Memory</br>初始 ≈ 2368MB（50%）</br>Shuffle、Sort、Agg"]
 
     classDef total fill:#6272a4,stroke:#bd93f9,color:#f8f8f2
     classDef fixed fill:#44475a,stroke:#ff79c6,color:#f8f8f2
@@ -264,7 +264,7 @@ abstract class MemoryConsumer(taskMemoryManager: TaskMemoryManager,
 ```mermaid
 %%{init: {"theme": "dracula", "themeVariables": {"primaryColor": "#6272a4", "primaryTextColor": "#f8f8f2", "primaryBorderColor": "#bd93f9", "lineColor": "#ff79c6", "secondaryColor": "#44475a", "tertiaryColor": "#282a36"}}}%%
 sequenceDiagram
-    participant MC as "MemoryConsumer\n(如 ExternalSorter)"
+    participant MC as "MemoryConsumer</br>(如 ExternalSorter)"
     participant TMM as "TaskMemoryManager"
     participant UMM as "UnifiedMemoryManager"
     participant OC as "其他 MemoryConsumer"
@@ -288,7 +288,7 @@ sequenceDiagram
             TMM-->>MC: "返回最终获得量（可能 < 请求量）"
         end
     end
-    Note over MC: "如果获得量 < 所需量\nMemoryConsumer 自行触发 Spill"
+    Note over MC: "如果获得量 < 所需量</br>MemoryConsumer 自行触发 Spill"
 ```
 
 ### 4.4 内存 Page 管理

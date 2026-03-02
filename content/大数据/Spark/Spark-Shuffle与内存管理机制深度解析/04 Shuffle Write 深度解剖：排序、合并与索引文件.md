@@ -202,7 +202,7 @@ sequenceDiagram
     ES->>DS: "原地排序（按 partitionId + key）"
     DS-->>ES: "返回有序迭代器"
     ES->>DISK: "序列化写入（按批次）"
-    Note over ES,DISK: "每 10000 条记录为一批次\n记录每个分区的字节偏移"
+    Note over ES,DISK: "每 10000 条记录为一批次</br>记录每个分区的字节偏移"
     ES->>DS: "清空数据结构"
     ES->>TMM: "汇报内存已释放"
     ES->>ES: "记录 SpillInfo（partitionLengths）"
@@ -267,20 +267,20 @@ sequenceDiagram
 %%{init: {"theme": "dracula", "themeVariables": {"primaryColor": "#6272a4", "primaryTextColor": "#f8f8f2", "primaryBorderColor": "#bd93f9", "lineColor": "#ff79c6", "secondaryColor": "#44475a", "tertiaryColor": "#282a36"}}}%%
 graph TD
     subgraph "Merge 输入：3 次 Spill + 内存剩余数据"
-        S1["Spill 文件 1\n分区0: [a:1, b:2]\n分区1: [x:5, y:3]\n..."]
-        S2["Spill 文件 2\n分区0: [a:3, c:1]\n分区1: [y:1, z:4]\n..."]
-        S3["Spill 文件 3\n分区0: [b:1, d:2]\n分区1: [x:2]\n..."]
-        MEM["内存剩余数据\n分区0: [a:2, e:1]\n分区1: [z:1]\n..."]
+        S1["Spill 文件 1</br>分区0: [a:1, b:2]</br>分区1: [x:5, y:3]</br>..."]
+        S2["Spill 文件 2</br>分区0: [a:3, c:1]</br>分区1: [y:1, z:4]</br>..."]
+        S3["Spill 文件 3</br>分区0: [b:1, d:2]</br>分区1: [x:2]</br>..."]
+        MEM["内存剩余数据</br>分区0: [a:2, e:1]</br>分区1: [z:1]</br>..."]
     end
 
     subgraph "按分区逐一归并"
-        P0["处理分区 0\n4路输入：S1分区0 + S2分区0 + S3分区0 + MEM分区0\n最小堆归并 → 输出有序序列"]
-        P1["处理分区 1\n4路输入：S1分区1 + S2分区1 + S3分区1 + MEM分区1\n最小堆归并 → 输出有序序列"]
+        P0["处理分区 0</br>4路输入：S1分区0 + S2分区0 + S3分区0 + MEM分区0</br>最小堆归并 → 输出有序序列"]
+        P1["处理分区 1</br>4路输入：S1分区1 + S2分区1 + S3分区1 + MEM分区1</br>最小堆归并 → 输出有序序列"]
     end
 
     subgraph "最终输出"
-        DATA["mapId.data\n[分区0有序数据]\n[分区1有序数据]\n..."]
-        INDEX["mapId.index\n[offset0, offset1, ...]"]
+        DATA["mapId.data</br>[分区0有序数据]</br>[分区1有序数据]</br>..."]
+        INDEX["mapId.index</br>[offset0, offset1, ...]"]
     end
 
     S1 --> P0
@@ -397,22 +397,22 @@ def writeIndexFileAndCommit(shuffleId: Int, mapId: Long,
 ```mermaid
 %%{init: {"theme": "dracula", "themeVariables": {"primaryColor": "#6272a4", "primaryTextColor": "#f8f8f2", "primaryBorderColor": "#bd93f9", "lineColor": "#ff79c6", "secondaryColor": "#44475a", "tertiaryColor": "#282a36"}}}%%
 graph TD
-    A["Map Task 开始\n初始化 ExternalSorter"] --> B["读取输入分区数据\n计算 partitionId"]
+    A["Map Task 开始</br>初始化 ExternalSorter"] --> B["读取输入分区数据</br>计算 partitionId"]
     B --> C{"mapSideCombine?"}
-    C -- "是" --> D["写入 PartitionedAppendOnlyMap\n（相同key原地聚合）"]
-    C -- "否" --> E["写入 PartitionedPairBuffer\n（直接追加）"]
-    D --> F{"每32条检查内存\n是否足够?"}
+    C -- "是" --> D["写入 PartitionedAppendOnlyMap</br>（相同key原地聚合）"]
+    C -- "否" --> E["写入 PartitionedPairBuffer</br>（直接追加）"]
+    D --> F{"每32条检查内存</br>是否足够?"}
     E --> F
     F -- "够" --> B
-    F -- "不够" --> G["触发 Spill\n1. 原地排序（partId + key）\n2. 序列化写临时文件\n3. 记录 SpillInfo\n4. 清空内存结构"]
+    F -- "不够" --> G["触发 Spill</br>1. 原地排序（partId + key）</br>2. 序列化写临时文件</br>3. 记录 SpillInfo</br>4. 清空内存结构"]
     G --> B
     B --> H["所有输入处理完毕"]
-    H --> I{"是否有\nSpill 文件?"}
-    I -- "否" --> J["对内存数据排序\n直接序列化写 .data 文件"]
-    I -- "是" --> K["多路归并排序\n（内存数据 + 所有Spill文件）\n写入最终 .data 文件"]
-    J --> L["写入 .index 文件\n原子 rename\n删除所有临时文件"]
+    H --> I{"是否有</br>Spill 文件?"}
+    I -- "否" --> J["对内存数据排序</br>直接序列化写 .data 文件"]
+    I -- "是" --> K["多路归并排序</br>（内存数据 + 所有Spill文件）</br>写入最终 .data 文件"]
+    J --> L["写入 .index 文件</br>原子 rename</br>删除所有临时文件"]
     K --> L
-    L --> M["Map Task 结束\n向 MapOutputTracker 汇报"]
+    L --> M["Map Task 结束</br>向 MapOutputTracker 汇报"]
 
     classDef process fill:#6272a4,stroke:#bd93f9,color:#f8f8f2
     classDef decision fill:#44475a,stroke:#50fa7b,color:#f8f8f2

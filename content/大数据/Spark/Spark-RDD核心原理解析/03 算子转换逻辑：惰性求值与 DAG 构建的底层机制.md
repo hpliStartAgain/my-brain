@@ -233,17 +233,17 @@ val rdd4 = rdd3.map(formatOutput)
 ```mermaid
 graph TD
     subgraph "逻辑 DAG -- Driver 内存中的 RDD 对象图"
-        A["HadoopRDD\n(1TB 日志)"]
-        B["MapPartitionsRDD\nfilter: contains ERROR"]
-        C["MapPartitionsRDD\nmap: parseLogLine"]
-        D["ShuffledRDD\nreduceByKey: 统计"]
-        E["MapPartitionsRDD\nmap: formatOutput"]
+        A["HadoopRDD</br>(1TB 日志)"]
+        B["MapPartitionsRDD</br>filter: contains ERROR"]
+        C["MapPartitionsRDD</br>map: parseLogLine"]
+        D["ShuffledRDD</br>reduceByKey: 统计"]
+        E["MapPartitionsRDD</br>map: formatOutput"]
     end
 
-    A -->|"OneToOneDep\n窄依赖"| B
-    B -->|"OneToOneDep\n窄依赖"| C
-    C -->|"ShuffleDep\n宽依赖 -- Stage 边界"| D
-    D -->|"OneToOneDep\n窄依赖"| E
+    A -->|"OneToOneDep</br>窄依赖"| B
+    B -->|"OneToOneDep</br>窄依赖"| C
+    C -->|"ShuffleDep</br>宽依赖 -- Stage 边界"| D
+    D -->|"OneToOneDep</br>窄依赖"| E
 
     classDef stage1 fill:#d4f1f9,stroke:#2c6e8a,stroke-width:2px;
     classDef stage2 fill:#f9ebd4,stroke:#8a6e2c,stroke-width:2px;
@@ -347,22 +347,22 @@ Stage 之间：强制同步，Shuffle 数据写入本地磁盘（MapOutputTracke
 ```mermaid
 graph LR
     subgraph "Stage 1 内部 -- 全流水线执行"
-        A1["read line\nHadoopRDD"]
-        B1["filter\n_.contains ERROR"]
-        C1["map\nparseLogLine"]
+        A1["read line</br>HadoopRDD"]
+        B1["filter</br>_.contains ERROR"]
+        C1["map</br>parseLogLine"]
         A1 -->|"Iterator.next()"| B1
         B1 -->|"Iterator.next()"| C1
     end
 
-    C1 -->|"写 Shuffle 文件\n磁盘落地"| SHUFFLE[("Shuffle\n磁盘")]
+    C1 -->|"写 Shuffle 文件</br>磁盘落地"| SHUFFLE[("Shuffle</br>磁盘")]
 
     subgraph "Stage 2 内部 -- 全流水线执行"
-        D1["ShuffledRDD\n跨网络拉取"]
-        E1["map\nformatOutput"]
+        D1["ShuffledRDD</br>跨网络拉取"]
+        E1["map</br>formatOutput"]
         D1 -->|"Iterator.next()"| E1
     end
 
-    SHUFFLE -->|"网络传输\n拉取"| D1
+    SHUFFLE -->|"网络传输</br>拉取"| D1
 
     classDef stage1 fill:#d4f1f9,stroke:#2c6e8a,stroke-width:2px;
     classDef stage2 fill:#f9ebd4,stroke:#8a6e2c,stroke-width:2px;

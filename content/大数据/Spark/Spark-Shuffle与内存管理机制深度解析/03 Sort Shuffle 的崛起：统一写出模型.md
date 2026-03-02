@@ -40,13 +40,13 @@ Sort Shuffle 的三种 Writer 策略，本质上就是在不同的约束条件�
 %%{init: {"theme": "dracula", "themeVariables": {"primaryColor": "#6272a4", "primaryTextColor": "#f8f8f2", "primaryBorderColor": "#bd93f9", "lineColor": "#ff79c6", "secondaryColor": "#44475a", "tertiaryColor": "#282a36"}}}%%
 graph TD
     subgraph "Map Task i 的输出文件"
-        DATA["mapId_i.data\n\n[分区0的数据块]\n[分区1的数据块]\n[分区2的数据块]\n...\n[分区R-1的数据块]"]
-        INDEX["mapId_i.index\n\n偏移量0: 0\n偏移量1: len(分区0)\n偏移量2: len(分区0+1)\n...\n偏移量R: 文件总长"]
+        DATA["mapId_i.data</br></br>[分区0的数据块]</br>[分区1的数据块]</br>[分区2的数据块]</br>...</br>[分区R-1的数据块]"]
+        INDEX["mapId_i.index</br></br>偏移量0: 0</br>偏移量1: len(分区0)</br>偏移量2: len(分区0+1)</br>...</br>偏移量R: 文件总长"]
     end
 
     subgraph "Reduce Task j 读取"
-        R["Reduce Task j\n读取分区 j 的数据"] --> |"查询 index 文件\n得到 start=offset[j]\nend=offset[j+1]"| INDEX
-        R --> |"seek 到 start\n读取 end-start 字节"| DATA
+        R["Reduce Task j</br>读取分区 j 的数据"] --> |"查询 index 文件</br>得到 start=offset[j]</br>end=offset[j+1]"| INDEX
+        R --> |"seek 到 start</br>读取 end-start 字节"| DATA
     end
 
     classDef file fill:#6272a4,stroke:#bd93f9,color:#f8f8f2
@@ -237,16 +237,16 @@ Java 原生序列化不支持重定位（因为 Java 对象流可能包含类型
 ```mermaid
 %%{init: {"theme": "dracula", "themeVariables": {"primaryColor": "#6272a4", "primaryTextColor": "#f8f8f2", "primaryBorderColor": "#bd93f9", "lineColor": "#ff79c6", "secondaryColor": "#44475a", "tertiaryColor": "#282a36"}}}%%
 graph TD
-    A["输入记录\n(key, value)"] --> B["序列化为字节流\n写入堆外内存 MemoryBlock"]
-    B --> C["计算 partitionId\n编码 (partitionId << 40 | address)\n插入 ShuffleInMemorySorter"]
-    C --> D{"堆外内存\n是否足够?"}
+    A["输入记录</br>(key, value)"] --> B["序列化为字节流</br>写入堆外内存 MemoryBlock"]
+    B --> C["计算 partitionId</br>编码 (partitionId << 40 | address)</br>插入 ShuffleInMemorySorter"]
+    C --> D{"堆外内存</br>是否足够?"}
     D -- "是" --> C
-    D -- "否" --> E["触发 Spill\n对 LongArray 基数排序\n按排序顺序写临时 Spill 文件\n每个分区连续存放"]
+    D -- "否" --> E["触发 Spill</br>对 LongArray 基数排序</br>按排序顺序写临时 Spill 文件</br>每个分区连续存放"]
     E --> C
     C --> F["所有记录处理完毕"]
-    F --> G{"是否有\n多个 Spill 文件?"}
-    G -- "否（无 Spill）" --> H["直接对 LongArray 基数排序\n按顺序写最终 .data 文件"]
-    G -- "是" --> I["多路归并排序\n合并所有 Spill 文件\n写入最终 .data 文件"]
+    F --> G{"是否有</br>多个 Spill 文件?"}
+    G -- "否（无 Spill）" --> H["直接对 LongArray 基数排序</br>按顺序写最终 .data 文件"]
+    G -- "是" --> I["多路归并排序</br>合并所有 Spill 文件</br>写入最终 .data 文件"]
     H --> J["写入 .index 文件"]
     I --> J
 
@@ -340,15 +340,15 @@ Spark UI 没有直接显示"使用了哪种 ShuffleWriter"的信息，但可以�
 ```mermaid
 %%{init: {"theme": "dracula", "themeVariables": {"primaryColor": "#6272a4", "primaryTextColor": "#f8f8f2", "primaryBorderColor": "#bd93f9", "lineColor": "#ff79c6", "secondaryColor": "#44475a", "tertiaryColor": "#282a36"}}}%%
 graph TD
-    Start["ShuffleDependency 注册"] --> Q1{"mapSideCombine\n= true?"}
-    Q1 -- "是" --> SW["SortShuffleWriter\n使用 ExternalSorter\n支持 Map 端聚合"]
-    Q1 -- "否" --> Q2{"R <=\nbypassMergeThreshold\n(默认200)?"}
-    Q2 -- "是" --> BW["BypassMergeSortShuffleWriter\n无排序\n临时文件 + 合并"]
-    Q2 -- "否" --> Q3{"序列化器支持\n对象重定位?\n(Kryo = 是)"}
+    Start["ShuffleDependency 注册"] --> Q1{"mapSideCombine</br>= true?"}
+    Q1 -- "是" --> SW["SortShuffleWriter</br>使用 ExternalSorter</br>支持 Map 端聚合"]
+    Q1 -- "否" --> Q2{"R <=</br>bypassMergeThreshold</br>(默认200)?"}
+    Q2 -- "是" --> BW["BypassMergeSortShuffleWriter</br>无排序</br>临时文件 + 合并"]
+    Q2 -- "否" --> Q3{"序列化器支持</br>对象重定位?</br>(Kryo = 是)"}
     Q3 -- "否" --> SW
-    Q3 -- "是" --> Q4{"R <=\n16,777,215?"}
+    Q3 -- "是" --> Q4{"R <=</br>16,777,215?"}
     Q4 -- "否" --> SW
-    Q4 -- "是" --> UW["UnsafeShuffleWriter\n堆外内存\n基数排序\n序列化二进制格式"]
+    Q4 -- "是" --> UW["UnsafeShuffleWriter</br>堆外内存</br>基数排序</br>序列化二进制格式"]
 
     classDef writer fill:#6272a4,stroke:#bd93f9,color:#f8f8f2
     classDef decision fill:#44475a,stroke:#50fa7b,color:#f8f8f2

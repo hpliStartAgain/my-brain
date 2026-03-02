@@ -219,15 +219,15 @@ Tungsten 通过 `sun.misc.Unsafe` 直接管理堆外内存，以紧凑的二进�
 ```mermaid
 %%{init: {"theme": "dracula", "themeVariables": {"primaryColor": "#6272a4", "primaryTextColor": "#f8f8f2", "primaryBorderColor": "#bd93f9", "lineColor": "#ff79c6", "secondaryColor": "#44475a", "tertiaryColor": "#282a36"}}}%%
 graph TD
-    A["Spark 0.8 及以前\nHash Shuffle\n文件数 = M × R"] --> B["Spark 0.8.1\n引入 File Consolidation\n文件数 = Executor数 × R"]
-    B --> C["Spark 0.9\n引入 ExternalAppendOnlyMap\nReduce 端支持磁盘溢写"]
-    C --> D["Spark 1.1\n引入 Sort Shuffle (可选)\n文件数 = M × 2"]
-    D --> E["Spark 1.2\nSort Shuffle 成为默认\nHash Shuffle 降级"]
-    E --> F["Spark 1.4\n引入 Tungsten Sort Shuffle\n堆外内存 + 二进制格式"]
-    F --> G["Spark 1.6\nTungsten Sort 并入 SortShuffleManager\n三种 Writer 策略统一管理"]
-    G --> H["Spark 2.0\nHash Shuffle Manager 彻底移除"]
-    H --> I["Spark 3.x\nAQE 自适应 Shuffle 分区\n动态调整 Reduce Task 数"]
-    I --> J["现在\nRemote Shuffle Service\nESS → RSS 解耦架构"]
+    A["Spark 0.8 及以前</br>Hash Shuffle</br>文件数 = M × R"] --> B["Spark 0.8.1</br>引入 File Consolidation</br>文件数 = Executor数 × R"]
+    B --> C["Spark 0.9</br>引入 ExternalAppendOnlyMap</br>Reduce 端支持磁盘溢写"]
+    C --> D["Spark 1.1</br>引入 Sort Shuffle (可选)</br>文件数 = M × 2"]
+    D --> E["Spark 1.2</br>Sort Shuffle 成为默认</br>Hash Shuffle 降级"]
+    E --> F["Spark 1.4</br>引入 Tungsten Sort Shuffle</br>堆外内存 + 二进制格式"]
+    F --> G["Spark 1.6</br>Tungsten Sort 并入 SortShuffleManager</br>三种 Writer 策略统一管理"]
+    G --> H["Spark 2.0</br>Hash Shuffle Manager 彻底移除"]
+    H --> I["Spark 3.x</br>AQE 自适应 Shuffle 分区</br>动态调整 Reduce Task 数"]
+    I --> J["现在</br>Remote Shuffle Service</br>ESS → RSS 解耦架构"]
 
     classDef old fill:#44475a,stroke:#6272a4,color:#f8f8f2
     classDef current fill:#6272a4,stroke:#bd93f9,color:#f8f8f2

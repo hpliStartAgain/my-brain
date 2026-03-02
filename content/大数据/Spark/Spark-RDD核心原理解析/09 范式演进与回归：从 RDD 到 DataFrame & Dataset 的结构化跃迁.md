@@ -138,12 +138,12 @@ Catalyst 本身不执行任何数据操作，它只是在"纸上"推演如何最
 
 ```mermaid
 graph LR
-    A["用户代码\nSQL/DataFrame"] --> B["未解析逻辑计划\nUnresolved Logical Plan"]
-    B --> C["解析后逻辑计划\nAnalyzed Logical Plan\n(Schema 验证, 列名解析)"]
-    C --> D["优化后逻辑计划\nOptimized Logical Plan\n(规则优化 + 代价优化)"]
-    D --> E["物理计划集合\nPhysical Plans\n(多个候选方案)"]
-    E --> F["最优物理计划\nSelected Physical Plan\n(代价最小)"]
-    F --> G["RDD DAG\n提交执行"]
+    A["用户代码</br>SQL/DataFrame"] --> B["未解析逻辑计划</br>Unresolved Logical Plan"]
+    B --> C["解析后逻辑计划</br>Analyzed Logical Plan</br>(Schema 验证, 列名解析)"]
+    C --> D["优化后逻辑计划</br>Optimized Logical Plan</br>(规则优化 + 代价优化)"]
+    D --> E["物理计划集合</br>Physical Plans</br>(多个候选方案)"]
+    E --> F["最优物理计划</br>Selected Physical Plan</br>(代价最小)"]
+    F --> G["RDD DAG</br>提交执行"]
 
     classDef logical fill:#d4f1f9,stroke:#2c6e8a,stroke-width:2px;
     classDef physical fill:#f9ebd4,stroke:#8a6e2c,stroke-width:2px;

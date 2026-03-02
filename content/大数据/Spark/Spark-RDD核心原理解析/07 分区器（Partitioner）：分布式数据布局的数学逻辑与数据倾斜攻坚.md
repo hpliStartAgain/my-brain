@@ -101,7 +101,7 @@ Hash 分区器在以下条件下工作良好：
 ```mermaid
 graph TD
     subgraph "正常数据分布 -- HashPartitioner 工作良好"
-        N1["Key 分布均匀\n每个 Key 约 1万条"]
+        N1["Key 分布均匀</br>每个 Key 约 1万条"]
         N2["Partition 0: 100万条"]
         N3["Partition 1: 101万条"]
         N4["Partition 2: 99万条"]
@@ -111,7 +111,7 @@ graph TD
     end
 
     subgraph "数据倾斜 -- HashPartitioner 灾难"
-        S1["热点 Key: userId=VIP_001\n占总数据 60%"]
+        S1["热点 Key: userId=VIP_001</br>占总数据 60%"]
         S2["Partition 0: 600万条 (OOM!)"]
         S3["Partition 1: 200万条"]
         S4["Partition 2: 200万条"]

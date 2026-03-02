@@ -33,10 +33,10 @@ Shuffle Read 是 Spark Shuffle 的"下半场"——当上游 Stage 的所有 Map
 %%{init: {"theme": "dracula", "themeVariables": {"primaryColor": "#6272a4", "primaryTextColor": "#f8f8f2", "primaryBorderColor": "#bd93f9", "lineColor": "#ff79c6", "secondaryColor": "#44475a", "tertiaryColor": "#282a36"}}}%%
 sequenceDiagram
     participant RT as "Reduce Task"
-    participant MOTW as "MapOutputTrackerWorker\n(Executor 本地)"
-    participant MOTM as "MapOutputTrackerMaster\n(Driver)"
+    participant MOTW as "MapOutputTrackerWorker</br>(Executor 本地)"
+    participant MOTM as "MapOutputTrackerMaster</br>(Driver)"
 
-    RT->>MOTW: "getMapSizesByExecutorId(\nshuffleId, partitionId)"
+    RT->>MOTW: "getMapSizesByExecutorId(</br>shuffleId, partitionId)"
     MOTW->>MOTW: "查本地缓存"
     alt "缓存命中"
         MOTW-->>RT: "返回 BlockManagerId → [BlockId, size] 映射"
@@ -107,21 +107,21 @@ Shuffle Read 的网络拉取面临三个相互矛盾的需求：
 %%{init: {"theme": "dracula", "themeVariables": {"primaryColor": "#6272a4", "primaryTextColor": "#f8f8f2", "primaryBorderColor": "#bd93f9", "lineColor": "#ff79c6", "secondaryColor": "#44475a", "tertiaryColor": "#282a36"}}}%%
 graph TD
     subgraph "初始化阶段"
-        INIT["初始化\n将本地块直接入队\n将远程块按节点分组"] --> LOCAL["本地块\n直接从 BlockManager 读取\n放入 results 队列"]
-        INIT --> REMOTE["远程块分组\n按 maxSizeInFlight 批量发送请求"]
+        INIT["初始化</br>将本地块直接入队</br>将远程块按节点分组"] --> LOCAL["本地块</br>直接从 BlockManager 读取</br>放入 results 队列"]
+        INIT --> REMOTE["远程块分组</br>按 maxSizeInFlight 批量发送请求"]
     end
 
     subgraph "拉取循环"
-        REMOTE --> SEND["发送 FetchRequest\n通过 Netty 发往目标节点"]
-        SEND --> RECV["收到响应\n解压缩数据块\n放入 results 队列"]
-        RECV --> CHECK{"在途请求量\n< maxSizeInFlight?"}
+        REMOTE --> SEND["发送 FetchRequest</br>通过 Netty 发往目标节点"]
+        SEND --> RECV["收到响应</br>解压缩数据块</br>放入 results 队列"]
+        RECV --> CHECK{"在途请求量</br>< maxSizeInFlight?"}
         CHECK -- "是" --> SEND
-        CHECK -- "否" --> WAIT["等待响应\n直到在途量降低"]
+        CHECK -- "否" --> WAIT["等待响应</br>直到在途量降低"]
         WAIT --> CHECK
     end
 
     subgraph "消费阶段"
-        CONSUME["next() 调用\n从 results 队列取块"] --> PARSE["解序列化数据\n交给上层迭代器"]
+        CONSUME["next() 调用</br>从 results 队列取块"] --> PARSE["解序列化数据</br>交给上层迭代器"]
     end
 
     LOCAL --> CONSUME
@@ -245,16 +245,16 @@ Reduce 端的聚合由 `ExternalAppendOnlyMap` 完成。
 ```mermaid
 %%{init: {"theme": "dracula", "themeVariables": {"primaryColor": "#6272a4", "primaryTextColor": "#f8f8f2", "primaryBorderColor": "#bd93f9", "lineColor": "#ff79c6", "secondaryColor": "#44475a", "tertiaryColor": "#282a36"}}}%%
 graph TD
-    A["Reduce Task 启动\n获取分区信息"] --> B["MapOutputTrackerWorker\n查询 Map 输出位置"]
-    B --> C["ShuffleBlockFetcherIterator\n并发拉取数据块\n（本地读取 + 网络拉取）"]
-    C --> D["解压缩 + 反序列化\n得到 (key, value) 流"]
-    D --> E{"需要聚合?\n(aggregator != None)"}
-    E -- "是" --> F["ExternalAppendOnlyMap\n内存聚合 + 可溢写\n→ 聚合后 Iterator"]
-    E -- "否" --> G["直接流化\n不做任何处理"]
-    F --> H{"需要排序?\n(keyOrdering != None)"}
+    A["Reduce Task 启动</br>获取分区信息"] --> B["MapOutputTrackerWorker</br>查询 Map 输出位置"]
+    B --> C["ShuffleBlockFetcherIterator</br>并发拉取数据块</br>（本地读取 + 网络拉取）"]
+    C --> D["解压缩 + 反序列化</br>得到 (key, value) 流"]
+    D --> E{"需要聚合?</br>(aggregator != None)"}
+    E -- "是" --> F["ExternalAppendOnlyMap</br>内存聚合 + 可溢写</br>→ 聚合后 Iterator"]
+    E -- "否" --> G["直接流化</br>不做任何处理"]
+    F --> H{"需要排序?</br>(keyOrdering != None)"}
     G --> H
-    H -- "是" --> I["ExternalSorter\n内存排序 + 可溢写\n→ 有序 Iterator"]
-    H -- "否" --> J["返回 Iterator\n供上层算子消费"]
+    H -- "是" --> I["ExternalSorter</br>内存排序 + 可溢写</br>→ 有序 Iterator"]
+    H -- "否" --> J["返回 Iterator</br>供上层算子消费"]
     I --> J
 
     classDef input fill:#6272a4,stroke:#bd93f9,color:#f8f8f2
@@ -299,13 +299,13 @@ Soft Buffer 是"软引用"内存，不从 `TaskMemoryManager` 申请，而是直
 %%{init: {"theme": "dracula", "themeVariables": {"primaryColor": "#6272a4", "primaryTextColor": "#f8f8f2", "primaryBorderColor": "#bd93f9", "lineColor": "#ff79c6", "secondaryColor": "#44475a", "tertiaryColor": "#282a36"}}}%%
 graph TD
     subgraph "无 ESS 的传统模式"
-        MT1["Map Executor\n（不能被释放）"] -- "服务 Shuffle Read 请求" --> RT1["Reduce Task"]
+        MT1["Map Executor</br>（不能被释放）"] -- "服务 Shuffle Read 请求" --> RT1["Reduce Task"]
     end
 
     subgraph "有 ESS 的解耦模式"
-        MT2["Map Executor\n写出 Shuffle 文件\n注册到 ESS 后可释放"] --> ESS["ExternalShuffleService\n（独立进程，常驻节点）"]
+        MT2["Map Executor</br>写出 Shuffle 文件</br>注册到 ESS 后可释放"] --> ESS["ExternalShuffleService</br>（独立进程，常驻节点）"]
         RT2["Reduce Task"] -- "从 ESS 读取 Shuffle 文件" --> ESS
-        ESS -- "读取磁盘文件" --> DISK["本地磁盘\nShuffle 文件"]
+        ESS -- "读取磁盘文件" --> DISK["本地磁盘</br>Shuffle 文件"]
     end
 
     classDef exec fill:#6272a4,stroke:#bd93f9,color:#f8f8f2
@@ -396,19 +396,19 @@ sequenceDiagram
     participant RT as "Reduce Task j"
     participant MOT as "MapOutputTrackerWorker"
     participant SBFI as "ShuffleBlockFetcherIterator"
-    participant ESS as "ExternalShuffleService\n/ BlockManager"
+    participant ESS as "ExternalShuffleService</br>/ BlockManager"
     participant EAOM as "ExternalAppendOnlyMap"
     participant ES as "ExternalSorter"
 
     RT->>MOT: "getMapSizesByExecutorId(shuffleId, j)"
     MOT-->>RT: "[(Node1, [block1_j]), (Node2, [block2_j]), ...]"
     RT->>SBFI: "初始化拉取任务"
-    SBFI->>ESS: "并发发送 FetchRequest\n（受 maxSizeInFlight 限制）"
+    SBFI->>ESS: "并发发送 FetchRequest</br>（受 maxSizeInFlight 限制）"
     ESS-->>SBFI: "返回序列化数据块"
-    SBFI->>SBFI: "解压缩\n放入 results 队列"
+    SBFI->>SBFI: "解压缩</br>放入 results 队列"
     RT->>SBFI: "迭代消费 next()"
     SBFI-->>RT: "(key, value) 反序列化后的记录流"
-    RT->>EAOM: "insert (key, value)\n实时聚合相同 key"
+    RT->>EAOM: "insert (key, value)</br>实时聚合相同 key"
     Note over EAOM: "内存满时 Spill 到临时磁盘文件"
     RT->>EAOM: "iterator() 触发最终 Merge"
     EAOM-->>RT: "聚合后有序 Iterator"
@@ -416,7 +416,7 @@ sequenceDiagram
         RT->>ES: "将聚合结果送入 ExternalSorter"
         ES-->>RT: "排序后有序 Iterator"
     end
-    RT->>RT: "将 Iterator 传给上层算子\n（如 map、filter 等）"
+    RT->>RT: "将 Iterator 传给上层算子</br>（如 map、filter 等）"
 ```
 
 ---

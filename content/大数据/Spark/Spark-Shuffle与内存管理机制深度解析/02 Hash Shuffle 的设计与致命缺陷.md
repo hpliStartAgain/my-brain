@@ -66,10 +66,10 @@ Hash Shuffle 的核心逻辑非常简单，用伪代码描述如下：
 ```mermaid
 %%{init: {"theme": "dracula", "themeVariables": {"primaryColor": "#6272a4", "primaryTextColor": "#f8f8f2", "primaryBorderColor": "#bd93f9", "lineColor": "#ff79c6", "secondaryColor": "#44475a", "tertiaryColor": "#282a36"}}}%%
 graph TD
-    T["Map Task i"] --> W0["DiskBlockObjectWriter\n分区 0\n缓冲区 32KB"]
-    T --> W1["DiskBlockObjectWriter\n分区 1\n缓冲区 32KB"]
-    T --> W2["DiskBlockObjectWriter\n分区 2\n缓冲区 32KB"]
-    T --> WN["DiskBlockObjectWriter\n分区 R-1\n缓冲区 32KB"]
+    T["Map Task i"] --> W0["DiskBlockObjectWriter</br>分区 0</br>缓冲区 32KB"]
+    T --> W1["DiskBlockObjectWriter</br>分区 1</br>缓冲区 32KB"]
+    T --> W2["DiskBlockObjectWriter</br>分区 2</br>缓冲区 32KB"]
+    T --> WN["DiskBlockObjectWriter</br>分区 R-1</br>缓冲区 32KB"]
     T --> dots["..."]
 
     W0 --> F0["file_i_0"]
@@ -160,15 +160,15 @@ Consolidation 的核心观察是：在同一个 Executor 上，Map Task 是**串
 %%{init: {"theme": "dracula", "themeVariables": {"primaryColor": "#6272a4", "primaryTextColor": "#f8f8f2", "primaryBorderColor": "#bd93f9", "lineColor": "#ff79c6", "secondaryColor": "#44475a", "tertiaryColor": "#282a36"}}}%%
 graph TD
     subgraph "Executor 上的 Map Tasks（串行执行）"
-        T1["Map Task 1"] --> G["ShuffleFileGroup\n(R 个文件)"]
+        T1["Map Task 1"] --> G["ShuffleFileGroup</br>(R 个文件)"]
         T2["Map Task 2"] --> G
         T3["Map Task 3"] --> G
         TN["Map Task N"] --> G
     end
 
-    G --> F0["group_0_part_0\n(Task1数据 + Task2数据 + ...)"]
-    G --> F1["group_0_part_1\n(Task1数据 + Task2数据 + ...)"]
-    G --> FN["group_0_part_{R-1}\n(Task1数据 + Task2数据 + ...)"]
+    G --> F0["group_0_part_0</br>(Task1数据 + Task2数据 + ...)"]
+    G --> F1["group_0_part_1</br>(Task1数据 + Task2数据 + ...)"]
+    G --> FN["group_0_part_{R-1}</br>(Task1数据 + Task2数据 + ...)"]
 
     classDef task fill:#6272a4,stroke:#bd93f9,color:#f8f8f2
     classDef group fill:#44475a,stroke:#50fa7b,color:#f8f8f2

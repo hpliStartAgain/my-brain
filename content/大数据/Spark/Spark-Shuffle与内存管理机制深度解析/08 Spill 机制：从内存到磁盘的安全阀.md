@@ -92,18 +92,18 @@ Spill 文件中的数据是序列化格式，Merge 时需要反序列化（如�
 %%{init: {"theme": "dracula", "themeVariables": {"primaryColor": "#6272a4", "primaryTextColor": "#f8f8f2", "primaryBorderColor": "#bd93f9", "lineColor": "#ff79c6", "secondaryColor": "#44475a", "tertiaryColor": "#282a36"}}}%%
 graph TD
     subgraph "主动 Spill"
-        A1["MemoryConsumer\n每32条记录估算内存"] --> B1["向 TaskMemoryManager\n申请额外内存"]
+        A1["MemoryConsumer</br>每32条记录估算内存"] --> B1["向 TaskMemoryManager</br>申请额外内存"]
         B1 --> C1{"申请成功?"}
-        C1 -- "否" --> D1["主动调用 spill()\n序列化内存数据到磁盘\n清空内存数据结构"]
+        C1 -- "否" --> D1["主动调用 spill()</br>序列化内存数据到磁盘</br>清空内存数据结构"]
         C1 -- "是" --> E1["继续插入数据"]
     end
 
     subgraph "被动 Spill"
-        A2["消费者 A\n申请内存"] --> B2["TaskMemoryManager\n尝试获取内存"]
-        B2 --> C2{"全局内存\n是否充足?"}
-        C2 -- "否" --> D2["找到内存最多的\n消费者 B"]
-        D2 --> E2["强制调用 B.spill()\nB 序列化数据到磁盘"]
-        E2 --> F2["B 释放的内存\n分配给 A"]
+        A2["消费者 A</br>申请内存"] --> B2["TaskMemoryManager</br>尝试获取内存"]
+        B2 --> C2{"全局内存</br>是否充足?"}
+        C2 -- "否" --> D2["找到内存最多的</br>消费者 B"]
+        D2 --> E2["强制调用 B.spill()</br>B 序列化数据到磁盘"]
+        E2 --> F2["B 释放的内存</br>分配给 A"]
         C2 -- "是" --> G2["直接分配给 A"]
     end
 
