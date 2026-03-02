@@ -19,6 +19,7 @@
       background-color: var(--light);
       padding: 1rem 0 1rem 0;
       margin: 0;
+      overflow: hidden;
     }
 
     .hide-until-loaded ~ .explorer-content {
@@ -57,6 +58,7 @@
     align-self: flex-start;
     margin-top: auto;
     margin-bottom: auto;
+    position: relative;
   }
 
   button.mobile-explorer {
@@ -228,6 +230,7 @@ li:has(> .folder-outer:not(.open)) > .folder-container > svg {
       & > .explorer-content {
         transform: translateX(-100vw);
         visibility: hidden;
+        display: none;
       }
     }
 
@@ -237,6 +240,7 @@ li:has(> .folder-outer:not(.open)) > .folder-container > svg {
       & > .explorer-content {
         transform: translateX(0);
         visibility: visible;
+        display: block;
       }
     }
 
@@ -259,6 +263,7 @@ li:has(> .folder-outer:not(.open)) > .folder-container > svg {
       height: 100dvh;
       max-height: 100dvh;
       visibility: hidden;
+      display: none;
     }
 
     .mobile-explorer {
