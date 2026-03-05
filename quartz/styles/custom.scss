@@ -431,31 +431,33 @@ footer {
 }
 
 // ----------------------------------------------------------
-// 19. Full-width layout — 铺满屏幕，正文宽度固定
+// 19. Full-width layout — 仅在桌面端铺满屏幕，正文宽度固定
 // ----------------------------------------------------------
-.page {
-  max-width: 100%;
-  padding: 0;
-  box-sizing: border-box;
-
-  &>#quartz-body {
-    width: 100%;
-    // 两侧 sidebar 均分剩余空间，正文区域固定最大 800px
-    grid-template-columns: 1fr min(800px, 100%) 1fr;
-    column-gap: 2rem;
-    padding: 0 2rem;
+@media (min-width: 1200px) {
+  .page {
+    max-width: 100%;
+    padding: 0;
     box-sizing: border-box;
-  }
 
-  // 左侧 sidebar：内容靠右侧对齐（贴近正文区）
-  &>#quartz-body>.sidebar.left {
-    padding-right: 1rem;
-    padding-left: 0;
-  }
+    &>#quartz-body {
+      width: 100%;
+      // 两侧 sidebar 均分剩余空间，正文区域固定最大 800px
+      grid-template-columns: 1fr min(800px, 100%) 1fr;
+      column-gap: 2rem;
+      padding: 0 2rem;
+      box-sizing: border-box;
+    }
 
-  // 右侧 sidebar：内容靠左侧对齐（贴近正文区）
-  &>#quartz-body>.sidebar.right {
-    padding-left: 1rem;
-    padding-right: 0;
+    // 左侧 sidebar：内容靠右侧对齐（贴近正文区）
+    &>#quartz-body>.sidebar.left {
+      padding-right: 1rem;
+      padding-left: 0;
+    }
+
+    // 右侧 sidebar：内容靠左侧对齐（贴近正文区）
+    &>#quartz-body>.sidebar.right {
+      padding-left: 1rem;
+      padding-right: 0;
+    }
   }
 }
