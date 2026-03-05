@@ -568,3 +568,12 @@ NameNode在内存中维护整个HDFS的命名空间，其内存对象特征包�
 3. Cloudera: GC Pauses in NameNode
 4. Red Hat: Understanding vm.swappiness
 5. JVM Anatomy Quark: GC Design and Pauses
+
+---
+
+## 关联专栏
+
+- [[Java/JVM/00 专栏导览|JVM]]：G1 GC 的内存管理与调优
+- [[Linux/内存管理/00 专栏导览|内存管理]]：Swap 机制与 vm.swappiness 的内核原理
+- [[大数据/Hadoop/HDFS/00 专栏导览|HDFS]]：NameNode 的架构与元数据管理
+- [[Linux/性能优化/00 专栏导览|性能优化]]：JVM + OS 层面的性能诊断方法

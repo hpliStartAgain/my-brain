@@ -30,7 +30,8 @@ article {
     letter-spacing: 0.02em;
   }
 
-  ul, ol {
+  ul,
+  ol {
     margin-top: 1rem;
     margin-bottom: 1.6rem;
     padding-left: 1.5rem;
@@ -50,6 +51,7 @@ article {
 
     p {
       margin-bottom: 0.6rem;
+
       &:last-child {
         margin-bottom: 0;
       }
@@ -72,7 +74,12 @@ article {
 // ----------------------------------------------------------
 // 3. Headings — elegant weight & spacing
 // ----------------------------------------------------------
-h1, h2, h3, h4, h5, h6 {
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
   font-weight: 700;
   letter-spacing: -0.01em;
 }
@@ -100,7 +107,9 @@ h3 {
   line-height: 1.4;
 }
 
-h4, h5, h6 {
+h4,
+h5,
+h6 {
   font-size: 1.05rem;
   margin-top: 1.8rem;
   margin-bottom: 0.6rem;
@@ -123,7 +132,7 @@ pre {
   border: 1px solid var(--lightgray);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
 
-  & > code {
+  &>code {
     font-size: 0.82rem;
     line-height: 1.65;
   }
@@ -158,6 +167,7 @@ a {
   a {
     color: var(--dark);
     font-weight: 700;
+
     &:hover {
       color: var(--secondary);
     }
@@ -180,7 +190,7 @@ a {
       line-height: 1.7;
       margin-bottom: 1px;
 
-      & > a {
+      &>a {
         font-size: 0.88rem;
         padding: 0.2rem 0;
         display: inline-block;
@@ -201,14 +211,15 @@ a {
   }
 
   .folder-container {
-    div > button span,
-    div > a {
+
+    div>button span,
+    div>a {
       font-size: 0.9rem;
       font-weight: 600;
     }
   }
 
-  .folder-outer > ul {
+  .folder-outer>ul {
     margin-left: 4px;
     padding-left: 0.9rem;
     border-left: 1px solid color-mix(in srgb, var(--lightgray) 80%, transparent);
@@ -230,10 +241,10 @@ a {
 }
 
 ul.toc-content.overflow {
-  & > li {
+  &>li {
     margin-bottom: 2px;
 
-    & > a {
+    &>a {
       font-size: 0.84rem;
       line-height: 1.6;
       padding: 0.15rem 0;
@@ -291,8 +302,9 @@ ul.toc-content.overflow {
 // ----------------------------------------------------------
 // 10. Article title & meta
 // ----------------------------------------------------------
-.page > #quartz-body .page-header {
-  article > h1,
+.page>#quartz-body .page-header {
+
+  article>h1,
   & h1 {
     font-size: 2.2rem;
     line-height: 1.25;
@@ -325,7 +337,7 @@ ul.toc-content.overflow {
 // ----------------------------------------------------------
 // 12. Table styling
 // ----------------------------------------------------------
-.table-container > table {
+.table-container>table {
   border-radius: 8px;
   overflow: hidden;
   border: 1px solid var(--lightgray);
@@ -344,7 +356,7 @@ ul.toc-content.overflow {
 // ----------------------------------------------------------
 // 13. Search button
 // ----------------------------------------------------------
-.search > .search-button {
+.search>.search-button {
   border-radius: 8px;
   border: 1px solid var(--lightgray);
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
@@ -367,7 +379,7 @@ footer {
 // ----------------------------------------------------------
 // 15. Sidebar spacing polish
 // ----------------------------------------------------------
-.page > #quartz-body {
+.page>#quartz-body {
   & .sidebar {
     padding-top: 4rem;
   }
@@ -416,4 +428,34 @@ footer {
 .callout {
   border-radius: 8px;
   margin: 1.5rem 0;
+}
+
+// ----------------------------------------------------------
+// 19. Full-width layout — 铺满屏幕，正文宽度固定
+// ----------------------------------------------------------
+.page {
+  max-width: 100%;
+  padding: 0;
+  box-sizing: border-box;
+
+  &>#quartz-body {
+    width: 100%;
+    // 两侧 sidebar 均分剩余空间，正文区域固定最大 800px
+    grid-template-columns: 1fr min(800px, 100%) 1fr;
+    column-gap: 2rem;
+    padding: 0 2rem;
+    box-sizing: border-box;
+  }
+
+  // 左侧 sidebar：内容靠右侧对齐（贴近正文区）
+  &>#quartz-body>.sidebar.left {
+    padding-right: 1rem;
+    padding-left: 0;
+  }
+
+  // 右侧 sidebar：内容靠左侧对齐（贴近正文区）
+  &>#quartz-body>.sidebar.right {
+    padding-left: 1rem;
+    padding-right: 0;
+  }
 }

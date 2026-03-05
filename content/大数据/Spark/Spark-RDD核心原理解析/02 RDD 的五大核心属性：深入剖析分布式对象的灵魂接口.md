@@ -22,13 +22,13 @@ Spark 的解法是经典的**面向接口编程**：定义一套所有数据集�
 
 这套抽象问题就是五个核心方法/属性：
 
-| 问题 | 对应方法/属性 | 调度器的使用方 |
-| :--- | :--- | :--- |
-| **你有多少分区？** | `getPartitions()` | DAGScheduler 生成 Task 列表 |
-| **给你一个分区，怎么算出数据？** | `compute(split, ctx)` | Executor 执行 Task 时调用 |
-| **你依赖哪些父 RDD？** | `getDependencies()` | DAGScheduler 划分 Stage |
-| **你的 KV 数据按什么规则分区？** | `partitioner` | TaskScheduler 判断能否跳过 Shuffle |
-| **这个分区的数据在哪台机器上？** | `getPreferredLocations(split)` | TaskScheduler 做本地化调度 |
+| 问题                   | 对应方法/属性                        | 调度器的使用方                      |
+| :------------------- | :----------------------------- | :--------------------------- |
+| **你有多少分区？**          | `getPartitions()`              | DAGScheduler 生成 Task 列表      |
+| **给你一个分区，怎么算出数据？**   | `compute(split, ctx)`          | Executor 执行 Task 时调用         |
+| **你依赖哪些父 RDD？**      | `getDependencies()`            | DAGScheduler 划分 Stage        |
+| **你的 KV 数据按什么规则分区？** | `partitioner`                  | TaskScheduler 判断能否跳过 Shuffle |
+| **这个分区的数据在哪台机器上？**   | `getPreferredLocations(split)` | TaskScheduler 做本地化调度         |
 
 **关键认知**：RDD 不存储数据，它存储的是"如何获取和计算数据"的完整描述。这就是为什么 RDD 是"逻辑视图"而非"物理容器"。
 

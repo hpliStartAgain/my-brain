@@ -426,5 +426,14 @@ SET hive.optimize.constant.propagation = false;
   
 -- 查看当前设置  
 SET hive.optimize.constant.propagation;  
-```  
+```
+
+---
+
+## 关联专栏
+
+- [[大数据/Hive/00 专栏导览|Hive]]：HiveServer2 的 SQL 优化器与 UDF 机制
+- [[中间件/Redis/Redis设计与实现/00 专栏导览|Redis]]：Redis 连接池与文件描述符管理
+- [[Java/JVM/00 专栏导览|JVM]]：文件描述符泄漏的 JVM 层面诊断
+- [[Linux/进程管理/00 专栏导览|进程管理]]：文件描述符限制与 OS 层面排查  
   

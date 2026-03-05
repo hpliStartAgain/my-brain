@@ -135,7 +135,7 @@ hadoop-keytab-kerberos {
 
 这段配置说明：当应用名为 `hadoop-keytab-kerberos` 时，使用 `Krb5LoginModule`，方式是读取指定的 keytab 文件，以 `hdfs@EXAMPLE.COM` 身份登录，`required` 表示此模块必须成功。
 
-**LoginModule 的两阶段提交（Two-Phase Commit）**是一个重要的设计细节，很多人忽略了它：
+**LoginModule 的两阶段提交（Two-Phase Commit）是一个重要的设计细节，很多人忽略了它：
 
 ```
 第一阶段：login()

@@ -192,3 +192,12 @@ flowchart TD
 如果不进行修复，当前集群面临以下风险：
 *   **定时炸弹**：每次 HS2 重启或重新登录后，服务寿命仅等于 TGT 的有效期（24小时）。一旦到期，服务必挂。
 *   **权限混乱**：Paimon 的修改可能导致 Proxy User 身份丢失，引发 HDFS 文件 Owner 错误（变为 hive 用户而非业务用户）。
+
+---
+
+## 关联专栏
+
+- [[大数据/Hive/00 专栏导览|Hive]]：HiveServer2 的架构与认证机制
+- [[大数据/安全与认证/00 专栏导览|Kerberos 安全认证]]：Kerberos 协议与 TGT 续期机制
+- [[Java/JVM/00 专栏导览|JVM]]：JDK Bug 与线程调度问题
+- [[大数据/Hadoop/HDFS/00 专栏导览|HDFS]]：Proxy User 与 HDFS 文件权限
