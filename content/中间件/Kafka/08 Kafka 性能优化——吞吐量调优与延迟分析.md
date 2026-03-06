@@ -241,3 +241,10 @@ Kafka 端到端延迟（Producer 发送到 Consumer 收到）由以下部分构�
 > - Confluent Blog,《Optimizing Your Apache Kafka Deployment》
 > - Brendan Gregg,《Systems Performance》
 > - LinkedIn Engineering Blog,《How We Improved Kafka Producer Performance》
+
+---
+
+> [!note] 思考题
+> 1. Broker 的 `num.io.threads`（默认 8）控制处理磁盘 IO 的线程数，`num.network.threads`（默认 3）控制处理网络请求的线程数。在高吞吐场景中，哪个参数更可能成为瓶颈？如何通过 JMX 指标（如 `RequestHandlerAvgIdlePercent`）判断是 IO 线程还是网络线程不够用？
+> 2. Producer 的 `batch.size`（默认 16KB）和 `linger.ms`（默认 0）控制批量发送行为。`linger.ms=0` 表示不等待直接发送——牺牲了批量效率。设为 5ms 可以让 Producer 等待 5ms 积累更多消息后批量发送——提高吞吐量但增加 5ms 延迟。在什么场景下 5ms 的额外延迟是不可接受的？
+> 3. Consumer 的 `fetch.min.bytes`（默认 1）和 `fetch.max.wait.ms`（默认 500ms）控制拉取行为。如果设为 `fetch.min.bytes=1MB, fetch.max.wait.ms=100ms`——Broker 会等到积累 1MB 数据或 100ms 超时后返回。在低吞吐 Topic 上，这会增加消费延迟。你如何根据 Topic 的消息速率调优这些参数？

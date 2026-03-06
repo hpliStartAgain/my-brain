@@ -278,6 +278,11 @@ Spark on K8s 资源优化的三层体系：
 
 ---
 
+> [!note] 思考题
+> 1. Gang Scheduling 要求一个 Spark 作业的所有 Pod（Driver + 所有 Executor）必须"全部或全不"调度——如果集群资源不足以同时启动所有 Pod，则整个作业等待而不是部分启动。这解决了资源死锁问题，但引入了新的问题：如果多个大作业同时等待，且每个作业都需要大量资源，集群可能长时间处于"所有作业都在等，但集群资源利用率很低"的局面。K8s 的 Gang Scheduling 实现（如 Coscheduling）如何处理这种"饥饿"（Starvation）问题？
+> 2. Spot 实例的中断（Preemption）是有预告的——AWS 会提前 2 分钟发出中断通知，GCP 会提前 30 秒。Spark 可以通过监听 K8s 的节点污点（`node.kubernetes.io/unschedulable`）来提前感知节点即将被回收。在收到中断预告到节点实际被回收的窗口期内，Spark 能做哪些有效的优化动作来减少数据重算量？
+> 3. 容量规划的核心是预测峰值资源需求。对于 Spark 批处理作业，峰值通常发生在 Shuffle 阶段（所有 Executor 同时活跃）。如何通过历史作业的 Spark UI 指标（如每个 Stage 的峰值 Executor 数、内存使用量）来建立资源使用预测模型，从而更准确地规划集群容量？
+
 ## 参考资料
 
 - [AWS Spot Instances Best Practices](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/spot-best-practices.html)

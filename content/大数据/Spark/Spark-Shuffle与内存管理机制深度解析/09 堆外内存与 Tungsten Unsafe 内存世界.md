@@ -451,6 +451,11 @@ Tungsten 项目从 JVM 对象模型的根本局限出发，用三个关键工具
 
 ---
 
+> [!note] 思考题
+> 1. Tungsten 的 `UnsafeRow` 使用固定长度的二进制格式存储数据，避免了 Java 对象头和指针的开销。但这要求列的偏移量在行格式固定。对于变长字段（如 `String`、`Array`），`UnsafeRow` 是如何在保持"固定偏移量访问"的同时支持变长数据的？这个设计有什么局限性？
+> 2. `sun.misc.Unsafe` 绕过了 JVM 的数组边界检查，直接操作内存地址。这在性能上有显著优势，但如果 Spark 代码存在 bug，计算了错误的内存偏移量，会发生什么？与普通 Java 代码的数组越界相比，`Unsafe` 操作越界的后果严重性有何不同？
+> 3. Tungsten 使用 `MemoryBlock` 来管理内存页，每个页可以是堆内或堆外。在 `UnsafeShuffleWriter` 中，数据先写入堆外内存的 `ShuffleExternalSorter`，再序列化到磁盘。相比传统的先序列化到 Java 字节数组再写磁盘的方式，这个流程减少了哪些内存拷贝？能减少几次？
+
 ## 参考资料
 
 - [Project Tungsten: Bringing Apache Spark Closer to Bare Metal](https://databricks.com/blog/2015/04/28/project-tungsten-bringing-spark-closer-to-bare-metal.html)

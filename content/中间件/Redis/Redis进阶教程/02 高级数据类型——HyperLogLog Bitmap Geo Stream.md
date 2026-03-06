@@ -499,3 +499,10 @@ XREAD COUNT 10 STREAMS orders 1709424000000-0
 4. Redis Documentation - Streams：https://redis.io/docs/data-types/streams/
 5. Flajolet, P., et al. "HyperLogLog: the analysis of a near-optimal cardinality estimation algorithm." (2007)
 6. Redis Documentation - Redis Stack / RedisBloom：https://redis.io/docs/stack/bloom/
+
+---
+
+> [!note] 思考题
+> 1. Redisson 的 Watchdog 默认每 10 秒续期一次（锁 TTL 的 1/3）。如果 Watchdog 线程因 GC 暂停或 CPU 饥饿而无法及时续期——锁可能过期被其他客户端获取。在什么 JVM 配置下（如大堆 + Full GC）这个风险最高？你如何监控 Watchdog 的续期行为？
+> 2. Martin Kleppmann 对 Redlock 的批评核心是：分布式系统中不能依赖时钟来保证安全性——GC 暂停或时钟跳变可能导致客户端认为自己持有锁但实际已过期。Kleppmann 建议使用 fencing token（递增的锁版本号）——即使锁过期，持有旧 token 的请求会被资源端拒绝。Redis 的锁机制能否原生支持 fencing token？
+> 3. 分布式锁的替代方案：数据库行锁（`SELECT ... FOR UPDATE`）在事务内提供锁——与分布式锁相比不需要额外基础设施。消息队列串行化——将需要串行执行的操作发到同一 Partition。在什么场景下分布式锁是不可替代的（如跨数据库操作、跨服务协调）？

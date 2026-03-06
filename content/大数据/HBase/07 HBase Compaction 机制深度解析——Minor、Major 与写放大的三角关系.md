@@ -515,6 +515,11 @@ Compaction 在 HBase 的整体架构中扮演着"调控阀"的角色：
 
 ---
 
+> [!note] 思考题
+> 1. Major Compaction 将一个 Region 的所有 HFile 合并成一个，同时清理过期数据、墓碑记录和超出版本数的数据。这个操作的 I/O 代价极高（读出所有数据再写回），在生产环境中通常禁止自动 Major Compaction（`hbase.hregion.majorcompaction=0`），改为在业务低峰期手动触发。如果长期不执行 Major Compaction，会有什么系统性问题逐渐积累？
+> 2. Compaction 策略（`CompactionPolicy`）决定了哪些 HFile 被选中参与 Minor Compaction。默认的 `ExploringCompactionPolicy` 倾向于选择大小相近的 HFile 进行合并。这个策略的背后逻辑是什么？如果大量小 HFile 和少量超大 HFile 并存，这个策略会不会让小 HFile 长期无法被 Compact（因为找不到大小相近的文件）？
+> 3. Compaction 会读取大量 HFile 数据，占用 RegionServer 的磁盘 I/O 和 CPU 资源，与正常读写请求竞争资源，导致读写延迟波动（Compaction 抖动）。HBase 提供了 Compaction 限速（`hbase.regionserver.throughput.controller`）来控制 Compaction 的资源占用。在设计 HBase 集群的容量规划时，应该为 Compaction 预留多少额外的 I/O 带宽？
+
 ## 参考资料
 
 - [1] 深入理解 HBase Compaction 机制: https://cloud.tencent.com/developer/article/1488439

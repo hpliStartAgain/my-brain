@@ -346,3 +346,10 @@ Kubernetes API Server 通过前缀查询高效地获取某类资源的所有对�
 - **读一致性**：线性化读（默认）通过 ReadIndex 保证读到最新数据；串行化读直接从本地状态机读，延迟更低但可能稍旧。
 
 下一篇文章将深入 Raft 协议的核心机制——Leader 选举的随机超时、日志复制的 AppendEntries 协议，以及 Raft 的安全性保证（已提交的日志不会被覆盖）。
+
+---
+
+> [!note] 思考题
+> 1. etcd 使用 Raft 协议实现一致性，所有写操作必须经过 Leader 节点。在一个 3 节点的 etcd 集群中，写操作需要 2 个节点确认（quorum）才算成功。如果 Leader 和一个 Follower 之间的网络延迟为 100ms，写操作的最低延迟是多少？在跨数据中心部署 etcd 时（节点分布在不同城市），Raft 的延迟如何影响 Kubernetes 的 API 响应时间？
+> 2. etcd 的数据存储在 BoltDB（一个嵌入式 B+ 树 KV 存储）中。BoltDB 使用 mmap 将文件映射到内存，读操作直接从内存中读取。但 BoltDB 的写操作需要获取全局写锁——这意味着写操作是串行的。在高写入负载场景中，etcd 的写吞吐量瓶颈在哪里？bbolt（BoltDB 的 fork）做了哪些改进？
+> 3. etcd 被 Kubernetes 用作唯一的存储后端——所有集群状态（Pod、Service、ConfigMap 等）都存储在 etcd 中。如果 etcd 不可用，Kubernetes 控制平面完全无法工作。在生产环境中，你如何保证 etcd 的高可用？etcd 节点应该部署在专用机器上还是与 K8s Master 共享？

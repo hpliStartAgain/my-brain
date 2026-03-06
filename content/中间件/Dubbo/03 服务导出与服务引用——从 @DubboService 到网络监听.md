@@ -420,3 +420,10 @@ com.example.UserService\:1.0.0=\
 2. **本地缓存**使得注册中心宕机不影响已有 Consumer 的调用，大幅提升了整体系统的可用性。
 
 下一篇文章将深入注册中心的实现细节——ZooKeeper 和 Nacos 在 Dubbo 中的节点结构差异，以及 Dubbo 3.x 应用级服务发现的演进背景与实现。
+
+---
+
+> [!note] 思考题
+> 1. Dubbo 内置的负载均衡策略包括：Random（加权随机）、RoundRobin（加权轮询）、LeastActive（最少活跃调用）和 ConsistentHash（一致性哈希）。LeastActive 将请求发往当前活跃调用数最少的 Provider——适合处理能力不均匀的场景。但 LeastActive 需要实时统计活跃数——在高并发下统计的延迟是否会导致多个 Consumer 同时选择同一个 Provider（'羊群效应'）？
+> 2. 一致性哈希（ConsistentHash）将相同参数的请求路由到同一个 Provider——适合有状态缓存的场景。但当 Provider 扩缩容时，一致性哈希只迁移部分请求。在什么场景下 ConsistentHash 负载均衡可能导致热点问题（某个 Provider 承受不均匀的负载）？虚拟节点如何缓解？
+> 3. Dubbo 3.x 引入了自适应负载均衡——基于 Provider 的实时响应时间和成功率动态调整权重。响应慢或错误多的 Provider 自动降权。这种策略在 Provider 短暂变慢（如 GC 暂停）时是否会过度惩罚？恢复后权重如何快速回升？

@@ -280,6 +280,11 @@ Spark on K8s 的权限与资源管控体系：
 
 ---
 
+> [!note] 思考题
+> 1. Spark Driver 需要 K8s API 权限来创建和管理 Executor Pod。最小权限原则要求只授予必要的权限。但在多团队共享集群场景下，如果 Driver 拥有的 Role 权限设置过宽（如允许 `list` 所有 Namespace 的 Pod），会带来什么安全风险？一个被妥协的 Spark Driver 可以做什么破坏？
+> 2. `ResourceQuota` 限制了 Namespace 中可以使用的 CPU、内存总量。当 Spark 作业请求的 Executor 总资源超过 Namespace 的 Quota 限制时，新的 Executor Pod 会被 K8s 拒绝创建。Spark 会如何响应这种"资源申请失败"？它会报错终止，还是以已成功启动的 Executor 数量继续运行？
+> 3. `LimitRange` 为 Namespace 中的 Pod 设置了资源请求（request）和限制（limit）的上下界。如果 Spark 配置的 Executor 内存超过了 `LimitRange` 的 `max.memory`，Pod 创建请求会被拒绝。在大型组织中，Spark 用户往往不清楚集群的 LimitRange 配置，如何设计一套自动化的"Spark 资源配置合规检查"机制，在作业提交前就发现此类问题？
+
 ## 参考资料
 
 - Kubernetes 官方文档：RBAC Authorization

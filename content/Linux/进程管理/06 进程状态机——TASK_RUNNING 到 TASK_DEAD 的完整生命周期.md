@@ -510,3 +510,10 @@ Linux 进程状态机是理解进程行为的核心框架：
 **Load Average 的正确理解**：= R 状态进程数 + D 状态进程数的指数加权平均。"负载高、CPU 闲"的现象通常由大量 D 状态（IO 等待）进程引起。
 
 下一篇 [[07 线程的真相——Linux 为什么没有真正的线程]] 将深入 Linux 的线程模型：为什么说 Linux 没有真正的线程？`clone()` 的 `CLONE_VM | CLONE_FS | CLONE_FILES | CLONE_SIGHAND | CLONE_THREAD` 组合如何实现 POSIX 线程语义？NPTL 线程库做了什么？
+
+---
+
+> [!note] 思考题
+> 1. 信号（Signal）是异步通知机制——SIGTERM 请求进程正常退出，SIGKILL 强制杀死。SIGKILL 无法被捕获或忽略。但如果进程处于不可中断睡眠状态（D 状态，如等待 NFS 响应），SIGKILL 也无法立即杀死——进程会在睡眠结束后才处理信号。在什么场景下进程会长时间处于 D 状态？如何处理 kill -9 也杀不死的进程？
+> 2. Unix Domain Socket（UDS）用于同一主机上的进程间通信——比 TCP loopback 更快（不经过网络协议栈）。UDS 的吞吐量通常是 TCP loopback 的 2-3 倍。MySQL、PostgreSQL 在本地连接时默认使用 UDS。UDS 支持 `sendmsg` 传递文件描述符（fd passing）——这个功能在什么场景下有用（如 Nginx 的优雅重启）？
+> 3. `eventfd` 是一个轻量级的进程/线程间通知机制——比 pipe 更简单（只有一个 fd 和一个 64 位计数器）。它被广泛用于事件循环框架（如 libevent、libev）中唤醒主循环。`eventfd` 与 `pipe` 在唤醒延迟上有什么差异？在 io_uring 中 `eventfd` 扮演什么角色？

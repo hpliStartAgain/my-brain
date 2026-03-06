@@ -391,3 +391,10 @@ etcdctl snapshot restore /backup/etcd-snapshot-20260304.db \
 - **Quota / NOSPACE**：Compaction 不及时导致数据库超出 Quota（默认 2GB），集群进入只读状态，是最常见的 etcd 故障；恢复需要 Compact + Defrag + alarm disarm 三步。
 
 下一篇文章将深入 etcd 的 Watch 机制（基于 Revision 的持久化事件流，与 ZooKeeper Watcher 的本质差异）和 Lease TTL 机制（服务发现与分布式锁的基础设施）。
+
+---
+
+> [!note] 思考题
+> 1. etcd 的 Watch 机制允许客户端监听 Key 的变化并收到实时通知。Kubernetes 的 Controller 大量使用 Watch 监听资源变化（如 Pod 创建/删除）。Watch 底层使用 gRPC 的 Server Streaming——服务端持续推送事件。如果客户端处理事件太慢（消费速度跟不上推送速度），etcd 会如何处理？事件会丢失吗？
+> 2. etcd 维护了一个 MVCC（多版本并发控制）的修订历史——每次写操作递增全局 revision。Watch 可以从指定 revision 开始监听——实现'断点续传'。但 etcd 的历史修订通过 Compaction（压缩）定期清理——如果客户端的 Watch revision 已经被压缩，会收到什么错误？客户端如何处理？
+> 3. 在一个有 5000 个 Pod 的 Kubernetes 集群中，可能有数百个 Watch 同时监听不同的资源。每次 Pod 更新都需要通知所有相关的 Watch 客户端。这种'扇出'（fan-out）的 IO 开销如何影响 etcd 的性能？etcd 的 Watch 是推模型还是拉模型？与 ZooKeeper 的 Watch（一次性触发，需要重新注册）相比有什么优势？

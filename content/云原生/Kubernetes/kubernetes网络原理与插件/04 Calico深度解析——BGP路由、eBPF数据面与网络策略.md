@@ -688,3 +688,10 @@ Calico 的 eBPF 模式是向下一代网络的迈进，但它的 eBPF 使用相�
 ---
 
 *本文是 [[Kubernetes网络原理与插件]] 专栏的第 4 篇。*
+
+---
+
+> [!note] 思考题
+> 1. Calico 的 BGP 模式不使用 Overlay 封装——通过 BGP 协议将 Pod CIDR 的路由信息通告给网络中的路由器。无封装意味着没有 VXLAN 的额外开销——延迟和吞吐量都优于 Overlay 模式。但 BGP 模式要求底层网络支持 BGP——在公有云（如 AWS）中通常不支持。Calico 在 AWS 上如何退回到 VXLAN 模式？你如何判断环境是否支持 BGP？
+> 2. Calico 的 NetworkPolicy 支持比 Kubernetes 原生 NetworkPolicy 更丰富——包括全局策略（GlobalNetworkPolicy）、按 Namespace Profile 的默认规则、基于 ServiceAccount 的策略。在什么场景下你需要 Calico 的扩展策略而非原生 NetworkPolicy？
+> 3. Calico 的 WireGuard 加密——在节点之间使用 WireGuard 隧道加密 Pod 流量。与 Istio 的 mTLS（Pod 级别加密）相比，WireGuard 在节点级别加密——对应用完全透明。这两种加密方式的适用场景和性能开销有什么区别？

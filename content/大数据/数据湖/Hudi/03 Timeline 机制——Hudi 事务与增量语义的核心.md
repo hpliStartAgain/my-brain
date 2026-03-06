@@ -376,3 +376,9 @@ Archive 后的结构：
 Timeline 是 Hudi 的"神经中枢"——它的三阶段提交保证了写入的原子性，它的全序事件日志赋予了增量消费的语义，它的 Action 状态机使 Commit、Compaction、Clean 三类任务可以在分布式环境下协同运行而互不干扰。
 
 理解 Timeline 后，下一篇 [[04 Upsert 写入路径——Index 机制、HoodieKey 与 Bucket Index]] 将聚焦 Upsert 的"第一步"——如何利用索引在海量数据中精准定位每条更新记录的存储位置。这是 Hudi 相比 Delta Lake 最核心的工程差异，也是 Hudi 能高效处理 CDC 更新的根本原因。
+
+
+> [!note] 思考题
+> 1. Hudi Timeline 的 INFLIGHT 状态对应 Writer 正在执行的事务。如果 Writer 在 INFLIGHT 阶段崩溃（写了部分数据但未完成 Commit），其他 Writer 或 Rollback 进程如何检测这个"孤儿 INFLIGHT"并清理？`HoodieCleanService` 和 `HoodieRollbackCommand` 各扮演什么角色？
+> 2. Hudi 的 Multi-Writer 并发写入依赖乐观并发控制和文件系统的 `create-if-not-exists` 原子操作。在 S3 上，这个操作是否真正原子？在什么条件下，Hudi 的 Multi-Writer 模式可能产生数据不一致？
+> 3. Timeline 的 Instant Time 格式依赖机器时钟（`yyyyMMddHHmmssSSS`）。如果两台 Spark 作业所在机器时钟不同步，可能产生"时钟回退"问题，破坏 Timeline 的时序顺序。Hudi 有没有机制检测和处理这种时钟不同步问题？

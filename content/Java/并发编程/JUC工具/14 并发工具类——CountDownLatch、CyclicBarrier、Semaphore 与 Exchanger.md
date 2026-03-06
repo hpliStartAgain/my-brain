@@ -613,3 +613,10 @@ semaphore.release();
 3. OpenJDK 源码：`CountDownLatch`、`CyclicBarrier`、`Semaphore`、`Exchanger`
 4. Herlihy & Shavit, "The Art of Multiprocessor Programming", Ch.17: Barriers
 5. Dijkstra, E.W., "Cooperating Sequential Processes", 1965
+
+---
+
+> [!note] 思考题
+> 1. CountDownLatch 是一次性的（计数减到零后无法重置），CyclicBarrier 可以重复使用（所有线程到达后自动重置）。在一个'主线程等待 N 个子任务完成'的场景中，两者都能实现。但如果某个子任务失败了需要重试，CountDownLatch 的一次性特性会导致什么问题？CyclicBarrier 的 `BrokenBarrierException` 机制如何处理线程故障？
+> 2. Semaphore 的 `acquire()` 和 `release()` 不要求由同一个线程调用——这意味着线程 A 可以 `acquire()`，线程 B 可以 `release()`。这与 Lock 的'谁加锁谁解锁'语义不同。在什么场景下你需要'跨线程释放许可'的能力？这种灵活性是否也带来了滥用的风险？
+> 3. Semaphore 可以用于实现限流——控制同时访问某资源的线程数。但 Semaphore 的许可是'公平'或'不公平'的——不公平模式下新请求可能插队。在 API 限流场景中，公平 Semaphore 和不公平 Semaphore 对用户体验有什么不同影响？生产环境中你更倾向于哪种？

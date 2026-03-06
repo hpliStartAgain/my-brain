@@ -533,6 +533,11 @@ groups:
 
 ---
 
+> [!note] 思考题
+> 1. Hive 的 Kerberos 认证依赖 Delegation Token——用户首先通过 Kerberos TGT 认证，获取 Delegation Token，后续操作使用 Delegation Token 而不需要再次访问 KDC。Delegation Token 有过期时间（通常 7 天），可以通过 `renew` 操作延期。在长时间运行的 ETL 作业（如运行 10 天的历史回溯作业）中，如果忘记 renew Token，会在哪个时间点出现认证失败？如何设计自动化的 Token 续期机制？
+> 2. HiveServer2 的连接池（如 Druid、HikariCP）通常维护一定数量的常驻 JDBC 连接。这些连接在 HS2 侧对应着 Session 资源消耗（内存、线程）。如果连接池配置的最大连接数超过了 HS2 的服务能力（线程数），会导致 HS2 资源耗尽。如何通过 HS2 的 `maxconnections` 配置和连接池的超时机制，在客户端和服务端两侧协调建立"流量控制"，防止 HS2 被连接风暴压垮？
+> 3. Hive 的监控体系通常依赖 JMX 指标（通过 Prometheus JMX Exporter 采集）和 Tez UI（作业级别的 DAG 诊断）。但对于生产环境的 SLA 监控，我们更关心"慢查询"——如何系统性地识别和处理执行时间超过预期的 Hive 查询？HMS 的审计日志（`hive.metastore.event.listeners`）和 HS2 的查询历史（HiveServer2 WebUI 的 Query History）在慢查询诊断中各提供了什么信息？
+
 ## 参考资料
 
 - [[HiveServer2 Kerberos 认证故障深度分析报告]]（本知识库）

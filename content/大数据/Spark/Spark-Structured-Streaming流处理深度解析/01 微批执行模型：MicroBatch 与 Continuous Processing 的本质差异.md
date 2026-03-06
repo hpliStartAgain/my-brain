@@ -355,6 +355,11 @@ Step 2: 检查 commits/ 目录是否有 batchId = N 的 commit 文件
 
 ---
 
+> [!note] 思考题
+> 1. MicroBatch 模型将流处理分解为一系列小批次，每个批次都是一次完整的 Spark 批处理作业。这个设计决策带来了"至少一次"到"精确一次"语义的实现基础——但 MicroBatch 的批次边界本身就意味着最低延迟受限于触发间隔。Continuous Processing 模式声称可以实现毫秒级延迟，它的底层机制与 MicroBatch 有什么本质不同？为什么 Continuous 模式目前只支持有限的算子？
+> 2. Structured Streaming 的"无界表"抽象将流数据建模为一张不断追加新行的表。这个抽象对开发者友好，但在引擎内部，"表"并不真实存在——每个 MicroBatch 处理的是 Source 的一个增量 Offset 区间。当流作业重启时，它如何知道从哪个 Offset 恢复？如果 Checkpoint 损坏，有什么恢复手段？
+> 3. MicroBatch 的每个批次都会复用上一批次的 `QueryExecution` 增量计划。如果在两次批次之间，Kafka Topic 的分区数发生了变化（动态扩分区），当前批次的执行计划是否能自动感知？Source 的 Schema 变更会怎样影响正在运行的流作业？
+
 ## 参考资料
 
 - Apache Spark 官方文档：Structured Streaming Programming Guide

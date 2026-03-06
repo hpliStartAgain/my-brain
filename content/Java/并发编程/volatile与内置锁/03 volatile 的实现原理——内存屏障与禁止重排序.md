@@ -455,3 +455,10 @@ LongAdder（分段设计）：   ~8 ns/op（减少了 5-6 倍的缓存争用）
 5. Intel, "Intel 64 and IA-32 Architectures Software Developer's Manual", Vol.3A Ch.8: Multiple-Processor Management
 6. ARM, "ARM Architecture Reference Manual", B2: Memory model
 7. JMH Benchmark Suite, openjdk.java.net/projects/code-tools/jmh
+
+---
+
+> [!note] 思考题
+> 1. `volatile` 保证了可见性和有序性，但不保证原子性。`volatile int count; count++` 不是原子操作——它包含读取、加一、写入三步。但 `volatile boolean flag; flag = true` 是原子的（单次写入）。在什么场景下 `volatile` 单独就够用（不需要锁或原子类）？'状态标志'模式是唯一的安全场景吗？
+> 2. `volatile` 的写操作在 HotSpot 中通过 `lock addl $0x0, (%rsp)` 指令实现（在 x86 上）——这个 `lock` 前缀指令相当于一个 StoreLoad 屏障。`lock` 前缀会锁定缓存行（或总线，取决于 CPU 版本）。在多核心高竞争场景下，大量 `volatile` 写操作是否会导致缓存行频繁在核心之间弹跳（bouncing）？这对性能的影响与使用 `synchronized` 相比如何？
+> 3. 在单例模式的 DCL 实现中，`volatile` 的作用是防止 `instance` 引用在对象构造完成前被其他线程看到。但如果使用 `final` 字段保证初始化安全性（`final field semantics`），是否可以不需要 `volatile`？Java 语言规范对 `final` 字段的初始化安全保证具体包含哪些内容？

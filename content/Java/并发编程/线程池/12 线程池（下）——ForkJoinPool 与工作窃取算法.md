@@ -433,3 +433,10 @@ protected Long compute() {
 3. OpenJDK 源码：`java.util.concurrent.ForkJoinPool`, `java.util.concurrent.ForkJoinTask`
 4. Goetz et al., "Java Concurrency in Practice", Ch.8: Applying Thread Pools
 5. JEP 266: More Concurrency Updates (common pool configuration)
+
+---
+
+> [!note] 思考题
+> 1. ForkJoinPool 的工作窃取（Work Stealing）算法中，空闲线程从其他线程的任务队列的'尾部'窃取任务（LIFO 窃取，而本线程从'头部'执行任务（LIFO 执行）。为什么窃取端和执行端选择队列的不同端？这对缓存局部性有什么影响？
+> 2. ForkJoinPool 是 `CompletableFuture.supplyAsync()` 和 `parallelStream()` 的默认执行器（`ForkJoinPool.commonPool()`）。commonPool 的线程数默认是 `Runtime.availableProcessors() - 1`。如果在 parallelStream 的处理逻辑中有阻塞操作（如 HTTP 调用），会耗尽 commonPool 的线程，影响其他使用 commonPool 的并行操作。你如何避免这个问题？
+> 3. ForkJoinTask 的 `fork()` 将任务推入当前线程的任务队列，`join()` 等待任务完成。如果任务的分割粒度过细（如递归分割到每个元素），`fork/join` 的调度开销可能超过实际计算时间。如何确定最优的任务分割阈值？ForkJoinPool 有自适应调整分割粒度的机制吗？

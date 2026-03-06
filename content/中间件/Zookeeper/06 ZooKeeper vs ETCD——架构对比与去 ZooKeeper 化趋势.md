@@ -259,3 +259,10 @@ ZooKeeper 和 ETCD 都是**协调服务**，不是通用数据库：
 - **选型**：生态兼容优先用 ZooKeeper；云原生、Kubernetes、Go 生态优先用 ETCD；两者都不适合高写入吞吐或大数据量场景。
 
 至此，ZooKeeper 专栏全部 6 篇文章完成，从数据模型与会话机制（01），到 ZAB 协议（02），到分布式锁与选举的工程实现（03），到数据持久化（04），到生产运维（05），最后到架构演进与去 ZooKeeper 化趋势（06），构建了完整的 ZooKeeper 知识体系。
+
+---
+
+> [!note] 思考题
+> 1. ZooKeeper 集群添加新节点需要修改所有节点的配置并重启——这在 3.5.0+ 版本中通过动态重配置（Dynamic Reconfiguration）改进——可以在线添加/移除节点。但动态重配置在生产中使用时需要注意什么（如确保 quorum 始终满足、避免同时变更多个节点）？
+> 2. ZooKeeper 的数据快照（Snapshot）和事务日志用于恢复。`autopurge.snapRetainCount`（默认 3）控制保留的快照数量——旧快照自动删除。如果你需要恢复到一个已被清理的时间点——如何处理？定期将快照备份到远程存储是否是必要的运维实践？
+> 3. 从 ZooKeeper 迁移到 etcd 或 ClickHouse Keeper 是一些团队的选择——原因包括 ZooKeeper 运维复杂、性能瓶颈、不支持某些功能等。在 Kafka 从 ZooKeeper 迁移到 KRaft 的趋势下，ZooKeeper 在你的技术栈中还有多大的使用价值？哪些系统仍然强依赖 ZooKeeper？

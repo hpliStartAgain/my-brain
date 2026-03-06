@@ -550,3 +550,10 @@ Page Cache 是 Linux IO 性能的核心基础设施：
 - **大文件顺序处理**：buffered IO + `POSIX_FADV_DONTNEED` 防止缓存污染
 
 下一篇 [[05 块设备栈——从 bio 到 blk-mq 的 IO 路径]] 将深入 Page Cache 之下的层次：当 Page Cache miss 需要从磁盘读取时，IO 请求如何被封装成 `bio` 结构体，经过通用块层（Generic Block Layer）的请求队列，最终到达设备驱动。以及 Linux 5.x 时代的 blk-mq 多队列架构为什么对 NVMe SSD 如此重要。
+
+---
+
+> [!note] 思考题
+> 1. 脏页超过 `vm.dirty_background_ratio`（10%）时 flusher 后台回写；超过 `dirty_ratio`（20%）时阻塞写操作。如果应用以 1GB/s 写入而磁盘只能 200MB/s——达到 dirty_ratio 后写操作被限速到磁盘吞吐量。这种'限速'对应用延迟的影响模式是什么（突然变慢 vs 逐渐变慢）？
+> 2. cgroup v1 中 dirty 限制是全局的——一个容器的大量脏页会影响其他容器。cgroup v2 引入了 per-cgroup writeback 控制。cgroup v2 的 `memory.high` 机制如何间接控制脏页？有没有直接针对脏页的 per-cgroup 参数？
+> 3. 在使用 RAID 控制器或 SAN 存储时，`fsync` 返回成功是否意味着数据真正持久化？写缓存（Write-Back Cache）会缓存数据——如果控制器掉电且没有 BBU，缓存中的数据会丢失。你如何验证存储栈是否真正支持 `fsync` 的持久化语义？`diskchecker.pl` 等工具如何做断电测试？

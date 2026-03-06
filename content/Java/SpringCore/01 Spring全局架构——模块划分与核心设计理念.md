@@ -556,3 +556,10 @@ graph TD
 > - Rod Johnson, *Expert One-on-One J2EE Design and Development* (2002)
 > - Martin Fowler, [Inversion of Control Containers and the Dependency Injection pattern](https://martinfowler.com/articles/injection.html) (2004)
 > - Robert C. Martin, *Clean Architecture* - SOLID Principles Chapter
+
+---
+
+> [!note] 思考题
+> 1. `BeanFactory` 是 Spring IoC 容器的根接口，`ApplicationContext` 是其子接口，增加了事件发布、国际化、AOP 集成等功能。在什么场景下你会直接使用 `BeanFactory` 而非 `ApplicationContext`？Spring 文档建议'除非有明确理由，否则使用 ApplicationContext'——这个'明确理由'通常是什么？
+> 2. Spring 的 IoC 容器在启动时创建所有 singleton Bean（eager initialization）。如果一个 Bean 的初始化非常耗时（如预加载 100GB 数据），它会拖慢整个应用的启动时间。`@Lazy` 注解延迟 Bean 的初始化到首次使用时——但 `@Lazy` Bean 被另一个非 `@Lazy` Bean 依赖注入时，延迟初始化是否还有效？
+> 3. 循环依赖是 Spring IoC 中的经典问题。Spring 通过'三级缓存'解决 setter 注入的循环依赖，但无法解决构造器注入的循环依赖。三级缓存的三个 Map（`singletonObjects`、`earlySingletonObjects`、`singletonFactories`）各自存储什么？为什么 AOP 代理使得二级缓存不够，需要第三级缓存？

@@ -364,3 +364,10 @@ Dubbo 3.x 在内部将 URL 重构为结构化对象（避免频繁字符串解�
 - **Dubbo SPI**：微内核骨架，支持按名称按需加载、Adaptive 自适应扩展、Wrapper 装饰器链，是 Dubbo 高度可扩展性的基础。
 
 下一篇文章将深入 Dubbo SPI 的实现细节：`ExtensionLoader` 的加载机制、Adaptive 代理的代码生成，以及 Wrapper 装饰器链的组装原理。
+
+---
+
+> [!note] 思考题
+> 1. Dubbo 的核心角色包括 Provider、Consumer、Registry 和 Monitor。Consumer 通过 Registry 发现 Provider 的地址列表，然后直连 Provider 进行 RPC 调用（不经过 Registry 代理）。这种'注册中心只做服务发现，不转发流量'的设计与 API Gateway（所有流量经过网关）相比有什么优劣？
+> 2. Dubbo 的调用链路是：Consumer Proxy → Filter Chain → Protocol → Transport（Netty）→ Provider。Filter Chain 可以插入各种横切逻辑（如限流、监控、日志）。如果一个 Filter 执行了耗时操作（如远程调用），会阻塞整个调用链路吗？Dubbo 3.x 的异步 Filter 是如何解决这个问题的？
+> 3. Dubbo 的 SPI（Service Provider Interface）扩展机制允许用户替换几乎所有核心组件（序列化、负载均衡、注册中心等）。这种高度可扩展的设计带来了灵活性，但也增加了复杂度。在什么场景下你需要自定义 Dubbo SPI 扩展？过度使用 SPI 扩展是否会导致维护困难？

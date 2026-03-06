@@ -640,3 +640,10 @@ Multus 通过 Kubernetes CRD `NetworkAttachmentDefinition` 管理额外的网络
 ---
 
 *本文是 [[Kubernetes网络原理与插件]] 专栏的第 2 篇。*
+
+---
+
+> [!note] 思考题
+> 1. NetworkPolicy 默认不生效——需要 CNI 插件支持（Calico、Cilium 支持，Flannel 不支持）。未设置 NetworkPolicy 的 Namespace 允许所有 Pod 之间通信——即使跨 Namespace。在多租户集群中，你是否应该为每个 Namespace 设置默认的'拒绝所有入站'策略（`default-deny-ingress`）？
+> 2. NetworkPolicy 的规则基于 Label Selector 和端口——如'允许带有 `app: frontend` 标签的 Pod 访问 `app: backend` 的 8080 端口'。但 NetworkPolicy 不支持 FQDN（域名）过滤——你无法写'允许访问 api.example.com'的规则。Cilium 的 CiliumNetworkPolicy 支持 FQDN 过滤——它是如何实现的？
+> 3. 出站（Egress）NetworkPolicy 限制 Pod 的对外访问。在安全敏感的环境中，你可能希望 Pod 只能访问特定的外部服务（如只允许访问数据库和 API 网关）。但 Egress 策略需要知道目标的 IP 或 Label——外部服务的 IP 可能变化。你如何管理 Egress 策略中的外部 IP 列表？

@@ -315,6 +315,11 @@ K8s 上的 Shuffle 存储是 Spark on K8s 落地的最大工程挑战，核心�
 
 ---
 
+> [!note] 思考题
+> 1. `emptyDir` 是 Spark on K8s 最简单的 Shuffle 存储方案，数据存储在 Pod 的临时目录中，Pod 销毁后数据随之消失。这意味着 Executor Pod 一旦被 K8s 强制删除（如节点压力驱逐），Shuffle 数据就永久丢失，相关的 Stage 必须完整重试。在 Spot 实例场景下，Executor 被抢占的概率远高于普通实例，`emptyDir` 方案导致的重试频率会有多高？
+> 2. `HostPath` 将节点的本地磁盘直接挂载给 Pod，提供最接近 YARN 的磁盘性能。但 `HostPath` 有严重的安全隐患——恶意或有 bug 的应用可能通过 `HostPath` 访问宿主机的任意文件（如 `/etc/passwd`）。生产环境如何在使用 `HostPath` 获取性能的同时，通过 K8s SecurityContext 和 Node 权限限制最小化安全风险？
+> 3. Remote Shuffle Service（RSS）在 K8s 环境下通常作为 DaemonSet 部署在每个节点上，或者作为独立的 StatefulSet 部署。两种部署模式在高可用性、网络延迟和运维复杂度上有什么差异？如果 RSS 的某个节点宕机，已经写入该节点的 Shuffle 数据如何恢复？
+
 ## 参考资料
 
 - Apache Uniffle 官方文档：[https://uniffle.apache.org/](https://uniffle.apache.org/)

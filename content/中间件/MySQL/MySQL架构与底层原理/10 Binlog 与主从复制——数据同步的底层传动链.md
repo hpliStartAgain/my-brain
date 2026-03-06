@@ -388,3 +388,10 @@ mysqlbinlog \
 ---
 
 *至此，「MySQL 架构与底层原理」专栏 10 篇文章全部完成。从 MySQL 全局架构（SQL 的完整生命周期）→ Buffer Pool（内存磁盘桥梁）→ Redo Log（WAL 与崩溃恢复）→ Undo Log 与 MVCC（多版本并发控制）→ B+Tree 索引结构（页分裂机制）→ 行格式与数据页（磁盘物理存储）→ 锁机制（记录锁到间隙锁）→ 事务隔离级别（MVCC 与锁的协作）→ 查询优化器（代价模型与执行计划）→ Binlog 与主从复制（数据同步传动链），构成了一套完整的 InnoDB 底层原理知识体系。*
+
+---
+
+> [!note] 思考题
+> 1. 窗口函数（`ROW_NUMBER()`、`RANK()`、`LAG()`）允许在不分组的情况下对行进行排名和计算——避免了传统 SQL 中复杂的子查询和自连接。在一个'查询每个部门薪资排名前 3 的员工'的场景中，窗口函数比传统写法简洁多少？窗口函数的执行效率与等价的子查询写法相比如何？
+> 2. CTE（Common Table Expression，`WITH` 子句）将复杂查询拆分为可命名的临时结果集——提升可读性。递归 CTE 可以查询树形结构（如组织架构的层级关系）。MySQL 8.0 的递归 CTE 实现与 PostgreSQL 的有什么差异？递归深度有限制吗（`cte_max_recursion_depth` 默认 1000）？
+> 3. MySQL 8.0 的原生 JSON 支持允许在 JSON 列上创建虚拟列（Generated Column）并建立索引。`SELECT * FROM orders WHERE JSON_EXTRACT(details, '$.status') = 'paid'` 可以通过虚拟列 + 索引加速。但 JSON 列的更新是整列替换（非原地修改）——在频繁更新 JSON 中的某个字段时性能如何？`JSON_SET` 函数是否能实现部分更新？

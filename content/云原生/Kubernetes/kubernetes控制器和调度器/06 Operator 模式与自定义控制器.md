@@ -517,3 +517,10 @@ if !reflect.DeepEqual(cluster.Status, newStatus) {
 5. Michael Hausenblas, Stefan Schimanski (2019). *Programming Kubernetes*. O'Reilly, Chapter 6-9.
 6. OperatorHub.io：https://operatorhub.io/
 7. Kubernetes Enhancement Proposal - CRD：https://github.com/kubernetes/enhancements/tree/master/keps/sig-api-machinery/2524-crd-validation-expression-language
+
+---
+
+> [!note] 思考题
+> 1. DaemonSet 确保每个 Node（或满足条件的 Node）运行一个 Pod——典型应用包括日志收集（Fluentd/Fluent Bit）、监控（Node Exporter）和网络插件（Calico/Cilium）。DaemonSet Pod 默认容忍所有 Taint——包括 `node.kubernetes.io/not-ready`。这意味着即使 Node 不健康，DaemonSet Pod 仍然运行。在什么场景下这是正确的行为？你何时需要给 DaemonSet 添加额外的 Toleration？
+> 2. Node 的 cordon（禁止调度新 Pod）和 drain（驱逐现有 Pod）是维护操作的标准流程。`kubectl drain --ignore-daemonsets --delete-emptydir-data` 驱逐所有非 DaemonSet Pod。但如果 Pod 设置了 PodDisruptionBudget（PDB）且 drain 会违反 PDB——drain 会被阻塞。在紧急维护场景中你如何处理？
+> 3. DaemonSet 的更新策略 `RollingUpdate` 逐节点更新 Pod。`maxUnavailable: 1` 确保同时只有一个节点的 DaemonSet Pod 在更新。在 100 节点集群中，逐个更新需要很长时间——增大 `maxUnavailable` 可以加速但降低了可用性。在日志收集 DaemonSet 的更新中，`maxUnavailable: 10%` 是否可接受？

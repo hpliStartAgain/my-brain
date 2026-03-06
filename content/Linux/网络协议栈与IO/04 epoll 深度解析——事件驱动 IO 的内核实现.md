@@ -557,3 +557,10 @@ epoll 用两个数据结构的组合解决了 select/poll 的 O(n) 扫描问题�
 **LT vs ET 的本质区别只有一行代码**：LT 在收割后将 epitem 重新放回就绪链表；ET 不放回，等下次数据到来再触发。ET 性能更好但对编程要求更高（必须循环读完所有数据）。
 
 下一篇 [[05 零拷贝技术全景——sendfile、splice 与 DMA gather]] 将解析网络 IO 中另一个核心性能优化：零拷贝。传统文件发送路径中，数据从磁盘到网卡要经过 4 次内存拷贝；`sendfile()` 将其降至 2 次，SG-DMA 进一步降至 0 次 CPU 拷贝。这是 Nginx 静态文件服务性能的秘密武器。
+
+---
+
+> [!note] 思考题
+> 1. epoll 的 LT（Level-Triggered）模式在 fd 可读时每次 `epoll_wait` 都返回该 fd。ET（Edge-Triggered）模式只在状态变化时通知一次——如果应用没有读完所有数据，后续不会再通知。ET 模式要求非阻塞 IO + 循环读取直到 EAGAIN。在什么场景下 ET 模式的性能优于 LT？ET 模式最常见的编程错误是什么？
+> 2. 多线程/多进程同时 `epoll_wait` 同一个 epfd 会导致'惊群'——一个事件唤醒所有等待线程。`EPOLLEXCLUSIVE`（Linux 4.5+）保证只唤醒一个线程。Nginx 在 1.11.3+ 使用 `EPOLLEXCLUSIVE` 替代了之前的 accept_mutex。在什么场景下 `EPOLLEXCLUSIVE` 不适用？
+> 3. epoll 底层使用红黑树管理注册的 fd，就绪列表使用链表。当 fd 数量达到百万级时，`epoll_ctl` 的 O(log n) 是否成为瓶颈？`io_uring` 提供了 `IORING_OP_POLL_ADD` 作为 epoll 的替代——它在什么场景下性能更好？

@@ -545,3 +545,10 @@ Nginx 的限流机制以**漏桶算法**为基础，通过共享内存红黑树�
 ---
 
 > **下一篇**：[[09 日志体系与可观测性：access_log、error_log 与链路追踪]]
+
+---
+
+> [!note] 思考题
+> 1. ModSecurity WAF 的 OWASP CRS 规则集可能产生误报。在上线前通过 DetectionOnly 模式评估误报率——但如何在不影响生产的前提下积累足够的数据？误报的处理流程是什么——添加白名单规则还是调整 CRS 的 Paranoia Level？
+> 2. 基于签名 URL（`expires=<timestamp>&signature=<hmac>`）的防盗链比 Referer 检查更可靠——签名无法伪造且可以设置过期时间。Nginx 的 `secure_link` 模块支持这种方案。签名 URL 的生成在应用端——密钥如何安全管理？签名被泄露后如何快速失效？
+> 3. 在 Kubernetes 环境中，经过 Ingress Controller 后源 IP 变为 Pod IP。`proxy_protocol` 在 TCP 层传递真实 IP——但需要上游负载均衡器（如 AWS NLB）支持。`X-Forwarded-For` 在多层代理场景中可能被伪造——`set_real_ip_from` 指令如何'信任'特定的代理层并提取正确的客户端 IP？

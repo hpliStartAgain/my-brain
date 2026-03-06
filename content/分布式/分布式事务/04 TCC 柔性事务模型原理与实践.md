@@ -692,3 +692,10 @@ public interface InventoryTccAction {
 4. Seata 官方文档：TCC 模式. https://seata.apache.org/zh-cn/docs/dev/mode/tcc-mode
 5. Atomikos 官方文档：TCC Transactions. https://www.atomikos.com/Documentation/TccTransactions
 6. 阿里云文档：分布式事务 TCC 最佳实践. https://help.aliyun.com/document_detail/159312.html
+
+---
+
+> [!note] 思考题
+> 1. Saga 将长事务拆分为一系列本地事务——每个本地事务有对应的补偿事务。如果某个步骤失败，按逆序执行补偿事务回滚之前的操作。编排式 Saga（Orchestration，中央协调者控制流程）和协同式 Saga（Choreography，事件驱动，无中央协调者）各有什么优劣？在什么复杂度下你会选择编排式？
+> 2. Saga 的补偿事务可能失败——如'退款'补偿失败（支付渠道不可用）。这种'补偿失败'如何处理？无限重试？人工介入？在设计补偿事务时，你需要保证什么性质（如幂等性、最终可执行性）？
+> 3. Saga 只保证最终一致性——在 Saga 执行过程中，中间状态对外可见。例如订单创建成功但库存还未扣减——此时查询可能看到不一致的数据。在什么业务场景下这种中间不一致是可接受的？你如何通过'状态标记'（如订单状态为'处理中'）来向用户隐藏中间状态？

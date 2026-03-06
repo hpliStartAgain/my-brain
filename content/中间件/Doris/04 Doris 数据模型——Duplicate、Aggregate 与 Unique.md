@@ -241,3 +241,10 @@ Doris 三种数据模型是在"存储空间/写入灵活性/查询灵活性"三�
 **延伸阅读**：
 - [[02 Doris 存储引擎——Tablet、Rowset 与 Compaction]]
 - [[05 Doris 实时数据导入——Stream Load、Routine Load 与 Flink Connector]]
+
+---
+
+> [!note] 思考题
+> 1. Stream Load 是 Doris 的主要批量导入方式——通过 HTTP PUT 将数据直接发送到 BE。单次 Stream Load 的数据量建议在 100MB-1GB 之间。过小（如 1MB/次）导致大量小文件和频繁合并，过大增加失败重试成本。在 Flink 实时写入场景中，Checkpoint 间隔如何影响每次 Stream Load 的数据量？
+> 2. Routine Load 持续从 Kafka 消费数据写入 Doris——提供了 exactly-once 语义（通过 Kafka offset 和 Doris 事务的协调）。如果 Kafka 的消费速度跟不上生产速度，Routine Load 的延迟会持续增大。你如何监控和调优 Routine Load 的消费速率？增加 Routine Load Task 的并发数有什么限制？
+> 3. Doris 的 INSERT INTO ... SELECT 支持从外部表（如 Hive、Iceberg、JDBC）直接导入数据。在一个从 Hive 迁移到 Doris 的项目中，你如何设计全量导入 + 增量同步的方案？全量导入 TB 级数据时的资源消耗如何控制以避免影响线上查询？

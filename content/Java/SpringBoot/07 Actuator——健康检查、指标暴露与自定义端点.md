@@ -826,3 +826,10 @@ Spring Boot Actuator 是构建生产级应用"可观测性"的基础设施：
 > - `org.springframework.boot.actuate.endpoint.annotation.Endpoint` 源码
 > - [Micrometer 官方文档](https://micrometer.io/docs)
 > - [Spring Boot 官方文档 - Actuator](https://docs.spring.io/spring-boot/docs/current/reference/html/actuator.html)
+
+---
+
+> [!note] 思考题
+> 1. Actuator 的 `/health` 端点聚合了多个 `HealthIndicator`（如 DataSource、Redis、Elasticsearch）的状态。如果 Redis 健康检查失败但数据库正常，`/health` 返回 DOWN（聚合策略是'最差的一个决定整体'）。在 Kubernetes 中将 `/health` 用作 liveness probe——Redis 宕机会导致应用被 K8s 重启，即使应用本身是正常的。你如何避免这种'级联重启'？
+> 2. Actuator 通过 Micrometer 暴露 JVM 指标（如堆内存、GC 次数、线程数）和自定义业务指标。Micrometer 支持多种监控系统（Prometheus、InfluxDB、Datadog）。在一个 Spring Boot 应用中，你如何定义一个 Counter 指标来记录'每种订单类型的创建数量'？使用 Tag（`orderType=physical`）和使用独立的 Counter（`order.create.physical`）各有什么优劣？
+> 3. Actuator 的 `/threaddump` 端点可以获取线程快照，但默认情况下这些端点暴露在与业务端口相同的端口上。在生产环境中，你如何配置 Actuator 使用独立端口（`management.server.port`）并限制访问（仅内网可达）？如果 Actuator 端点被意外暴露到公网，可能造成什么安全风险？

@@ -507,6 +507,11 @@ YARN 的三大组件 RM、NM、AM 共同构成了一个精心设计的三角协�
 
 ---
 
+> [!note] 思考题
+> 1. ResourceManager 是 YARN 集群的全局资源仲裁者，所有计算框架都通过 AM 向 RM 申请资源。RM 不了解具体的作业逻辑，只负责资源分配。这种设计的代价是：RM 无法做"预知"调度——它不知道一个 Spark 作业未来还需要多少资源，只能响应当前的资源申请。在什么场景下，这种"无预知"调度会导致资源分配不优化？Gang Scheduling（全有全无调度）是如何在这个框架下实现的？
+> 2. NodeManager 负责管理单个节点上的 Container 生命周期，向 RM 汇报本节点的资源状况。NM 上报的资源量（CPU、内存）是静态配置的（`yarn.nodemanager.resource.memory-mb`），而不是动态检测的实际可用资源。如果节点上运行了 YARN 之外的进程（如系统守护进程、监控 Agent）占用了大量内存，NM 仍然会向 RM 声明配置的内存量可用，导致 Container 申请量超过实际可用量，引发 OOM。如何解决这个"资源超售"问题？
+> 3. AM 与 RM 之间通过心跳（`allocate()` 调用）来申请和释放资源。AM 在每次心跳时可以同时发送资源申请（ResourceRequest）和资源释放（ContainerRelease）。如果 AM 在申请了大量 Container 之后崩溃（还没有使用这些 Container），这些已分配但未使用的 Container 如何被回收？RM 会因为 AM 心跳超时而自动回收吗？
+
 ## 参考资料
 
 - Apache Hadoop 官方文档：[YARN Architecture](https://hadoop.apache.org/docs/current/hadoop-yarn/hadoop-yarn-site/YARN.html)

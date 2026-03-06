@@ -471,3 +471,10 @@ future.addListener(f -> {
 > - Apache RocketMQ 源码：`rocketmq-remoting` 模块
 > - Elasticsearch 源码：`transport-netty4` 插件模块
 > - 各项目官方文档与架构设计文档
+
+---
+
+> [!note] 思考题
+> 1. Dubbo 的网络传输层基于 Netty，使用自定义的 Dubbo 协议（16字节 Header + Body）。gRPC 基于 HTTP/2 协议，使用 Protobuf 编码。HTTP/2 的多路复用（在同一个 TCP 连接上并发传输多个请求/响应）相比 Dubbo 的连接池模型（多个 TCP 连接），在连接数管理和头部压缩方面有什么优势？在什么场景下 Dubbo 的模型更高效？
+> 2. gRPC 在 Java 中使用 Netty 作为传输层。gRPC 的流式调用（Server Streaming / Client Streaming / Bidirectional Streaming）底层是如何映射到 Netty 的 Channel 读写的？gRPC 的流控机制（Flow Control）与 HTTP/2 的流控和 Netty 的 `ChannelOption.WRITE_BUFFER_WATER_MARK` 之间是什么关系？
+> 3. 在 Dubbo 中，请求和响应通过 Request ID 进行关联——客户端发送请求时生成唯一 ID，服务端响应时携带该 ID，客户端根据 ID 找到对应的 `CompletableFuture` 并完成。如果 Request ID 用尽（假设使用 `int` 类型的自增 ID），会发生什么？在长时间运行的服务中，ID 空间的管理需要注意什么？

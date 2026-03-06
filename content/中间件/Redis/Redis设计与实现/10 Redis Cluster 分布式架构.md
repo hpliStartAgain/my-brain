@@ -410,3 +410,10 @@ CLUSTER RESET HARD                  # 重置节点的集群状态
 3. Redis Documentation - Cluster Specification：https://redis.io/docs/reference/cluster-spec/
 4. antirez - Redis Cluster 设计笔记：http://antirez.com/news/79
 5. 黄健宏 - 《Redis 设计与实现》（第二版）- 第 17 章 集群
+
+---
+
+> [!note] 思考题
+> 1. Redis Stream 的 Consumer Group 支持消息确认（`XACK`）和 Pending 列表（`XPENDING`）——未确认的消息可以被 `XCLAIM` 重新分配。在什么场景下 Redis Stream 可以替代 Kafka（如延迟要求极低、数据量不大、不需要持久化保证）？Redis Stream 的消息持久性依赖 RDB/AOF——与 Kafka 的日志持久化相比可靠性差距有多大？
+> 2. Redis Pub/Sub 的'发后即忘'语义意味着离线订阅者丢失所有消息。Redis Stream 解决了这个问题——Consumer Group 跟踪消费进度。但 Stream 的数据会持续增长——你需要通过 `MAXLEN` 或 `MINID` 限制 Stream 长度。`XTRIM MAXLEN ~ 1000000` 的 `~` 前缀表示'近似裁剪'——为什么近似比精确更高效？
+> 3. Redis 7.0 的 Sharded Pub/Sub 将消息只广播到负责对应 Slot 的节点——而非所有节点。在 100 节点 Cluster 中，普通 Pub/Sub 的一条消息广播 100 次，Sharded Pub/Sub 只广播到 1-3 个节点。这对 Pub/Sub 的吞吐量和延迟有什么改善？

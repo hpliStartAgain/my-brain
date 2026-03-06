@@ -729,3 +729,10 @@ Spring 事件机制经常与消息队列做对比，它们都实现了发布-订
 > - `org.springframework.context.event.EventListenerMethodProcessor` 源码
 > - `org.springframework.context.event.ApplicationListenerMethodAdapter` 源码
 > - [Spring Framework 官方文档 - Application Events and Listeners](https://docs.spring.io/spring-framework/reference/core/beans/context-introduction.html#context-functionality-events)
+
+---
+
+> [!note] 思考题
+> 1. SpEL 支持在运行时求值（如 `@Value("#{T(java.lang.Math).random()}")`）。与简单的 `${}` 属性占位符不同，SpEL 可以调用方法、访问属性、进行算术运算。但 SpEL 的动态求值能力也带来了安全风险——如果用户输入被直接用作 SpEL 表达式（如 `@Value("#{userInput}")`），可能导致什么安全漏洞？SpEL 注入攻击在实际中发生过吗？
+> 2. SpEL 在 Spring Security 中广泛使用——`@PreAuthorize("hasRole('ADMIN') and #user.id == authentication.principal.id")` 可以实现方法级别的细粒度权限控制。SpEL 表达式在每次方法调用时求值——在高频调用路径上，SpEL 的求值性能是否会成为瓶颈？Spring 是否缓存了 SpEL 的解析结果？
+> 3. SpEL 的 `#root` 和 `#this` 在集合选择（Selection）和投影（Projection）中有特殊含义。`names.?[#this.length() > 5]` 选择长度大于 5 的字符串。在 `@Cacheable(key = "#root.method.name + #args[0]")` 中，`#root` 指向什么对象？SpEL 在缓存注解中的典型用法有哪些？

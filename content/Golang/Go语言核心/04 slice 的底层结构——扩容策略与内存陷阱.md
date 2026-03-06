@@ -580,3 +580,10 @@ func reverse(s []int) {
 > - Go 语言规范：Slice expressions 章节
 > - Go Blog,《Go Slices: usage and internals》: https://go.dev/blog/slices-intro
 > - Dave Cheney,《Slices from the ground up》
+
+---
+
+> [!note] 思考题
+> 1. `s := make([]int, 0, 1024)` 创建了一个 len=0、cap=1024 的 slice。向其 append 1024 个元素不会触发扩容。但如果执行 `s2 := s[:512]` 再向 s2 append，s2 和 s 是否共享底层数组？什么时候 s2 的修改会影响 s 的数据？这种'共享底层数组'是 slice 最常见的 bug 来源——你有哪些编码习惯来规避？
+> 2. Go 1.18 之前，slice 的扩容策略是：cap < 1024 时翻倍，cap >= 1024 时增长 25%。Go 1.18 改用了更平滑的增长曲线。新策略解决了旧策略的什么问题？在一个需要精确控制内存使用量的场景（如嵌入式设备或内存受限容器），你应该使用 `append` 还是预分配 `make([]T, n)`？
+> 3. 从一个大 slice 中取一个小子切片 `small := big[0:10]`，如果 `big` 的底层数组很大（比如 100MB），`small` 会阻止 GC 回收整个 100MB。这就是'slice 内存泄漏'。`copy` 和 `append([]T(nil), small...)` 都能解决这个问题。它们在性能和语义上有什么区别？Go 编译器未来有可能自动优化这种场景吗？

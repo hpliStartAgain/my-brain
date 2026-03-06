@@ -336,3 +336,10 @@ vllm serve meta-llama/Llama-2-7b-chat-hf --tensor-parallel-size 2
 6. Dao et al., "FlashAttention-2: Faster Attention with Better Parallelism and Work Partitioning", ICLR 2024
 7. Ainslie et al., "GQA: Training Generalized Multi-Query Transformer Models from Multi-Head Checkpoints", EMNLP 2023
 8. Yu et al., "ORCA: A Distributed Serving System for Transformer-Based Generative Models", OSDI 2022
+
+---
+
+> [!note] 思考题
+> 1. KV Cache 将已生成 token 的 Key 和 Value 缓存起来，避免重复计算。对于一个 70B 参数的模型，生成 4096 个 token 时 KV Cache 占用多少显存？PagedAttention（vLLM 使用）通过'分页'管理 KV Cache——它解决了什么问题？与传统的连续内存 KV Cache 相比，PagedAttention 如何提升显存利用率？
+> 2. 模型量化（INT8/INT4/GPTQ/AWQ）将 FP16 权重压缩为低精度——减少显存和加速推理。但量化不可避免地带来精度损失。在什么任务类型上量化的精度损失最明显（如数学推理 vs 文本摘要）？GPTQ（逐层量化 + 校准集）和 AWQ（激活感知量化）的量化策略有什么本质区别？
+> 3. 投机解码（Speculative Decoding）使用一个小模型快速生成候选 token 序列，然后用大模型一次性验证。如果小模型的预测准确率为 80%，投机解码的加速比大约是多少？小模型和大模型的'对齐度'如何影响加速效果？在什么场景下投机解码的收益最大？

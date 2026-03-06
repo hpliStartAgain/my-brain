@@ -519,6 +519,11 @@ Shuffle Write 的核心流水线是：**插入内存数据结构 → 内存估�
 
 ---
 
+> [!note] 思考题
+> 1. `ExternalSorter` 使用 `PartitionedAppendOnlyMap` 来做 Map 端的聚合（Combine）。这个数据结构同时承担了哈希聚合和排序两个职责。当数据量超过内存阈值触发 Spill 时，它的内存使用量是如何估算的？为什么内存估算的误差会导致 OOM？
+> 2. 多次 Spill 后，磁盘上会有多个临时有序文件，最终需要做一次 K 路归并合并成单个 `.data` 文件。这个归并操作使用的是外部归并排序，它的时间复杂度和 I/O 放大系数是多少？在极端情况下（如 1000 次 Spill），归并的瓶颈在哪里？
+> 3. `.index` 文件记录了每个 Partition 在 `.data` 文件中的字节偏移量。这个设计使得 Reducer 可以精准读取自己需要的数据段，避免读取整个文件。但如果一个 Partition 的数据为空，`.index` 文件如何表示？Reducer 如何区分"该 Partition 没有数据"和"该 Partition 的数据在偏移 0 处"？
+
 ## 参考资料
 
 - [Spark SortShuffleWriter 原理](https://zhmin.github.io/posts/spark-shuffle-sort-writer-2/)

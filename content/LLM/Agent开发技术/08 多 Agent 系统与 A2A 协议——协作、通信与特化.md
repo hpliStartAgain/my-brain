@@ -482,3 +482,10 @@ async def run_research(topic: str) -> str:
 5. Anthropic, "Building Effective Agents", anthropic.com, 2024
 6. LangGraph, "Multi-Agent Networks Documentation", 2024
 7. Qian et al., "Communicative Agents for Software Development", ACL 2024 (ChatDev)
+
+---
+
+> [!note] 思考题
+> 1. 多 Agent 系统中，不同 Agent 负责不同子任务（如'研究 Agent'负责信息收集，'编码 Agent'负责代码生成）。Agent 之间的通信方式有'共享黑板'（所有 Agent 读写同一个状态）和'消息传递'（点对点通信）。在一个 5 个 Agent 协作的系统中，哪种通信方式更适合？共享状态如何避免并发冲突？
+> 2. A2A（Agent-to-Agent）协议定义了 Agent 之间的发现、协商和任务委托标准。在一个开放的 Agent 生态中，Agent A 需要委托 Agent B 执行子任务——但 Agent A 如何信任 Agent B 的能力声明？如果 Agent B 声称能'精确分析财务数据'但实际能力不足，Agent A 如何在运行时检测并降级？
+> 3. 多 Agent 系统中的'群体思维'（Groupthink）风险——如果所有 Agent 使用相同的底层 LLM，它们可能产生类似的偏见和错误。使用不同的 LLM（如 GPT-4 + Claude + Gemini）作为不同 Agent 的基座能否有效降低这种风险？多样性带来的额外成本和延迟如何评估？

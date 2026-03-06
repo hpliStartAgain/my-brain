@@ -514,3 +514,10 @@ XGROUP DELCONSUMER orders order-processors consumer-3
 3. Redis Documentation - Lists as queues：https://redis.io/docs/data-types/lists/
 4. antirez - Streams: a new general purpose data structure in Redis：http://antirez.com/news/114
 5. Redis Documentation - Sharded Pub/Sub (7.0)：https://redis.io/docs/interact/pubsub/#sharded-pubsub
+
+---
+
+> [!note] 思考题
+> 1. 20 个应用实例 × `maxTotal=50` = 1000 个并发连接。Redis 的 `maxclients` 默认 10000——但每个连接占用内存（输出缓冲区）。如果每个连接的输出缓冲区为 64KB——1000 个连接占用 64MB。在什么场景下连接数过多成为问题（如使用 Pub/Sub 的订阅连接，输出缓冲区可能增长到 MB 级）？
+> 2. Spring Boot 默认使用 `JdkSerializationRedisSerializer`——序列化后的数据包含 Java 类信息，体积大且不跨语言。替换为 `GenericJackson2JsonRedisSerializer`（JSON 格式，可读且跨语言）或 `StringRedisSerializer`（纯字符串，最紧凑）。在什么场景下 JSON 序列化的额外 CPU 开销需要关注？Protobuf 序列化是否是更优的选择？
+> 3. Lettuce 基于 Netty 的单连接多路复用——不需要连接池。Jedis 需要连接池（每个线程一个连接）。在 WebFlux/响应式编程模型中 Lettuce 是唯一选择。但在传统同步 Servlet 模型中，Lettuce 的单连接是否会成为吞吐瓶颈？Redis 6.0 的多线程 IO 如何影响这个选择？

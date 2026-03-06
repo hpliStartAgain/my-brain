@@ -255,6 +255,11 @@ query = df.writeStream.trigger(processingTime="0 seconds").format("console").sta
 
 ---
 
+> [!note] 思考题
+> 1. `ProcessingTime("0 seconds")` 触发器会在上一个批次处理完成后立即启动下一个批次，实现"尽可能快"的处理节奏。但这会导致 Driver 端的调度循环持续高负载。在数据源速率不稳定的场景下（忽高忽低），这种触发模式与 `ProcessingTime("5 seconds")` 相比，在资源利用率和延迟上有什么差异？
+> 2. `AvailableNow` 触发器会在启动时一次性处理所有当前可用数据，然后自动停止。这看起来像是一次全量批处理，但它是作为流作业运行的。与直接用 Spark 批处理读取相同数据相比，`AvailableNow` 有哪些额外优势（如 Checkpoint 记录进度、精确一次语义）？在什么场景下应该选择 `AvailableNow` 而不是直接批处理？
+> 3. `Continuous` 触发器使用长时间运行的 Task（Epoch-based 执行模型），而不是 MicroBatch 的短 Task 模式。这意味着 Continuous 模式的 Task 失败后，必须从上一个 Epoch Checkpoint 重放数据，而不能像 MicroBatch 那样只重试单个批次。在 Continuous 模式下，如何平衡 Epoch 间隔（Checkpoint 粒度）与故障恢复代价之间的关系？
+
 ## 参考资料
 
 - Apache Spark 官方文档：Structured Streaming Triggers

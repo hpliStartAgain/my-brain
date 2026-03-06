@@ -391,6 +391,11 @@ Spark 统一内存管理模型的本质是：**用动态边界替代静态分区
 
 ---
 
+> [!note] 思考题
+> 1. Spark 的 Executor 内存由 `spark.executor.memory` 控制，但真正可用于 Execution 和 Storage 的内存只是其中一部分（`spark.memory.fraction` 默认 0.6）。另外 40% 预留给了 User Memory 和 Reserved Memory。在什么情况下 User Memory 会被撑爆？`spark.memory.fraction` 调高到 0.8 会有什么潜在风险？
+> 2. `StaticMemoryManager`（旧版内存管理）将 Execution 和 Storage 的内存区域静态分割，两者不能互相借用。在迭代式机器学习场景（如需要大量缓存的 MLlib 算法）中，静态分割为什么会导致严重的内存浪费？`UnifiedMemoryManager` 是如何从根本上解决这个问题的？
+> 3. 堆外内存（Off-Heap）不受 JVM GC 管理，由 Spark 通过 `sun.misc.Unsafe` 直接分配。如果 Spark 进程在持有大量堆外内存时崩溃，这些内存会被操作系统自动回收吗？堆外内存泄漏在 Spark 中有哪些典型触发场景？
+
 ## 参考资料
 
 - [Spark 统一内存管理：UnifiedMemoryManager](https://blog.csdn.net/aijiudu/article/details/78032663)

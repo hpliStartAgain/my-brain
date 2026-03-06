@@ -537,3 +537,10 @@ Namespace 提供的是**视图隔离**而非**安全隔离**。一个拥有 `CAP
 4. Kubernetes Documentation - Share Process Namespace：https://kubernetes.io/docs/tasks/configure-pod-container/share-process-namespace/
 5. runc source code：https://github.com/opencontainers/runc
 6. Brendan Burns et al. (2019). *Kubernetes: Up and Running*, 2nd Edition. O'Reilly, Chapter 5.
+
+---
+
+> [!note] 思考题
+> 1. Dockerfile 的每条指令创建一个镜像层。`RUN apt-get update && apt-get install -y python3` 写在一条 RUN 中——如果分成两条 RUN，`apt-get update` 的缓存层可能过期导致安装失败。多阶段构建（Multi-Stage Build）如何减少最终镜像大小？在一个 Go 应用中，编译阶段使用 `golang:1.22` 镜像，运行阶段使用 `scratch`——最终镜像可以多小？
+> 2. 镜像层缓存加速构建——如果 Dockerfile 中的指令未变，直接使用缓存层。但 `COPY . .` 会在任何文件变化时使缓存失效——即使只改了一行代码。你如何通过将'依赖安装'和'代码复制'分开来最大化缓存命中率？`COPY go.mod go.sum ./` → `RUN go mod download` → `COPY . .` 的顺序为什么重要？
+> 3. 镜像安全扫描（Trivy、Snyk）检测镜像中的已知漏洞。基础镜像（如 `ubuntu:22.04`）可能包含数百个 CVE。使用最小化基础镜像（`alpine`、`distroless`、`scratch`）可以大幅减少攻击面。但 `alpine` 使用 musl libc 而非 glibc——在什么场景下这会导致兼容性问题？

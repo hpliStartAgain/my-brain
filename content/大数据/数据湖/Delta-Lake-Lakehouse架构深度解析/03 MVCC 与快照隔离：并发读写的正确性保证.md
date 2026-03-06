@@ -303,6 +303,11 @@ Delta Lake 的并发控制体系建立在两个相互配合的机制之上：
 
 ---
 
+> [!note] 思考题
+> 1. Delta Lake 使用乐观并发控制（OCC），冲突判断基于操作是否涉及相同的文件。在高并发 MERGE 操作场景下，冲突率如何估算？如何通过分区设计降低冲突概率？
+> 2. 快照隔离保证读操作始终读取一致的快照。如果在长时间读操作（2 小时批处理）期间，`VACUUM` 删除了该快照版本引用的旧文件，读操作会失败吗？`deletedFileRetentionDuration` 参数与快照隔离有什么关系？
+> 3. `VACUUM` 也会破坏 Time Travel——旧数据文件被删除后无法查询历史版本。在设计 Time Travel 保留策略时，如何在存储成本和历史回溯能力之间做出合理权衡？
+
 ## 参考资料
 
 - [Delta Lake 事务协议规范](https://github.com/delta-io/delta/blob/master/PROTOCOL.md#optimistic-concurrency-control)

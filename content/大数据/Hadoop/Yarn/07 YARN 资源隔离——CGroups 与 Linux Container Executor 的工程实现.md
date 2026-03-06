@@ -449,6 +449,11 @@ YARN 的资源隔离形成了一个层次化的防御体系：
 
 ---
 
+> [!note] 思考题
+> 1. CGroups 的 CPU 隔离（`cpu.shares` 和 `cpu.cfs_quota_us`）有两种模式：软限制（shares，按比例分配，CPU 空闲时可超额使用）和硬限制（cfs_quota，严格限制最大 CPU 使用率）。YARN 的 `yarn.nodemanager.linux-container-executor.cgroups.strict-resource-usage` 参数控制使用哪种模式。在计算密集型作业（如 Spark）与 I/O 密集型作业（如 Hive Tez）混部时，软限制和硬限制各有什么优缺点？
+> 2. Linux Container Executor（LCE）是 YARN 的安全容器执行器，要求以提交作业的用户身份运行 Container 进程，防止不同用户的 Container 互相影响。LCE 依赖一个 SetUID 的 `container-executor` 二进制文件来切换用户身份。如果攻击者通过提交恶意代码获得了 YARN Container 的执行权限，LCE 能够防止他们提权到 root 吗？还有哪些安全边界是 LCE 无法防护的？
+> 3. YARN 的内存隔离依赖 CGroups 的 `memory.limit_in_bytes` 硬限制，超过限制的进程会被 OOM Killer 杀死。但 YARN Container 中运行的 JVM 进程（如 Spark Executor）使用了大量 JVM 堆外内存（Direct Memory、MemoryMapped Files），这些堆外内存也占用 OS 内存，但不受 JVM `-Xmx` 控制。如何在设置 CGroup 内存限制时为 JVM 堆外内存留出足够空间，避免 Container 因堆外内存导致的 OOM Kill？
+
 ## 参考资料
 
 - Apache Hadoop 官方文档：[YARN CGroups](https://hadoop.apache.org/docs/current/hadoop-yarn/hadoop-yarn-site/NodeManagerCgroups.html)

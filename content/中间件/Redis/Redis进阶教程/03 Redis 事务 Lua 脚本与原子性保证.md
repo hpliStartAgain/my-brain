@@ -514,3 +514,10 @@ FUNCTION RESTORE <serialized-data>
 3. Redis Documentation - Redis Functions：https://redis.io/docs/interact/programmability/functions-intro/
 4. Antirez - Redis Transactions：http://antirez.com/news/
 5. Redis Source Code - scripting.c / multi.c：https://github.com/redis/redis/tree/unstable/src
+
+---
+
+> [!note] 思考题
+> 1. Sorted Set 延迟队列的'获取并删除'操作需要原子性。`ZPOPMIN`（Redis 5.0+）原子弹出分数最小的元素——但无法加条件（如只弹出分数 ≤ 当前时间的元素）。Lua 脚本 `ZRANGEBYSCORE + ZREM` 保证原子性。在多消费者场景中如何避免同一消息被多个消费者获取？
+> 2. 消息可靠性：消费者获取消息后崩溃导致消息丢失。'处理中队列'模式——消息从延迟队列移到'processing' Sorted Set（score 为超时时间），处理完后删除；超时未删除的消息重新入队。这与 Redis Stream 的 `XPENDING` + `XCLAIM` 机制有什么相似？你是否应该直接使用 Redis Stream 替代 Sorted Set 延迟队列？
+> 3. Redis 延迟队列在什么数据量下适用——如果每天有千万级延迟任务，Redis 的内存占用和 CPU 开销是否可控？与 RocketMQ 的延迟消息（支持 18 个固定延迟级别）和 RabbitMQ 的 Dead Letter Queue（通过 TTL + DLX 实现任意延迟）相比，Redis 方案的灵活性和可靠性如何？

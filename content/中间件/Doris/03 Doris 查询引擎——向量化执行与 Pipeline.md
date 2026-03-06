@@ -211,3 +211,10 @@ Doris 查询引擎的演进路径代表了现代 OLAP 系统的共同方向：
 **延伸阅读**：
 - [[01 Doris 全局架构——FE BE 分离与 MPP 执行]]
 - [[04 Doris 数据模型——Duplicate、Aggregate 与 Unique]]
+
+---
+
+> [!note] 思考题
+> 1. Doris 的 CBO（Cost-Based Optimizer）使用统计信息（表行数、列基数、直方图）来选择最优执行计划。如果统计信息过期（如大量数据导入后未更新统计），CBO 可能选择错误的 JOIN 顺序或 JOIN 方式。`ANALYZE TABLE` 更新统计的开销有多大？在频繁导入数据的场景中，统计信息应该多久更新一次？
+> 2. Doris 支持多种 JOIN 策略：Broadcast Join（小表广播到所有节点）、Shuffle Join（按 JOIN Key 重分布）和 Colocate Join（数据已按 JOIN Key 预分布，无需网络传输）。Colocate Join 的前提是两个表的 Colocate Group 相同——这要求建表时就规划好。在一个 star schema（事实表 + 维度表）中，哪些表适合设置 Colocate？
+> 3. Doris 的 Runtime Filter（运行时过滤器）在 JOIN 执行时动态生成过滤条件——例如 Build 端生成 Bloom Filter 推送到 Probe 端，提前过滤不匹配的行。Runtime Filter 在什么场景下效果显著（高选择性 JOIN）？在低选择性 JOIN（几乎所有行都匹配）中，Runtime Filter 的生成和传输开销是否反而拖慢查询？

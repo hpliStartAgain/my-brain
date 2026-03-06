@@ -444,3 +444,10 @@ Ambient Mesh 的出现，证明了这个"下沉"还可以做得更彻底——�
 ---
 
 *本文是 [[服务网格]] 专栏的第 7 篇（终篇）。相关专栏：[[05 Cilium深度解析——eBPF驱动的下一代网络与可观测性|Cilium eBPF]]、[[kubernetes网络原理与插件|K8s 网络专栏]]、[[01 容器的本质——从进程隔离到 OCI 标准|Docker 容器]]*
+
+---
+
+> [!note] 思考题
+> 1. Linkerd 以轻量著称——Sidecar（linkerd-proxy，Rust 编写）资源占用远小于 Envoy。在资源受限的环境中（如边缘计算），Linkerd 可能比 Istio 更合适。但 Linkerd 的功能不如 Istio 丰富（如不支持 Envoy 的 Wasm 扩展）。在什么功能需求下你会选择 Istio 而非 Linkerd？
+> 2. Cilium Service Mesh 基于 eBPF——不需要 Sidecar（或可选 Envoy 做 L7 处理）。Cilium 同时提供网络策略（CNI）和服务网格——减少了组件数量。但 Cilium 对内核版本有要求（通常需要 5.4+）。在你的环境中内核版本是否是限制因素？
+> 3. Service Mesh 的'是否需要'问题——在什么阶段引入 Service Mesh 是合理的？10 个微服务？50 个？还是只在需要 mTLS 或灰度发布时？过早引入增加了系统复杂度和运维负担——你如何评估 Service Mesh 的 ROI？

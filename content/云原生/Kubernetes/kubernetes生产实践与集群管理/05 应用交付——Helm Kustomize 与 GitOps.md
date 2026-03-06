@@ -639,3 +639,10 @@ spec:
 5. Argo Rollouts：https://argoproj.github.io/argo-rollouts/
 6. Kubernetes Documentation - Managing Resources：https://kubernetes.io/docs/concepts/cluster-administration/manage-deployment/
 7. GitOps Working Group：https://opengitops.dev/
+
+---
+
+> [!note] 思考题
+> 1. EFK（Elasticsearch + Fluentd/Fluent Bit + Kibana）是传统的 Kubernetes 日志方案。Fluent Bit 作为 DaemonSet 在每个节点收集容器日志（`/var/log/containers/*.log`）并发送到 ES。在每天产生 TB 级日志的集群中，ES 的存储成本可能很高。Loki（Grafana 的日志系统）通过只索引标签（不全文索引）大幅降低了存储成本——但全文搜索能力不如 ES。在什么查询模式下 Loki 足够使用？
+> 2. 容器日志的生命周期：容器写 stdout/stderr → 容器运行时（containerd）将日志写入节点文件 → 日志收集器（Fluent Bit）读取并发送到后端。如果容器被重新创建（如 Pod 重启），旧容器的日志文件保留多久？`kubectl logs --previous` 如何查看上一个容器的日志？
+> 3. 结构化日志（JSON 格式）vs 非结构化日志（纯文本）。结构化日志可以直接在 ES/Loki 中按字段查询（如 `level: ERROR AND service: payment`）。在推动团队使用结构化日志时，你需要提供什么标准和工具（如日志库的配置模板、日志格式规范）？

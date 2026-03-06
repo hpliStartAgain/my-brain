@@ -500,6 +500,11 @@ NameNode 永远不参与数据传输，这个看似简单的设计决策，是 H
 
 ---
 
+> [!note] 思考题
+> 1. NameNode 将整个文件系统的命名空间和 Block 映射关系全部加载到内存中，这使得元数据访问极快，但也限制了 HDFS 能管理的文件总数（受限于 NameNode 内存大小）。每个文件和 Block 在 NameNode 内存中大约占用 150 字节元数据。如果一个集群的 NameNode 有 128GB 内存，理论上最多能管理多少个文件（假设平均每文件 2 个 Block）？这个上限对生产集群规划有什么指导意义？
+> 2. HDFS 的写入流程是 Pipeline 模式：Client 将数据发送给第一个 DataNode，第一个 DataNode 转发给第二个，以此类推。这个链式传输的优势是什么？如果 Pipeline 中的某个 DataNode 在写入过程中宕机，Client 如何处理这个故障？写入操作会失败还是会自动重建 Pipeline？
+> 3. Client 读取 HDFS 文件时，NameNode 会返回每个 Block 的所有副本位置，Client 根据网络拓扑选择"最近"的 DataNode 读取。"最近"的判断基于机架感知（Rack Awareness）。如果 Client 运行在集群外部（如一台独立的应用服务器），它对集群内部的机架拓扑一无所知，会选择哪个 DataNode？这对跨机房部署的读取性能有什么影响？
+
 ## 参考资料
 
 - Apache Hadoop 官方文档：[HDFS Architecture](https://hadoop.apache.org/docs/current/hadoop-project-dist/hadoop-hdfs/HdfsDesign.html)

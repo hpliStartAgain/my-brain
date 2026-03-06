@@ -430,3 +430,10 @@ Q1：应用是否有自己的内存缓存（Buffer Pool / Block Cache）？
 **错误匹配的代价**：将 Kafka 改为 Direct IO（绕过 Page Cache），会让"追尾消费"（消费最新数据）从内存速度退化为磁盘速度，吞吐量下降 10-100 倍。将 MySQL 改为 Buffered IO，会导致 Buffer Pool 和 Page Cache 的双重缓存，内存利用率减半，且写入时有额外的 CPU 拷贝开销。
 
 下一篇 [[07 网络性能调优——全栈参数配置与基准测试]] 将对前面网络协议栈专栏中散落各篇的调优内容进行**系统性整合**，给出从 NIC 驱动到应用层的完整 sysctl 调优参数清单，以及如何用 `iperf3`/`netperf` 科学地进行网络基准测试，验证调优效果。
+
+---
+
+> [!note] 思考题
+> 1. `mmap` 的 Page Fault 开销在高频小 IO 场景下可能成为瓶颈。在顺序读大文件时 mmap 比 read() 更快（少一次用户态/内核态数据拷贝）。但在随机读小块数据时，mmap 的 Page Fault 开销可能抵消拷贝节省。RocksDB 在什么层使用 mmap？为什么 RocksDB 提供了 mmap 和 pread 两种读取模式？
+> 2. `io_uring` 的 `IORING_SETUP_SQPOLL` 模式让内核线程持续轮询提交队列。在高 IOPS 场景（>500K IOPS）下，轮询避免了每次提交的系统调用开销。但空闲时 CPU 仍在消耗——`sq_thread_idle` 参数如何在响应性和 CPU 开销之间取得平衡？在什么 IOPS 水平下 SQPOLL 模式开始有收益？
+> 3. `io_uring` 支持 linked SQEs（链式提交）。'先 read 再 write'可作为原子序列提交。如果链中第一个操作失败，后续操作是否被取消？`IOSQE_IO_HARDLINK` 和 `IOSQE_IO_LINK` 在失败处理上有什么区别？

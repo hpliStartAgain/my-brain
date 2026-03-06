@@ -269,3 +269,10 @@ Compaction 是保持读性能的关键后台工作——Cumulative Compaction �
 **延伸阅读**：
 - [[01 Doris 全局架构——FE BE 分离与 MPP 执行]]
 - [[04 Doris 数据模型——Duplicate、Aggregate 与 Unique]]
+
+---
+
+> [!note] 思考题
+> 1. Doris 的三种数据模型各有适用场景：Duplicate（保留所有原始数据）、Aggregate（预聚合，相同 Key 的数据自动合并）、Unique（主键去重，保留最新版本）。在用户行为日志场景中（需要保留每条记录但也需要聚合统计），应该选择 Duplicate 还是 Aggregate？如果选择 Duplicate，聚合计算的性能是否会受影响？
+> 2. Unique Key 模型支持实时更新——INSERT 新数据时自动替换相同主键的旧数据。底层通过 Merge-on-Read 或 Merge-on-Write 实现。Merge-on-Read 写入快但查询时需要合并——在什么查询模式下 Merge-on-Read 的开销可以接受？Doris 2.0 的 Merge-on-Write 如何在写入时完成合并？
+> 3. Aggregate 模型的预聚合在数据导入时自动执行——如 `SUM`、`MAX`、`MIN`、`REPLACE`。但预聚合只对定义的聚合函数生效——如果后续需要计算一个未预定义的聚合（如中位数），就无法利用预聚合数据。这种'提前绑定聚合逻辑'的局限性如何应对？物化视图是否能解决？

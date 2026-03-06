@@ -398,3 +398,10 @@ K8s 不关心你的代码仓库在哪里、如何编译、如何打包成镜像�
 5. Kubernetes Design Principles：https://github.com/kubernetes/design-proposals-archive
 6. Brian Grant (2018). *Kubernetes Design Principles*. KubeCon keynote.
 7. Joe Beda, Brendan Burns, Kelsey Hightower (2019). *Kubernetes: Up and Running*, 2nd Edition. O'Reilly.
+
+---
+
+> [!note] 思考题
+> 1. Kubernetes 的声明式 API——用户描述'期望状态'（如'运行 3 个副本'），Controller 负责将实际状态收敛到期望状态。与命令式 API（如'启动一个容器'）相比，声明式的优势在于自愈能力——Pod 崩溃后 Controller 自动重建。但声明式也有劣势——你无法精确控制'如何'达到目标状态。在什么场景下声明式模型不够灵活（如需要特定的操作顺序）？
+> 2. Kubernetes 的'最终一致性'模型——Controller 异步调谐，状态变化不是瞬间完成的。从 `kubectl apply` 到 Pod 实际运行可能需要数秒到数分钟。在需要快速响应的场景中（如自动扩缩容应对流量突增），这个延迟是否可接受？你如何缩短从'决策到生效'的延迟？
+> 3. Kubernetes 的 Label 和 Selector 是松耦合的对象关联机制——Service 通过 Selector 关联 Pod，Deployment 通过 Selector 关联 ReplicaSet。Label 的错误配置可能导致严重问题——如两个 Deployment 使用相同 Selector 导致 Pod 被错误管理。你在 Label 设计中遵循什么命名规范？`app.kubernetes.io/*` 推荐 Label 集有什么价值？

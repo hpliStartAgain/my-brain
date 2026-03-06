@@ -234,3 +234,10 @@ Offset: 3  Key:user1 Value:age=20  ← 只保留最新值
 > - 《Kafka: The Definitive Guide》, Chapter 5: Kafka Internals
 > - Linux `sendfile()` man page
 > - Brendan Gregg,《Systems Performance》, Chapter on File Systems
+
+---
+
+> [!note] 思考题
+> 1. Producer 的分区策略决定消息发往哪个 Partition。默认的 Sticky Partitioner 在同一 batch 内将消息发往同一 Partition（提升 batch 效率）。如果消息有 Key，按 Key 的 hash 值分区——保证相同 Key 的消息有序。在订单消息场景中（按 order_id 分区），如果某些 order_id 的消息量远大于其他（如热门商品），会导致 Partition 间数据倾斜——你如何缓解？
+> 2. Kafka 的幂等生产者（`enable.idempotence=true`）通过 Producer ID + Sequence Number 在 Broker 端去重——保证单 Partition 内不丢不重。但幂等只保证单会话（单 Producer 实例）内的去重。如果 Producer 重启（新的 Producer ID），之前的 Sequence 记录丢失——是否可能产生重复消息？事务（`transactional.id`）如何解决跨会话的 exactly-once？
+> 3. `acks` 参数控制写入确认级别：`acks=0`（不等确认）、`acks=1`（Leader 确认）、`acks=all`（所有 ISR 确认）。`acks=all` + `min.insync.replicas=2` 保证至少 2 个副本写入成功。在一个 3 副本的 Partition 中，如果 ISR 缩减到只有 Leader 一个节点，`acks=all` + `min.insync.replicas=2` 会导致什么？消息会被拒绝还是降级为 `acks=1`？

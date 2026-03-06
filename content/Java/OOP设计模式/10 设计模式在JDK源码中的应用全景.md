@@ -713,3 +713,10 @@ protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundE
 > - OpenJDK 源码（GitHub: openjdk/jdk）
 > - Java SE 21 API Documentation（Oracle Docs）
 > - Doug Lea,《Java Concurrency in Practice》（AQS 的设计哲学）
+
+---
+
+> [!note] 思考题
+> 1. Martin Fowler 在《重构》中提出'先写简单代码，遇到变化时再通过重构引入设计模式'。但在大型团队中，如果每个人都'先简单后重构'，代码库很快会变成一团乱麻。在团队规模和代码规模增长时，预先设计（Up-front Design）和渐进式设计（Emergent Design）如何取得平衡？
+> 2. 函数式编程（Lambda、Stream、Optional）的流行使得某些设计模式变得'过时'——策略模式可以用 Lambda 替代，迭代器模式可以用 Stream 替代，观察者模式可以用响应式流替代。在 Java 8+ 项目中，还有哪些 GoF 模式仍然不可替代？函数式编程是否能完全取代面向对象的设计模式？
+> 3. 在微服务架构中，传统 GoF 设计模式（面向单进程内的对象协作）的适用范围缩小。取而代之的是分布式设计模式（如断路器、服务发现、Saga、CQRS）。你认为 GoF 设计模式在微服务时代最大的价值体现在哪里——是在单个服务内部的代码组织，还是在理解分布式模式背后的设计哲学？

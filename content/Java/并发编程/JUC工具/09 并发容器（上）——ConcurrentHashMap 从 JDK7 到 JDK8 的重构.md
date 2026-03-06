@@ -524,3 +524,10 @@ JDK 8 的重构本质是：用**更细粒度**（单桶）替代**中等粒度**
 3. Goetz et al., "Java Concurrency in Practice", Ch.5: Building Blocks
 4. 美团技术博客, "Java 8 ConcurrentHashMap 源码分析", 2018
 5. JDK Bug JDK-8062841: "ConcurrentHashMap.computeIfAbsent can hang", bugs.openjdk.java.net
+
+---
+
+> [!note] 思考题
+> 1. JDK 7 的 ConcurrentHashMap 使用分段锁（Segment，每个 Segment 是一个 ReentrantLock），JDK 8 改为 CAS + synchronized（锁单个 Node）。JDK 8 方案在什么场景下性能优于 JDK 7 的分段锁？分段锁的'段数'（concurrencyLevel）固定导致了什么问题？
+> 2. ConcurrentHashMap 的 `size()` 方法在 JDK 8 中使用了类似 `LongAdder` 的分散计数器（`baseCount` + `counterCells`）。这意味着 `size()` 返回的值可能不是精确的实时值。在什么场景下这种不精确会导致问题？如果你需要 ConcurrentHashMap 的精确大小，应该怎么做？
+> 3. ConcurrentHashMap 的 `computeIfAbsent(key, mappingFunction)` 在 JDK 8 中如果 mappingFunction 试图修改同一个 map（如递归地 put 或 computeIfAbsent），可能导致死锁。这个 bug 在 JDK 9 中被修复了——修复方案是什么？在 JDK 8 中如何规避这个问题？

@@ -309,3 +309,10 @@ Dubbo 针对注册中心宕机设计了三级容灾：
 - **容灾**：内存缓存 + 本地文件缓存 + FailbackRegistry 三级机制，使注册中心宕机不影响已有调用，保证了服务的高可用。
 
 下一篇文章将深入 Dubbo 的通信层——Dubbo 协议的报文格式、Netty 的 Channel 管理与心跳，以及 Exchange 层的请求-响应关联机制。
+
+---
+
+> [!note] 思考题
+> 1. Dubbo 的 Cluster 容错策略包括：Failover（失败自动切换重试）、Failfast（快速失败）、Failsafe（失败安全忽略异常）和 Failback（失败自动恢复后台重试）。在支付场景中应该使用 Failfast（避免重复支付）还是 Failover（保证成功率）？如果接口不是幂等的，Failover 重试会导致什么问题？
+> 2. Dubbo 3.x 集成了 Sentinel 实现限流和熔断。熔断器的三种状态（Closed→Open→Half-Open）如何协作？当熔断打开时所有请求快速失败——这对调用方意味着什么？调用方是否需要有自己的降级逻辑（如返回缓存数据或默认值）？
+> 3. 服务降级是在 Provider 不可用时 Consumer 端返回兜底数据。Dubbo 支持 `mock` 机制——在 `@DubboReference(mock="return null")` 中配置 mock 返回值。但静态 mock 值可能不满足业务需求——在什么场景下你需要实现自定义的 Mock 类？Mock 逻辑是否应该包含业务判断？

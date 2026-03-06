@@ -385,6 +385,11 @@ Spark 之所以接受 Shuffle 的高代价，是因为它需要提供**通用的
 
 ---
 
+> [!note] 思考题
+> 1. Shuffle 的五类代价（序列化、磁盘 I/O、网络传输、反序列化、内存压力）中，在不同的集群规模下，哪类代价最容易成为瓶颈？在千节点规模的集群与十节点规模的集群上，Shuffle 的主要瓶颈往往不同——为什么？
+> 2. Spark 提供了 `reduceByKey` 和 `groupByKey` 两个算子，前者在 Map 端做局部聚合（Combine），后者不做。`reduceByKey` 之所以性能更好，不仅因为减少了网络传输量，还因为它改变了 Shuffle 的哪些底层行为？在什么情况下两者的结果会不一致？
+> 3. 宽依赖是 Shuffle 的充要条件吗？`coalesce`（不 shuffle 版本）是一个宽依赖操作，但它不产生 Shuffle。这说明 Shuffle 与宽依赖之间的关系是什么？DAGScheduler 划分 Stage 的真正依据是什么？
+
 ## 参考资料
 
 - [Spark Architecture: Shuffle](https://0x0fff.com/spark-architecture-shuffle/) — 深度解析 Spark Shuffle 架构

@@ -574,3 +574,10 @@ CNI_NETNS=/var/run/netns/container1 \
 **策略层（iptables/eBPF）**：iptables 通过 Netfilter 的五个钩子实现 NAT、端口映射和访问控制，但其 O(n) 的链式遍历在大规模场景下成为瓶颈；eBPF/Cilium 用哈希表实现 O(1) 查找，通过 `redirect()` 绕过 Netfilter 框架，在性能和可观测性两个维度都显著优于传统 iptables 方案。
 
 下一篇 [[10 网络性能诊断——从 ss 到 perf/eBPF 的全套工具链]] 是本专栏的收官之作，将系统梳理网络性能诊断的完整工具链：`ss`/`netstat` 查连接状态，`tcpdump`/`Wireshark` 抓包分析，`perf` 对内核网络函数进行 profiling，以及 BCC/bpftrace 工具集如何用 eBPF 实现实时的、零侵入的网络路径追踪。
+
+---
+
+> [!note] 思考题
+> 1. XDP 在网卡驱动层运行 eBPF 程序——在协议栈处理之前对数据包做出决策（通过 XDP_PASS、XDP_DROP、XDP_TX、XDP_REDIRECT）。在 DDoS 防护中，XDP_DROP 可以在最早的阶段丢弃恶意包——比 iptables 快 10 倍以上。XDP 的处理能力（百万 pps 级别）的瓶颈在哪里——是 eBPF 程序的执行速度还是网卡的 DMA 吞吐？
+> 2. eBPF 的 TC（Traffic Control）hook 运行在协议栈的入口/出口——比 XDP 晚一些但可以访问 skb（socket buffer）的完整信息。XDP 在 native 模式下不创建 skb——这意味着 XDP 程序无法访问什么信息？在什么场景下必须使用 TC hook 而非 XDP？
+> 3. Cilium 使用 eBPF 实现 Kubernetes 的网络策略（NetworkPolicy）和服务发现（替代 kube-proxy 的 iptables 规则）。传统 iptables 的规则数量与 Service 数量线性增长——在 5000+ Service 的集群中性能明显下降。Cilium 的 eBPF map 查找是 O(1)——这对大规模集群的网络性能有什么质的提升？

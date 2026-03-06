@@ -413,3 +413,10 @@ MemTable 的设计体现了三个核心决策的精妙组合：
 
 - **[[03 SSTable 的文件格式与 Block 结构]]**：深入 MemTable 刷盘后生成的 SSTable 文件格式，理解 Data Block、Index Block、Bloom Filter 的布局与读取优化
 - **[[04 Compaction——分层合并与版本管理]]**：理解多个 SSTable 如何通过 Compaction 合并，以及 Version/VersionEdit/VersionSet 如何管理文件集合的 MVCC
+
+---
+
+> [!note] 思考题
+> 1. 写入路径：先写 WAL（Write-Ahead Log，顺序追加）再写 MemTable（内存跳表）。WAL 保证了崩溃恢复——重启时重放 WAL 恢复 MemTable 内容。如果 WAL 写入成功但 MemTable 写入失败（如内存不足），数据是否安全？WAL 的 fsync 策略（每次写入 fsync vs 批量 fsync）如何影响持久性和性能？
+> 2. 读取路径：先查 MemTable → Immutable MemTable → Level 0 SSTable → Level 1 SSTable → ...。在最坏情况下（Key 在最底层），需要查找所有层级的 SSTable。LevelDB 通过'表缓存'（Table Cache）缓存打开的 SSTable 文件描述符和索引块。在什么场景下 Table Cache 的大小成为性能关键因素？
+> 3. MemTable 使用跳表（Skip List）实现——O(log n) 的插入和查找。为什么选择跳表而非红黑树或 B+ 树？跳表的实现更简单且对并发读友好（无需复杂的旋转操作）。RocksDB 后来引入了 HashSkipList 和 HashLinkList——它们在什么场景下优于普通 SkipList？

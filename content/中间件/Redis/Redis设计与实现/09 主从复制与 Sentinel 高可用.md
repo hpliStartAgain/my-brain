@@ -431,3 +431,10 @@ Sentinel 之间不需要手动配置彼此的地址——它们通过主节点�
 4. Redis Documentation - Sentinel：https://redis.io/docs/management/sentinel/
 5. Raft Consensus Algorithm：https://raft.github.io/
 6. 黄健宏 - 《Redis 设计与实现》（第二版）- 第 15/16 章
+
+---
+
+> [!note] 思考题
+> 1. Redis 的近似 LRU（`maxmemory-samples 5`，随机采样 5 个 Key 选最旧的）与精确 LRU 有 5-10% 的差距。`maxmemory-samples` 设为 10 时差距缩小到 <3%——但增加了每次淘汰的 CPU 开销。Redis 4.0 引入了 LFU（Least Frequently Used）——`allkeys-lfu` 在什么访问模式下优于 LRU（如热点 Key 周期性访问）？
+> 2. 内存碎片率 >1.5 时开启 `activedefrag yes`。在线碎片整理通过移动数据减少碎片——但消耗 CPU（`active-defrag-cycle-min/max` 控制 CPU 占比）。在延迟敏感的场景中，碎片整理的 CPU 开销是否会导致请求延迟增加？你如何在低峰期执行碎片整理？
+> 3. Big Key 检测：`redis-cli --bigkeys` 使用 SCAN 遍历所有 Key——在亿级 Key 的实例上可能需要数十分钟。`MEMORY USAGE` 可以检查单个 Key 但需要知道 Key 名。在不影响生产的前提下如何系统性地检测 Big Key？RDB 分析工具（如 `rdb-tools`）离线分析是否更合适？

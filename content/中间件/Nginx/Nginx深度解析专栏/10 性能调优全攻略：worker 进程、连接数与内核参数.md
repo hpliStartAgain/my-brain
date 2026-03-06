@@ -671,3 +671,10 @@ Nginx 性能调优涉及三个互相关联的层面，缺少任何一层都可�
 ---
 
 > **下一篇**：[[11 安全加固：常见攻击向量与防御配置]]
+
+---
+
+> [!note] 思考题
+> 1. 支持 10 万并发连接：`worker_processes 8; worker_connections 16384`（8×16384÷2=65536 反向代理连接）。操作系统需要 `ulimit -n 131072` 和调优 `net.core.somaxconn`。在这个规模下，Nginx 的内存占用大约是多少？每个连接占用的内存如何计算？
+> 2. `proxy_buffering off` 关闭后端响应缓冲——直接流式转发。这对 SSE 和 WebSocket 代理是必要的。但关闭缓冲意味着 Nginx 不能'吸收'后端的突发响应——如果后端快速返回但客户端下载慢，后端连接会被长时间占用。你如何针对不同的 location 分别配置缓冲策略？
+> 3. upstream `keepalive 64` 保持与后端的长连接。在 Kubernetes Pod 频繁扩缩容时，长连接可能连向已销毁的 Pod。`keepalive_timeout 60s` 控制空闲连接的最大存活时间——但 Pod 可能在 timeout 前被删除。你如何通过健康检查和 `proxy_next_upstream` 配合处理连接到已失效后端的请求？

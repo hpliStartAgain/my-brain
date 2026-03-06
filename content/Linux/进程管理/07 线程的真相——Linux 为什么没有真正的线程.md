@@ -552,3 +552,10 @@ Linux 的线程模型体现了"统一、简洁、灵活"的设计哲学：
 **性能关键**：futex 让线程同步在**无竞争路径**上完全在用户态完成，避免系统调用，是 Linux 线程同步高性能的核心秘密。
 
 下一篇 [[08 CFS 完全公平调度器——从 O(1) 到红黑树的演进]] 将深入调度器的核心：CFS 如何用"虚拟运行时间"实现公平调度、红黑树为什么是理想的数据结构、time slice 如何动态计算，以及 nice 值与权重的精确映射关系。
+
+---
+
+> [!note] 思考题
+> 1. Linux 提供了 8 种命名空间：PID、Mount、Network、UTS、IPC、User、Cgroup、Time。每种命名空间隔离了一类系统资源。Docker 容器默认使用哪些命名空间？User Namespace 是最后加入的——它允许容器内 root 映射为宿主机的非特权用户。这对容器安全性有什么影响？为什么 Docker 默认不启用 User Namespace？
+> 2. Network Namespace 为每个容器创建独立的网络栈——包括独立的接口、路由表、iptables 规则。容器之间通过 veth pair + bridge 通信。在 Pod 内多个容器共享同一个 Network Namespace——这意味着它们通过 localhost 通信。Kubernetes 的 pause 容器唯一的作用是'持有'这个 Network Namespace——如果 pause 容器被杀死会发生什么？
+> 3. PID Namespace 中，容器内的 PID 1 进程是容器的 init。如果 PID 1 退出，整个 PID Namespace 中的所有进程都会被杀死（收到 SIGKILL）。这就是为什么容器的入口进程非常重要。如果你在容器中运行一个 shell 脚本作为 PID 1，shell 不会转发信号给子进程——`docker stop` 会等待超时后 SIGKILL。如何正确处理这个问题？

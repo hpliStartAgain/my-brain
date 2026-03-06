@@ -635,3 +635,10 @@ TC 集群的每个节点都连接同一个 MySQL，通过 MySQL 的行锁来保�
 5. 于毅. (2020). Seata 事务隔离详解. Seata 官方博客.
 6. 阿里云 GTS 产品文档. https://help.aliyun.com/product/48444.html
 7. Mohan, C., et al. (1992). ARIES: A Transaction Recovery Method. *ACM TODS, 17*(1), 94–162.
+
+---
+
+> [!note] 思考题
+> 1. Seata 的 AT（Auto Transaction）模式通过代理数据源拦截 SQL——在执行 SQL 前记录 Before Image（修改前的数据），执行后记录 After Image。回滚时用 Before Image 恢复数据。AT 模式对业务代码几乎无侵入——只需要加 `@GlobalTransactional` 注解。但 AT 的全局锁在 Seata Server 上管理——高并发时 Seata Server 是否成为瓶颈？
+> 2. AT 模式的脏写问题——如果全局事务 A 修改了行 X，全局事务 B 也修改了行 X 但先提交——A 回滚时用 Before Image 恢复 X 会覆盖 B 的修改。Seata 通过全局锁（行级锁）防止脏写——但这增加了锁等待。与 TCC 的显式'Try 预留'相比，AT 的隐式全局锁在什么场景下性能更差？
+> 3. Seata 支持 AT、TCC、Saga 和 XA 四种模式。在选型时你如何决定——AT 适合简单场景（自动补偿、低侵入），TCC 适合性能要求高的场景（无全局锁），Saga 适合长事务，XA 适合需要强一致性的场景。在一个混合场景中（如部分服务用 AT、部分用 TCC），Seata 能否支持？

@@ -364,6 +364,11 @@ HBase 数据存储在 HDFS 上，理想情况下 Region 的 HFile 数据存储�
 
 ---
 
+> [!note] 思考题
+> 1. HBase 的 BlockCache 以 Block 为单位缓存 HFile 数据（默认 Block 大小 64KB）。当查询一个特定 RowKey 时，即使只需要一行数据，也会将整个 64KB 的 Block 加载到 BlockCache 中。对于随机点查（Get）密集型工作负载，这种 Block 级别的缓存粒度会导致大量"无用"数据占用 Cache，降低 Cache 命中率。如何调整 Block 大小来优化点查 vs 范围扫描的性能权衡？
+> 2. HBase 的 Scanner 需要同时合并 MemStore 中的数据和多个 HFile 中的数据，按 RowKey + 时间戳排序输出。这个多路归并操作使用了一个优先队列（Heap）来维护各个数据源的当前最小 Key。如果一次 Scan 需要合并来自 50 个 HFile 的数据，这个优先队列的操作复杂度是多少？在超大表（数千 HFile）上的 Scan 性能会如何退化？
+> 3. HBase 支持 Coprocessor（协处理器），类似于数据库的存储过程——用户代码在 RegionServer 上直接执行，避免大量数据通过网络传输到客户端。Endpoint Coprocessor 可以实现分布式聚合（如直接在 RegionServer 计算 SUM），大幅减少网络 I/O。但 Coprocessor 的代码运行在 RegionServer 的 JVM 中，如果 Coprocessor 代码存在 Bug（如死循环、内存泄漏），会对整个 RegionServer 产生什么影响？
+
 ## 参考资料
 
 - [1] Apache HBase Reference Guide — BlockCache: https://hbase.apache.org/book.html#block.cache

@@ -759,3 +759,10 @@ mybatis:
 > - `org.apache.ibatis.type.TypeHandlerRegistry` 源码
 > - `org.apache.ibatis.reflection.ParamNameResolver` 源码
 > - [Mybatis 官方文档 - TypeHandlers](https://mybatis.org/mybatis-3/configuration.html#typeHandlers)
+
+---
+
+> [!note] 思考题
+> 1. TypeHandler 负责 Java 类型与 JDBC 类型之间的转换。MyBatis 内置了大量 TypeHandler（如 `StringTypeHandler`、`IntegerTypeHandler`）。如果你需要将数据库中的 JSON 字符串自动映射为 Java 的 `Map<String, Object>`，自定义 TypeHandler 是最佳方案吗？与在 Service 层手动转换相比有什么优劣？
+> 2. 当 Mapper 方法有多个参数时（如 `User findByNameAndAge(String name, int age)`），MyBatis 如何将参数传递给 SQL 中的 `#{name}` 和 `#{age}`？`@Param` 注解的作用是什么？在没有 `@Param` 的情况下，MyBatis 是通过反射获取参数名还是使用 `param1/param2` 索引？这与编译时是否保留参数名（`-parameters` 选项）有什么关系？
+> 3. `#{}` 和 `${}` 的区别是 MyBatis 面试的常见问题。`#{}` 使用 PreparedStatement 的参数化查询，`${}` 直接文本替换。但在 ORDER BY 子句中必须使用 `${}`（因为 PreparedStatement 不能参数化列名）——这带来了 SQL 注入风险。你如何在不暴露注入风险的前提下实现动态排序？

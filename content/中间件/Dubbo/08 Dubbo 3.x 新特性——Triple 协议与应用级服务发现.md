@@ -393,3 +393,10 @@ dubbo:
 - 相比 Sidecar 模式，消除额外网络跳转延迟，节省 Envoy 内存，但需要应用升级到 Dubbo 3.x 且使用 Triple 协议。
 
 至此，Dubbo 专栏全部 8 篇文章完成，构建了从 SPI 微内核（01-02）、服务生命周期（03-04）、通信层（05）、集群治理（06-07）到 3.x 云原生演进（08）的完整知识体系。
+
+---
+
+> [!note] 思考题
+> 1. Dubbo 3.x 支持 Kubernetes 原生服务发现——使用 K8s Service 替代 ZooKeeper/Nacos。Pod 的 IP 直接作为 Provider 地址。这种方式省去了独立注册中心的运维——但 K8s Service 的服务发现机制（DNS 或 Endpoints API）与 Dubbo 的推模型有什么差异？延迟和及时性如何？
+> 2. Service Mesh（如 Istio + Envoy）通过 Sidecar 代理实现服务治理——将负载均衡、熔断、路由等逻辑从应用代码移到基础设施层。Dubbo 本身已经内置了这些能力——引入 Service Mesh 后是否存在功能重叠？在'Dubbo SDK 模式'和'Mesh Sidecar 模式'之间如何选择？
+> 3. Dubbo Proxyless Mesh 方案让应用直接通过 xDS 协议与 Istio 控制平面通信——获取路由规则和服务配置——而不需要 Envoy Sidecar。这避免了 Sidecar 的额外延迟和资源消耗。Proxyless 方案的局限是什么？它是否只适用于 Java 应用？

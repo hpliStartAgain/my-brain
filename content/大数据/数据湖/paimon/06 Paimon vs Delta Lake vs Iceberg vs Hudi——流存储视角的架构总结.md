@@ -346,3 +346,9 @@ Apache Paimon（专注实时）：
 | **06** | 四大数据湖方案的流存储能力全面对比；实时数仓分层选型：Paimon（ODS/DWD/实时 DWS）+ Iceberg（批量 DWS）|
 
 **三专栏的最终总结**：Hudi、Iceberg、Paimon 三者不是竞争关系，而是互补关系——它们解决的是数据湖建设中三个不同层次的核心问题（写入效率、格式标准、实时性）。在真实的大型数据平台中，很可能同时使用这三者（甚至加上 Delta Lake），每层数据选择最适合的方案。理解它们各自的设计取舍，是做出正确架构决策的基础。
+
+
+> [!note] 思考题
+> 1. Paimon 的核心差异化是"流式写入延迟最低"——基于 LSM-Tree 的秒级可见性远优于 Delta/Iceberg 的分钟级延迟（取决于 Compaction 频率）。但 Paimon 的 LSM 架构带来了额外的运维复杂性（需要管理 Compaction 策略、多层文件结构）。在一个以 Flink 为核心计算引擎、需要同时支持实时写入和 OLAP 查询的数据平台中，Paimon 的运维复杂性代价是否值得为其低延迟特性买单？
+> 2. 四种格式（Delta、Iceberg、Hudi、Paimon）在批处理 OLAP 查询（大规模数据扫描 + 聚合）性能上有什么差异？Delta 和 Iceberg 的"不可变文件 + 统计信息"设计天然适合 OLAP（文件有序、无 Compaction 读放大）；Hudi MoR 和 Paimon 由于存在未 Compacted 的文件，在 OLAP 查询时有额外的合并代价。在选型时，如何量化这个"实时写入能力"和"OLAP 查询性能"之间的权衡？
+> 3. 如果一个组织同时使用 Delta Lake（用于批处理数仓）和 Paimon（用于实时写入），存在"双格式并存"的局面。数据在 Paimon（实时更新）中写入，定期转换为 Delta Lake（供 OLAP 查询）。这个定期转换的过程（Paimon → Delta Lake）如何实现？转换过程中的数据一致性如何保证（避免读到转换中间态的不一致数据）？

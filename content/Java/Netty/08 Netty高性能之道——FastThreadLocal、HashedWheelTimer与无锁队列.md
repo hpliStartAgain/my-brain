@@ -566,3 +566,10 @@ Netty 的高性能不是单一技术的功劳，而是大量精心设计的小�
 > - JCTools `MpscArrayQueue` 源码
 > - Gil Tene,《False Sharing》, Azul Systems
 > - Varghese & Lauck,《Hashed and Hierarchical Timing Wheels》, 1987
+
+---
+
+> [!note] 思考题
+> 1. Netty 服务端启动时，`ServerBootstrap.bind()` 触发了一系列异步操作：创建 ServerSocketChannel、注册到 BossGroup 的 EventLoop、绑定端口。这些操作都是在 EventLoop 线程中执行的。如果在 `bind()` 返回的 `ChannelFuture` 上调用 `sync()` 阻塞等待，而此时代码运行在 EventLoop 线程上，会发生什么？为什么？
+> 2. 新连接接入时，BossGroup 的 EventLoop 调用 `ServerSocketChannel.accept()` 获取 `SocketChannel`，然后通过 `ServerBootstrapAcceptor` 将其注册到 WorkerGroup。`ServerBootstrapAcceptor` 是在 BossGroup 还是 WorkerGroup 的线程中执行？将 SocketChannel 注册到 WorkerGroup 的选择策略是轮询（Round-Robin）还是最少连接？
+> 3. Netty 的 `ChannelOption.SO_BACKLOG` 设置 TCP 连接队列的大小。当 BossGroup 来不及 `accept()` 新连接时，连接会排在 OS 的 backlog 队列中。如果 backlog 满了，新的 TCP 连接请求会被拒绝还是丢弃？Linux 的 `tcp_abort_on_overflow` 参数如何影响这个行为？

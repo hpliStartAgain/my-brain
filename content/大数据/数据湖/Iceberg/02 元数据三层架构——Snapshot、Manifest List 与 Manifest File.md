@@ -422,3 +422,9 @@ Iceberg 三层元数据架构的设计精髓在于**层次化剪枝与状态直�
 - **Manifest 复用**：写操作只需追加新 Manifest，旧 Manifest 被多个 Snapshot 共享，写放大最小
 
 下一篇 [[03 Hidden Partitioning——告别分区列陷阱]] 将深入 Iceberg 对用户体验影响最大的设计——Hidden Partitioning。我们将解析为什么传统分区的"分区列陷阱"是一个设计缺陷，以及 Iceberg 如何通过把分区规则存在元数据而不是文件路径里，彻底消除这个陷阱，并实现无缝的 Partition Evolution。
+
+
+> [!note] 思考题
+> 1. 在频繁小批次写入场景（每分钟一次 Commit），每次 Commit 产生新的 Snapshot + Manifest List + 若干 Manifest File。`metadata.json` 中的 Snapshot 列表会不断增长。Iceberg 的 `expire_snapshots` 操作是如何清理旧 Snapshot 对应的元数据文件的？清理操作是否是原子的？
+> 2. Manifest File 中的列统计信息由 Writer 在文件写入时计算。如果 Writer 是不支持精确统计的引擎（如某些版本的 Trino 只记录 Min/Max 但不记录 NullCount），包含 NULL 值的查询（`WHERE col IS NULL`）在 Manifest 级别的过滤会发生什么？
+> 3. Compaction 将多个小文件合并为大文件时，包含旧文件信息的 Manifest 需要被重写（旧文件标记为 DELETED，新文件标记为 ADDED）。如果 Compaction 的目标文件非常多（合并 10000 个小文件），重写 Manifest 的代价是多少？有没有优化手段避免完全重写整个 Manifest？

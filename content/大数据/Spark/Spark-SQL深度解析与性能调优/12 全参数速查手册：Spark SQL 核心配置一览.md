@@ -327,6 +327,11 @@ spark.sql.execution.arrow.maxRecordsPerBatch=20000
 
 ---
 
+> [!note] 思考题
+> 1. `spark.sql.shuffle.partitions` 默认值为 200，这个值来自 Hadoop MapReduce 时代的经验数字，并不适用于所有场景。开启 AQE 后这个参数的角色发生了变化——它从"最终分区数"变成了"初始上限"。在 AQE 环境下，这个参数设置过小（比如 10）会引发什么问题？设置过大（比如 10000）又会带来哪些额外开销？
+> 2. CBO 相关参数（如 `spark.sql.cbo.enabled`、`spark.sql.cbo.joinReorder.enabled`）默认是关闭的。Spark 为什么不默认开启 CBO？在哪些典型场景下，开启 CBO 反而会导致查询变慢，产生比 RBO 更差的执行计划？
+> 3. `spark.sql.autoBroadcastJoinThreshold` 控制广播阈值，但 Spark 估算表大小的方式依赖统计信息——如果统计信息缺失，Spark 会依赖文件大小估算，而文件大小与内存中的数据大小可能相差数倍（Parquet 压缩比、解压后膨胀）。在什么情况下这种估算误差会导致超出 Driver/Executor 内存的广播操作？如何设置安全上限？
+
 ## 参考资料
 
 - Apache Spark 官方文档：Configuration（spark.apache.org/docs/latest/configuration.html）

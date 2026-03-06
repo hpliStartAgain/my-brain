@@ -557,3 +557,10 @@ try {
 3. Goetz et al., "Java Concurrency in Practice", Ch.13: Explicit Locks
 4. JEP 374: Disable and Deprecate Biased Locking — 影响 synchronized vs ReentrantLock 的性能对比
 5. OpenJDK 源码：`java.util.concurrent.locks.ReentrantLock`
+
+---
+
+> [!note] 思考题
+> 1. `ReentrantLock` 相比 `synchronized` 提供了可中断、可超时、可条件等待（`Condition`）和公平性选择等额外能力。在 JDK 6 之后，`synchronized` 经过偏向锁/轻量级锁等优化后性能已经与 `ReentrantLock` 接近。在什么场景下你仍然必须选择 `ReentrantLock` 而非 `synchronized`？
+> 2. `Condition.await()` 可以被 `signal()` 或 `signalAll()` 唤醒。`signalAll()` 唤醒所有等待线程，它们竞争重新获取锁——但只有一个能获取到。这种'惊群效应'（thundering herd）在等待线程非常多时是否会导致性能问题？`signal()` 只唤醒一个线程但可能唤醒'不需要被唤醒的'线程——你如何在精确唤醒和避免死锁之间权衡？
+> 3. `ReentrantLock.lockInterruptibly()` 允许等待锁的线程被中断。但如果线程已经持有锁并在执行业务逻辑，此时调用 `thread.interrupt()` 不会导致线程释放锁——中断只在 `await/sleep/park` 等阻塞操作中生效。在一个需要'强制终止持锁线程'的场景中（如请求超时），你如何安全地实现？直接 `Thread.stop()` 有什么风险？

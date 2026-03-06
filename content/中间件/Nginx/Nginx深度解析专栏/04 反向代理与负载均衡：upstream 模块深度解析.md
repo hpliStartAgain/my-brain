@@ -574,3 +574,10 @@ server {
 ---
 
 > **下一篇**：[[05 缓存机制：proxy_cache 的物理结构与失效策略]]
+
+---
+
+> [!note] 思考题
+> 1. TLS 1.3 的 0-RTT（Early Data）存在重放攻击风险。Nginx 的 `ssl_early_data on` 开启后，如何确保只有幂等请求（GET）使用 0-RTT？`$ssl_early_data` 变量如何在后端识别 0-RTT 请求并做额外验证？
+> 2. OCSP Stapling 由 Nginx 代替客户端查询证书吊销状态。如果 CA 的 OCSP 服务不可用，Nginx 会 staple 旧的响应还是不 staple？`ssl_stapling_verify on` 的作用是什么？OCSP 查询失败对客户端的影响是什么？
+> 3. 管理数百个域名证书时，`nginx -s reload` 加载新证书影响长连接。通过 Lua（`ssl_certificate_by_lua_block`）实现动态证书加载——根据 SNI 从 Redis/文件系统动态获取证书。这种方案的性能开销在哪里？证书缓存如何设计？

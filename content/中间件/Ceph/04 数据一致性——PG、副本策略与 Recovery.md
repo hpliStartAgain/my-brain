@@ -228,3 +228,10 @@ PG 是 Ceph 数据一致性体系的枢纽：
 - [[02 CRUSH 算法——去中心化的数据放置]]
 - [[03 OSD 与对象存储——BlueStore 引擎]]
 - [[06 Ceph 运维——集群部署、PG 调优与故障处理]]
+
+---
+
+> [!note] 思考题
+> 1. CephFS 的元数据由 MDS（Metadata Server）管理。MDS 将目录树的不同子树分配给不同的 MDS 进程——实现元数据的水平扩展。但目录树的访问模式通常是不均匀的（如某个热点目录被频繁访问）。MDS 的动态子树分区（Dynamic Subtree Partitioning）如何处理热点？当一个子树突然变热时，迁移子树的开销和延迟是多少？
+> 2. CephFS 支持 POSIX 语义——包括文件锁、硬链接、`readdir` 一致性等。但严格的 POSIX 语义会限制性能（如 `readdir` 需要一致性快照）。CephFS 的 `client_cache_size` 和 `client_caps` 机制如何在一致性和性能之间取舍？
+> 3. CephFS 适合什么工作负载？与 NFS（适合小规模共享）、HDFS（适合大数据批处理）和 JuiceFS（云原生场景）相比，CephFS 的定位是什么？在 HPC（高性能计算）和机器学习训练场景中，CephFS 的元数据性能是否是瓶颈？

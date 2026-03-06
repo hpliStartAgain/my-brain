@@ -560,3 +560,10 @@ OOM Killer 是 Linux 内存管理的最后一道防线，本文的核心认知�
 - [Linux OOM Killer - Wesley Aptekar-Cassels Blog](https://blog.wesleyac.com/posts/linux-kernel-oom-killer)
 - [Understanding Memory Overcommitment and OOM - Baeldung](https://www.baeldung.com/linux/memory-overcommitment-oom-killer)
 - Kubernetes Documentation: [Managing Resources for Containers](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/)
+
+---
+
+> [!note] 思考题
+> 1. OOM Killer 基于 `oom_score` 选择被杀进程。`/proc/<pid>/oom_score_adj` 允许手动调整（-1000 表示永不被杀）。在运行数据库和应用服务的混合节点上，如何设置各进程的 `oom_score_adj`？将数据库设为 -1000 是否总是正确？如果数据库本身才是内存泄漏的根因呢？
+> 2. CGroups 内存限制触发的 OOM Kill 只杀 CGroup 内的进程。在 Kubernetes 中 Pod OOMKilled 时，如何区分'内存限制过低'和'应用内存泄漏'？`kubectl describe pod` 中的 `Last State` 和 `container_memory_working_set_bytes` 指标如何帮助诊断？
+> 3. 某些情况下 OOM Killer 杀死进程后仍无法释放足够内存——如被杀进程的共享内存被其他进程引用。你是否遇到过 OOM Kill 连锁反应导致节点宕机？内核日志中的 OOM 报告如何分析？`oom_kill` 的 `total-vm` 和 `anon-rss` 分别表示什么？

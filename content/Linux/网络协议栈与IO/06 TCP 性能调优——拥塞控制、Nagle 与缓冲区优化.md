@@ -501,3 +501,10 @@ TCP 性能调优的三条主线：
 **缓冲区调优**：缓冲区大小需要 >= BDP 才能充分利用带宽；让 Autotuning 自动管理（只调整上限，不手动设置 `SO_RCVBUF`）；注意缓冲区过大会导致 Bufferbloat（高延迟），使用 `fq_codel` 或 `cake` 主动队列管理解决。
 
 下一篇 [[07 Linux 网络包的完整收发路径——软中断、NAPI 与 XDP]] 将深入到网络栈的最底层：从网卡触发硬中断开始，分析 Linux 的 NAPI（New API）如何用软中断轮询替代高频硬中断，降低 CPU 上下文切换开销，以及 XDP（eXpress Data Path）如何在网卡驱动层面直接处理数据包，绕过整个内核网络栈，实现每秒千万级的包处理能力。
+
+---
+
+> [!note] 思考题
+> 1. 同步/异步描述的是'谁主动获取结果'——同步是调用者轮询/等待，异步是内核回调通知。阻塞/非阻塞描述的是'调用是否立即返回'。很多开发者混淆'非阻塞 IO'和'异步 IO'——非阻塞 IO 的 `read` 在数据未就绪时返回 EAGAIN（同步非阻塞），真正的异步 IO（如 AIO、io_uring）在数据就绪后由内核回调通知。在实际的高性能服务器中，使用最多的是哪种 IO 模型？为什么真正的异步 IO（POSIX AIO）在 Linux 上很少被使用？
+> 2. Reactor 模式（epoll + 非阻塞 IO）是 Nginx、Redis、Netty 的核心模型。Proactor 模式（异步 IO + 完成回调）是 Windows IOCP 和 io_uring 的模型。Reactor 在 IO 就绪时通知应用'可以读了'，应用再调用 read；Proactor 直接由内核完成 read 操作后通知应用'已经读完了'。Proactor 在什么场景下性能优于 Reactor？
+> 3. Node.js 使用 libuv 的 Event Loop 模型——看似单线程但底层使用线程池处理文件 IO（因为 Linux 的文件 IO 没有真正的异步支持，epoll 不支持普通文件）。io_uring 改变了这个局面——它支持文件的真正异步 IO。如果 Node.js 底层从线程池切换到 io_uring，会有什么性能提升？

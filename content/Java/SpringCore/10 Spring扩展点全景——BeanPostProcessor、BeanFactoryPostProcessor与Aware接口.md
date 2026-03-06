@@ -787,3 +787,10 @@ SpringCore 专栏至此完结。SpringBoot 专栏将以此为基础，继续探�
 > - `org.springframework.context.support.PostProcessorRegistrationDelegate` 源码（BFPP/BPP 注册与调用的核心）
 > - `org.springframework.beans.factory.annotation.AutowiredAnnotationBeanPostProcessor` 源码
 > - [Spring Framework 官方文档 - Container Extension Points](https://docs.spring.io/spring-framework/reference/core/beans/factory-extension.html)
+
+---
+
+> [!note] 思考题
+> 1. Spring 框架的核心设计哲学是'约定优于配置'和'非侵入式'。但随着 Spring 生态的膨胀（Spring Boot、Spring Cloud、Spring Data、Spring Security...），学习曲线越来越陡。相比之下，Go 生态倾向于'标准库优先，第三方库极简'。你认为 Spring 的'全家桶'模式和 Go 的'最小化'模式各适合什么类型的团队和项目？
+> 2. Spring 5 引入了 WebFlux 响应式编程模型，与传统的 Spring MVC（Servlet 阻塞模型）并存。WebFlux 使用 Netty 作为非阻塞 HTTP 服务器，适合 IO 密集型场景。但 Spring 生态中大量库（如 Spring Data JPA、MyBatis）是阻塞的。在一个混合了阻塞 JDBC 和非阻塞 HTTP 调用的应用中，WebFlux 的优势是否会被阻塞 JDBC 抵消？
+> 3. Spring 的 IoC 容器通过反射创建 Bean——这与 GraalVM Native Image（要求在编译时确定所有类和方法）存在根本矛盾。Spring 6 / Spring Boot 3 引入了 AOT（Ahead-of-Time）编译支持。AOT 如何在编译时生成 Bean 的工厂代码以替代运行时反射？这对 Spring 的'约定优于配置'理念有什么影响？

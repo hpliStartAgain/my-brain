@@ -38,7 +38,7 @@ def map[U: ClassTag](f: T => U): RDD[U] = withScope {
 - `dependencies`：指向父 RDD（`this`），这就是血缘链的物理连接方式
 - `f`：用户传入的转换函数，被存储在闭包中，等待 Executor 执行时调用
 
-这个"创建对象"而非"执行计算"的行为，就是**惰性求值（Lazy Evaluation）**的物理本质：Transformation 算子构建的是一张由 RDD 对象构成的引用图，而非执行任何实际计算。
+这个"创建对象"而非"执行计算"的行为，就是**惰性求值（Lazy Evaluation）的物理本质：Transformation 算子构建的是一张由 RDD 对象构成的引用图，而非执行任何实际计算。
 
 ### 1.1 sc.clean(f) 的作用：闭包清理为什么必须存在？
 

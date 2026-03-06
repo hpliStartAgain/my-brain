@@ -729,3 +729,10 @@ SOLID 五条原则共同描述了一个健康代码库应该具备的特征：
 > - Barbara Liskov,《Data Abstraction and Hierarchy》, 1987
 > - Martin Fowler,《Refactoring: Improving the Design of Existing Code》, 2nd ed.
 > - Michael Feathers,《Working Effectively with Legacy Code》
+
+---
+
+> [!note] 思考题
+> 1. SOLID 中的'开闭原则'（对扩展开放，对修改关闭）在实践中往往需要通过策略模式或模板方法模式来实现。但过度追求开闭原则会导致'过度抽象'——为一个目前只有一种实现的接口创建抽象层。你如何判断什么时候需要提前抽象，什么时候应该遵循 YAGNI（You Aren't Gonna Need It）原则？
+> 2. 依赖倒置原则（DIP）要求高层模块不依赖低层模块，而是都依赖抽象。在 Spring 中通过 DI 容器实现 DIP 非常自然。但在非 Spring 的场景（如 SDK 开发、命令行工具）中，你如何实现 DIP 而不引入 DI 框架的复杂度？'穷人的依赖注入'（Pure DI）与框架 DI 相比有什么取舍？
+> 3. 里氏替换原则（LSP）要求子类必须能替换父类而不改变程序的正确性。`java.sql.Timestamp` 继承自 `java.util.Date`，但 `Timestamp.equals(Date)` 违反了对称性（`date.equals(timestamp)` 为 true 但 `timestamp.equals(date)` 可能为 false）。这是 LSP 违反的经典案例——Java 标准库为什么会出现这种设计错误？

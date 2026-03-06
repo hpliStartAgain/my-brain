@@ -747,3 +747,10 @@ Spring 原生支持 AspectJ 的 Load-Time Weaving（LTW），通过 `@EnableLoad
 > - `org.springframework.aop.aspectj.annotation.AnnotationAwareAspectJAutoProxyCreator` 源码
 > - `org.springframework.aop.framework.ReflectiveMethodInvocation` 源码
 > - [Spring Framework 官方文档 - Aspect Oriented Programming](https://docs.spring.io/spring-framework/reference/core/aop.html)
+
+---
+
+> [!note] 思考题
+> 1. Spring 的 `@Transactional(propagation = REQUIRED)` 是默认传播行为——如果当前有事务就加入，没有就创建新事务。但 `REQUIRES_NEW` 会挂起当前事务并创建新事务。在什么场景下你需要 `REQUIRES_NEW`（如审计日志记录、独立的异常处理）？如果内层 `REQUIRES_NEW` 事务提交后，外层事务回滚——内层的数据会回滚吗？
+> 2. Spring 事务的隔离级别（`@Transactional(isolation = Isolation.REPEATABLE_READ)`）实际上由底层数据库实现。MySQL 的 REPEATABLE READ 通过 MVCC 实现快照读，避免了不可重复读，但 MySQL 的 RR 级别能否防止幻读？InnoDB 的 Gap Lock 在这里起什么作用？
+> 3. 编程式事务（`TransactionTemplate` 或 `PlatformTransactionManager`）比声明式事务（`@Transactional`）更灵活但代码更啰嗦。在什么场景下你必须使用编程式事务（如在循环中对每次迭代独立提交、根据运行时条件决定是否回滚）？编程式和声明式可以混合使用吗？

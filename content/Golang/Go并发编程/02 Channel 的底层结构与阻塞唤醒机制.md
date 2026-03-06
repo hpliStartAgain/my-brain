@@ -571,3 +571,10 @@ case v := <-ch2:   // 永远不会执行（ch2 是 nil）
 > - Go Blog,《Share Memory By Communicating》: https://go.dev/blog/codelab-share
 > - Tony Hoare,《Communicating Sequential Processes》, 1978
 > - Kavya Joshi,《Understanding Channels》, GopherCon 2017
+
+---
+
+> [!note] 思考题
+> 1. 向一个已关闭的 channel 发送数据会 panic，但从已关闭的 channel 接收数据不会。如果有多个 goroutine 同时向一个 channel 发送数据，由'谁'来负责关闭这个 channel？Go 中有哪些惯用模式来安全地关闭一个'多生产者单消费者'的 channel？
+> 2. 无缓冲 channel 的 send 和 receive 是同步的——send 方会阻塞直到有 receive 方就绪。Go 运行时在这种'同步握手'场景下做了一个优化：直接将数据从 send 方的栈拷贝到 receive 方的栈，绕过了 channel 的内部缓冲区。这个优化对 GC 有什么影响？为什么有缓冲 channel 不能做同样的优化？
+> 3. `select` 语句在多个 case 同时就绪时会'随机'选择一个。这个随机性的实现机制是什么（真随机还是伪随机）？在一个 `select` 中有一个从 `time.After()` 返回的 channel 用作超时控制——如果每次循环都调用 `time.After()`，未触发的 Timer 是否会被 GC 回收？这会导致内存泄漏吗？

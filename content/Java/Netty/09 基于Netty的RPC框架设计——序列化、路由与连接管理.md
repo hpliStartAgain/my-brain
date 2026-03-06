@@ -531,3 +531,10 @@ public Object invokeWithRetry(RpcRequest request, int maxRetry) {
 > - gRPC-Java 源码：`io.grpc.netty`
 > - Peter Deutsch,《The Eight Fallacies of Distributed Computing》, 1991
 > - Martin Fowler,《CircuitBreaker》, martinfowler.com
+
+---
+
+> [!note] 思考题
+> 1. `IdleStateHandler` 检测读/写空闲超时。它的实现原理是定时任务——每隔一段时间检查上次读/写时间与当前时间的差值。如果系统时钟发生跳变（如 NTP 同步导致时间回退），`IdleStateHandler` 会错误地触发 IDLE 事件吗？Netty 是使用 `System.currentTimeMillis()` 还是 `System.nanoTime()`？
+> 2. 断线重连的实现通常是在 `channelInactive` 事件中启动延迟重连任务。但如果网络持续不可用，重连会无限重试——消耗线程和 CPU 资源。你如何实现指数退避重连（初始 1s → 2s → 4s → ... → 最大 60s）？如果重连成功后又立即断开，退避时间应该重置还是继续递增？
+> 3. 在双向心跳机制中，客户端发送 Ping 帧，服务端回复 Pong 帧。如果服务端进程假死（JVM Full GC 长停顿），服务端无法回复 Pong，客户端会检测到超时并断开连接。但 Full GC 结束后服务端恢复正常——此时大量客户端同时重连（reconnect storm）会导致什么问题？如何缓解？

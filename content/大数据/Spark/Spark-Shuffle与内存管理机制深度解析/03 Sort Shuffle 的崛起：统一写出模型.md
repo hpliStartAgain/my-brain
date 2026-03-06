@@ -407,6 +407,11 @@ Sort Shuffle 的统一写出模型，是 Spark Shuffle 演进中最重要的架�
 
 ---
 
+> [!note] 思考题
+> 1. Sort Shuffle 的"统一写出模型"要求每个 Mapper 最终只产生一个 `.data` 文件和一个 `.index` 文件。这个"统一"是如何实现的？如果一个 Mapper 在写出过程中发生了多次 Spill（溢写到磁盘），最终的单文件是通过什么机制合并的？
+> 2. `SortShuffleManager` 会根据条件选择三种 Writer：`BypassMergeSortShuffleWriter`、`UnsafeShuffleWriter`、`SortShuffleWriter`。其中 `UnsafeShuffleWriter` 要求 Serializer 支持对象重定位（`supportsRelocationOfSerializedObjects`）。这个条件为什么存在？如果不满足这个条件强行用 Unsafe 路径会有什么问题？
+> 3. Sort Shuffle 在 Map 端对数据按 `(partitionId, key)` 排序。这个排序对 Reducer 端的行为有什么影响？在 `reduceByKey` 场景下，Reducer 是否还需要在内存中维护一个完整的 HashMap？
+
 ## 参考资料
 
 - [Spark Shuffle 机制详细源码解析](https://www.cnblogs.com/jordan95225/p/13967000.html)

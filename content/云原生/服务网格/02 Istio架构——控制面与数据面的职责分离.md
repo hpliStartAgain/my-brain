@@ -652,3 +652,10 @@ curl -X POST localhost:15000/logging?level=debug
 ---
 
 *本文是 [[服务网格]] 专栏的第 2 篇。相关专栏：[[kubernetes之API Server|K8s API Server 专栏]]、[[kubernetes控制器和调度器|K8s 控制器专栏]]、[[05 List-Watch 机制与 Informer 框架|List-Watch 机制]]*
+
+---
+
+> [!note] 思考题
+> 1. Istio 的控制平面（istiod）将路由规则、安全策略等编译为 Envoy 配置，通过 xDS 协议推送到数据平面的 Envoy 代理。istiod 是单点组件——如果 istiod 崩溃，已下发的配置仍然生效（Envoy 继续使用本地缓存），但新的配置变更无法下发。istiod 的高可用如何保证？
+> 2. Istio 的 Sidecar 注入通过 Kubernetes MutatingAdmissionWebhook 自动在 Pod 创建时注入 istio-proxy 容器。如果 Webhook 服务不可用，Pod 创建会失败还是跳过注入？`failurePolicy: Fail` vs `Ignore` 如何配置？
+> 3. Istio Ambient Mesh 是 Istio 的新架构——取消 Sidecar，使用 ztunnel（节点级代理）和 Waypoint Proxy（可选的 L7 代理）。这减少了资源开销（不再每个 Pod 一个 Sidecar）。Ambient Mesh 与 Sidecar 模式在功能和性能方面有什么权衡？它是否能完全替代 Sidecar 模式？

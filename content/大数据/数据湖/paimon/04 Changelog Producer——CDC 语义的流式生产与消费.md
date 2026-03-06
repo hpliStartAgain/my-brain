@@ -373,3 +373,9 @@ Paimon 的 Changelog Producer 是它在流批一体架构中的核心差异化�
 两者都让 Paimon 成为一个"既能存储、又能流式消费"的数据湖存储——这是 [[Apache Hudi]] 的 Incremental Query 和 [[Apache Iceberg]] 的 Incremental Read 都无法完全覆盖的能力。
 
 下一篇 [[05 Lookup Join 与维表——Paimon 在流计算中的实时维表查询]] 将聚焦 Paimon 作为 Flink Lookup Join 的维表来源，解析 Paimon 如何通过 LSM-Tree 的局部查找能力和 Lookup Cache 机制，实现比 HBase/Redis 更低运维复杂度的实时维表查询。
+
+
+> [!note] 思考题
+> 1. Paimon 的 Changelog Producer 将数据湖的写入操作（Upsert）转化为标准的 CDC 变更流（+I、-U、+U、-D），使下游 Flink 作业能够增量消费变更，而不是全量读取快照。这个 Changelog 是"物化的"（写入时就记录变更，存储在专用的 Changelog 文件中）还是"计算的"（查询时通过比较两个快照的差异来推导变更）？两种实现的延迟和存储代价有什么差异？
+> 2. Full Compaction Changelog Producer 通过在每次 Full Compaction 时对比前后两个版本的 SST 文件来生成 Changelog。这意味着 Changelog 的生成频率等于 Full Compaction 的频率，而不是写入频率。如果 Full Compaction 的间隔是 10 分钟，下游消费 Changelog 的最小延迟就是 10 分钟。如何通过调整 Compaction 策略来降低 Changelog 的端到端延迟？
+> 3. Paimon 的 Changelog 消费是幂等的吗？如果下游 Flink 作业从 Changelog 消费中途重启，它能从上次消费的位置（Changelog 的 Offset）重新开始，而不会重复处理已经处理过的变更吗？Paimon 的 Changelog Consumer 如何管理消费进度（类似 Kafka 的 Consumer Group Offset）？

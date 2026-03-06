@@ -469,6 +469,11 @@ HDFS 不会消亡，但它的角色会逐渐从"大数据存储的唯一选择"�
 
 ---
 
+> [!note] 思考题
+> 1. HDFS 小文件问题的根本原因是 NameNode 内存中每个文件和 Block 都需要约 150 字节的元数据，导致大量小文件耗尽 NameNode 内存。HAR（HDFS Archive）通过将大量小文件打包成一个 Archive 文件来减少 NameNode 的内存压力，但 HAR 文件不支持修改，且读取时需要两次元数据查询。在什么场景下 HAR 是合适的解决方案，在什么场景下反而增加了复杂性？
+> 2. 存算分离架构（如将 Spark 计算迁移到 K8s，数据存储在 S3 或 OSS）与 HDFS 的"数据局部性"原则背道而驰——数据存储在远端对象存储，计算节点需要通过网络读取所有数据，无法利用本地读取优化。在存算分离架构下，如何通过缓存层（如 Alluxio）来恢复部分数据局部性？缓存层的引入会带来哪些新的运维复杂性？
+> 3. HDFS 的 Block 大小（默认 128MB）影响了 NameNode 内存用量和 DataNode 的磁盘 I/O 效率。对于大文件顺序读取（如 Spark 全表扫描），增大 Block 大小（如 512MB 或 1GB）可以减少 NameNode 元数据压力并提高顺序读效率。但增大 Block 大小对小文件和随机读取场景有什么负面影响？在混合工作负载集群中，如何为不同类型的数据设置不同的 Block 大小？
+
 ## 参考资料
 
 - Apache Hadoop 官方文档：[HDFS Commands Guide](https://hadoop.apache.org/docs/current/hadoop-project-dist/hadoop-hdfs/HDFSCommands.html)

@@ -327,3 +327,9 @@ Iceberg 不是"更好的 Hudi"，也不是"更开放的 Delta Lake"——它是�
 Netflix 的 10PB 困境暴露了 HMS 模型的根本缺陷，而 Iceberg 的回答是：**把表的定义从"文件系统目录结构"提升到"与引擎无关的元数据规范"**。
 
 下一篇 [[02 元数据三层架构——Snapshot、Manifest List 与 Manifest File]] 将深入 Iceberg 最核心的技术创新——三层元数据结构，解析为什么这个设计能将"列举 100 万个分区"的元数据查询时间从数分钟压缩到毫秒级，以及 Snapshot 如何实现无锁的快照隔离。
+
+
+> [!note] 思考题
+> 1. Iceberg 通过三层元数据结构（metadata.json → Manifest List → Manifest File）将分区裁剪从 O(分区数) 降低到 O(Manifest 数)。但在频繁小批次写入的场景（每分钟一次 Commit），Manifest 文件数量本身也会快速增长。在什么极端情况下，Iceberg 的元数据遍历也会成为瓶颈？`rewrite_manifests` 操作的作用是什么？
+> 2. Iceberg 将分区信息存储在私有的元数据文件中，不依赖目录结构。目录名可以完全任意（不包含分区信息）。在不了解 Iceberg 格式的传统工具（如直接用 `aws s3 ls` 列举文件的脚本）中，如何发现和理解 Iceberg 表的数据分布？
+> 3. Iceberg 的 Hidden Partitioning 支持 Partition Evolution——从按天分区改为按小时分区时，新旧 Partition Spec 共存，历史数据不需要重写。在新旧 Partition Spec 共存的情况下，查询规划器如何同时利用新旧两种分区规则进行分区裁剪？

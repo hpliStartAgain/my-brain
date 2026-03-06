@@ -338,6 +338,11 @@ YARN 的解决方案体现了"**关注点分离（Separation of Concerns）**"�
 
 ---
 
+> [!note] 思考题
+> 1. MRv1 中 JobTracker 同时承担了资源管理（分配 TaskSlot）和作业调度（监控 Task 进度、处理失败）两个职责，这种耦合设计导致了 JobTracker 成为整个集群的单点瓶颈。YARN 将这两个职责拆分为 ResourceManager（资源）和 ApplicationMaster（作业逻辑）。这种"关注点分离"带来了可扩展性，但也增加了系统复杂性——多了一层 AM 的启动、注册、心跳流程。在小规模集群（如 50 个节点）上，这个额外复杂性的开销是否值得？
+> 2. MRv1 的 TaskSlot 是静态的（Map Slot 和 Reduce Slot 预先固定），导致资源利用率低下——Map 阶段 Reduce Slot 闲置，Reduce 阶段 Map Slot 闲置。YARN 将资源抽象为可分配的 CPU 核数和内存量，理论上可以 100% 利用集群资源。但在实际生产中，YARN 的资源利用率真的比 MRv1 高吗？有哪些因素（如内存碎片、调度延迟）会导致 YARN 实际利用率远低于理论上限？
+> 3. YARN 的设计目标之一是支持除 MapReduce 之外的计算框架（如 Spark、Flink、Tez）。从 MRv1 到 YARN 的升级需要将原有的 MapReduce 作业迁移到在 YARN 上运行的 MRv2（MapReduce over YARN）。MRv2 中，JobHistoryServer 承担了 MRv1 中 JobTracker 保存历史作业信息的职责。在 YARN 架构下，如果 MRv2 作业的 ApplicationMaster 宕机，已完成的 Task 结果是否会丢失？AM 重启后如何恢复作业状态？
+
 ## 参考资料
 
 - Vavilapalli, V. K. et al. (2013). *Apache Hadoop YARN: Yet Another Resource Negotiator*. SOCC 2013.

@@ -426,6 +426,11 @@ Hive 的查询优化器体系由 RBO 和 CBO 两层构成，两者协同工作�
 
 ---
 
+> [!note] 思考题
+> 1. Hive 的 CBO（基于代价的优化器）依赖表和列的统计信息（行数、NDV、Min/Max）来估算每个操作的代价，从而选择最优的 JOIN 顺序和 JOIN 算法。如果统计信息过时（上次 `ANALYZE TABLE` 之后数据发生了大量变更），CBO 的估算可能严重偏差，选择出比 RBO 更差的执行计划。如何在生产环境中建立统计信息的自动更新机制，确保 CBO 始终基于准确的统计数据做决策？
+> 2. Join Order Optimization（JOO）是 CBO 最重要的应用——在多表 JOIN 时，不同的 JOIN 顺序会产生不同大小的中间结果，进而影响性能。Hive 的 JOO 使用动态规划（DP）来枚举所有可能的 JOIN 顺序，选择代价最小的方案。对于 N 张表的 JOIN，枚举的空间是 O(N!)。当 N 很大（如 10 张以上）时，完全枚举的计算量会非常大。Hive 如何通过剪枝或启发式方法控制 JOO 的计算复杂度？
+> 3. Predicate Pushdown（谓词下推）是 RBO 中最重要的优化之一——将 WHERE 条件尽早下推到数据扫描层（如 ORC 的列统计过滤），减少后续处理的数据量。但并非所有谓词都可以下推——包含不确定性函数（如 `RAND()`、`CURRENT_TIMESTAMP`）或需要先执行聚合再过滤（如 `HAVING` 子句）的谓词不能下推。在实际编写 Hive SQL 时，有哪些常见的"写法导致谓词无法下推"的陷阱，以及如何改写 SQL 来启用下推？
+
 ## 参考资料
 
 - [Hive CBO 设计文档](https://cwiki.apache.org/confluence/display/Hive/Cost-based+optimizations+in+Hive)

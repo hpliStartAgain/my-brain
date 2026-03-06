@@ -330,3 +330,10 @@ ZGC 代表了 JVM 技术的当前最前沿，也是 Java 在延迟敏感场景�
 5. JEP 439: Generational ZGC (JDK 21)
 6. OpenJDK Wiki, "ZGC", wiki.openjdk.org/display/zgc
 7. Aleksey Shipilev, "ZGC: The Next Generation Low-Latency GC", 2019
+
+---
+
+> [!note] 思考题
+> 1. ZGC 使用'着色指针'（Colored Pointers）在 64 位指针中嵌入 GC 元数据（标记位、重映射位等）。这意味着 ZGC 不能使用压缩指针（CompressedOops）。不使用压缩指针会导致每个对象引用从 4 字节增加到 8 字节——在一个引用密集的应用（如大量小对象组成的树/图结构）中，内存开销增加多少？这是否抵消了 ZGC 低延迟的优势？
+> 2. ZGC 的并发标记和并发转移依赖'读屏障'（Load Barrier）——每次从堆中读取引用时插入检查代码。读屏障的运行时开销通常在 2%-5%。在什么类型的应用中（读多写少 vs 写多读少），读屏障的开销会特别明显？为什么 G1 选择了'写屏障'而 ZGC 选择了'读屏障'？
+> 3. ZGC 从 JDK 15 开始成为生产就绪。但在堆内存超过 TB 级别的场景下，ZGC 的并发标记阶段需要遍历整个对象图——标记耗时可能很长。如果标记阶段耗时超过对象的分配速率（即 GC 跟不上分配速度），会发生什么？ZGC 有类似 G1 的'Full GC 降级'机制吗？

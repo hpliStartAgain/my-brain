@@ -657,3 +657,9 @@ System.out.println("Subject: " + ugi.getSubject());
 - **Delegation Token 是 Kerberos 的轻量化代理**，使 Executor/Container 无需 KDC 即可认证
 
 下一篇 [[02 Kerberos 协议深度解析：TGT、ST 与票据体系]] 将深入 Kerberos 协议本身，理解 UGI 持有的那张 TGT 到底是什么、如何产生的，以及 AS/TGS/SS 三方模型背后的密码学原理。
+
+
+> [!note] 思考题
+> 1. Hadoop 的 `UserGroupInformation`（UGI）封装了 JAAS 的 `Subject`，是整个 Hadoop 安全体系的身份基石。UGI 提供了 `doAs()` 方法，允许以指定用户身份执行代码块（Privileged Action）。在 Hadoop Proxy User（代理用户）场景中，超级用户 A 需要以普通用户 B 的身份访问 HDFS，UGI 的 `doAs()` 在 JVM 层面做了什么？执行 `doAs()` 后，当前线程的安全上下文如何切换，执行完毕后如何恢复？
+> 2. UGI 的 `loginUserFromKeytab()` 会从 keytab 文件中读取凭证并向 KDC 申请 TGT，将 Kerberos Ticket 存入 Subject 的 PrivateCredential 集合。TGT 是有过期时间的（通常 8-24 小时），UGI 内置了自动续约（TGT Renewal）机制——后台线程在 TGT 过期前自动 `kinit`。如果 KDC 暂时不可达（网络故障），这个后台续约线程会在什么时机失败？当 TGT 真正过期后，下一次 RPC 调用会发生什么？
+> 3. 在同一个 JVM 进程中，如果多个线程同时以不同的 UGI 身份（通过 `doAs()`）执行操作，JAAS 的 `Subject` 是线程局部的（Thread-Local）还是进程全局的？如果 Subject 是全局的，多线程并发调用 `doAs()` 时，不同线程的身份信息是否会发生互相覆盖的竞态条件？Hadoop 是如何解决这个并发安全问题的？

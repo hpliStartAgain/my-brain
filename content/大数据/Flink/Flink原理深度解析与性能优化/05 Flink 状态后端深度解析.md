@@ -540,3 +540,9 @@ Flink 状态管理的核心知识体系：
 - Block Cache 大小 → 观察 `rocksdb.block-cache-hit/miss` 命中率，命中率 < 50% 则需增大
 
 下一篇 [[06 Flink Checkpoint 机制深度解析]] 将深入 Checkpoint 的触发、传播、完成全流程，解析 Chandy-Lamport 分布式快照算法在 Flink 中的具体实现，以及 Savepoint 与 Checkpoint 的本质区别。
+
+
+> [!note] 思考题
+> 1. `HashMapStateBackend` 将状态存储在 TaskManager 的 JVM 堆内存中，访问速度极快，但受 JVM GC 制约——大量小对象的状态会给 GC 带来巨大压力，导致长时间的 Stop-the-World 暂停。在什么状态规模（Key 数量 × 每 Key 状态大小）下，应该从 `HashMapStateBackend` 切换到 `EmbeddedRocksDBStateBackend`？有没有经验性的"临界点"判断方法？
+> 2. `EmbeddedRocksDBStateBackend` 的 Checkpoint 支持增量模式（`incremental = true`）——只将自上次 Checkpoint 以来变更的 SST 文件上传到持久化存储，而不是每次全量上传。但增量 Checkpoint 的恢复速度比全量 Checkpoint 慢（需要合并多个增量快照）。在作业故障恢复时，恢复时间和 Checkpoint 时间之间存在什么权衡关系？在何种场景下应该关闭增量模式？
+> 3. 当流作业的并行度发生变化（如从 4 改为 8）时，存储在 State Backend 中的 Keyed State 需要重新分配——每个 Key 的哈希值重新决定应属于哪个新的 SubTask。这个重新分配过程是在 Checkpoint 恢复时完成的。如果并行度从 4 变为 5，一个 Key 在旧布局中属于 SubTask 2，在新布局中可能属于 SubTask 3——Flink 如何保证这种重新分配不会丢失任何 Key 的状态？

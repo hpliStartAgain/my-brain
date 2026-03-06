@@ -647,3 +647,10 @@ Java NIO 的三大组件各司其职，共同构建了非阻塞 I/O 的完整体
 > - Ron Hitchens,《Java NIO》, O'Reilly, 2002
 > - JDK Bug 6670302: NIO selector wakes up with 0 selected keys infinitely
 > - Linux man 页：`epoll_create(2)`、`epoll_ctl(2)`、`epoll_wait(2)`、`sendfile(2)`
+
+---
+
+> [!note] 思考题
+> 1. Java NIO 的 `Selector` 在 Linux 上底层使用 `epoll`，但在 macOS 上使用 `kqueue`。两者在事件通知模型上有什么差异（边缘触发 vs 水平触发）？Java NIO 的 `Selector` 封装了这些差异，但在某些极端场景（如 epoll 的空轮询 bug）下，平台差异会导致什么问题？Netty 是如何修复这个 bug 的？
+> 2. `ByteBuffer` 的 `flip()` 方法将 Buffer 从写模式切换到读模式（`limit = position; position = 0`）。忘记调用 `flip()` 是 NIO 初学者最常见的错误。为什么 Java NIO 不设计一个自动管理读写模式的 Buffer？Netty 的 `ByteBuf` 用两个独立指针（`readerIndex` 和 `writerIndex`）解决了这个问题——这种设计的代价是什么？
+> 3. NIO 的 `Channel` 是双向的（可同时读写），而 IO 的 `InputStream/OutputStream` 是单向的。在 Socket 通信中，双向 Channel 意味着同一个 Channel 的 read 和 write 可以在不同线程中并发执行吗？如果两个线程同时调用同一个 `SocketChannel` 的 `read()` 和 `write()`，会发生什么？

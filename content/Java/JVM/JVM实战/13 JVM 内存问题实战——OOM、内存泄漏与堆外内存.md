@@ -574,3 +574,10 @@ graph TD
 5. 阿里开源, "Arthas User Guide", arthas.aliyun.com/doc
 6. Netty Project, "Reference Counted Objects", netty.io/wiki/reference-counted-objects.html
 7. JDK Tools Reference, "jmap", "jstack", "jstat", "jcmd", docs.oracle.com
+
+---
+
+> [!note] 思考题
+> 1. `java.lang.OutOfMemoryError: Java heap space` 和 `java.lang.OutOfMemoryError: GC overhead limit exceeded` 都表示堆内存不足，但含义不同。后者意味着 GC 花费了 98% 以上的时间但只回收了不到 2% 的堆空间。在什么场景下你会看到第一种而非第二种？第二种错误是否意味着一定存在内存泄漏？
+> 2. 堆外内存（Direct Memory）通过 `ByteBuffer.allocateDirect()` 分配，不受 GC 管理。NIO 框架（如 Netty）大量使用堆外内存来减少数据拷贝。但堆外内存泄漏比堆内存泄漏更难排查——`jmap` 无法显示堆外分配。你有哪些工具和方法来排查堆外内存泄漏？`-XX:MaxDirectMemorySize` 的默认值是什么？
+> 3. 使用 MAT（Memory Analyzer Tool）分析堆转储（Heap Dump）时，需要区分 Shallow Size（对象自身大小）和 Retained Size（对象被回收后能释放的总大小）。一个 `HashMap` 的 Shallow Size 只有几十字节，但 Retained Size 可能是 GB 级。在什么情况下 Shallow Size 大的对象反而不是泄漏的根因？

@@ -476,3 +476,10 @@ resp, err := client.Do(req)
 > - Cloudflare Blog,《The sad state of Linux socket balancing》
 > - Go Blog,《The Go net/http package》
 > - Russ Cox,《Go's network poller》
+
+---
+
+> [!note] 思考题
+> 1. Go 的 netpoller 使用 epoll（Linux）/kqueue（macOS）在底层实现非阻塞 IO，但对用户暴露的是同步阻塞 API（`conn.Read()` 会阻塞当前 goroutine）。这种'以同步编程模型暴露异步 IO'的方式，与 Java NIO 的 Selector 模式相比，开发效率和运行时性能各有什么优劣？在 C10K 场景下，Goroutine-per-Connection 模型是否会遇到瓶颈？瓶颈在哪里？
+> 2. 当一个 goroutine 调用 `conn.Read()` 但数据未到达时，Go 运行时会将这个 goroutine 挂起并将 fd 注册到 epoll。数据到达后，epoll 通知 netpoller，netpoller 唤醒对应的 goroutine。在这个过程中，goroutine 从挂起到被唤醒的延迟由哪些因素决定？这个延迟与直接使用 epoll 的 C 程序相比会大多少？
+> 3. `net.Conn` 的 `SetDeadline`/`SetReadDeadline`/`SetWriteDeadline` 是通过什么机制实现超时的？是内核层面的 socket timeout，还是 Go 运行时层面的 timer？如果设置了 `ReadDeadline` 后数据在 deadline 前到达但 goroutine 还未被调度到 CPU 执行，会发生超时错误吗？

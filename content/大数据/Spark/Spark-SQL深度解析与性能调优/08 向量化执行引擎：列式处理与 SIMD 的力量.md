@@ -394,6 +394,11 @@ UnsafeRow 内存布局（3 列：INT, LONG, STRING）：
 
 ---
 
+> [!note] 思考题
+> 1. Spark 的向量化执行引擎（`ColumnarBatch`）与 Whole-Stage CodeGen 是两条不同的优化路径，在很多情况下不能同时发挥最大效果。为什么向量化执行和 CodeGen 存在设计上的张力？Databricks 的 Photon 引擎是如何解决这个矛盾的？
+> 2. `ColumnarBatch` 的 Batch Size 默认是 4096 行。这个值并非越大越好——增大 Batch Size 会导致 CPU L1/L2 缓存溢出，反而降低 SIMD 效率。在列数很多（比如宽表 200 列）的场景下，你会如何调整 Batch Size？有没有办法动态适配？
+> 3. Parquet 向量化读取绕过了 Java 对象的创建，直接将 Parquet 编码数据（如 Dictionary Encoding、RLE）解码到堆外 `WritableColumnVector` 中。但对于用户自定义的复杂类型（如嵌套 STRUCT、MAP），向量化读取会退化为逐行读取。这个退化的根本原因是什么？
+
 ## 参考资料
 
 - [Vectorized Query Execution in Apache Spark（Databricks Blog）](https://www.databricks.com/blog/2017/05/23/apache-spark-native-execution.html)

@@ -435,6 +435,11 @@ Shuffle Read 是 Spark 分布式计算中最复杂的阶段之一，涉及分布
 
 ---
 
+> [!note] 思考题
+> 1. `MapOutputTracker` 存储了所有 Map Task 的输出位置信息，Reducer 在 Fetch 数据前必须向 Driver 上的 `MapOutputTrackerMaster` 查询。在拥有数千个 Mapper 和数千个 Reducer 的超大规模 Shuffle 中，这个集中式的 Tracker 会成为性能瓶颈吗？Spark 提供了什么机制来缓解这个问题？
+> 2. `ShuffleBlockFetcherIterator` 对并发 Fetch 请求的数量和每次 Fetch 的数据大小都有限制（`maxBlocksInFlightPerAddress`、`maxBytesInFlight`）。如果不加这些限制，直接并发拉取所有数据块会发生什么？这些参数的调优方向是什么？
+> 3. Shuffle Read 阶段的数据聚合（如 `reduceByKey`）使用 `ExternalAppendOnlyMap` 来处理 OOM 场景。与 Map 端的 `ExternalSorter` 相比，Reduce 端的聚合有什么不同的挑战？在数据严重倾斜（某个 Key 有数百万条记录）的情况下，`ExternalAppendOnlyMap` 的 Spill 策略是否能有效缓解 OOM？
+
 ## 参考资料
 
 - [Shuffle reading in Apache Spark SQL](https://www.waitingforcode.com/apache-spark-sql/shuffle-reading-apache-spark-sql/read)

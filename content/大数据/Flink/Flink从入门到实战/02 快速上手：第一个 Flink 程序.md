@@ -540,3 +540,9 @@ flink run -d -c com.example.flink.StreamingWordCount job.jar
 - **本地调试技巧**：`fromElements` 替代 Socket、`setParallelism(1)` 简化输出、本地 Web UI 可视化
 
 下一篇 [[03 DataStream API 深度使用指南]] 将系统讲解 Source、Transformation、Sink 的全部算子，以及并行度控制、分区策略等核心使用技巧。
+
+
+> [!note] 思考题
+> 1. Flink 的 DataStream API 是惰性求值的——所有的转换操作只是在构建执行计划图（StreamGraph），只有调用 `env.execute()` 才会真正触发执行。这与 Spark 的 RDD 惰性求值非常相似，但两者的触发机制有所不同。Flink 中如果用户忘记调用 `execute()`，程序会静默退出还是报错？在本地调试模式下，行为是否与集群模式相同？
+> 2. 本地执行模式（`createLocalEnvironment()`）和集群执行模式（`getExecutionEnvironment()`）的代码在逻辑上是相同的，但行为有差异——本地模式下所有 Operator 在同一个 JVM 进程中运行，共享内存空间。这意味着某些在本地不会出现的问题（如序列化 / 反序列化错误、跨 Task 的状态隔离问题）在集群上才会暴露。如何通过本地测试尽早发现这类集群特有的问题？
+> 3. Flink Maven Archetype 生成的项目将 Flink 依赖设置为 `provided` scope，意味着打包时不包含 Flink 框架 JAR。这是为了避免与集群上已有的 Flink 版本冲突。但如果用户使用了某个 Flink 版本新引入的 API（如某个 Connector），而集群上运行的是旧版本 Flink，会在什么时机报错？是编译期、提交期还是运行期？

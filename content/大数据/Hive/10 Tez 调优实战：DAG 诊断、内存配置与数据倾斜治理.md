@@ -505,6 +505,11 @@ Tez 调优的本质是**消除执行链路中的短板**：
 
 ---
 
+> [!note] 思考题
+> 1. Tez 的 Vertex（顶点）对应 Hive 的一个处理阶段，每个 Vertex 有多个 Task 并发执行。Tez UI 中可以看到每个 Vertex 的 Task 执行时间分布。如果某个 Vertex 的 Task 执行时间呈现"长尾效应"（大多数 Task 快速完成，少数 Task 慢很多），通常是数据倾斜的表现。如何通过 Tez UI 和 Counter 指标（如 `RECORDS_IN_Map`、`RECORDS_OUT_Reduce`）量化倾斜的严重程度，并确定倾斜发生在哪个 Key 上？
+> 2. Tez 的内存配置涉及三层：Container 内存（`hive.tez.container.size`）、JVM 堆内存（`hive.tez.java.opts` 中的 `-Xmx`）、以及 Tez Task 内部的操作内存（如 Hash Join 的 Hash Table 大小）。这三层内存有严格的包含关系：堆内存必须小于 Container 内存，操作内存必须小于堆内存。如果配置不当（如 `-Xmx` 超过 Container 内存），会在 Container 启动时报错还是运行时 OOM？合理的三层内存比例应该如何设置？
+> 3. Hive 的"自动倾斜 Join 优化"（`hive.optimize.skewjoin`）在 MapReduce 模式下有效，但在 Tez 模式下，数据倾斜的处理方式有所不同——Tez 可以在运行时动态调整 Reducer 数量（通过 `hive.tez.dynamic.partition.pruning`）。但动态分区裁剪是针对分区裁剪优化的，不是针对倾斜处理的。在 Tez 模式下，处理倾斜数据的主要手段是什么？在 SQL 层面（如加盐、两阶段聚合）和配置层面（如增大倾斜 Key 的 Reducer 数）各有什么工程实践？
+
 ## 参考资料
 
 - [Tez 性能调优指南](https://tez.apache.org/install.html)

@@ -460,3 +460,9 @@ Flink SQL 与 Blink Planner 的核心知识体系：
 **代码生成**：将 SQL 表达式编译为 JVM 字节码（针对具体查询的专用代码），配合 BinaryRow 列式内存布局，消除虚函数调用和装箱开销，性能接近手写 DataStream 代码。
 
 下一篇 [[09 Flink 性能调优体系]] 将系统梳理 Flink 作业的性能调优方法论——从资源配置（并行度、内存）到算子级别的优化（状态后端、序列化、算子链），形成一套完整的生产调优决策树。
+
+
+> [!note] 思考题
+> 1. Blink Planner 使用 Apache Calcite 作为 SQL 解析和逻辑优化的基础，然后将 Calcite 的 RelNode 逻辑计划转换为 Flink 的 FlinkPhysicalRel 物理计划。Calcite 的优化规则（RBO + CBO）是为批处理（有界关系代数）设计的。对于流处理的特殊语义（如时间窗口、Retract 流），Flink 是通过向 Calcite 注册自定义规则来扩展的，还是在 Calcite 之外单独处理的？这两种方案各有什么优缺点？
+> 2. Flink SQL 中的 `GROUP BY` + 聚合操作会产生 Retract 流——每次聚合结果更新时，先发出一条撤回消息（-U），再发出新的插入消息（+U）。这在下游需要维护完整的撤回语义。但某些场景（如固定时间窗口聚合）的结果一旦输出就不会变更，可以使用 Append-only 模式。Flink 如何在查询规划阶段判断一个聚合操作是否产生 Retract 流，从而选择更高效的 Append-only 路径？
+> 3. Flink SQL 的 `MATCH_RECOGNIZE` 语句用于复杂事件处理（CEP）——在数据流中匹配符合特定模式的事件序列。这个操作在底层使用了一个 NFA（非确定有限自动机）来追踪可能的匹配路径。当模式非常复杂（如多个可选分支、循环匹配）时，NFA 的状态数会爆炸式增长。Flink 如何控制 CEP 的状态规模？有没有机制剪枝不可能成功的匹配路径？

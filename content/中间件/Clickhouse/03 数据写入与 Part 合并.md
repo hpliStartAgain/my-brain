@@ -236,3 +236,10 @@ ClickHouse 的写入和合并机制体现了"写入简单、合并优化"的设�
 **延伸阅读**：
 - [[02 MergeTree 引擎家族——主键索引与数据排序]]
 - [[06 ClickHouse 性能调优——表设计、查询优化与资源管理]]
+
+---
+
+> [!note] 思考题
+> 1. Distributed 表是一个逻辑视图——它将查询分发到各 Shard 的本地表并合并结果。`distributed_group_by_mode` 控制分布式 GROUP BY 的行为——`in_order`（各节点先分组再合并）和 `in_combined`（将所有数据拉到一个节点合并）。在什么场景下 `in_order` 比 `in_combined` 更高效（提示：考虑 GROUP BY 的基数和网络传输量）？
+> 2. 数据分片（Sharding）通常使用 `cityHash64(user_id) % shard_count` 将数据分散到不同 Shard。如果查询包含 `WHERE user_id = 123`，查询可以路由到特定 Shard——避免全 Shard 扫描。但如果查询是 `WHERE city = 'Beijing'`（分片键之外的列），则需要查询所有 Shard。在多维度分析场景中，如何选择分片键使得最多的查询能做到分片裁剪？
+> 3. ClickHouse 的 ReplicatedMergeTree 使用 ZooKeeper/ClickHouse Keeper 协调副本间的数据同步。INSERT 写入任意一个副本后异步复制到其他副本。如果写入副本在复制完成前崩溃，数据是否可能丢失？`insert_quorum` 参数如何保证写入的持久性？它对写入延迟的影响有多大？

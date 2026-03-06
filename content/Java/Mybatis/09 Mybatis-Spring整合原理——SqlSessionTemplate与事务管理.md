@@ -763,3 +763,10 @@ mybatis:
 > - `org.mybatis.spring.transaction.SpringManagedTransaction` 源码
 > - `org.mybatis.spring.mapper.MapperScannerConfigurer` 源码
 > - [mybatis-spring 官方文档](https://mybatis.org/spring/)
+
+---
+
+> [!note] 思考题
+> 1. `SqlSessionTemplate` 是 Spring 整合 MyBatis 的核心类，它是线程安全的 SqlSession 代理。内部通过 `SqlSessionInterceptor`（InvocationHandler）在每次调用时从 `TransactionSynchronizationManager` 获取当前事务绑定的 SqlSession。如果当前没有事务，是创建新的 SqlSession 还是抛出异常？
+> 2. Spring 的 `@Transactional` 与 MyBatis 的事务管理如何协作？如果 `@Transactional(propagation = REQUIRES_NEW)` 开启了一个新事务，MyBatis 会创建新的 SqlSession 还是复用外层事务的 SqlSession？新事务中的一级缓存与外层事务的一级缓存是隔离的吗？
+> 3. 在 Spring Boot 中，`mybatis-spring-boot-starter` 自动配置了 `SqlSessionFactory`、`SqlSessionTemplate` 和 `DataSource`。如果项目需要连接两个数据库（如业务库和日志库），你需要如何配置多数据源？`@MapperScan` 如何区分哪些 Mapper 使用哪个数据源？

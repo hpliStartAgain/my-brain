@@ -771,3 +771,10 @@ Mapper 接口代理机制是 Mybatis 最优雅的设计，它让开发者只需�
 > - `org.apache.ibatis.binding.MapperMethod` 源码
 > - `org.apache.ibatis.binding.MapperProxyFactory` 源码
 > - `org.apache.ibatis.binding.MapperRegistry` 源码
+
+---
+
+> [!note] 思考题
+> 1. Mapper 接口没有实现类，MyBatis 通过 JDK 动态代理生成实现。`MapperProxy` 实现了 `InvocationHandler`，将方法调用转发为 SqlSession 的 select/insert/update/delete 操作。这意味着 Mapper 接口的方法只能返回 MyBatis 支持的类型——如果方法返回 `CompletableFuture<User>`（异步），MyBatis 能否处理？
+> 2. `MapperMethod` 内部将 Mapper 方法的返回类型映射为具体的 SqlSession 操作：返回 `List` 调用 `selectList`，返回单个对象调用 `selectOne`，返回 `Map` 调用 `selectMap`。如果一个方法声明返回 `Optional<User>`，MyBatis 3.5+ 是如何支持的？底层是先调用 `selectOne` 再包装为 `Optional` 吗？
+> 3. 在 Spring 中，`@MapperScan` 扫描 Mapper 接口并注册为 Spring Bean。底层使用 `MapperFactoryBean` 创建代理实例。如果两个不同的 Mapper 接口定义了相同签名的方法但对应不同的 SQL（不同的 XML Namespace），Spring 容器中会有冲突吗？

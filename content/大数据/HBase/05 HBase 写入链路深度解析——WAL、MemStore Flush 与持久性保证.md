@@ -570,6 +570,11 @@ HBase 写入链路的设计，是其核心工程哲学在具体机制上的集�
 
 ---
 
+> [!note] 思考题
+> 1. HBase 的 WAL（Write-Ahead Log）在每次写入前先将操作记录到 HDFS 上的 WAL 文件，然后才写入 MemStore。WAL 的写入是同步的（默认），这带来了持久性保证，但也增加了写入延迟（每次写入都需要等待 HDFS 的数据块确认）。`setDurability(Durability.SKIP_WAL)` 可以跳过 WAL 写入，极大提升写入速度。在什么业务场景下，牺牲持久性换取性能是合理的？跳过 WAL 在 RegionServer 宕机时会有什么后果？
+> 2. MemStore Flush 将内存中的数据写入 HDFS 上的新 HFile。Flush 是异步的，但在 Flush 进行期间，新的写入请求如何处理？HBase 是否有一个"写入暂停"窗口？`hbase.hregion.memstore.block.multiplier` 参数控制在什么条件下会阻塞写入请求——这个阻塞机制的作用是什么？
+> 3. 在批量导入场景（如使用 BulkLoad 导入数亿条数据），直接通过 HBase 的 Put API 写入效率极低，因为每条记录都要走 WAL + MemStore + Flush 的完整路径。`BulkLoad`（HFile 直接导入）绕过了这条路径，直接将预先生成的 HFile 移入 HBase 管理的目录。BulkLoad 在 HDFS 层面做了什么操作来实现"原子性导入"？BulkLoad 对现有数据的读取路径是否有影响？
+
 ## 参考资料
 
 - [1] Apache HBase Reference Guide — Write Path: https://hbase.apache.org/book.html#client.writebuffer

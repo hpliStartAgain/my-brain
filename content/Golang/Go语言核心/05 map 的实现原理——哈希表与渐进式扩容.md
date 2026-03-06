@@ -473,3 +473,10 @@ m2 := make(map[string]int, 1000)  // 预估约 1000 个键值对
 > - Keith Randall,《Inside the Map Implementation》, GopherCon 2016
 > - Go Blog,《Go maps in action》: https://go.dev/blog/maps
 > - Russ Cox,《Go Data Structures: Interfaces》
+
+---
+
+> [!note] 思考题
+> 1. Go 的 map 使用拉链法处理哈希冲突，每个 bucket 存储 8 个 key-value 对。当 bucket 中的元素超过 8 个时，会使用 overflow bucket（链式溢出）。在什么条件下 map 会触发扩容？'等量扩容'（sameSizeGrow）和'翻倍扩容'的触发条件有什么区别？等量扩容解决的是什么问题？
+> 2. Go 的 map 禁止并发读写（运行时会 panic: `concurrent map read and map write`）。这个检测是通过什么机制实现的——是加锁还是原子标志位？为什么 Go 团队选择直接 panic 而不是像 Java 的 `ConcurrentHashMap` 那样提供一个并发安全的 map 实现？
+> 3. map 的迭代顺序在 Go 中是'有意随机化'的——即使是同一个 map，两次 `range` 的遍历顺序也不同。Go 团队为什么要刻意打乱遍历顺序？如果你需要按 key 有序遍历 map，Go 社区的标准做法是什么？第三方库 `btree` 或 `treemap` 与'先排序再遍历'的方式相比，各有什么优劣？

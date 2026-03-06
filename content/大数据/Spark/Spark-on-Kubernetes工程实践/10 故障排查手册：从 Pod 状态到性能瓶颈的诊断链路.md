@@ -410,6 +410,11 @@ State Store OOM          → kubectl logs driver + 关键字state → 无 Waterm
 
 ---
 
+> [!note] 思考题
+> 1. `OOMKilled` 是 Spark on K8s 最常见的故障，根因可能来自 JVM 堆内存（`-Xmx` 设置不足）、堆外内存（Tungsten/Direct Buffer）、或者 K8s Container 的 `memory.limit` 设置过低。这三类 OOM 在 `kubectl describe pod` 的输出中有什么不同的表现？如何通过 JVM GC 日志区分"真正的内存不足"和"GC 压力导致的假 OOM"？
+> 2. 在 K8s 上，`kubectl logs` 只能获取容器当前或最近一次运行的日志。如果 Executor Pod 已经被 K8s 删除（`deleteOnTermination=true`），日志就永久丢失了。在设计生产监控体系时，如何在不修改 Spark 代码的前提下，确保所有 Executor 的日志都能被持久化到外部日志系统（如 ELK/Loki）？
+> 3. 网络性能问题在 K8s 上比在 YARN 上更难诊断——Pod 之间的通信经过 CNI 插件（如 Calico、Cilium）的虚拟网络，可能存在额外的封包开销（如 VXLAN 隧道）。Shuffle 密集型的 Spark 作业在使用不同 CNI 插件时，网络性能差异可能达到 30% 以上。如何通过 Spark UI 的 Shuffle 读写时间指标，判断网络瓶颈是否是性能问题的主因？
+
 ## 参考资料
 
 - Apache Spark 官方文档：Kubernetes Troubleshooting

@@ -436,3 +436,10 @@ Kafka 的引入带来了以下好处：
 4. Wu Sheng (2020). Apache SkyWalking: Application Performance Monitoring for Distributed Systems. Medium.
 5. SkyWalking GitHub Repository：https://github.com/apache/skywalking
 6. SkyWalking Kafka Fetcher：https://skywalking.apache.org/docs/main/latest/en/setup/backend/backend-kafka-fetcher/
+
+---
+
+> [!note] 思考题
+> 1. 一个 Trace 由多个 Span 组成——每个 Span 代表一个操作（如 HTTP 请求、数据库查询）。Span 之间的父子关系形成了树形结构——根 Span 是入口请求。在一个有 20 个微服务的调用链中，一个 Trace 可能包含 50+ 个 Span。如何通过 Span 的 `status` 和 `duration` 快速定位延迟最大的服务？
+> 2. 异步调用（如消息队列消费）的 Trace 如何关联——Producer 发送消息时将 Trace Context 嵌入消息头，Consumer 消费时从消息头恢复 Trace Context 并创建新 Span。这样异步调用也能出现在同一个 Trace 中。但如果 Consumer 是批量处理（一次消费 100 条消息），每条消息的 Trace Context 不同——你如何处理？
+> 3. Span 的 Attributes（属性）记录了操作的详细信息——如 HTTP 方法、URL、状态码、数据库语句。但过多的 Attributes 增加了数据量和存储成本。OTel 的 Semantic Conventions 定义了标准的 Attribute 名称和值——遵循这些约定有什么好处？在什么场景下你需要自定义 Attribute？

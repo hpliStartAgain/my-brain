@@ -444,6 +444,11 @@ ALTER TABLE table_name DROP PARTITION (dt='2026-01-15');
 
 ---
 
+> [!note] 思考题
+> 1. HS2 无响应是一类常见但原因复杂的生产故障——可能是线程池耗尽（所有工作线程被阻塞的查询占用）、GC 暂停（HS2 JVM 执行长时间 Full GC）、或者 HMS 不可用（所有查询都在等待元数据查询返回）。这三类原因在表象上都是"HS2 不响应新连接"，如何通过 HS2 的 JStack 线程 Dump、GC 日志和 HMS 监控指标快速区分具体原因？
+> 2. Tez 作业中的 Task 失败通常会被 Tez AM 自动重试（`tez.am.task.max.failed.attempts`）。但如果某个 Task 因为"毒数据"（如一条包含特殊字符导致 UDF 抛出异常的记录）反复失败，每次重试都会产生相同的失败。这类"必然失败"的 Task 会消耗大量重试资源，最终导致整个 Vertex 失败。Hive/Tez 是否有机制跳过无法处理的"毒数据"记录（类似 Spark 的 `spark.task.maxFailures` 结合部分失败容忍）？
+> 3. 在多节点 Hive 集群中，当 Tez 作业失败时，故障 Task 的日志可能分散在不同的 NodeManager 节点上，通过 Tez UI 能看到每个 Task 的日志链接，但如果 NM 节点的日志已经被 GC（日志轮转清理），这些链接会失效。在生产环境中，如何建立统一的日志收集体系（如将所有 Container 日志实时写入 Elasticsearch 或 S3），确保即使 Container 已经退出，日志仍然可查？
+
 ## 参考资料
 
 - [[HiveServer2 Kerberos 认证故障深度分析报告]]（本知识库）

@@ -585,3 +585,10 @@ Linux 支持 **Mount Namespace**（通过 `clone(CLONE_NEWNS)`）——不同 Na
 - **分层设计**：每层解决一个特定问题，各层独立演进
 
 下一篇 [[02 VFS 虚拟文件系统——超级块、inode、dentry 与 file]] 将深入 VFS 的四大核心数据结构，解析每个字段的含义、对象之间的生命周期关系，以及"负 dentry"这一精妙的缓存优化设计。
+
+---
+
+> [!note] 思考题
+> 1. 路径解析从根目录逐级查找 inode。路径深度为 10 时最坏情况需要多少次磁盘 IO？dentry cache 命中率如何影响路径解析性能？在一个有数百万文件的系统上，dentry cache 的内存占用可能达到 GB 级——你如何评估 dentry cache 的命中率和内存效率？
+> 2. 文件描述符是进程级资源。`ulimit -n` 默认 1024 在高并发网络服务中远远不够。fd 耗尽时 `accept()` 返回 EMFILE 错误——但此时进程无法打开新文件来记录日志。你如何在应用层预防 fd 耗尽？预留 fd 的技巧是什么？
+> 3. `fsync(fd)` 保证文件数据落盘，但不保证目录的 dentry 已更新。在 ext4 的 `data=ordered` 模式下，文件创建后只 fsync 文件而不 fsync 目录——掉电后文件可能丢失。PostgreSQL 曾因此出现数据丢失 bug。你需要对目录 fd 也调用 fsync 吗？ext4 的 `auto_da_alloc` 特性如何缓解这个问题？

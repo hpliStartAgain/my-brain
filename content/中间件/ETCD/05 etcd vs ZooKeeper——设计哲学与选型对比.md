@@ -477,3 +477,10 @@ etcd 和 ZooKeeper 的对比，本质上是两代分布式协调思想的碰撞�
 - [[04 Watch 与 Lease 机制]]
 - [[01 ZooKeeper 全局架构——数据模型与会话机制]]
 - [[06 ZooKeeper vs ETCD——架构对比与去 ZooKeeper 化趋势]]
+
+---
+
+> [!note] 思考题
+> 1. etcd 的写入延迟主要由两部分组成：Raft 日志持久化（WAL fsync）和 BoltDB 提交（BoltDB fsync）。在 HDD 上 fsync 延迟约 10ms，SSD 约 0.1ms。etcd 官方强烈建议使用 SSD——在 HDD 上运行的 etcd 性能会差多少？`ETCD_DISK_METRICS` 如何帮助诊断磁盘延迟？
+> 2. etcd 的推荐数据量上限是 8GB（默认 quota 2GB）。超过 quota 后 etcd 进入只读模式——只能读取和删除，不能写入。在 Kubernetes 中，什么操作会快速增大 etcd 数据量（如频繁的 ConfigMap 更新、大量 Event 对象）？你如何监控 etcd 的数据量并设置告警？
+> 3. etcd 集群的节点数量增加能提高读吞吐（更多节点可以处理读请求），但写性能反而下降（需要更多节点确认）。5 节点集群比 3 节点集群容忍更多故障（2 vs 1），但写延迟更高。在什么场景下你会部署 5 节点而非 3 节点 etcd 集群？7 节点是否有实际意义？

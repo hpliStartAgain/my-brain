@@ -446,3 +446,9 @@ Flink 时间与 Watermark 底层机制的核心要点：
 **Key Group 设计**：Key → Key Group 的映射依赖 `maxParallelism`（固定值），与实际 parallelism 无关。Savepoint 恢复时通过重新划分 Key Group 到 Subtask 的对应关系，实现并行度的动态变更，无需数据迁移。
 
 下一篇 [[08 Flink SQL 与 Blink Planner 深度解析]] 将深入 Flink SQL 的查询优化层——Blink Planner 如何将 SQL 查询转化为 DataStream 执行计划，`RelNode` 树的优化规则，以及 MiniBatch、LocalGlobalAgg 等关键优化策略的内部实现。
+
+
+> [!note] 思考题
+> 1. Watermark 在 Flink 数据流中作为特殊消息传播，每个算子接收到上游的 Watermark 后需要决定如何传播给下游。对于多输入算子（如 CoProcessFunction），Flink 取所有输入流 Watermark 的最小值作为本算子的 Watermark（短板效应）。这个设计在"流速不均衡"场景下会引发什么问题？有没有办法为某些低速流"豁免"短板效应？
+> 2. `WatermarkGenerator` 的 `onEvent()` 方法在每条记录到来时被调用，`onPeriodicEmit()` 方法按固定周期被调用（`autoWatermarkInterval` 控制周期，默认 200ms）。如果记录的到来频率远低于 `autoWatermarkInterval`（比如每 10 秒才有一条记录），Watermark 的推进主要靠哪个方法？`BoundedOutOfOrdernessWatermarks` 和 `MonotonousTimestamps` 在空闲流（没有记录到来时）的 Watermark 行为有什么不同？
+> 3. 在 Flink SQL 中定义时间属性时，`WATERMARK FOR rowtime AS rowtime - INTERVAL '5' SECOND` 声明了一个 5 秒的乱序容忍度。但 Flink SQL 在底层将时间属性和 Watermark 逻辑编译为 DataStream API 的 `WatermarkGenerator`。如果用户在 SQL 中同时使用了多个不同时间属性（如一个表基于 event_time，另一个表基于 ingestion_time），两个 Watermark 如何在 Join 算子中协调？

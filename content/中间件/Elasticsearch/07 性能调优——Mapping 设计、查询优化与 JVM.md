@@ -576,3 +576,10 @@ ILM 将原本需要 SRE 手动执行的"数据老化迁移 + 定期 Force Merge 
 - **JVM 调优**的关键是 Heap 与 Page Cache 的平衡：不超过 31GB 的 Heap 限制、禁止 swap、选择适合 Heap 大小的 GC 算法。
 
 下一篇文章将转向 ES 的生产运维实践——关键监控指标体系、容量规划方法论与版本升级策略。
+
+---
+
+> [!note] 思考题
+> 1. ELK（Elasticsearch + Logstash + Kibana）是经典的日志分析栈。但 Logstash 是 JVM 应用，资源消耗大（默认 1GB 堆内存）。Filebeat（Go 编写，轻量级）+ ES Ingest Pipeline 可以替代 Logstash 的大部分场景。在什么场景下你仍然需要 Logstash（如复杂的数据转换、多输出目标）？
+> 2. 日志数据的特点是'写多读少、时间序列、仅追加'。ES 默认的 1 秒 Refresh 间隔在日志场景中可能过于频繁。将 `refresh_interval` 设为 30 秒可以显著提升写入性能。但这意味着最新的日志需要 30 秒才能被搜索到——在故障排查场景中这个延迟是否可接受？
+> 3. 在大规模日志平台中（每天 10TB+ 日志），ES 的存储成本可能很高。数据分层（Hot-Warm-Cold）和 Searchable Snapshot（将冷数据存储在对象存储但仍可搜索）如何降低成本？Searchable Snapshot 的查询延迟与本地存储相比差多少？

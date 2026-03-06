@@ -219,3 +219,10 @@ Doris 的定位是"兼顾易用性和性能的 OLAP 数据库"，在实时数据
 - [[02 Doris 存储引擎——Tablet、Rowset 与 Compaction]]
 - [[04 Doris 数据模型——Duplicate、Aggregate 与 Unique]]
 - [[01 ClickHouse 全局架构——列式存储与 MPP 执行引擎]]（对比参考）
+
+---
+
+> [!note] 思考题
+> 1. Doris 采用 FE（Frontend，元数据管理和查询规划）+ BE（Backend，数据存储和计算）的架构。FE 基于 MySQL 协议对外提供服务——用户可以直接用 MySQL 客户端连接。这种兼容 MySQL 协议的设计对生态兼容性有什么优势？但 Doris 的 SQL 方言与标准 MySQL 有哪些重要差异可能导致迁移问题？
+> 2. Doris 的 MPP（Massively Parallel Processing）执行引擎将查询拆分为多个 Fragment 在各 BE 节点并行执行。如果某个 BE 节点处理的数据量远大于其他节点（数据倾斜），整个查询的耗时取决于最慢的节点。Doris 如何检测和缓解数据倾斜？`colocate join` 和 `bucket shuffle join` 分别在什么场景下有效？
+> 3. Doris 与 ClickHouse 都面向 OLAP 场景。Doris 支持更丰富的 JOIN 类型和实时更新（Unique Key 模型），ClickHouse 在单表聚合性能上更强。在一个需要多表 JOIN 分析且数据需要实时更新的场景中，你会选择哪个？两者在运维复杂度方面的差异是什么？

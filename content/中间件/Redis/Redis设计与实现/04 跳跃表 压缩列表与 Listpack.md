@@ -408,3 +408,10 @@ graph TD
 4. Redis Source Code - quicklist.c：https://github.com/redis/redis/blob/unstable/src/quicklist.c
 5. antirez - listpack 设计文档：https://github.com/antirez/listpack
 6. 黄健宏 - 《Redis 设计与实现》（第二版）- 第 5/6/7 章
+
+---
+
+> [!note] 思考题
+> 1. Redis 6.0 的多线程 IO（`io-threads 4`）将网络读写并行化。在 100K+ QPS 的场景中，单线程 IO 可能成为瓶颈——多线程 IO 的 QPS 提升通常在 50-100%。但命令执行仍然是单线程——在什么类型的命令中（如计算密集的 Lua 脚本、大 Key 操作），多线程 IO 的收益被单线程执行瓶颈抵消？
+> 2. `KEYS *` 是 O(n) 操作，在百万 Key 的实例上可能阻塞数秒。`SCAN` 使用游标增量遍历——但 `SCAN` 可能返回重复 Key 或遗漏 Key（在遍历期间数据变化时）。在什么一致性要求下 `SCAN` 的这种'最终一致'遍历是可接受的？
+> 3. 在 16 核 64GB 服务器上运行多个 Redis 实例——每个实例绑定一个 CPU 核、分配 8-10GB 内存。实例之间用 Redis Cluster 分片。与单个大实例相比，多实例的优势是什么（如利用多核、更小的 RDB/AOF、更快的 fork）？劣势呢（如运维复杂度、Cluster 的跨 Slot 限制）？

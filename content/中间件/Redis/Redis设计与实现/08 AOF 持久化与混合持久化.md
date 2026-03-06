@@ -351,3 +351,10 @@ save 60 10000
 3. Redis 7.0 Multi-Part AOF 设计：https://github.com/redis/redis/pull/9788
 4. fsync(2) - Linux manual page：https://man7.org/linux/man-pages/man2/fsync.2.html
 5. 黄健宏 - 《Redis 设计与实现》（第二版）- 第 11 章 AOF 持久化
+
+---
+
+> [!note] 思考题
+> 1. Redis Cluster 的 Slot 迁移期间，客户端可能收到 `ASK` 重定向。`MOVED` 表示永久迁移（客户端应更新 Slot 映射），`ASK` 表示临时迁移（只对当前请求跟随重定向）。Smart Client 如何区分处理这两种重定向？在迁移期间的读写性能下降有多大？
+> 2. 100 节点 Cluster 中 Gossip 的网络开销：每个节点每秒与 `cluster-node-timeout / 10` 个节点交换消息。默认 `cluster-node-timeout=15s`，每秒约与 1-2 个节点通信，每条消息包含所有节点的状态（约 100 × 几百字节）。在什么集群规模下 Gossip 的带宽开销需要关注？
+> 3. Hash Tag `{user}:profile` 和 `{user}:orders` 强制路由到同一 Slot——支持跨 Key 的事务（MULTI/EXEC）和 Lua 脚本。但如果大量 Key 使用相同 Hash Tag（如所有 Key 都以 `{app}` 为前缀），所有数据集中在一个 Slot——形成热点。如何设计 Hash Tag 策略以兼顾'相关 Key 共存'和'负载均衡'？

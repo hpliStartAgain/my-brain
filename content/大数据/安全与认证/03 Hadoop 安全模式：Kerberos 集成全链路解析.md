@@ -677,3 +677,9 @@ hadoop org.apache.hadoop.security.KDiag \
 - **SPNEGO**：将 Kerberos 认证封装在 HTTP 中，支持浏览器无缝访问 Web UI
 
 下一篇 [[04 Apache Ranger 权限管控体系深度解析]] 将进入授权层，介绍当认证通过之后，如何通过 Ranger 的 Policy 引擎精细控制"谁能做什么"。
+
+
+> [!note] 思考题
+> 1. Hadoop 安全模式使用"双凭证体系"：Kerberos 票据用于初始认证（长期凭证，有效期通常 8 小时），Delegation Token 用于服务间通信（短期凭证，可续约，有效期通常 7 天）。Delegation Token 由 NameNode 签发，HDFS Client 在与 DataNode 通信时使用 Block Access Token（不是 Delegation Token）。这三种令牌（Kerberos Ticket、Delegation Token、Block Access Token）在 Hadoop 安全通信中各自负责哪段链路？互相之间有什么派生关系？
+> 2. `hadoop.security.auth_to_local` 规则将 Kerberos Principal（如 `hdfs/namenode.example.com@EXAMPLE.COM`）映射到 Linux 用户名（如 `hdfs`）。这个映射是 Hadoop 安全模型的关键桥梁——没有它，Kerberos 认证通过了，但 HDFS 权限检查会失败（因为 HDFS 权限基于 Linux 用户名）。如果 `auth_to_local` 规则配置错误，导致不同 Principal 映射到同一 Linux 用户名，会产生什么安全漏洞？
+> 3. 在多 Kerberos Realm 互信（Cross-Realm Trust）场景中（如企业 Active Directory Realm 与 Hadoop 集群专用 Realm 建立信任），用户来自 AD Realm，Hadoop 服务来自 HDP Realm。跨 Realm 的票据交换需要经过两次 TGS 请求（先在本 Realm 获取跨 Realm 引用票据，再在目标 Realm 获取服务票据）。在这个过程中，Hadoop NameNode 如何验证跨 Realm 票据的合法性？`auth_to_local` 规则如何处理来自不同 Realm 的 Principal？

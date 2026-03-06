@@ -544,3 +544,9 @@ Flink 大规模生产实践的关键决策维度：
 - Flink CDC：MySQL → Kafka 的 Binlog 实时同步，必须开 Checkpoint，推荐无锁快照
 
 至此，「Flink 原理深度解析与性能优化」专栏全部 10 篇文章已完成创作，从 Flink 底层架构原理到大规模生产实践，形成完整的知识体系闭环。
+
+
+> [!note] 思考题
+> 1. 在大规模 Flink 集群中，JobManager 的 RPC 风暴问题源于：高并行度作业的所有 TaskManager 都需要定期向 JobManager 上报心跳和指标。如果有 1000 个 TaskManager 每秒上报一次，JobManager 的 RPC 处理能力成为瓶颈。除了减少上报频率（`heartbeat.interval`），还有哪些架构层面的手段可以减轻 JobManager 的 RPC 压力？Flink 社区是否有类似"联邦化 JobManager"的方向？
+> 2. Kappa 架构消灭了批处理层，所有历史数据重算都通过流处理完成。当业务逻辑变更需要重新处理历史数据时，通常需要从消息队列的最早 Offset 开始重新消费。但如果历史数据有 3 年，而消息队列只保留了 7 天，如何实现 Kappa 架构下的历史数据回溯？数据湖（如 Iceberg 或 Delta Lake）在 Kappa 架构的历史回溯中扮演什么角色？
+> 3. 实时数仓的 ODS → DWD → DWS → ADS 分层架构意味着数据需要经过多层 Flink 作业的处理，每一层的延迟叠加导致最终 ADS 层的数据新鲜度较低。在什么业务 SLA 要求下，分层架构的延迟叠加是可以接受的？如果业务要求秒级延迟，应该如何在保留分层架构的同时减少层间延迟？

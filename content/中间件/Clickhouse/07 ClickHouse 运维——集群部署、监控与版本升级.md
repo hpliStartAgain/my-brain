@@ -406,3 +406,10 @@ ClickHouse 的运维重点是：
 - [[05 分布式表与数据分片]]
 - [[01 Doris 全局架构——FE BE 分离与 MPP 执行]]
 - [[01 Trino 全局架构——Coordinator Worker 与 MPP 执行]]
+
+---
+
+> [!note] 思考题
+> 1. SharedMergeTree 是 ClickHouse Cloud 的核心引擎——数据存储在对象存储（S3）上，计算节点无状态。这实现了计算与存储分离——计算节点可以弹性扩缩容。与传统的 ReplicatedMergeTree（每个副本存储完整数据）相比，SharedMergeTree 的存储成本降低了多少？但对象存储的延迟（~10ms）比本地 NVMe（~100μs）高 100 倍——SharedMergeTree 如何通过本地缓存弥补这个差距？
+> 2. 计算存储分离后，多个计算节点共享同一份数据。并发写入（INSERT）时，不同节点可能同时创建新 part——需要协调避免冲突。SharedMergeTree 使用什么机制来协调并发写入？与 Delta Lake/Iceberg 的乐观并发控制相比有什么异同？
+> 3. ClickHouse 正在从单机数据库演进为云原生数据平台。这种演进对开源社区版本意味着什么？社区版是否能使用 SharedMergeTree？开源版本与商业云版本的功能差异如何影响用户的选型决策？

@@ -381,3 +381,10 @@ llama.cpp 的 Metal 后端充分利用了 Apple Silicon 的 GPU 和神经引擎�
 5. Georgi Gerganov et al., "llama.cpp", GitHub 2023-2024
 6. Yu et al., "ORCA: A Distributed Serving System for Transformer-Based Generative Models", OSDI 2022
 7. Agrawal et al., "Sarathi: Efficient LLM Inference by Piggybacking Decodes with Chunked Prefills", arXiv 2024
+
+---
+
+> [!note] 思考题
+> 1. vLLM 通过 PagedAttention 和连续批处理（Continuous Batching）实现高吞吐量推理。连续批处理允许新请求在已有请求正在生成时加入 batch——与传统的'等所有请求完成再处理下一批'相比，延迟如何改善？在什么负载模式（稳态 vs 突发）下连续批处理的优势最明显？
+> 2. TensorRT-LLM 通过算子融合、量化和自定义 CUDA Kernel 实现低延迟推理。但 TensorRT-LLM 需要在部署前进行模型编译——编译过程针对特定 GPU 型号和 batch size 优化。这是否意味着编译后的模型不能在不同型号的 GPU 上运行？在需要弹性扩缩容的云环境中，这种限制如何应对？
+> 3. 多模型 Serving 场景中（如同时服务 7B 和 70B 模型），GPU 资源如何分配？在同一张 GPU 上同时加载两个模型是否可行（显存允许的情况下）？推理请求的路由策略（大模型处理复杂请求、小模型处理简单请求）如何设计？如何自动判断请求的'复杂度'？

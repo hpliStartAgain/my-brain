@@ -411,3 +411,10 @@ Kleppmann 批判 Redlock 时使用的是更严格的部分异步假设（允许�
 5. Kleppmann, M. (2017). *Designing Data-Intensive Applications*. O'Reilly Media. Chapter 8 & 9.
 6. Gray, J., & Lamport, L. (2006). Consensus on Transaction Commit. *ACM TODS, 31*(1), 133–160.
 7. Fischer, M.J., Lynch, N.A., & Paterson, M.S. (1985). Impossibility of Distributed Consensus with One Faulty Process. *Journal of the ACM, 32*(2), 374–382.
+
+---
+
+> [!note] 思考题
+> 1. ZooKeeper 锁使用临时顺序节点：创建 `/lock/seq-` → 获取所有子节点排序 → 如果自己最小则获取锁 → 否则 Watch 前一个节点的删除事件。这种设计避免了'惊群效应'——只唤醒下一个等待者。但如果前一个节点的 Session 超时很长（如 30 秒），当前等待者需要等待 30 秒才能获取锁。如何优化 Session 超时以平衡'快速检测'和'避免误判'？
+> 2. ZooKeeper 锁的可重入性——同一客户端可以多次获取同一把锁。Curator 的 `InterProcessMutex` 在客户端维护了一个计数器——每次 `acquire` 加 1，`release` 减 1，减到 0 时删除节点。如果客户端进程崩溃但 Session 未超时——计数器丢失，临时节点仍存在——其他客户端无法获取锁直到 Session 超时。这个窗口期如何缩短？
+> 3. ZooKeeper 锁 vs Redis 锁的性能差距——Redis 的获取/释放延迟约 0.1-1ms，ZooKeeper 约 5-20ms。在需要每秒获取/释放数千次锁的场景中（如高频交易），ZooKeeper 锁是否适用？

@@ -456,6 +456,11 @@ Spill 机制是 Spark 在性能与可靠性之间寻求平衡的典型设计：
 
 ---
 
+> [!note] 思考题
+> 1. Spill 触发有两条路径：`MemoryConsumer` 主动感知内存不足后自我 Spill，以及 `TaskMemoryManager` 强制驱逐其他 Consumer。在一个有 4 个并发 Task 的 Executor 上，如果 Task A 的内存申请触发了对 Task B 的强制驱逐，Task B 被 Spill 后它的执行是否会受到影响？Task B 是否能感知到自己被驱逐了？
+> 2. 频繁 Spill 的核心危害是写放大（Write Amplification）——数据被反复写入磁盘再读回内存。在一个拥有 100GB 数据的 Shuffle 作业中，如果每次 Spill 只能写出 1GB，触发了 100 次 Spill，最终归并时的 I/O 总量大约是多少？有没有办法减少 Spill 次数而不增加内存用量？
+> 3. Spill 生成的临时文件写在 `spark.local.dir` 指定的本地目录下。如果本地磁盘写满（磁盘 100% 占用），Spill 失败会导致什么后果？Spark 是否有机制在多个本地磁盘之间做负载均衡，以避免单盘写满？
+
 ## 参考资料
 
 - [浅析 Spark Shuffle 内存使用](https://tech.youzan.com/spark_memory_1/)

@@ -414,3 +414,10 @@ spec:
 3. Kubernetes Source Code - pkg/controller/statefulset：https://github.com/kubernetes/kubernetes/tree/master/pkg/controller/statefulset
 4. Kubernetes Enhancement Proposal - StatefulSet Slice：https://github.com/kubernetes/enhancements/tree/master/keps/sig-apps/961-maxunavailable-for-statefulset
 5. Kubernetes Documentation - PVC Retention Policy：https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#persistentvolumeclaim-retention
+
+---
+
+> [!note] 思考题
+> 1. HPA（Horizontal Pod Autoscaler）根据指标（CPU、内存、自定义指标）自动调整 Pod 副本数。默认使用 CPU 利用率——`targetAverageUtilization: 50%` 在 CPU 使用超过 50% 时扩容。但 CPU 利用率的采集有延迟（Metrics Server 每 15 秒采集一次）——在流量突增时 HPA 的反应速度如何？`--horizontal-pod-autoscaler-sync-period` 如何调优？
+> 2. VPA（Vertical Pod Autoscaler）自动调整 Pod 的资源请求（request/limit）——适合资源需求波动但副本数不应变化的场景。但 VPA 更新资源请求需要重启 Pod——这对有状态服务（如数据库）是否可接受？VPA 的'In-place Resize'（原地调整不重启，Kubernetes 1.27+ alpha）如何解决？
+> 3. HPA 和 VPA 同时使用时可能冲突——HPA 基于 CPU 扩容，VPA 同时增大 CPU request——两者可能相互干扰。官方建议不要让 HPA 和 VPA 同时管理同一个指标。在什么场景下你需要同时使用 HPA（水平扩展）和 VPA（垂直调整）？Multidimensional Pod Autoscaler（MPA）是否是更好的方案？

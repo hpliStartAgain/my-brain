@@ -451,6 +451,11 @@ Physical Planning 是从"说清楚要什么"到"告诉引擎怎么做"的关键�
 
 ---
 
+> [!note] 思考题
+> 1. BroadcastHashJoin 要求至少一张表能够被广播到所有 Executor。如果广播阈值设置过大（比如 10GB），会导致哪些连锁问题？Driver 内存、Executor 内存以及网络传输分别会受到什么影响？
+> 2. `EnsureRequirements` 规则会在需要时自动插入 `Exchange`（Shuffle）算子。如果两个 DataFrame 已经用相同的方式分区，`ReuseExchange` 能复用同一次 Shuffle 的结果——但这个复用是有条件的。在哪些情况下 `ReuseExchange` 会失效，导致相同数据被 Shuffle 两次？
+> 3. Bucket Join 可以彻底消除 Shuffle，但它要求参与 Join 的两张表具有完全相同的分桶列、分桶数和排序列。在实际生产中，分桶表的维护成本很高，有哪些常见操作会"悄悄破坏"分桶属性，导致 Bucket Join 退化为普通 SortMergeJoin？
+
 ## 参考资料
 
 - Apache Spark 源码：`org.apache.spark.sql.execution.SparkPlanner`

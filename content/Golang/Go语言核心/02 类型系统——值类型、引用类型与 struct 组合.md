@@ -638,3 +638,10 @@ var t string = s  // 合法，不需要转换
 > - Go 内存模型：https://go.dev/ref/mem
 > - Dave Cheney,《High Performance Go Workshop》（内存对齐与 struct 优化）
 > - Russ Cox,《Go Data Structures》（slice/map 内部结构）
+
+---
+
+> [!note] 思考题
+> 1. Go 中 slice、map、channel 被称为'引用类型'，但严格来说它们是包含指针的值类型（slice header 是 {pointer, len, cap}，map 是指向 hmap 的指针）。将一个 slice 作为函数参数传递时，函数内部 `append` 导致扩容后，调用方看到的 slice 会改变吗？为什么？这个行为与 Java 传递 ArrayList 引用有什么本质区别？
+> 2. struct embedding 在 Go 中实现了方法的'提升'（promotion）——外层 struct 可以直接调用被嵌入 struct 的方法。但如果外层 struct 和被嵌入 struct 有同名方法，会发生什么？如果同时嵌入两个 struct 且都有同名方法呢？Go 编译器如何解决这种歧义？
+> 3. Go 的 struct 内存布局遵循字段对齐规则（alignment）。一个包含 `bool`(1B)、`int64`(8B)、`bool`(1B) 三个字段的 struct 实际占用多少字节？如果调整字段顺序为 `bool`、`bool`、`int64`，占用又是多少？`unsafe.Sizeof` 和 `unsafe.Alignof` 的结果能帮你优化 struct 布局吗？

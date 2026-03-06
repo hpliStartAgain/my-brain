@@ -619,3 +619,10 @@ func processRequest(ctx context.Context) error {
 > - context 包源码：`context/context.go`
 > - Sameer Ajmani,《Advanced Go Concurrency Patterns》, Google I/O 2013
 > - Go 1.21 Release Notes: context 优化
+
+---
+
+> [!note] 思考题
+> 1. `context.WithCancel` 返回的子 Context 在父 Context 被取消时也会被取消。这种传播是如何实现的——子 Context 是轮询父 Context 的状态，还是父 Context 主动通知子 Context？如果一个父 Context 有 10000 个子 Context，取消操作的时间复杂度是什么？
+> 2. 在 gRPC 拦截器中，Context 会携带 deadline 信息跨进程传播。如果客户端设置了 5 秒超时，但服务端在第 3 秒调用了另一个 gRPC 服务——这个下游调用的 deadline 是剩余的 2 秒还是另一个独立的超时？如果你希望下游调用有独立的超时（比如 10 秒），该怎么处理？直接 `context.WithTimeout(context.Background(), 10*time.Second)` 会有什么问题？
+> 3. Context 被设计为不可变（只能创建新的子 Context）。`context.WithValue` 用于在调用链中传递请求级数据（如 Trace ID）。但如果滥用 `WithValue` 传递业务参数（如用户 ID、权限列表），会导致什么问题？Go 社区中关于 Context 应该传递哪些数据存在什么共识？

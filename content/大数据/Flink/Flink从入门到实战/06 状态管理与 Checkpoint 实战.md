@@ -570,3 +570,9 @@ JobManager 负责 Checkpoint 协调（收集所有算子的 Checkpoint 完成通
 - 从 Savepoint 恢复可以改变并行度（不超过 `maxParallelism`）
 
 下一篇 [[07 Table API 与 Flink SQL 实战]] 将进入 Flink 的高阶 API 层，系统讲解 Table API 的统一编程模型、Flink SQL 的 DDL/DML 语法，以及如何用 SQL 实现流式 Join、窗口聚合和 Changelog 数据处理。
+
+
+> [!note] 思考题
+> 1. Flink 的 `ValueState`、`MapState`、`ListState` 等都是 Keyed State，与 Key 绑定。如果一个算子需要维护一个"全局状态"（不与任何特定 Key 关联，如全局计数器），应该如何实现？直接使用 Operator State（`ListState` 的 Broadcast 变体）与使用外部存储（如 Redis）各有什么优缺点？
+> 2. 状态 TTL 的清理策略有"懒清理"（访问时检查）和"全量清理"（后台定期扫描）两种。懒清理的优点是无额外开销，缺点是过期状态一直占用存储空间直到被访问。在用户活跃度极低的场景（大量 Key 长期不被访问），懒清理会导致大量过期状态堆积。Flink 提供了哪些机制来强制清理这类"僵尸状态"？
+> 3. Checkpoint 触发时，所有 Task 需要将当前状态快照写入持久化存储。如果 Task 正在处理一条非常耗时的记录（比如调用外部服务），Checkpoint Barrier 会被这条记录"阻塞"，导致 Checkpoint 延迟。`spark.task.cpus` 对应到 Flink 中的 Checkpoint 超时（`checkpointTimeout`）如果被触发，会怎样？Checkpoint 失败对作业的影响是什么？

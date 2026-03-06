@@ -516,3 +516,9 @@ Flink 性能调优体系的决策路径：
 **Checkpoint 调优**：开启增量 Checkpoint + 本地恢复；`aligned-checkpoint-timeout` 触发 Unaligned Checkpoint；分析 Sync/Async/Alignment Duration 定位瓶颈环节。
 
 下一篇 [[10 Flink 大规模生产实践]] 将结合真实的大规模生产场景（万级 TPS、TB 级状态、数百并行度），梳理 Flink 在大规模部署中的特殊挑战与解决方案，以及与 Hadoop 生态、云原生环境的集成实践。
+
+
+> [!note] 思考题
+> 1. Flink 的反压（Backpressure）不是问题本身，而是系统自我保护的正常机制。真正的问题是导致反压的瓶颈算子。定位瓶颈算子后，常见的调优手段是"提高该算子的并行度"。但提高并行度需要重启作业，在流处理场景下代价很高。在不重启作业的前提下，有哪些运行时手段可以临时缓解瓶颈算子的压力？
+> 2. 数据倾斜在 Flink 中通常表现为某些 SubTask 的处理速度显著慢于其他 SubTask（在 Flink UI 的 Task 指标中可以看到）。对于 KeyBy 后的倾斜，加盐（Salting）是常见手段，但加盐后的 Key 与原始 Key 不同，需要在下游重新聚合。对于 GroupBy 窗口聚合（非实时流），两阶段聚合（Local Agg + Global Agg）是经典解法。在 Flink SQL 中，如何触发优化器自动采用两阶段聚合？有哪些情况下优化器不会自动选择两阶段聚合？
+> 3. Flink 的 `AsyncFunction`（异步 I/O）允许在不阻塞主处理线程的情况下并发调用外部服务（如数据库、API）。`AsyncFunction` 的 `capacity` 参数控制同时并发的请求数量。如果外部服务本身有并发限制（如数据库连接池大小为 10），而 Flink 作业有 100 个并行 SubTask，每个 SubTask 的 `capacity` 应该设置为多少才能充分利用数据库的 10 个连接而不超载？

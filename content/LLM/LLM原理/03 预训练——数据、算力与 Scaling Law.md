@@ -444,3 +444,10 @@ LLaMA-65B 使用 4M token/batch（约 2000 个长度为 2048 的序列）。
 8. Loshchilov & Hutter, "Decoupled Weight Decay Regularization", ICLR 2019 (AdamW)
 9. Penedo et al., "The RefinedWeb Dataset for Falcon LLM", NeurIPS 2023
 10. Brown et al., "Language Models are Few-Shot Learners", NeurIPS 2020 (GPT-3)
+
+---
+
+> [!note] 思考题
+> 1. Scaling Law（Chinchilla 论文）指出：对于给定的计算预算，模型参数量和训练数据量应该等比例扩展。但在实践中，LLaMA 系列选择了'小模型 + 大数据'的路线（7B 模型用 1T+ token 训练），偏离了 Chinchilla 的最优比例。这种策略的工程动机是什么？推理成本（与参数量成正比）和训练成本（一次性）的权衡如何影响这个决策？
+> 2. 预训练数据的质量直接决定模型能力。Common Crawl 等网络抓取数据包含大量低质量内容（广告、重复文本、有害内容）。数据清洗（去重、过滤、质量评分）的工程挑战有哪些？如果训练数据中包含版权内容（如书籍、论文），模型可能'记住'并逐字输出——这在法律和伦理上有什么风险？
+> 3. 预训练的计算成本极其高昂——GPT-4 的训练估计花费了 1 亿美元以上。如果训练到一半发现数据中有严重问题（如数据泄漏或偏见），是否需要从头开始？'继续训练'（从 checkpoint 恢复但用修正后的数据）是否能有效修复问题？

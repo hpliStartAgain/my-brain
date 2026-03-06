@@ -448,3 +448,10 @@ GraalVM 是近年来 JVM 生态最重要的创新之一，它做了两件事：
 4. HotSpot VM 架构文档, wiki.openjdk.org/display/HotSpot
 5. Cliff Click & Michael Paleczny, "A Simple Graph-Based Intermediate Representation", 1995（C2 Sea-of-Nodes IR）
 6. Christian Wimmer et al., "Graal: A Research Platform for Dynamic Compilation and Managed Runtimes", 2013
+
+---
+
+> [!note] 思考题
+> 1. Java 源码经过 javac 编译为字节码，再由 JVM 解释执行或 JIT 编译为机器码。为什么 Java 不像 Go 那样直接编译为原生机器码？字节码这一'中间表示'除了跨平台之外，还为 JVM 的哪些运行时优化提供了前提条件？
+> 2. JVM 规范定义了类加载、内存模型、执行引擎等抽象接口，但并不规定具体实现。HotSpot、OpenJ9、GraalVM 都是合规实现。同一份字节码在不同 JVM 上的执行性能可能差异巨大——这种差异主要来自哪些模块的实现差异？
+> 3. 从 `java MyApp` 命令输入到 `main` 方法第一行执行，JVM 启动过程中至少经历了哪些阶段（类加载、链接、初始化、线程创建等）？如果 `main` 方法所在类的静态初始化块抛出异常，JVM 的行为是什么？

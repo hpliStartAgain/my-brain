@@ -238,3 +238,10 @@ MM2 的核心功能：
 > - Confluent Platform 监控指南
 > - KIP-382: MirrorMaker 2.0
 > - LinkedIn Engineering,《Kafka at Scale》
+
+---
+
+> [!note] 思考题
+> 1. 事件驱动架构（EDA）中，服务之间通过 Kafka Topic 传递事件而非直接 RPC 调用。这种解耦带来了异步处理和流量削峰的好处。但事件的顺序保证变得复杂——如果两个服务并发发布事件到同一 Topic，Consumer 看到的顺序可能与发布顺序不同。在需要严格顺序的场景（如订单状态变更），你如何保证事件的全局有序？只保证 Partition 内有序是否足够？
+> 2. CDC（Change Data Capture）通过 Debezium 将数据库变更实时同步到 Kafka——实现数据库到数据仓库/搜索引擎的实时同步。CDC 的一个挑战是 Schema 变更——如果源表新增了一列，下游消费者能否自动适配？Schema Registry 如何管理 Avro/Protobuf Schema 的演进？
+> 3. Event Sourcing 模式将业务状态存储为一系列不可变的事件（而非当前状态）。Kafka 的日志天然适合存储事件流——Log Compaction 保证每个 Key 的最新事件可查。但事件数量随时间无限增长——查询历史状态需要回放所有事件。在什么规模下'事件回放'变得不可行？Snapshot 机制如何解决？

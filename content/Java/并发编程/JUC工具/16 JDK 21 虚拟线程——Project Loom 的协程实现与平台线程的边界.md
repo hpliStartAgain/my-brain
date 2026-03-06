@@ -396,3 +396,10 @@ try (var scope = new StructuredTaskScope.ShutdownOnFailure()) {
 4. Ron Pressler, "Loom: Fibers and Continuations for the Java Virtual Machine", blogs.oracle.com
 5. Heinz Kabutz, "Virtual Threads in Java 21", javaspecialists.eu
 6. Spring Blog, "Spring Boot 3.2 + Virtual Threads", spring.io
+
+---
+
+> [!note] 思考题
+> 1. 虚拟线程（Virtual Thread）由 JVM 调度而非操作系统调度——一个平台线程（carrier thread）可以承载成千上万个虚拟线程。当虚拟线程执行阻塞操作（如 `Socket.read()`）时，JVM 会将其从 carrier thread 上'卸载'（unmount），让 carrier thread 执行其他虚拟线程。但 `synchronized` 块中的阻塞操作会'钉住'（pin）carrier thread——为什么？
+> 2. 虚拟线程适合 IO 密集型任务——百万级虚拟线程可以同时等待网络响应。但对于 CPU 密集型任务，虚拟线程没有优势——因为 carrier thread 的数量仍然受限于 CPU 核数。在一个混合了 IO 等待和 CPU 计算的应用中，你如何判断虚拟线程是否能带来性能提升？
+> 3. 虚拟线程使得'每个请求一个线程'（Thread-per-Request）模式在高并发下可行。这是否意味着 Reactive 编程模型（如 WebFlux、RxJava）不再需要了？虚拟线程的同步编程模型相比 Reactive 的异步链式编程，在可读性和调试性方面有什么优势？在什么场景下 Reactive 仍然优于虚拟线程？

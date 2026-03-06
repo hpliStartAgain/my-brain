@@ -343,6 +343,11 @@ RocksDB State Store 是 Spark Structured Streaming 为超大状态场景提供�
 
 ---
 
+> [!note] 思考题
+> 1. RocksDB 使用 LSM-Tree 结构实现高写入吞吐，但 LSM-Tree 存在读放大问题——查询一个 Key 可能需要检查多层文件（MemTable → L0 → L1 → ...）。在流处理中，State 的访问模式通常是"写多读少"还是"读写均衡"？对于 `flatMapGroupsWithState` 这类需要频繁读写状态的场景，RocksDB 的读放大问题是否会显著影响性能？Compaction 如何缓解这个问题？
+> 2. RocksDB State Store 将 State 存储在 Executor 的本地磁盘中，通过增量 Checkpoint 将变更同步到 HDFS/S3。如果 Executor 宕机，本地的 RocksDB 数据丢失，新启动的 Executor 需要从 HDFS/S3 下载完整的 RocksDB 快照来恢复。对于数十 GB 的 State，这个恢复过程可能需要数分钟，导致流作业长时间暂停。有哪些工程手段可以加速这个恢复过程？
+> 3. `RocksDBStateStore` 引入了 Native Memory（JNI 堆外内存）作为 State 的实际存储区域。这部分内存不受 JVM `-Xmx` 控制，但会占用 Executor 进程的总内存。在 K8s 场景下，如果 Executor 的 `memory.limit` 没有为 RocksDB 的 Native Memory 留出足够空间，会发生什么？如何正确估算和配置 RocksDB State Store 的 Executor 内存上限？
+
 ## 参考资料
 
 - [RocksDB 101: Optimizing stateful streaming in Apache Spark（AWS Blog）](https://aws.amazon.com/blogs/big-data/rocksdb-101-optimizing-stateful-streaming-in-apache-spark-with-amazon-emr-and-aws-glue/)

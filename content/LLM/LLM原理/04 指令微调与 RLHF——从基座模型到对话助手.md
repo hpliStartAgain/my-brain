@@ -408,3 +408,10 @@ Google 的研究表明，在某些场景下，RLAIF 的效果接近甚至匹敌 
 8. Christiano et al., "Deep Reinforcement Learning from Human Preferences", NeurIPS 2017
 9. Tunstall et al., "Zephyr: Direct Distillation of LM Alignment", arXiv 2023
 10. Lee et al., "RLAIF: Scaling Reinforcement Learning from Human Feedback with AI Feedback", arXiv 2023
+
+---
+
+> [!note] 思考题
+> 1. RLHF（Reinforcement Learning from Human Feedback）训练一个 Reward Model 来评估模型输出的质量，然后用 PPO 算法优化生成策略。但 Reward Model 本身的偏差（reward hacking）是一个已知问题——模型可能学会'讨好' Reward Model 而非真正提升质量。你如何检测和缓解 reward hacking？DPO（Direct Preference Optimization）是否解决了这个问题？
+> 2. 指令微调（Instruction Tuning / SFT）使用高质量的'指令-回复'对来训练模型遵循指令。但 SFT 数据的质量和多样性至关重要——如果 SFT 数据中缺少某类指令（如数学推理），模型在该领域的能力会明显不足。在构建 SFT 数据集时，你如何平衡不同任务类型的数据比例？
+> 3. Constitutional AI（Claude 使用的方法）通过让模型自我批评和修正来实现对齐（alignment），减少了对人类标注的依赖。与 RLHF 相比，Constitutional AI 的核心创新是什么？在什么场景下'自我批评'的方式会失效（如模型的偏见恰好在自我批评中被强化）？

@@ -408,3 +408,9 @@ Iceberg 事务机制的设计精髓是**简单而正确**：
 与 Delta Lake 相比，Iceberg 的事务机制**不是全面超越，而是不同取舍**：Delta Lake 提供了更精细的事务隔离级别配置（3 种选项），适合对一致性要求极高的场景；Iceberg 的 OCC 在追加密集的场景下并发吞吐更高，且与多种 Catalog 后端（HMS/Glue/REST）的集成更加标准化。
 
 下一篇 [[05 查询优化——Partition Pruning、Column Metrics 与 Row-level Delete]] 将聚焦 Iceberg 的查询端优化：多层过滤如何将"扫描 10 万个文件"压缩为"扫描 100 个文件"，以及行级删除的两种实现如何在最小化写放大的同时维持查询性能。
+
+
+> [!note] 思考题
+> 1. Iceberg 的事务原子性依赖 Catalog 的原子指针切换。在使用 Hive Metastore 作为 Catalog 时，这个原子更新通过 HMS 的 `alterTable` API（MySQL 中带乐观锁的 UPDATE）实现。如果 MySQL 在 `alterTable` 执行期间宕机，Iceberg 事务的原子性如何保证？MySQL 的 InnoDB 事务在这里扮演什么角色？
+> 2. Iceberg 的冲突检测粒度是文件级别。两个 APPEND 操作向同一分区写入（产生新文件，不修改现有文件），它们是否冲突？Iceberg 的冲突检测逻辑是否能区分"不同分区的并发写入无冲突"和"同分区的并发 DELETE 有冲突"？
+> 3. 在 Flink 持续写入 + Spark 批量 Compaction 的并发场景中，Compaction 删除了流式 Writer 正在读取的文件时，Iceberg 的 OCC 如何处理这种"读-删冲突"？是 Compaction 失败重试，还是流式 Writer 读到不一致数据？

@@ -359,6 +359,11 @@ Delta Log 是 Delta Lake 的核心——它将无状态的 Parquet 文件集合�
 
 ---
 
+> [!note] 思考题
+> 1. Delta Log 是一个 JSON 文件序列，通过定期生成 Checkpoint（Parquet 格式快照）来压缩历史 Log。如果 Checkpoint 生成失败（如写 S3 时网络中断），Delta 如何保证表仍然可读，而不是因为 Checkpoint 文件不完整导致表状态损坏？
+> 2. Delta on S3 依赖 S3 的"对象键唯一性"来模拟原子提交。在并发写入时（如两个 Spark 作业同时尝试提交版本 N），S3 能否保证只有一个提交成功？这个机制与 HDFS 的 rename 原子性有什么本质差异？
+> 3. Delta Log 中每个 `add`/`remove` Action 包含列统计信息（Min/Max/NullCount），用于后续查询的数据跳过。如果统计信息记录不准确（如代码 Bug），会导致查询结果不正确的静默错误。Delta 有没有机制验证统计信息的准确性？
+
 ## 参考资料
 
 - [Delta Lake Protocol Specification（GitHub）](https://github.com/delta-io/delta/blob/master/PROTOCOL.md)

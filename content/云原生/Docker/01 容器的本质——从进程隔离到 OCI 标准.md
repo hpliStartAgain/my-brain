@@ -596,3 +596,10 @@ echo 12345 > /sys/fs/cgroup/memory/my-container/tasks
 7. Brendan Burns, Joe Beda, Kelsey Hightower (2019). *Kubernetes: Up and Running*, 2nd Edition. O'Reilly.
 8. Michael Kerrisk (2013). *Namespaces in operation* (LWN.net series).
 9. Linux man pages: `namespaces(7)`, `cgroups(7)`, `clone(2)`, `unshare(2)`, `pivot_root(2)`.
+
+---
+
+> [!note] 思考题
+> 1. 容器的隔离由 Linux Namespace 实现——PID/Network/Mount/UTS/IPC/User 各自隔离一类资源。但容器共享宿主机内核——如果容器中的进程利用内核漏洞（如 Dirty COW），可以逃逸到宿主机。与虚拟机（独立内核）相比，容器在安全隔离方面的根本差距是什么？gVisor 和 Kata Containers 如何弥补？
+> 2. CGroups 限制容器的资源使用——`memory.max` 限制内存，`cpu.max` 限制 CPU。但容器内的应用可能不感知 CGroups 限制——JVM 在没有 `-XX:+UseContainerSupport` 时读取宿主机的总内存而非容器限制。除了 Java，哪些运行时（Python、Node.js、Go）需要特殊配置才能正确感知容器资源限制？
+> 3. 容器的文件系统使用 OverlayFS——由只读的镜像层和可写的容器层叠加。容器写入文件时使用 COW（Copy-on-Write）——从镜像层复制文件到容器层再修改。频繁写入大文件时 COW 的性能开销如何？为什么数据库容器通常挂载 Volume 而非写入容器层？

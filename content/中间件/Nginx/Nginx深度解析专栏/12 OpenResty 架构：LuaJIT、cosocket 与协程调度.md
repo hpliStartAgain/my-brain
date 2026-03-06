@@ -637,3 +637,10 @@ OpenResty 的高性能可编程能力建立在三个相互配合的核心机制�
 ---
 
 > **下一篇**：[[13 OpenResty 实战：lua-resty 生态与性能陷阱]]
+
+---
+
+> [!note] 思考题
+> 1. APISIX 使用 etcd Watch 实时生效配置——无需 reload。与 Kong（PostgreSQL + 定期轮询）相比，APISIX 的配置变更生效延迟从秒级降到毫秒级。在蓝绿发布场景中（需要瞬间切换流量），这个差距有多重要？
+> 2. APISIX 的插件热加载——运行时添加/移除插件无需重启。在实现 AB 测试路由时，`traffic-split` 插件按权重分配流量到不同 upstream。如果需要根据请求头中的自定义标签路由——`traffic-split` 是否足够，还是需要自定义 Lua 插件？
+> 3. APISIX vs Envoy + Istio：APISIX 偏向 API 网关（南北向），Istio 偏向服务网格（东西向）。在需要同时管理南北向和东西向流量的架构中，两者如何配合？APISIX 能否替代 Istio 的部分功能（如服务间的 mTLS 和可观测性）？

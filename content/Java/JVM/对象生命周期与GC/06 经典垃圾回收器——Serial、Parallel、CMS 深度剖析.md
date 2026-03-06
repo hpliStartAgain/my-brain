@@ -306,3 +306,10 @@ Serial（1 线程，长 STW）
 4. OpenJDK Wiki, "CMS Collector", wiki.openjdk.org
 5. JEP 291: Deprecate the Concurrent Mark Sweep (CMS) Garbage Collector (JDK 9)
 6. JEP 363: Remove the Concurrent Mark Sweep (CMS) Garbage Collector (JDK 14)
+
+---
+
+> [!note] 思考题
+> 1. CMS（Concurrent Mark Sweep）使用'初始标记→并发标记→重新标记→并发清除'四个阶段。并发标记阶段 GC 线程和应用线程同时运行，可能导致'浮动垃圾'（Floating Garbage）。浮动垃圾的产生机制是什么？CMS 的 `-XX:CMSInitiatingOccupancyFraction` 为什么默认设置为 68%（JDK 6）或 92%（JDK 8）而非更高？
+> 2. Parallel Scavenge 收集器关注的是吞吐量（= 应用时间 / (应用时间 + GC 时间)），而 CMS 关注的是停顿时间。在一个既需要高吞吐量（批处理 ETL）又需要低延迟（偶尔的 HTTP 请求处理）的混合型应用中，你会选择哪种收集器？能否通过 JVM 参数让 Parallel Scavenge 兼顾延迟？
+> 3. CMS 在并发清除阶段如果应用线程分配内存过快，导致老年代空间不足，会触发'Concurrent Mode Failure'，降级为 Serial Old 进行 Full GC。这个 Full GC 的停顿时间可能是秒级的。除了增大堆内存，你有哪些手段来避免 Concurrent Mode Failure？

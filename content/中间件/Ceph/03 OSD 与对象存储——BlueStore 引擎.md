@@ -288,3 +288,10 @@ BlueStore 的复杂性主要集中在实现层面（Block Allocator、BlueFS、R
 - [[01 Ceph 全局架构——RADOS、CRUSH 与三大存储接口]]
 - [[04 数据一致性——PG、副本策略与 Recovery]]
 - [[01 LevelDB 全局架构——LSM-Tree 的写优化设计]]（理解 RocksDB 的 LSM-Tree 背景）
+
+---
+
+> [!note] 思考题
+> 1. RBD（RADOS Block Device）将块设备抽象为 RADOS 对象集合（默认每个对象 4MB）。客户端读写 RBD 时，通过 CRUSH 算法直接定位到目标 OSD——不经过中心节点。这种去中心化设计的吞吐量天花板是什么？单个 RBD 卷的 IOPS 上限受什么因素限制？
+> 2. RBD 支持快照和克隆——快照是 COW（Copy-on-Write）的。克隆基于快照创建新卷，初始不占用额外空间。在 OpenStack 中，从模板镜像创建 100 个虚拟机使用 RBD 克隆——所有 VM 共享基础镜像的数据块。当多个 VM 同时写入（触发 COW）时，父镜像的读取会成为热点吗？RBD 的 `flatten` 操作解决了什么问题？
+> 3. Kubernetes 通过 CSI 驱动使用 RBD 作为 PersistentVolume。RBD 卷默认只能被一个节点挂载（ReadWriteOnce）。如果 Pod 漂移到新节点但旧节点未释放 RBD 卷（如节点故障），新节点挂载会失败。Kubernetes 的 `VolumeAttachment` 和 Ceph 的 `rbd lock` 如何协调？强制解锁有什么风险？

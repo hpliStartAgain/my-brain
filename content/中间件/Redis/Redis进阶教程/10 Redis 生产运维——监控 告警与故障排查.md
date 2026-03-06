@@ -455,3 +455,10 @@ Redis 进阶教程专栏至此完结。如果你对 Redis 的底层实现原理�
 4. Grafana Redis Dashboard：https://grafana.com/grafana/dashboards/763
 5. Redis Documentation - Administration：https://redis.io/docs/management/
 6. Redis Documentation - Security：https://redis.io/docs/management/security/
+
+---
+
+> [!note] 思考题
+> 1. `info memory` 中 `used_memory` vs `used_memory_rss`——后者包含内存碎片和 OS 分配的额外内存。碎片率 `mem_fragmentation_ratio` >1.5 需要关注。`latest_fork_usec` 记录最近 fork 耗时——超过 500ms 在延迟敏感场景中需要告警。你如何构建 Prometheus + Grafana 的 Redis 监控面板？最应该设置告警的指标有哪些？
+> 2. 在从节点执行 BGSAVE 避免影响主节点——但从节点可能承担读请求。fork 导致的 COW 内存增长和 CPU 开销是否影响从节点的读性能？在什么时间点执行 BGSAVE 最安全（如业务低峰期）？
+> 3. 跨区域灾备——主在北京、灾备在上海。异步复制可能丢失数据。`min-replicas-to-write 1` + `min-replicas-max-lag 10` 保证至少一个从节点在 10 秒内有同步。如果北京→上海的网络延迟 20ms 但偶尔抖动到 5 秒——这个配置是否合理？网络分区时主节点拒绝写入是否可接受？

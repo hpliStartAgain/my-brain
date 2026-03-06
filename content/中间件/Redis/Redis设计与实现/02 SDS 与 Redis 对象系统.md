@@ -472,3 +472,10 @@ OBJECT ENCODING user:1        # "hashtable"
 3. 黄健宏 - 《Redis 设计与实现》（第二版）- 第 2 章 SDS / 第 8 章 对象
 4. antirez - Redis 内部数据结构解析：http://antirez.com/
 5. jemalloc Size Classes：http://jemalloc.net/
+
+---
+
+> [!note] 思考题
+> 1. Hash 在元素少于 128 个且值小于 64 字节时使用 Listpack 编码，超过后转换为 HashTable。Listpack 编码的 Hash 比 HashTable 节省多少内存（通常 5-10 倍）？`hash-max-listpack-entries` 和 `hash-max-listpack-value` 的默认值是否适合你的应用？在什么场景下你会调大这些阈值？
+> 2. Redis 预创建整数 0-9999 为共享对象。如果你的应用大量使用整数 Score（如排行榜分数 0-10000），共享对象节省的内存有多可观？但共享对象只适用于整数——字符串为什么不共享（O(n) 比较开销 vs O(1) 整数比较）？
+> 3. `memory usage <key> [SAMPLES count]` 精确计算 Key 的内存占用。对于包含 100 万元素的 Sorted Set，`SAMPLES 0`（精确计算）和 `SAMPLES 5`（采样估算）的结果差异通常有多大？在什么场景下采样估算足够准确？

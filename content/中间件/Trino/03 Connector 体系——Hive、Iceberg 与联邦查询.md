@@ -459,3 +459,10 @@ Trino 的查询优化器和执行引擎永远只与 SPI 接口交互，不关心
 
 - **[[04 内存管理与资源调度]]**：深入 Trino 的分级内存管理，以及资源组如何在多租户场景下实现查询隔离
 - **[[05 查询优化——CBO、动态过滤与索引下推]]**：解析 Trino 的基于代价的优化器（CBO）如何选择最优 Join 策略，以及动态过滤如何在运行时进一步减少数据扫描量
+
+---
+
+> [!note] 思考题
+> 1. Hive Connector 是 Trino 最常用的 Connector——读取 HDFS/S3 上的 Parquet/ORC 文件。Trino 的列裁剪（Column Pruning）只读取查询需要的列——对于列式存储格式（Parquet/ORC），这意味着大量数据无需从磁盘读取。在一个 100 列的表中查询 3 列，数据读取量减少了多少？
+> 2. JDBC Connector 连接关系型数据库（MySQL、PostgreSQL）。Trino 将 SQL 翻译为目标数据库的方言并下推执行。但并非所有函数都能下推——如果 Trino SQL 中使用了目标数据库不支持的函数，该函数在 Trino 端执行。你如何判断哪些操作被下推了（`EXPLAIN` 输出中查看 ScanFilterProject 节点）？
+> 3. Iceberg Connector 支持 Time Travel 查询（查询历史版本的数据）和 Schema Evolution（列的增删改不影响已有数据）。这些能力是 Iceberg 表格式本身提供的还是 Trino Connector 实现的？Trino 读取 Iceberg 表时的 Metadata 解析开销有多大？

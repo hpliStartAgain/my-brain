@@ -714,3 +714,10 @@ istioctl authn tls-check <pod-name>.<namespace> backend-svc.default.svc.cluster.
 ---
 
 *本文是 [[服务网格]] 专栏的第 4 篇。*
+
+---
+
+> [!note] 思考题
+> 1. Istio 的 mTLS（双向 TLS）为服务间通信自动加密——每个服务有独立的证书（由 istiod 签发的 SPIFFE 身份）。证书自动轮换（默认 24 小时）——无需人工管理。mTLS 的加密/解密对延迟的影响是多少（通常 <0.5ms）？在什么场景下 mTLS 的性能开销需要关注？
+> 2. Istio 的 PeerAuthentication 策略控制 mTLS 模式——`STRICT`（必须 mTLS）、`PERMISSIVE`（同时接受明文和 mTLS）和 `DISABLE`。在迁移到 Service Mesh 的过程中，为什么需要 `PERMISSIVE` 模式？如果直接设为 `STRICT`，未注入 Sidecar 的服务会发生什么？
+> 3. 零信任安全模型——'永不信任、始终验证'。mTLS 只解决了传输层的身份验证和加密。应用层的授权（如'服务 A 只能调用服务 B 的 /api/v1/users 接口'）需要 Istio 的 AuthorizationPolicy。AuthorizationPolicy 的规则粒度可以细到 HTTP 方法和路径——这种 L7 授权的性能开销如何？

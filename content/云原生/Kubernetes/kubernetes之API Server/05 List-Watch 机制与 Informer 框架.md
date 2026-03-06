@@ -484,3 +484,10 @@ sequenceDiagram
 4. Kubernetes Enhancement Proposal - Watch Bookmark：https://github.com/kubernetes/enhancements/tree/master/keps/sig-api-machinery/956-watch-bookmark
 5. Kubernetes Source - staging/src/k8s.io/apiserver/pkg/storage/cacher：https://github.com/kubernetes/kubernetes/tree/master/staging/src/k8s.io/apiserver/pkg/storage/cacher
 6. Joe Beda (2017). *Understanding the Kubernetes Informer Pattern*. KubeCon NA.
+
+---
+
+> [!note] 思考题
+> 1. API Server 的 `--max-requests-inflight`（默认 400）和 `--max-mutating-requests-inflight`（默认 200）限制并发请求数。Priority and Fairness（APF）机制将请求分为不同优先级——system 请求优先于 user 请求。在一个自动化工具（如 CI/CD Pipeline）发送大量 API 请求时，APF 如何防止这些请求'饿死'关键的 Controller 请求？
+> 2. 审计日志（Audit Log）记录所有 API 请求——用于安全审计和故障排查。审计策略定义了记录哪些事件和哪些字段。在高 QPS 集群中，审计日志的量可能很大——如何通过审计策略过滤不重要的事件（如对 ConfigMap 的 GET 请求）来降低日志量？
+> 3. API Server 的 etcd 请求延迟是关键性能指标。如果 etcd 延迟超过 100ms，API Server 的响应时间显著增加。`--etcd-servers` 配置的 etcd 端点数量和负载均衡策略如何影响性能？API Server 到 etcd 的网络延迟应该控制在多少以内？

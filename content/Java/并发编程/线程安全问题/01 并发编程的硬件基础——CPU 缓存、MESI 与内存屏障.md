@@ -257,3 +257,10 @@ Java 工程师不直接调用 CPU 内存屏障指令，而是通过 JMM 定义�
 4. Preshing, Paul, "Memory Barriers Are Like Source Control Operations", preshing.com, 2012
 5. JSR-133 Java Memory Model and Thread Specification, 2004
 6. Doug Lea, "The JSR-133 Cookbook for Compiler Writers", gee.cs.oswego.edu
+
+---
+
+> [!note] 思考题
+> 1. MESI 协议保证了多核 CPU 缓存的一致性，但它本身并不能保证程序的可见性——因为 Store Buffer 和 Invalidate Queue 的存在延迟了缓存行状态的传播。在 x86 架构上，Store Buffer 导致的唯一可观察的重排序是'Store-Load 重排序'。这意味着在 x86 上，除了 Store-Load 之外的其他内存序是天然保证的——那为什么 Java 仍然需要 `volatile` 关键字？
+> 2. CPU 的 false sharing（伪共享）发生在两个变量恰好落在同一个缓存行（通常 64 字节）中——一个核写变量 A 会导致另一个核缓存中变量 B 的缓存行失效。Java 8 引入了 `@Contended` 注解（如 `LongAdder` 中使用）来避免伪共享。`@Contended` 的实现原理是什么？在什么场景下伪共享会导致明显的性能下降？
+> 3. 内存屏障（Memory Barrier）分为 LoadLoad、StoreStore、LoadStore 和 StoreLoad 四种。StoreLoad 屏障的开销最大（通常需要刷新 Store Buffer）。在 Java 中，`volatile` 写操作后会插入 StoreLoad 屏障。如果一个热点循环中有 `volatile` 写操作，StoreLoad 屏障的开销是否会成为性能瓶颈？你如何量化这个开销？

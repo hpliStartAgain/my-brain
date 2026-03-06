@@ -330,3 +330,10 @@ CRUSH 解决了分布式存储中最难的权衡问题：
 **延伸阅读**：
 - [[01 Ceph 全局架构——RADOS、CRUSH 与三大存储接口]]
 - [[04 数据一致性——PG、副本策略与 Recovery]]
+
+---
+
+> [!note] 思考题
+> 1. RADOS 将数据组织为 Pool → PG（Placement Group）→ OSD 的层级。PG 是数据分布和复制的基本单位。PG 数量过少导致数据分布不均，过多增加内存和 peering 开销。如何计算集群所需的 PG 数量（考虑 OSD 数量、副本数和目标 PG/OSD 比例）？Ceph Nautilus+ 的 PG Autoscaler 是如何自动调整的？
+> 2. Ceph 的数据一致性通过 PG Peering 和 Recovery 机制保证。当 OSD 故障后恢复（或新 OSD 加入），PG 需要 Peering（对齐各副本的状态）然后 Recovery（同步缺失的数据）。在一个有 1000 个 OSD 的集群中，如果一个 OSD 故障后恢复，Peering 和 Recovery 的 IO 开销对前台业务的影响有多大？如何通过 `osd_recovery_max_active` 限制恢复速度？
+> 3. BlueStore 是 Ceph Luminous+ 的默认 OSD 后端——直接管理裸磁盘，绕过了文件系统（取代了之前的 FileStore + XFS）。BlueStore 使用 RocksDB 存储元数据。直接管理裸盘相比使用文件系统有什么性能优势？BlueStore 的事务机制如何保证数据和元数据的一致性？

@@ -397,6 +397,11 @@ State Store 的版本号与 Structured Streaming 的 Epoch 编号一一对应：
 
 ---
 
+> [!note] 思考题
+> 1. `HDFSBackedStateStore` 采用"内存主写，HDFS 持久化"的三层架构。每个 MicroBatch 结束时，State 的增量变更（Delta）被写入 HDFS。但随着批次增多，Delta 文件也不断增多，重建完整 State 时需要合并所有 Delta 文件——这个代价随时间线性增长。`snapshotInterval` 参数控制多少个 Delta 后生成一次完整快照（Snapshot）。这个参数设置过小（频繁 Snapshot）和过大（稀少 Snapshot）各有什么代价？
+> 2. State Store 是按 Partition 粒度管理的——每个 Task 管理自己对应 Partition 的状态。这意味着如果流作业重启时 Partition 数发生了变化（比如 Kafka Topic 扩分区导致 Spark 也增加了并行度），旧 Checkpoint 中的 State 如何映射到新的 Partition 布局？Structured Streaming 是否支持在不清空 State 的情况下动态调整 Partition 数？
+> 3. `HDFSBackedStateStore` 的读路径需要将 State 从 HDFS 加载到 Executor 内存，这个加载操作发生在每个 MicroBatch 开始时。对于超大 State（如数 GB 的聚合状态），每批次的加载时间可能超过实际计算时间，成为性能瓶颈。在这种场景下，除了切换到 RocksDB State Store，有哪些调优手段可以减少 State 加载的开销？
+
 ## 参考资料
 
 - [HDFSBackedStateStoreProvider 内部解析（Jacek Laskowski）](https://jaceklaskowski.gitbooks.io/spark-structured-streaming/content/spark-sql-streaming-HDFSBackedStateStoreProvider.html)

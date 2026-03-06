@@ -816,3 +816,10 @@ Spring Boot 的测试体系以"测试切片"为核心，构建了覆盖不同粒
 > - [Spring Boot 官方文档 - Testing](https://docs.spring.io/spring-boot/docs/current/reference/html/features.html#features.testing)
 > - [Testcontainers 官方文档](https://java.testcontainers.org/)
 > - [Spring Boot Test Slices](https://docs.spring.io/spring-boot/docs/current/reference/html/test-auto-configuration.html)
+
+---
+
+> [!note] 思考题
+> 1. Spring Security 的 Filter 链包含 15+ 个 Filter（如 `UsernamePasswordAuthenticationFilter`、`BasicAuthenticationFilter`、`ExceptionTranslationFilter`）。当引入 Spring Security 依赖后，所有端点默认需要认证。如果你只想保护部分端点（如 `/api/**`），其他端点（如 `/public/**`）免认证，`SecurityFilterChain` 应该如何配置？多个 `SecurityFilterChain` Bean 之间的匹配顺序由什么决定？
+> 2. JWT 无状态认证不需要服务端存储 Session，但 JWT 一旦签发就无法撤销（除非使用黑名单）。如果用户修改密码后，之前签发的 JWT 仍然有效——这是一个安全漏洞。你如何在不引入 Session 的前提下实现 JWT 的'即时失效'？Redis 黑名单和短过期时间 + 刷新令牌各有什么取舍？
+> 3. CORS（跨域资源共享）和 Spring Security 的关系经常导致困惑——`@CrossOrigin` 注解、`CorsFilter` 和 Spring Security 的 CORS 配置可能互相覆盖。在 Spring Security 开启后，CORS 的 preflight 请求（OPTIONS）会被 Security Filter 拦截导致 403。你如何正确配置 CORS 使其与 Spring Security 协作？

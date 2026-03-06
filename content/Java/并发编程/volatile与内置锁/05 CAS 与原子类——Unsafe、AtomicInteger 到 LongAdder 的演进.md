@@ -490,3 +490,10 @@ long max = maxTracker.get();
 5. JDK Source: `java.util.concurrent.atomic` package
 6. Shipilev, Aleksey, "JVM Anatomy Quarks: Atomic Long", shipilev.net
 7. Goetz et al., "Java Concurrency in Practice", Ch.15: Atomic Variables and Nonblocking Synchronization
+
+---
+
+> [!note] 思考题
+> 1. CAS（Compare-And-Swap）存在 ABA 问题——值从 A 变为 B 再变回 A，CAS 认为没有变化。`AtomicStampedReference` 通过版本号解决 ABA 问题。但在实际业务中，ABA 问题导致的 bug 有多常见？在什么场景下 ABA 问题会导致严重后果（提示：考虑链表的 CAS 操作）？
+> 2. `LongAdder` 在高竞争场景下性能远优于 `AtomicLong`——它通过将值分散到多个 Cell 中减少 CAS 竞争。`LongAdder.sum()` 返回的值不是精确的实时值（因为其他线程可能正在更新 Cell）。在什么场景下 `LongAdder` 的非精确 sum 是可以接受的？在什么场景下你必须使用 `AtomicLong`？
+> 3. `Unsafe` 类提供了底层的 CAS 操作（`compareAndSwapInt` 等），是所有原子类的基础。JDK 9 引入了 `VarHandle` 作为 `Unsafe` 的安全替代。`VarHandle` 能完全替代 `Unsafe` 吗？哪些 `Unsafe` 的功能（如直接内存分配、对象字段偏移量计算）是 `VarHandle` 无法提供的？

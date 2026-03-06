@@ -312,3 +312,10 @@ ClickHouse 的性能调优是一个系统工程，核心是：
 - [[02 MergeTree 引擎家族——主键索引与数据排序]]
 - [[03 数据写入与 Part 合并]]
 - [[04 查询执行引擎——向量化与 Pipeline]]
+
+---
+
+> [!note] 思考题
+> 1. ClickHouse 集群的容量规划需要考虑：数据量（压缩后磁盘占用）、查询 QPS 和并发数、写入吞吐量。列式存储的压缩比通常在 5:1 到 20:1（取决于数据类型和重复度）。如果原始数据每天 1TB（JSON 格式），写入 ClickHouse 后约占多少磁盘空间？保留 90 天的数据需要多少存储？
+> 2. ClickHouse 的备份方案包括：`ALTER TABLE ... FREEZE PARTITION`（硬链接快照）、`clickhouse-backup` 工具（增量备份到 S3）和副本冗余。在一个 100TB 的集群中，全量备份到 S3 需要多长时间（假设 1Gbps 网络带宽）？增量备份如何减少备份窗口？
+> 3. ClickHouse Keeper 是 ZooKeeper 的替代——用 C++ 实现，资源占用更少且部署更简单。在新部署的集群中，你会选择 ClickHouse Keeper 还是 ZooKeeper？从 ZooKeeper 迁移到 ClickHouse Keeper 的风险是什么？

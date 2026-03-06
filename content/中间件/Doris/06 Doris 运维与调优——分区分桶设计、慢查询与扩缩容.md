@@ -415,3 +415,10 @@ Doris 的运维核心是三件事：
 **延伸阅读**：
 - [[01 Doris 全局架构——FE BE 分离与 MPP 执行]]
 - [[02 Doris 存储引擎——Tablet、Rowset 与 Compaction]]
+
+---
+
+> [!note] 思考题
+> 1. Doris FE 的高可用通过 Leader-Follower-Observer 架构实现——Leader 处理写操作，Follower 参与选举，Observer 只读。当 Leader 故障时 Follower 自动选举新 Leader。在选举期间写操作会失败——选举通常需要多长时间？应用层如何处理选举期间的写失败？
+> 2. Doris BE 的扩容需要将部分 Tablet 从旧 BE 迁移到新 BE。迁移过程中 Tablet 的读写如何保证不中断？如果扩容时正好有大量查询在执行，迁移是否会影响查询性能？`alter system decommission backend` 的安全下线流程是什么？
+> 3. Doris 的 Multi-Catalog 功能允许直接查询外部数据源（Hive、Iceberg、JDBC 等）而无需数据导入。在'湖仓一体'架构中，Doris 作为统一查询引擎的定位是什么？直接查询外部数据的性能与导入到 Doris 内部表的性能差距有多大？在什么场景下应该导入，什么场景下直接联邦查询？

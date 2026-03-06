@@ -342,3 +342,10 @@ T4: 将旧值 100 写入 Redis
    - 击穿（热点 key 过期瞬间）→ 互斥锁 / 逻辑过期
    - 雪崩（大量 key 同时过期 / Redis 宕机）→ 随机 TTL 抖动 / Redis 高可用 / 熔断限流
 5. **主从延迟下的特殊处理**：写后强制路由主库或版本号保护，避免从库旧值污染缓存
+
+---
+
+> [!note] 思考题
+> 1. MySQL 的 `utf8` 字符集实际上只支持最多 3 字节的 UTF-8 字符——不能存储 emoji（4 字节）。`utf8mb4` 是真正的 UTF-8。很多旧系统使用 `utf8` 导致无法存储 emoji。从 `utf8` 迁移到 `utf8mb4` 需要修改表和列的字符集——在大表（亿级行）上 `ALTER TABLE` 可能需要数小时。你如何在不停机的情况下完成字符集迁移？
+> 2. 排序规则（Collation）决定了字符串的比较和排序方式。`utf8mb4_general_ci`（不区分大小写，不区分重音）和 `utf8mb4_unicode_ci`（更精确的 Unicode 排序）有什么区别？MySQL 8.0 默认的 `utf8mb4_0900_ai_ci` 相比前两者有什么改进？在什么场景下排序规则的选择会影响查询结果（如德语的 ß 和 ss 是否相等）？
+> 3. 字符集在连接层面也需要一致——`character_set_connection`、`character_set_client`、`character_set_results` 必须与应用的编码一致。如果 JDBC 连接参数中未指定 `characterEncoding=utf8mb4`，可能导致中文乱码。你如何排查字符集相关的乱码问题？`SHOW VARIABLES LIKE 'character_set%'` 中哪些变量最关键？

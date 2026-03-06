@@ -391,3 +391,10 @@ Trino 的架构设计体现了以下核心价值取向：
 
 - **[[02 查询执行引擎——Stage、Task 与 Pipeline]]**：深入查询的执行计划切分机制，解析 Stage/Task/Split/Pipeline/Driver/Operator 六层执行层次，理解流水线算子是如何在代码层面实现的
 - **[[03 Connector 体系——Hive、Iceberg 与联邦查询]]**：解析 Connector SPI 的设计，深入 Hive Connector 的元数据访问和数据分片机制，以及 Iceberg Connector 对表格式（Table Format）的支持
+
+---
+
+> [!note] 思考题
+> 1. Trino 是纯内存计算引擎——中间结果不落盘。与 Spark SQL（中间结果可以溢写到磁盘）相比，Trino 在什么查询模式下性能更优？当查询的中间数据超过集群内存时，Trino 会如何处理（OOM Kill）？Fault-Tolerant Execution 模式如何缓解这个问题？
+> 2. Trino 的 Connector 架构允许查询跨多个数据源（Hive、MySQL、Kafka、Elasticsearch）进行联邦查询。在一个 `SELECT * FROM hive.db.t1 JOIN mysql.db.t2 ON ...` 的查询中，数据从 MySQL 传输到 Trino 的网络开销如何？Trino 的谓词下推（Predicate Pushdown）能将多少过滤逻辑推到数据源执行？
+> 3. Trino 与 Presto 的关系——Trino 是 Presto 的原作者从 Facebook 离开后创建的开源分支。两者在功能和社区发展上有什么分化？在选型时你更倾向于哪个？

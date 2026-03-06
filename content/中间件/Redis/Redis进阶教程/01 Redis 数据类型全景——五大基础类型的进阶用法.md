@@ -533,3 +533,10 @@ RESTORE newkey 0 <dump-data>  # 反序列化——可跨 Redis 实例迁移数�
 2. Redis Documentation - Commands：https://redis.io/commands/
 3. Antirez - Redis Data Types and Abstractions：https://redis.io/docs/data-types/tutorial/
 4. Redis Source Code - t_string.c / t_list.c / t_hash.c / t_set.c / t_zset.c：https://github.com/redis/redis/tree/unstable/src
+
+---
+
+> [!note] 思考题
+> 1. 缓存穿透防护——布隆过滤器 vs 缓存空值。布隆过滤器在 Key 空间极大（如 UUID）时内存占用可控，但有误判。缓存空值在恶意随机 Key 攻击下会缓存大量无效数据。在'Key 空间有限且已知'和'Key 空间无限且随机'两种场景下，你分别如何选择？能否组合使用两种方案？
+> 2. 缓存击穿的互斥锁方案——`SET lock NX EX 5` 获取锁后回源数据库。获取锁失败的请求应该'自旋等待'还是'返回旧缓存'？在 QPS 极高（10 万/秒）的热点 Key 场景中，自旋等待可能导致大量线程阻塞。'永不过期 + 异步更新'方案是否更适合这种场景？
+> 3. '先更新数据库再删缓存'（Cache Aside Pattern）在并发下仍可能不一致——删缓存后、另一个读请求重新写入旧缓存之前的时间窗口。延迟双删的'延迟时间'取决于读请求的执行时间——通常设为'主从复制延迟 + 业务读取时间'。如果你无法准确估计这个时间——基于 Canal 监听 Binlog 异步删缓存是否是更可靠的方案？

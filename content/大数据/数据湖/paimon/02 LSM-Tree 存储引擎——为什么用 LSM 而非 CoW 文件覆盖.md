@@ -393,3 +393,9 @@ Paimon 的 LSM-Tree 存储引擎不是简单地把 RocksDB 搬到数据湖上，
 - **Snapshot 元数据**代替 rename 原子性，在对象存储上实现 ACID 提交
 
 下一篇 [[03 主键表与追加表——两种写入模型的设计逻辑]] 将聚焦 Paimon 的两种核心表类型：Primary Key Table（主键表，基于 LSM-Tree 的 Upsert）和 Append-Only Table（追加表，适合日志/事件流场景），深入分析两者的写入路径差异和适用场景。
+
+
+> [!note] 思考题
+> 1. Paimon 使用 LSM-Tree 实现高写入吞吐，但 LSM-Tree 存在读放大——查询一个 Key 可能需要检查多层文件（L0、L1、L2...）。在 Compaction 滞后（L0 文件积累很多）的情况下，点查的读放大系数是多少？Paimon 的 BloomFilter 索引如何减少不必要的层间文件扫描？
+> 2. Paimon 的 Compaction 将多层文件逐级合并（类似 RocksDB 的 Leveled Compaction）。Level-0 到 Level-1 的 Compaction 是最频繁的，代价也最高（Level-0 文件之间可能有重叠的 Key 范围，需要全量合并）。在高写入吞吐场景下，Compaction 的写放大系数是多少？如何通过配置（如 Compaction 触发阈值、Level 层数）来平衡写放大和读放大？
+> 3. Paimon 的 MemTable（写入的第一站，类似 HBase 的 MemStore）在内存中积累写入数据，达到阈值后 Flush 到 L0 文件。如果 Flink 作业的写入速率超过 Flush 速率（MemTable 持续增长），Paimon 如何防止 MemTable OOM？这个"写入背压"机制是否会影响 Flink 作业的 Checkpoint？

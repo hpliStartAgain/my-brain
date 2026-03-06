@@ -883,3 +883,10 @@ class RateLimiterAutoConfigurationTest {
 > - `org.springframework.boot.autoconfigure.condition.OnPropertyCondition` 源码
 > - `org.springframework.boot.test.context.runner.ApplicationContextRunner` 源码
 > - [Spring Boot 官方文档 - Condition Annotations](https://docs.spring.io/spring-boot/docs/current/reference/html/features.html#features.developing-auto-configuration.condition-annotations)
+
+---
+
+> [!note] 思考题
+> 1. Spring Boot 的配置优先级从高到低包括：命令行参数 > 环境变量 > application-{profile}.yml > application.yml > @PropertySource。在 Kubernetes 环境中，敏感配置（如数据库密码）通常通过 Secret 注入为环境变量。但环境变量不支持层级结构（如 `spring.datasource.password`）——Spring Boot 如何将 `SPRING_DATASOURCE_PASSWORD` 映射为 `spring.datasource.password`（Relaxed Binding）？
+> 2. `@ConfigurationProperties` 将配置绑定到 POJO。Spring Boot 2.2+ 支持 `@ConstructorBinding`，通过构造函数创建不可变的配置对象。不可变配置对象在什么场景下优于可变的 setter 绑定？如果配置需要在运行时动态刷新（如 Nacos 配置中心），不可变对象是否适用？
+> 3. Profile 机制（`spring.profiles.active=prod`）用于区分不同环境的配置。但在 12-Factor App 原则中，配置应该通过环境变量注入而非 Profile 切换。Profile 和环境变量注入这两种方式在容器化部署中各有什么优劣？你如何设计一个既支持本地开发（Profile）又支持容器部署（环境变量）的配置体系？

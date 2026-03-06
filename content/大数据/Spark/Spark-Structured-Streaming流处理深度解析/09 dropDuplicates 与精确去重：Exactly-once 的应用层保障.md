@@ -214,6 +214,11 @@ query = deduped.writeStream \
 
 ---
 
+> [!note] 思考题
+> 1. `dropDuplicates` 依赖 State Store 记录已见过的唯一 Key。在高基数 Key（如全局唯一的事件 ID）场景下，State Store 的大小会线性增长，最终导致 OOM。结合 Watermark 的有界去重是解决方案，但 Watermark 的时间窗口必须大于 Source 端的最大可能重复时间范围。如果这个时间范围无法准确估计（比如上游系统可能在任意时间重放历史数据），有界去重是否还有效？
+> 2. Spark 的框架级"精确一次"语义（通过 Checkpoint + 幂等写入）与 `dropDuplicates` 提供的应用层去重是两个独立的保障层。如果 Sink 本身不支持幂等写入（比如追加型文件系统），框架级的"至少一次"加上应用层的 `dropDuplicates` 能否组合出端到端的精确一次语义？存在什么漏洞？
+> 3. `dropDuplicates` 的 State Store 在 Checkpoint 中持久化。如果 Checkpoint 目录损坏导致 State 丢失，重启后的流作业无法感知历史上已处理过的 Key，会产生重复输出。在这种灾难恢复场景下，如何在业务层面补偿这种"去重状态丢失"带来的数据重复？
+
 ## 参考资料
 
 - Apache Spark 官方文档：Structured Streaming - Deduplication

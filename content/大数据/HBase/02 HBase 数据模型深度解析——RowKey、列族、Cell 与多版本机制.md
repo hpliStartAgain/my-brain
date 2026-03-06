@@ -676,6 +676,11 @@ HBase 的数据模型相比关系型数据库看似简单——只有 RowKey、�
 
 ---
 
+> [!note] 思考题
+> 1. HBase 的 RowKey 是唯一的排序依据，数据按 RowKey 字典序存储。如果 RowKey 设计为自增数字（如用户 ID 1, 2, 3...），会导致所有写入请求集中到最后一个 Region（因为新数据总是追加到末尾），形成严重的写热点。常见的 RowKey 设计方案（如哈希散列、时间戳反转）如何在解决热点问题的同时，影响了数据的查询效率？
+> 2. HBase 支持多版本（Multi-Version），每个 Cell 可以存储多个时间戳版本的数据。`maxVersions` 参数控制保留的最大版本数，超出的旧版本在 Compaction 时被清理。在时序数据场景中（如传感器每秒上报数据），多版本机制与 Time-to-Live（TTL）机制如何配合使用，才能在节省存储空间的同时保留必要的历史数据？
+> 3. HBase 的删除操作不是立即物理删除，而是写入一个"Delete Marker"（墓碑标记），标记该数据在某个时间戳之后已被删除。在 Compaction 之前，被删除的数据仍然占用存储空间，并且在读取时需要额外的逻辑跳过这些墓碑记录。在高删除率的业务场景下（如消息已读状态），墓碑记录积累会对读取性能产生什么影响？
+
 ## 参考资料
 
 - [1] Apache HBase Reference Guide — Data Model: https://hbase.apache.org/book.html#datamodel

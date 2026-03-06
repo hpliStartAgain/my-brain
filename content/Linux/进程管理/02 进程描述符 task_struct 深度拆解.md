@@ -605,3 +605,10 @@ cat /proc/$NGINX_PID/limits | grep "open files"
 - **signal_struct**：线程组共享的信号处理信息，同时也是 rlimit 的存储位置
 
 下一篇 [[03 进程的诞生——fork 的内核之旅]] 将以 `copy_process()` 为核心，详细解析 `fork()` 系统调用如何依据上述字段创建一个新的 `task_struct`，以及 Copy-on-Write 如何在 `mm_struct` 层面实现高效的内存复制。
+
+---
+
+> [!note] 思考题
+> 1. `fork()` 使用 COW（Copy-on-Write）——子进程共享父进程的物理页，只在写入时复制。但 `fork()` 仍然需要复制页表——如果父进程有 100GB 虚拟地址空间（即使大部分未映射），页表的复制开销有多大？`vfork()` 不复制页表（子进程直接使用父进程的地址空间）——它的使用限制是什么（子进程只能调用 exec 或 _exit）？
+> 2. `posix_spawn` 作为 `fork+exec` 的替代，在某些平台上可以避免 fork 的地址空间复制开销。在 Linux 上 `posix_spawn` 底层仍然使用 `clone`——但未来是否可能优化为类似 Windows `CreateProcess` 的直接创建？在大内存进程（如 JVM 占用 100GB 堆）中 `fork` 的耗时有多长？
+> 3. `clone()` 是最灵活的进程/线程创建接口——通过标志位控制哪些资源共享。`CLONE_NEWPID` 创建新的 PID 命名空间——这是容器隔离的基础。如果一个进程使用 `clone(CLONE_NEWPID)` 创建子进程，子进程在新命名空间中的 PID 是 1。这个 PID 1 是否具有 init 进程的特殊行为（如收养孤儿进程、忽略未注册的信号）？

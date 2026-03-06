@@ -724,3 +724,9 @@ logger.rewrite.level=DEBUG
 - **HA 设计**：Knox 自身无状态可水平扩展，HaProvider 处理后端服务 HA 故障转移
 
 Kerberos（认证基础）+ Ranger（细粒度授权）+ Knox（统一入口），三者共同构成了 Hadoop 安全体系的核心骨架。下一篇 [[06 DProxy 透明代理原理与生产实践]] 将介绍另一种代理模式——DProxy 作为集群内部的透明 HTTP 代理，解决 Knox 无法覆盖的场景。
+
+
+> [!note] 思考题
+> 1. Knox 作为 Hadoop 集群的 API 网关，将所有外部访问统一收口到单一入口，避免直接暴露集群内部服务（NameNode、ResourceManager 等）的端口。Knox 通过 Topology 文件定义每个服务的路由规则，将外部请求代理到内部服务。Knox 在代理 Kerberos 认证的服务时，需要以自己的 Service Principal 向内部服务发起请求（作为代理用户）。这要求 Knox 的 Service Principal 在 HDFS/Hive 等服务中被配置为允许的代理用户（`hadoop.proxyuser.knox.*`）。如果 Knox 的 Principal 被错误配置为可以代理任意用户（`*`），会带来什么安全风险？
+> 2. Knox 支持多种认证方式：Basic Auth（用户名密码）、Kerberos SPNEGO、OAuth2、SAML。在企业环境中，通常需要将 Knox 与 LDAP（如 Active Directory）集成，通过 LDAP 验证用户名密码。Knox 的 ShiroProvider 负责 LDAP 认证。如果 LDAP 服务不可用（如 AD 故障），Knox 的所有基于 LDAP 认证的请求都会失败。如何在 Knox 层面实现 LDAP 的高可用，避免单一 LDAP 服务器成为整个集群访问的单点故障？
+> 3. Knox 的 HA（高可用）通过多个 Knox 实例 + 负载均衡器（如 HAProxy）实现。Knox 本身是无状态的（会话状态可以通过 Token 携带），理论上可以水平扩展。但 Knox 的 Token 服务（用于将 Basic Auth 换取短期 Token，避免每次请求都查询 LDAP）需要在多个 Knox 实例间共享 Token 状态。Knox 是如何实现这个共享状态的？如果使用共享 ZooKeeper 存储 Token，ZooKeeper 宕机会对 Knox 的 Token 服务产生什么影响？

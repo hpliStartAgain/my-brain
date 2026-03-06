@@ -271,3 +271,10 @@ ORDER BY ENGINE_TRANSACTION_ID;
 5. **加锁退化规则**：等值查询命中唯一索引 → 记录锁；等值查询未命中 → 间隙锁；范围查询 → 临键锁；非唯一索引等值查询 → 临键锁 + 后续间隙锁
 6. **意向锁**：表级锁，O(1) 判断表上是否有行级锁，避免 O(n) 全表扫描
 7. **死锁检测算法**：等待图 DFS 查环，代价最小的事务被回滚。高并发时检测代价随活跃事务数增长
+
+---
+
+> [!note] 思考题
+> 1. Binlog 记录了所有修改数据的 SQL 语句（Statement 格式）或行变更（Row 格式）。Row 格式记录了每行数据的前后值——精确但体积大。Statement 格式记录 SQL 语句——体积小但某些语句在从库执行结果可能不同（如 `NOW()`、`UUID()`）。Mixed 格式自动选择——在什么场景下 Mixed 仍然可能导致主从不一致？
+> 2. MySQL 的主从复制延迟是常见问题——从库的 SQL 线程单线程回放 Binlog，而主库是多线程并发写入。MySQL 5.7+ 支持多线程复制（`slave_parallel_workers`）——按库（DATABASE）或按事务组（LOGICAL_CLOCK）并行回放。在什么场景下 LOGICAL_CLOCK 比 DATABASE 并行更高效？
+> 3. GTID（Global Transaction Identifier）为每个事务分配全局唯一 ID。在主从切换时，GTID 使得新从库可以自动找到复制的起始位置——无需手动指定 Binlog 位点。GTID 复制与传统位点复制相比，在运维便利性和限制（如不支持 `CREATE TABLE ... SELECT`）方面有什么权衡？

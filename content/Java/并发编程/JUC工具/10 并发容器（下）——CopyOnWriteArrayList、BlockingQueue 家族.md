@@ -615,3 +615,10 @@ public E take() throws InterruptedException {
 3. JDK 源码：`java.util.concurrent` 包
 4. Goetz et al., "Java Concurrency in Practice", Ch.5: Building Blocks, Ch.6: Task Execution
 5. 美团技术博客, "Java 中的阻塞队列", 2016
+
+---
+
+> [!note] 思考题
+> 1. CopyOnWriteArrayList 在写操作时复制整个数组，读操作无锁。如果数组有 100 万个元素，每次写操作都复制 100 万个引用——这个代价在什么场景下是可接受的？CopyOnWriteArrayList 的迭代器是'快照'迭代器——迭代期间的修改对迭代器不可见。这在什么业务场景下是优势，什么场景下是劣势？
+> 2. BlockingQueue 家族中，`ArrayBlockingQueue`（有界数组）和 `LinkedBlockingQueue`（有界/无界链表）的选择取决于什么因素？在 Executors.newFixedThreadPool 中使用的是 `LinkedBlockingQueue(Integer.MAX_VALUE)`——这实际上是无界队列。无界队列在任务生产速度大于消费速度时会导致什么问题？这与 OOM 有直接关系吗？
+> 3. `SynchronousQueue` 没有容量——每个 put 必须等待一个 take。它在 `Executors.newCachedThreadPool` 中使用——新任务到来时如果没有空闲线程，立即创建新线程。在什么场景下 `SynchronousQueue` 优于有容量的 BlockingQueue？如果任务处理速度有波动，`SynchronousQueue` + CachedThreadPool 的线程数会如何变化？

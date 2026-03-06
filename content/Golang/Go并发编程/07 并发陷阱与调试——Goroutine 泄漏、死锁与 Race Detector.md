@@ -754,3 +754,10 @@ go tool pprof -diff_base=before.pb.gz after.pb.gz
 > - Go 文档,《Data Race Detector》: https://go.dev/doc/articles/race_detector
 > - uber-go/goleak: https://github.com/uber-go/goleak
 > - Go pprof 文档: https://pkg.go.dev/net/http/pprof
+
+---
+
+> [!note] 思考题
+> 1. 一个 goroutine 向一个无缓冲 channel 发送数据，但没有接收方——这个 goroutine 会永远阻塞（goroutine 泄漏）。Go 运行时能检测到这种泄漏吗？`runtime.NumGoroutine()` 可以用来监控泄漏，但它无法定位是哪个 goroutine 泄漏了。在生产环境中，你有哪些工具和方法来定位 goroutine 泄漏的具体代码位置？
+> 2. Go 的 Race Detector 使用 happens-before 关系来判断是否存在数据竞争。两个 goroutine 分别读写同一个 `map` 而没有加锁——即使在测试中没有观察到错误结果，Race Detector 也会报告竞争。这是否意味着'没有可观察到的错误不等于没有数据竞争'？Go 的 map 在并发读写时可能导致什么运行时后果（不仅仅是数据错误）？
+> 3. 死锁检测是 Go 运行时的内置能力——当所有 goroutine 都阻塞时，运行时会 panic 并报告 `fatal error: all goroutines are asleep - deadlock!`。但如果只有部分 goroutine 死锁（其他 goroutine 仍在运行，比如 HTTP server），运行时还能检测到吗？在微服务场景中，如何检测这种'部分死锁'？

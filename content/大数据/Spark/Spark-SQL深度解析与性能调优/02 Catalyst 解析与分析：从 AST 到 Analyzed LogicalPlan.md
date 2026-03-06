@@ -468,6 +468,11 @@ val spark = SparkSession.builder()
 
 ---
 
+> [!note] 思考题
+> 1. Analyzer 使用"固定点迭代"来确保所有 Resolution 规则收敛。如果用户写了一个无法收敛的自定义 Resolution 规则，Spark 会怎么处理？Spark 是如何防止无限循环的？
+> 2. `Unresolved` 系列节点（UnresolvedRelation、UnresolvedAttribute）在解析阶段大量存在。这种"延迟绑定"设计有什么好处？在什么场景下会导致运行时才暴露的错误，而不是编译期错误？
+> 3. Analyzer 依赖 Catalog 来解析表名和列名。在多租户场景下，如果两个 SparkSession 同时修改同一张表的 Schema，Analyzer 拿到的 Catalog 快照可能不一致——Spark 是如何处理这种并发元数据访问的？
+
 ## 参考资料
 
 - [Deep Dive into Spark SQL's Catalyst Optimizer（Databricks Blog）](https://www.databricks.com/blog/2015/04/13/deep-dive-into-spark-sqls-catalyst-optimizer.html)

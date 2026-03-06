@@ -404,3 +404,10 @@ ZooKeeper 不适合高吞吐写入场景（如消息队列、高并发 KV 存储
 5. Medeiros, A. (2012). ZooKeeper's atomic broadcast protocol: Theory and practice. https://diyhpl.us/~bryan/papers2/distributed/distributed-systems/zab.totally-ordered-broadcast-protocol.2012.pdf
 6. Ongaro, D., & Ousterhout, J. (2014). In Search of an Understandable Consensus Algorithm. *USENIX ATC 2014*.
 7. Kleppmann, M. (2017). *Designing Data-Intensive Applications*. O'Reilly Media. Chapter 9.
+
+---
+
+> [!note] 思考题
+> 1. 一致性哈希将 Key 映射到环上的位置——按顺时针找到最近的节点。添加/删除节点只影响相邻区间的数据——减少了数据迁移量。但基本的一致性哈希可能导致数据分布不均（如节点在环上分布不均匀）。虚拟节点如何解决这个问题？每个物理节点通常映射多少虚拟节点？
+> 2. 一致性哈希的'热点'问题——如果某个 Key 的访问频率远高于其他 Key（如热门商品），该 Key 所在的节点会过载。一致性哈希本身无法解决热点——你需要额外的缓存或分片策略。在什么场景下你需要将热点 Key 的请求分散到多个节点（如 Key 前缀分片）？
+> 3. 一致性哈希 vs Range Partitioning（范围分片，如 HBase 的 Region）。一致性哈希的优势是数据均匀分布和扩缩容方便，Range Partitioning 的优势是支持范围查询。在什么查询模式下你会选择 Range Partitioning？两者能否结合使用？

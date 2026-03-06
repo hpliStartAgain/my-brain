@@ -489,6 +489,11 @@ zookeeper-client -server localhost:2181 get /hadoop-ha/<nameservice>/ActiveStand
 
 ---
 
+> [!note] 思考题
+> 1. QJM（Quorum Journal Manager）要求写入 EditLog 到大多数（Quorum）JournalNode 才算成功（如 3 个 JN 中的 2 个）。这确保了 EditLog 的高可用，但如果某个 JournalNode 宕机，Active NameNode 仍然可以继续写（只需 2/3 的 JN 确认）。当宕机的 JournalNode 重新上线时，它如何追上遗漏的 EditLog 条目？JN 之间的数据同步机制是什么？
+> 2. NameNode HA 中，Active 和 Standby NN 之间的状态同步依赖 JournalNode 传递 EditLog，而 DataNode 与两个 NN 都建立了 Block Report 连接。如果发生网络分区，导致 Standby NN 无法访问 JournalNode，但 Active NN 仍然正常工作，ZKFC 会触发 HA 切换吗？这种情况下，脑裂防护（Fencing）机制的作用是什么？
+> 3. NameNode 的 Active-Standby 切换（Failover）过程包括：ZKFC 检测到 Active NN 失联 → 触发 Fence（SSH 杀死旧 Active 进程）→ 新 Active NN 从最新 EditLog 位置开始服务。在"旧 Active NN 卡住（GC 暂停导致 ZK 会话超时，但进程并未真正宕机）"场景下，Fencing 执行成功后，旧 Active 进程恢复正常，此时集群中有两个认为自己是 Active 的 NN，会发生什么？HDFS 如何防止这种情况下的数据损坏？
+
 ## 参考资料
 
 - Apache Hadoop 官方文档：[HDFS High Availability Using QJM](https://hadoop.apache.org/docs/current/hadoop-project-dist/hadoop-hdfs/HDFSHighAvailabilityWithQJM.html)

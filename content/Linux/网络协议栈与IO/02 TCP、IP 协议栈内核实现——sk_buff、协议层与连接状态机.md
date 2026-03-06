@@ -517,3 +517,10 @@ tcpdump -n -vv 'tcp[tcpflags] & (tcp-syn) != 0' | grep -i "wscale"
 2. 防止同 4 元组的新连接受到旧连接迷失包的污染
 
 下一篇 [[03 Socket 内核深度解析——struct sock、接收缓冲区与发送缓冲区]] 将专注于 `struct sock` 的完整字段解析——发送缓冲区如何限速（背压机制）、接收缓冲区如何与 epoll 协作（数据就绪通知）、`SO_SNDBUF`/`SO_RCVBUF` socket 选项的内核实现以及自动调整（autotuning）机制。
+
+---
+
+> [!note] 思考题
+> 1. TCP 半连接队列（SYN Queue）和全连接队列（Accept Queue）的大小分别由 `net.ipv4.tcp_max_syn_backlog` 和 `listen()` 的 backlog 参数控制。SYN Flood 攻击填满半连接队列导致正常连接无法建立。`tcp_syncookies` 如何在不维护半连接状态的情况下完成三次握手？syncookies 有什么功能限制？
+> 2. TIME_WAIT 状态持续 2*MSL（Linux 默认 60 秒）。高并发短连接场景下可能积累数万个 TIME_WAIT——占用端口和内存。`tcp_tw_reuse` 允许复用 TIME_WAIT 端口——它的安全性保证是什么（依赖时间戳选项）？为什么 `tcp_tw_recycle` 在 NAT 环境下会导致问题并在 Linux 4.12 被移除？
+> 3. 四次挥手中，如果服务端在 CLOSE_WAIT 状态下没有调用 `close()`——连接会永远停留在 CLOSE_WAIT。大量 CLOSE_WAIT 通常意味着应用层的 bug（未关闭连接）。你如何通过 `ss -tnap state close-wait` 定位泄漏的连接属于哪个进程？在什么编程模式下最容易忘记 close（如异常处理路径）？

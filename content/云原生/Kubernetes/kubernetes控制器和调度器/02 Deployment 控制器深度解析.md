@@ -389,3 +389,10 @@ spec:
 3. Kubernetes Source Code - pkg/controller/deployment：https://github.com/kubernetes/kubernetes/tree/master/pkg/controller/deployment
 4. Kubernetes Documentation - Pod Lifecycle (readinessProbe)：https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#container-probes
 5. Kubernetes Enhancement Proposal - Deployment：https://github.com/kubernetes/design-proposals-archive/blob/main/apps/deployment.md
+
+---
+
+> [!note] 思考题
+> 1. kube-scheduler 为每个 Pending Pod 选择最合适的 Node。调度过程：过滤（Filter，排除不满足条件的 Node）→ 打分（Score，对候选 Node 评分）→ 绑定（Bind，将 Pod 分配到最高分 Node）。在 5000 节点集群中，Filter 阶段如何快速排除大量 Node 而非遍历所有节点？`percentageOfNodesToScore` 参数的作用是什么？
+> 2. 调度器的亲和性（Affinity）和反亲和性（Anti-Affinity）控制 Pod 的放置偏好。`podAntiAffinity` 确保同一应用的 Pod 分布在不同 Node 上——提高可用性。但硬反亲和性（`requiredDuringSchedulingIgnoredDuringExecution`）可能导致 Pod 无法调度（如 Node 数量不够）。在什么场景下你应该使用软反亲和性（`preferred`）而非硬反亲和性？
+> 3. Scheduling Framework（调度框架）允许通过插件扩展调度逻辑。自定义调度插件可以实现'GPU 感知调度'、'网络拓扑感知调度'等。开发自定义调度器的难度如何？在什么场景下默认调度器无法满足需求需要自定义？

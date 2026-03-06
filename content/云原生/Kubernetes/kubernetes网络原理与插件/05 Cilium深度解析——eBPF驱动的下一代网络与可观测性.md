@@ -667,3 +667,10 @@ Cilium 并非在所有场景下都是最佳选择：
 ---
 
 *本文是 [[Kubernetes网络原理与插件]] 专栏的第 5 篇。*
+
+---
+
+> [!note] 思考题
+> 1. Cilium 使用 eBPF 在内核层实现网络策略和负载均衡——绕过了 iptables。在高 QPS 场景中（>100K PPS），Cilium 的性能比传统 CNI 高多少？eBPF 程序的加载和更新是否有延迟？在策略变更频繁的场景中，eBPF map 的更新开销如何？
+> 2. Cilium 的 Hubble 提供了网络层的可观测性——可视化 Service 之间的流量、延迟和错误率。Hubble Relay 聚合所有节点的 Hubble Agent 数据。在一个 200 节点集群中，Hubble 的数据量和存储需求是多少？Hubble 的 UI 在日常运维中解决什么问题？
+> 3. Cilium 的 Cluster Mesh 连接多个 Kubernetes 集群——实现跨集群的 Service 发现和 NetworkPolicy。Pod 可以直接访问其他集群的 Service（通过全局 Service）。Cluster Mesh 的流量路由如何避免跨区域的高延迟？与 Istio Multi-Cluster 相比，Cilium Cluster Mesh 的架构更简单吗？

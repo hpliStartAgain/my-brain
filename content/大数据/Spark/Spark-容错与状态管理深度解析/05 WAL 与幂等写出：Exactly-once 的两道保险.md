@@ -416,6 +416,11 @@ Exactly-once 语义是流处理的"圣杯"，需要 Source 可重放和 Sink 幂
 
 ---
 
+> [!note] 思考题
+> 1. WAL（Write-Ahead Log）通过在处理数据前先将数据记录到持久化日志来保证"至少一次"语义。但 WAL 引入了双倍的写放大（先写 WAL，再处理数据）。Spark Streaming（DStream）的 WAL 方案在高吞吐场景下会产生多大的额外 I/O 开销？Structured Streaming 为什么选择放弃 WAL 转而依赖 Source 的"可重放"特性？
+> 2. 幂等写出要求"相同的输入写出相同的输出且不重复"。Kafka 作为 Sink 支持事务性写入（Kafka Transactions），可以实现精确一次语义。但 Kafka 事务有性能代价——事务性 Producer 的吞吐量比非事务性低约 20-30%。在什么业务场景下，这个性能代价是值得的，而在什么场景下"至少一次 + 下游幂等"是更好的权衡？
+> 3. 文件系统 Sink（如写 HDFS 或 S3）通过"先写临时文件，成功后原子 rename"来实现幂等写出。但 S3 不支持真正的原子 rename（`rename` 在 S3 上是 copy + delete 操作），这破坏了幂等写出的原子性保证。在使用 S3 作为 Sink 时，Spark 和 Hadoop FileSystem 层是如何用变通手段解决这个问题的？这些手段在什么边界条件下会失效？
+
 ## 参考资料
 
 - [Spark Structured Streaming Exactly-Once Guarantees（singdata.com）](https://www.singdata.com/trending/spark-structured-streaming-exactly-once-guarantees/)

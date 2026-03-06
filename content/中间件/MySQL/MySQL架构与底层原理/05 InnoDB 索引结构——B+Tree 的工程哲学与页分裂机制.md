@@ -287,3 +287,10 @@ SELECT * FROM t WHERE a=1 AND b>5 AND c=3;
 5. **页分裂的根因是随机插入**：有序递增插入（自增主键）几乎不产生分裂，随机插入（UUID 主键）频繁分裂导致性能劣化、空间浪费
 6. **页合并是分裂的逆操作**：低使用率相邻页合并；`OPTIMIZE TABLE` 重建表消除历史碎片
 7. **联合索引的最左前缀匹配是 B+Tree 物理结构的必然**：先按第一列排序，范围条件截断后续列的顺序性
+
+---
+
+> [!note] 思考题
+> 1. InnoDB 的行锁实际上是'索引记录锁'——锁加在索引上而非数据行上。如果 SQL 没有使用索引（如 `UPDATE t SET x=1 WHERE name='abc'` 且 name 无索引），InnoDB 会锁住所有行（退化为表锁）。这个行为经常被忽视——在生产环境中因为缺少索引导致的锁升级问题你如何排查？
+> 2. 死锁的经典场景：事务 A 锁住行 1 等待行 2，事务 B 锁住行 2 等待行 1。InnoDB 的死锁检测会自动回滚其中一个事务。`SHOW ENGINE INNODB STATUS` 的 `LATEST DETECTED DEADLOCK` 部分记录了最近的死锁信息。在高并发的交易系统中，如何从代码层面减少死锁（如按固定顺序访问资源、缩短事务持续时间）？
+> 3. `SELECT ... FOR UPDATE` 和 `SELECT ... LOCK IN SHARE MODE` 分别获取排他锁和共享锁。在一个'先查询余额再扣款'的场景中（`SELECT balance FROM accounts WHERE id=1 FOR UPDATE; UPDATE accounts SET balance=balance-100 WHERE id=1;`），如果不加 `FOR UPDATE` 会有什么并发问题？乐观锁（版本号）和悲观锁（`FOR UPDATE`）在什么并发程度下各更合适？

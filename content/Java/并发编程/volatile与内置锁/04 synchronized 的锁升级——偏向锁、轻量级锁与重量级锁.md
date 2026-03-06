@@ -399,3 +399,10 @@ JDK 15 废弃偏向锁，是锁优化机制随着硬件发展和 JDK 自身演�
 4. JEP 374: Disable and Deprecate Biased Locking, JDK 15
 5. Goetz et al., "Java Concurrency in Practice", Ch.11: Performance and Scalability
 6. Shipilev, Aleksey, "JVM Anatomy Quarks: Biased Locking", shipilev.net
+
+---
+
+> [!note] 思考题
+> 1. 偏向锁的设计假设是'大多数锁只被一个线程持有'。当偏向锁被另一个线程竞争时，需要撤销偏向——这涉及到暂停持有偏向锁的线程（安全点操作）。JDK 15 默认禁用了偏向锁（`-XX:-UseBiasedLocking`），JDK 18 彻底移除。移除偏向锁的原因是什么？在 JDK 15+ 中，没有竞争的 `synchronized` 块使用什么级别的锁？
+> 2. 轻量级锁通过 CAS 操作将 Mark Word 替换为指向栈帧中 Lock Record 的指针。如果 CAS 失败（说明有竞争），锁膨胀为重量级锁。重量级锁使用操作系统的 Mutex——线程阻塞和唤醒需要用户态/内核态切换。在一个'锁竞争短暂但频繁'的场景中（如计数器），轻量级锁不断膨胀为重量级锁再降级——这种'锁升降级震荡'是否存在？实际上锁能降级吗？
+> 3. `synchronized` 的锁消除（Lock Elimination）是 JIT 编译器的优化——如果逃逸分析判断锁对象不会被其他线程访问，就消除锁操作。例如在方法内部创建的 `StringBuffer`（其方法是 `synchronized` 的）的锁可以被消除。锁消除在什么条件下不生效？如果锁对象通过方法参数传入（但实际上只有一个调用者），JIT 能做锁消除吗？

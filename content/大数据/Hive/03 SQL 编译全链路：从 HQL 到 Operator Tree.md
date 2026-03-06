@@ -430,6 +430,11 @@ Hive SQL 编译流水线的五个阶段共同将一条 HQL 字符串转化为可
 
 ---
 
+> [!note] 思考题
+> 1. Hive 的编译器将 SQL 转换为 Operator Tree（算子树），然后再生成物理执行计划（MapReduce 或 Tez DAG）。Operator Tree 中的每个节点代表一个关系代数操作（Filter、Select、Join、GroupBy）。如果一条 SQL 包含多个子查询和复杂的 JOIN，生成的 Operator Tree 可能非常庞大。Hive 的优化器（RBO + CBO）在何时介入，对 Operator Tree 进行简化和重排序？RBO 的规则优化发生在 Operator Tree 阶段还是物理计划阶段？
+> 2. Hive 的语义分析阶段（Semantic Analyzer）会将 AST 转换为 QueryBlock（QB），QB 代表一个查询块（如一个 SELECT 语句或一个子查询）。嵌套子查询会生成嵌套的 QB 结构。Hive 为什么要引入 QB 这一中间表示，而不是直接从 AST 生成 Operator Tree？QB 在处理相关子查询（Correlated Subquery）时扮演什么角色？
+> 3. Hive 支持通过 `EXPLAIN` 命令查看查询的执行计划，包括 Operator Tree 和物理执行阶段。`EXPLAIN EXTENDED` 会显示更详细的信息，而 `EXPLAIN VECTORIZATION` 显示向量化执行的细节。在生产调优中，如何通过 `EXPLAIN` 的输出来判断是否触发了预期的优化（如 Map-side Join、Partition Pruning）？有哪些常见的"优化没有生效"场景及其诊断方法？
+
 ## 参考资料
 
 - [Hive SemanticAnalyzer 源码](https://github.com/apache/hive/blob/master/ql/src/java/org/apache/hadoop/hive/ql/parse/SemanticAnalyzer.java)

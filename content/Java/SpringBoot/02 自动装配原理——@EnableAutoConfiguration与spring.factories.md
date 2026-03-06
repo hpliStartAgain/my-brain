@@ -681,3 +681,10 @@ org.springframework.boot.autoconfigure.condition.OnWebApplicationCondition
 > - `org.springframework.core.io.support.SpringFactoriesLoader` 源码
 > - `org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration` 源码
 > - [Spring Boot 官方文档 - Auto-configuration](https://docs.spring.io/spring-boot/docs/current/reference/html/features.html#features.developing-auto-configuration)
+
+---
+
+> [!note] 思考题
+> 1. `SpringApplication.run()` 的启动流程包括：创建 ApplicationContext、加载 BeanDefinition、刷新容器（`refresh()`）、调用 Runner。在 `refresh()` 阶段，如果某个 Bean 的初始化失败（抛出异常），Spring Boot 会尝试优雅关闭已创建的资源吗？还是直接崩溃退出？
+> 2. Spring Boot 的 `ApplicationRunner` 和 `CommandLineRunner` 在容器就绪后执行。如果你需要在所有 Bean 初始化完成后、但在接收 HTTP 请求前执行一些初始化逻辑（如缓存预热），应该使用哪种机制？`@PostConstruct`、`InitializingBean`、`ApplicationRunner` 和 `SmartLifecycle` 的执行时机有什么区别？
+> 3. Spring Boot 的'优雅停机'（Graceful Shutdown）在收到 SIGTERM 后等待正在处理的请求完成再关闭。`server.shutdown=graceful` 配置了优雅停机，`spring.lifecycle.timeout-per-shutdown-phase` 设置了超时时间。如果某个请求一直不结束（如长轮询），超时后会强制中断该请求吗？线程中断是否能可靠地终止正在执行的数据库事务？

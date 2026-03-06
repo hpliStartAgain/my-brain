@@ -528,3 +528,10 @@ SET SESSION operator_memory_limit_before_spill = '8GB';
 Trino 的工程价值在于：**通过内存流水线执行和存储无关的 Connector 体系，在不移动数据的前提下，为分散在多个异构存储中的数据提供统一的、接近实时的 SQL 分析能力**。这在数据量超过单机能力、数据分散在多个系统、业务需要 ad-hoc 探索的企业数据分析场景中，是当前技术栈最合理的选择之一。
 
 理解 Trino 的关键洞见是：**它的性能优势来自于"减少不必要的 IO 和 Shuffle"（分区裁剪、动态过滤、列裁剪），而非"更快地处理已经读取的数据"**。大多数慢查询的根因都是数据读取量过大，而非 CPU 计算慢。这个认识是所有 Trino 调优工作的出发点。
+
+---
+
+> [!note] 思考题
+> 1. Trino Coordinator 是单点——它负责查询解析、规划和调度。如果 Coordinator 宕机，所有查询失败。Trino 目前不支持 Coordinator HA。在生产环境中你如何应对这个单点问题？快速重启 Coordinator 的 MTTR（Mean Time To Recovery）通常是多少？
+> 2. Trino 的 Worker 扩缩容需要考虑正在运行的查询——直接停止 Worker 会导致查询失败。Graceful Shutdown（`trino-cli --execute "SHUTDOWN"`）等待当前查询完成后再退出。在 Kubernetes 上通过 HPA 自动扩缩容时，如何确保缩容时不杀死正在执行查询的 Worker？
+> 3. Trino 的监控关键指标：`RunningQueries`（并发查询数）、`BlockedQueries`（内存不足被阻塞的查询数）、`QueuedQueries`（等待执行的查询数）和各 Stage 的 CPU/内存使用。`BlockedQueries > 0` 持续出现意味着什么？你应该增加内存还是优化查询？

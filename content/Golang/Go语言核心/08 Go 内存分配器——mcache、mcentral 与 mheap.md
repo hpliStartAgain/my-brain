@@ -443,3 +443,10 @@ go tool pprof http://localhost:6060/debug/pprof/heap
 > - Austin Clements,《Go 1.5 concurrent garbage collector pacing》
 > - TCMalloc 设计文档：https://google.github.io/tcmalloc/design.html
 > - Go Blog,《Getting to Go: The Journey of Go's Garbage Collector》
+
+---
+
+> [!note] 思考题
+> 1. Go 的内存分配器将对象分为三类：tiny（< 16B）、small（16B-32KB）、large（> 32KB）。tiny 对象的分配使用 mcache 中的 tiny allocator，将多个 tiny 对象合并到同一个 16B 的内存块中。这个优化对什么类型的程序效果最显著？如果一个 tiny 对象包含指针，还能使用 tiny allocator 吗？为什么？
+> 2. 每个 P 有自己的 mcache，mcache 中缓存了各个 size class 的空闲对象。当 mcache 用尽时，从 mcentral 获取新的 span。这种'P 本地缓存'的设计与 TCMalloc 的 thread cache 有什么异同？在 GOMAXPROCS=64 的高并发场景下，mcache 的总内存占用是多少？这是否会成为内存压力？
+> 3. Go 内存分配器的 size class 将 0-32KB 的对象映射到 67 个离散的大小等级。例如 33 字节的对象会被分配到 48 字节的 size class 中，浪费 15 字节。这种'内部碎片'的理论最大值是多少？与 C 的 `malloc`（glibc ptmalloc）相比，Go 的分配器在碎片率方面有优势还是劣势？

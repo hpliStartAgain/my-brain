@@ -355,6 +355,11 @@ History Server 是解决"历史作业 UI 消失"问题的标准方案：
 
 ---
 
+> [!note] 思考题
+> 1. Spark UI 运行在 Driver Pod 内，IP 地址是动态分配的 Pod IP，外部无法直接访问。NodePort Service 将 Driver 的 4040 端口暴露到节点的某个高位端口，而 Ingress 则通过域名路由。两种方案在多租户集群中各有什么安全隐患？NodePort 暴露后是否需要额外的认证层？
+> 2. History Server 通过读取已完成作业的 EventLog 来重建 Spark UI。EventLog 写入 HDFS/S3 的路径在 `spark.eventLog.dir` 中配置。如果同时有数千个并发作业写 EventLog，S3 或 HDFS 的写入吞吐量会成为瓶颈吗？History Server 在解析大型 EventLog 文件（如数 GB 的超复杂作业）时，有哪些已知的性能问题？
+> 3. 在 K8s 上部署 History Server 时，它需要访问存储在 S3/HDFS 上的 EventLog 文件，同时需要一个 Service 将 UI 暴露给用户。如果多个团队共享同一个 History Server，如何实现按团队隔离——即用户只能看到自己团队的作业历史，而不能浏览其他团队的作业？
+
 ## 参考资料
 
 - Apache Spark 官方文档：Web UI, History Server

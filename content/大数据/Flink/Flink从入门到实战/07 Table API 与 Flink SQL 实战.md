@@ -529,3 +529,9 @@ Flink Table API / SQL 的核心知识点：
 - `toDataStream()` / `toChangelogStream()`：Table → DataStream（有更新语义时用 Changelog）
 
 下一篇 [[08 Flink 与 Kafka 端到端精确一次实战]] 将深入 Flink + Kafka 精确一次的完整配置，分析两阶段提交在 Kafka 事务中的实际工作方式，以及 Exactly-Once 的性能代价与取舍。
+
+
+> [!note] 思考题
+> 1. Flink SQL 的"动态表"（Dynamic Table）抽象将流数据建模为一张不断变化的表，Retract 流（ChangeLog）传递的是行级别的增量变更（+I、-U、+U、-D）。当一个聚合结果需要被"撤回"（比如窗口关闭后输出，然后因迟到数据触发更新），Sink 必须支持 Upsert 或 Retract 语义。如果 Sink 是一个只支持追加写入的系统（如 Kafka 主题），如何处理包含撤回消息的 ChangeLog 流？
+> 2. Flink SQL 的 `OVER` 窗口（滑动聚合）与 `GROUP BY` 窗口在语义上有什么本质差异？`OVER` 窗口计算的是每条记录到达时的"滑动聚合值"，不等待窗口关闭就输出结果。这种实时输出特性需要维护多少历史状态？如果 `OVER` 窗口的时间范围是"过去 7 天"，State 的大小如何随时间变化？
+> 3. 在 Flink SQL 中执行 Temporal Table Join（时态表 Join）可以将实时流与一个维表的"历史版本"关联——即根据事件时间查找维表在该时刻的值，而不是维表的当前值。这在维表频繁更新的场景下非常有用。但时态表 Join 要求维表实现 `LookupTableSource` 接口。如果维表存储在 HBase 中，每次 Join 都需要一次网络请求，高并发下会有什么性能问题？如何通过异步 I/O 和缓存来优化？

@@ -534,3 +534,10 @@ pthread_setaffinity_np(pthread_self(), sizeof(cpuset), &cpuset);
 **NIC 多队列 + CPU 亲和性**：RSS/RPS/RFS/XPS 四层机制从硬件到软件建立连接与 CPU 的强绑定关系；配合 NUMA 感知的内存分配和线程亲和性，使一个 TCP 连接的整个生命周期都在同一 CPU 的 L1/L2 缓存中流转，消除跨核和跨 NUMA 的内存访问延迟。
 
 下一篇 [[09 容器网络原理——veth、bridge、iptables 与 eBPF]] 将把视角切换到容器时代：当 Linux 的网络命名空间（Network Namespace）将物理网络"分割"为多个独立的虚拟网络后，容器之间如何通信？veth pair 如何连接两个网络命名空间？Linux bridge 如何实现二层转发？Kubernetes 的 Pod 网络模型（CNI）背后的原理是什么？iptables 和 eBPF/XDP 在容器网络中分别承担什么角色？
+
+---
+
+> [!note] 思考题
+> 1. 传统的文件发送路径：read() 将数据从内核 Page Cache 拷贝到用户态缓冲区，write() 再拷贝回内核 Socket 缓冲区——两次多余的拷贝。`sendfile` 直接在内核中从 Page Cache 拷贝到 Socket 缓冲区。如果网卡支持 scatter-gather DMA，还可以消除这次拷贝——数据直接从 Page Cache DMA 到网卡。这种'真零拷贝'的前提条件是什么？
+> 2. `splice` 通过管道（pipe）在两个 fd 之间移动数据而不经过用户态。Nginx 使用 splice 将上游响应转发给客户端。splice 与 sendfile 的区别是什么？splice 能在两个 Socket 之间直接转发数据吗？如果可以，它在反向代理场景中的性能优势有多大？
+> 3. 用户态协议栈（如 DPDK + F-Stack）完全绕过内核网络栈——在用户态实现 TCP/IP。这消除了系统调用和上下文切换的开销。但也失去了内核协议栈的成熟性和安全性。在什么性能需求下（延迟<Xμs，吞吐>X Gbps）用户态协议栈是必要的？

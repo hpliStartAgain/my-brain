@@ -445,3 +445,9 @@ high-availability.zookeeper.path.root: /flink
 这些架构知识的实际应用价值将在后续文章中逐步体现：内存配置（第 03 篇）需要理解 TM 的内存分区，网络反压（第 04 篇）需要理解 Task 间的数据传输路径，Checkpoint 优化（第 06 篇）需要理解 JobMaster 的 Checkpoint 协调逻辑。
 
 下一篇 [[02 从 StreamGraph 到 JobGraph 再到 ExecutionGraph]] 将深入 Flink 的编译流水线，解析一段用户代码是如何一步步被转化为集群上真正运行的 ExecutionGraph 的。
+
+
+> [!note] 思考题
+> 1. Flink 的 JobManager 由三个组件构成：Dispatcher、ResourceManager 和 JobMaster。其中 JobMaster 是每个作业独有的，而 Dispatcher 和 ResourceManager 是整个集群共享的。如果 JobMaster 宕机（比如在一次 Checkpoint 过程中），整个作业会失败吗？HA 模式下 JobMaster 的恢复机制是什么？
+> 2. TaskManager 上的每个 Task Slot 是一个资源单元，Flink 保证同一个 Job 的不同 SubTask 可以共享同一个 Slot（通过 SlotSharingGroup）。这个设计使得一个拥有 N 个 Task Slot 的 TaskManager 可以并行运行 N 个完整的 Pipeline 副本。但 Slot 共享意味着不同算子的 SubTask 在同一个 JVM 线程中通过对象传递（非序列化）通信。这种"本地优化"会在哪些情况下变成问题（如不同算子的内存需求差异悬殊）？
+> 3. Flink 的执行模型是 Push 驱动的（上游 Task 将数据推送到下游 Task 的 Buffer），而 Spark 的执行模型是 Pull 驱动的（Reducer 从 Mapper 拉取数据）。两种模式在背压传导、故障恢复和延迟特性上各有什么优缺点？在什么具体场景下，Pull 模型比 Push 模型更有优势？

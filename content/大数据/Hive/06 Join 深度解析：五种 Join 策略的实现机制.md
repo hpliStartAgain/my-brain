@@ -487,6 +487,11 @@ FROM orders_salted o JOIN customers_salted c ON o.salted_key = c.salted_key;
 
 ---
 
+> [!note] 思考题
+> 1. Map-side Join（Broadcast Join）通过将小表广播到所有 Map Task 的内存中，避免了 Shuffle。但"小表"的定义（`hive.auto.convert.join.noconditionaltask.size`，默认 25MB）是基于文件大小的，而不是实际内存中的数据大小——经过反序列化后，数据在内存中的大小通常是文件大小的 3-5 倍。如果小表实际内存占用超过 Task 的内存上限，会发生什么？如何更准确地判断一张表是否适合 Map-side Join？
+> 2. Skew Join（倾斜 Join）针对数据倾斜问题：如果 JOIN Key 中某个值的频次极高（如 `NULL` 值或热点 Key），会导致处理该 Key 的 Reducer 成为瓶颈。Hive 的 Skew Join 优化通过将热点 Key 的数据单独路由到专用 Reducer，并将大表的对应数据也发到这些 Reducer 来处理。这个优化需要对倾斜 Key 有预先的了解（`hive.skewjoin.key`）。如果倾斜 Key 是动态变化的（不同批次的热点 Key 不同），静态配置的 Skew Join 是否有效？有没有运行时动态检测倾斜的机制？
+> 3. Bucket Map Join 要求两张表在 JOIN Key 上都按相同的 Bucket 数量分桶（`CLUSTERED BY`），从而在 Map 阶段只需要读取对应 Bucket 的数据，避免全表 Shuffle。但建立分桶表需要在数据写入时就按 JOIN Key 哈希分桶，这会影响写入性能，并且分桶数量一旦确定就不容易修改。在什么业务场景下（数据的访问模式是什么），投资建立分桶表的维护成本是值得的？
+
 ## 参考资料
 
 - [Hive Join 优化官方文档](https://cwiki.apache.org/confluence/display/Hive/LanguageManual+JoinOptimization)

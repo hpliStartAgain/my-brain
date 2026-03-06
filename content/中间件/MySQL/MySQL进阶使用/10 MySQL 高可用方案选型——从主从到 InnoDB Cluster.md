@@ -316,3 +316,10 @@ cluster.setPrimaryInstance('host2:3306');
 4. **读写分离充分利用从库价值**：ProxySQL 是最成熟的读写分离代理；主从延迟导致读旧数据是核心风险，需要写后强制读主
 5. **InnoDB Cluster 是官方高可用全栈方案**：MGR（Paxos 数据同步）+ MySQL Shell（管理 API）+ MySQL Router（路由），三组件配合，运维友好，是新项目的推荐选择
 6. **高可用是工程体系**：工具只是基础，定期演练、监控告警、备份验证、Runbook 缺一不可
+
+---
+
+> [!note] 思考题
+> 1. MySQL 5.7 到 8.0 的升级涉及多个不兼容变更：默认字符集从 `latin1` 变为 `utf8mb4`、默认认证插件从 `mysql_native_password` 变为 `caching_sha2_password`、`GROUP BY` 隐式排序被移除。在升级前如何评估这些不兼容变更对应用的影响？`mysql-shell` 的 `util.checkForServerUpgrade()` 如何帮助？
+> 2. MySQL 8.0 移除了 Query Cache——依赖 Query Cache 的应用在升级后可能出现性能回退。你如何在应用层（如 Redis 缓存查询结果）替代 Query Cache 的功能？应用层缓存与 Query Cache 在缓存失效策略上有什么根本区别？
+> 3. 原地升级（In-Place Upgrade）直接在现有数据目录上升级——速度快但风险高（升级失败难以回退）。逻辑迁移（`mysqldump` 导出后导入到新版本）安全但耗时长。在一个 500GB 的生产数据库中，你会选择哪种升级策略？蓝绿部署（新旧版本并行运行，流量切换）是否是更安全的方案？

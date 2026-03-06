@@ -417,6 +417,11 @@ Spark on K8s 安全加固的三个层面：
 
 ---
 
+> [!note] 思考题
+> 1. K8s Secrets 默认以 Base64 编码存储在 etcd 中，Base64 不是加密——任何有 etcd 访问权限的人都能轻松解码。在合规要求严格的场景（如金融行业），需要对 etcd 静态数据加密（Encryption at Rest）。除了 etcd 加密，在 Spark on K8s 场景下，凭据还可能在哪些环节暴露？（如环境变量日志、Spark UI、EventLog 文件等）
+> 2. NetworkPolicy 可以限制 Spark Pod 只能与特定 IP 或 Pod 通信。但 Spark 的通信模式比较复杂：Driver 与所有 Executor 双向通信，Executor 之间在 Shuffle 阶段也需要直接通信。如何设计一个最小权限的 NetworkPolicy，既允许必要的 Spark 内部通信，又阻止 Spark Pod 访问集群内不相关的服务（如其他团队的数据库）？
+> 3. 镜像安全扫描（如 Trivy、Snyk）可以发现已知的 CVE 漏洞。但 Spark 依赖的 JAR 生态系统庞大（Hadoop、Hive、Arrow 等），其中不可避免地包含有漏洞的传递依赖。在生产中，如何建立一套"漏洞可接受性"评估机制，避免因为修复低危漏洞而引入高风险的依赖升级？
+
 ## 参考资料
 
 - Kubernetes 官方文档：Secrets

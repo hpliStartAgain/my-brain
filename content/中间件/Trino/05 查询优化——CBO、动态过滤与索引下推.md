@@ -440,3 +440,10 @@ Trino 的查询优化分为五个层次，从高到低优先级依次为：
 ### 7.2 后续章节导引
 
 - **[[06 Trino 运维——集群部署、慢查询分析与调优]]**：从运维角度讲解如何部署 Trino 集群、通过 Trino UI 和监控指标定位慢查询、以及生产环境中的常见调优场景
+
+---
+
+> [!note] 思考题
+> 1. Trino 的权限模型支持 Catalog → Schema → Table → Column 级别的访问控制。在一个数据湖场景中（多个团队共享同一个 Trino 集群），你如何设计权限策略——按团队划分 Catalog 还是按数据域划分 Schema？OPA（Open Policy Agent）集成如何实现更灵活的权限策略？
+> 2. 数据脱敏（Data Masking）在查询时动态替换敏感数据（如将手机号显示为 `138****1234`）。Trino 的 Column Masking 功能可以为不同用户组配置不同的脱敏规则。与在数据源层做脱敏相比，在查询引擎层做脱敏有什么优势（如不需要复制数据、规则统一管理）？
+> 3. Trino 支持 Kerberos、OAuth2 和证书认证。在 Kubernetes 环境中，你倾向于使用哪种认证方式？OAuth2 + OIDC（如 Keycloak）与 Kerberos 在运维复杂度和用户体验方面有什么差异？

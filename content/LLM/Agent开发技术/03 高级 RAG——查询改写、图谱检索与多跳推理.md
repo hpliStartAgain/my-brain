@@ -472,3 +472,10 @@ graph LR
 7. Khattab et al., "ColBERT: Efficient and Effective Passage Search via Contextualized Late Interaction over BERT", SIGIR 2020
 8. Anthropic, "Contextual Retrieval", 2024
 9. Zheng et al., "Take a Step Back: Evoking Reasoning via Abstraction in Large Language Models", ICLR 2024
+
+---
+
+> [!note] 思考题
+> 1. 查询改写（Query Rewriting）将用户的口语化查询转换为更适合检索的形式。例如用户问'这个东西为什么不工作'，改写为'XXX 组件报错的常见原因'。但查询改写本身依赖 LLM——如果 LLM 对领域术语理解不准确，改写后的查询可能偏离原意。你如何评估查询改写的质量？如果改写导致检索结果变差，有没有回退机制？
+> 2. 知识图谱检索（Graph RAG）将实体和关系组织为图结构，支持多跳推理（如'A 的上级公司的 CEO 是谁'）。纯向量检索无法处理这类需要关系推理的查询。但构建和维护知识图谱的成本远高于向量索引。在什么规模和场景下，引入知识图谱是值得的？Graph RAG 和 Text-to-SQL 在结构化查询方面有什么互补性？
+> 3. 多跳推理（Multi-hop Reasoning）需要从多个文档中提取信息并组合。例如'比较 Kafka 和 Pulsar 的存储架构差异'需要同时检索两个系统的文档。单次检索可能只召回其中一个。Iterative Retrieval（迭代检索：先检索 Kafka → 提取关键点 → 再检索 Pulsar 对应内容）是否能有效解决？每增加一轮迭代，延迟和成本如何增长？

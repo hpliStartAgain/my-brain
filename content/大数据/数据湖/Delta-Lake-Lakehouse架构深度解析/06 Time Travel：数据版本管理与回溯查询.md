@@ -389,6 +389,11 @@ Time Travel 的工程价值远不止"查历史数据"——它是 Delta Lake 整
 
 ---
 
+> [!note] 思考题
+> 1. Delta Time Travel 按时间戳查询时，依赖 Delta Log 中记录的机器时间。如果机器时钟不准确（NTP 不同步），按时间戳查询可能返回错误版本。时间戳和版本号两种查询方式在什么场景下行为会产生令人意外的差异？
+> 2. `RESTORE TABLE` 命令（Delta 专用恢复命令）比手动 Time Travel + 覆写更好的场景是什么？`RESTORE` 操作在 Delta Log 层面具体做了什么操作？
+> 3. Delta 的 Change Data Feed（CDF）是如何解决"行级别变更追溯"问题的？与直接遍历所有历史版本相比，CDF 在性能上有什么本质提升？
+
 ## 参考资料
 
 - [Delta Lake Time Travel 官方文档](https://docs.delta.io/latest/delta-batch.html#query-an-older-snapshot-of-a-table-time-travel)

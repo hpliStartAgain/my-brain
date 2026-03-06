@@ -520,3 +520,10 @@ RAG 是当前 LLM 应用中最成熟、最广泛部署的架构模式，其价�
 6. Reranking with Cross-Encoders, sentence-transformers documentation
 7. Douze et al., "The Faiss Library", arXiv 2024
 8. Günther et al., "JINA EMBEDDINGS: A Novel Set of High-Performance Sentence Embedding Models", arXiv 2023
+
+---
+
+> [!note] 思考题
+> 1. RAG 的核心流程是'检索相关文档 → 拼接到 Prompt → 生成回答'。但如果检索到的文档与问题不相关（低召回率）或包含矛盾信息，模型可能生成错误答案且'看起来很自信'。在什么场景下 RAG 的回答质量反而低于纯模型生成？你如何设计'检索质量评估'环节来过滤低质量检索结果？
+> 2. 向量检索（如 FAISS、Milvus）基于语义相似度（余弦相似度/L2 距离）召回文档。但语义相似不等于问题相关——'猫吃鱼'和'鱼吃猫'在向量空间中可能很近但含义相反。在法律、医疗等需要精确匹配的领域，纯向量检索的局限性是什么？关键词检索（BM25）与向量检索的混合检索（Hybrid Search）是如何互补的？
+> 3. RAG 中的 Chunking 策略（将长文档切分为固定大小的文本块）直接影响检索质量。Chunk 太小会丢失上下文，太大会引入噪声。在一个包含代码和文档混合的知识库中，固定大小的 Chunking 是否合适？你会如何设计针对代码和文档分别优化的 Chunking 策略？

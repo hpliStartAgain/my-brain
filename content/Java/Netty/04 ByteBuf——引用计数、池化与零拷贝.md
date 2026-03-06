@@ -593,3 +593,10 @@ try {
 > - `io.netty.buffer.CompositeByteBuf` 源码
 > - `io.netty.util.ResourceLeakDetector` 源码
 > - Norman Maurer,《Netty in Action》第 5 章 ByteBuf
+
+---
+
+> [!note] 思考题
+> 1. ChannelPipeline 中的 InboundHandler 从 Head 到 Tail 正序执行，OutboundHandler 从 Tail 到 Head 逆序执行。如果在 Pipeline 中先添加 InboundHandler A，再添加 InboundHandler B，入站数据的处理顺序是 A → B。但如果 A 中调用了 `ctx.fireChannelRead(msg)` 和 `ctx.channel().writeAndFlush(resp)`，后者会从 Tail 开始还是从 A 的位置开始执行出站 Handler？
+> 2. `ChannelHandlerContext.write()` 和 `Channel.write()` 的行为不同——前者从当前 Handler 的位置开始向前（Outbound 方向）传播，后者从 Pipeline 的 Tail 开始传播。在什么场景下使用 `ctx.write()` 比 `channel().write()` 更高效？如果一个 OutboundHandler 在 `write()` 方法中调用了 `ctx.channel().write()`，会发生无限循环吗？
+> 3. Netty 允许在运行时动态添加和移除 ChannelHandler（如 SSL HandshakeHandler 在握手完成后移除自己）。在 Pipeline 修改期间，如果有数据正在流经 Pipeline，是否存在并发安全问题？Netty 是如何保证 Pipeline 修改的线程安全性的？

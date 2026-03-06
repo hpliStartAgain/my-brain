@@ -697,3 +697,10 @@ Spring Boot 的日志体系建立在 SLF4J 的统一门面之上，以 Logback �
 > - [Logback 官方文档](https://logback.qos.ch/manual/)
 > - [Spring Boot 官方文档 - Logging](https://docs.spring.io/spring-boot/docs/current/reference/html/features.html#features.logging)
 > - [logstash-logback-encoder GitHub](https://github.com/logfellow/logstash-logback-encoder)
+
+---
+
+> [!note] 思考题
+> 1. `@Async` 将方法的执行交给独立的线程池。但默认情况下 Spring 使用 `SimpleAsyncTaskExecutor`——它为每个任务创建新线程，没有线程复用。在高并发场景下这可能导致线程数爆炸。你如何自定义 `@Async` 使用的线程池？`ThreadPoolTaskExecutor` 的核心参数（`corePoolSize`、`maxPoolSize`、`queueCapacity`）应该如何设置？
+> 2. `@Async` 方法如果返回 `void`，方法内部抛出的异常会被'吞掉'（不会传播到调用方）。你如何捕获 `@Async void` 方法的异常？`AsyncUncaughtExceptionHandler` 是唯一的方案吗？如果 `@Async` 方法返回 `CompletableFuture`，异常又是如何传播的？
+> 3. `@Scheduled(fixedRate=5000)` 每 5 秒执行一次，`@Scheduled(fixedDelay=5000)` 上一次执行完毕后等 5 秒再执行。在单节点部署时 `@Scheduled` 工作正常，但在多实例部署时，每个实例都会执行——导致任务重复执行。除了使用分布式调度框架（如 XXL-Job），你有什么轻量级方案来保证只有一个实例执行定时任务？

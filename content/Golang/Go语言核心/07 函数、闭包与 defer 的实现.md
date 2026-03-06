@@ -594,3 +594,10 @@ handlers := []func(){
 > - Go Blog,《Defer, Panic, and Recover》: https://go.dev/blog/defer-panic-and-recover
 > - Dan Scales,《Proposal: Go 1.14 open-coded defers》
 > - Go 1.22 Release Notes：for loop variable changes
+
+---
+
+> [!note] 思考题
+> 1. Go 的闭包捕获的是变量本身（引用捕获），而不是变量的值（值捕获）。这意味着闭包内外对变量的修改是相互可见的。如果一个闭包被发送到另一个 goroutine 执行，闭包中捕获的变量是否需要加锁保护？Go 编译器如何决定一个被捕获的变量应该分配在栈上还是堆上？
+> 2. `defer` 的实现经历了三次优化：Go 1.1 的堆分配 `_defer` 结构、Go 1.13 的栈分配优化、Go 1.14 的开放编码（open-coded defer）。开放编码 defer 的原理是什么？它在什么条件下会退化回堆分配？一个函数中超过多少个 defer 会导致开放编码无法使用？
+> 3. Go 的函数值（function value）在底层是一个指针，指向一个包含函数地址的结构。对于非闭包的函数值，这个结构很简单；对于闭包，结构中还包含捕获变量的地址。将一个方法赋值给函数变量（method value）时，receiver 是如何被绑定的？`time.AfterFunc(d, obj.Method)` 中 `obj.Method` 是立即求值 `obj` 还是延迟求值？

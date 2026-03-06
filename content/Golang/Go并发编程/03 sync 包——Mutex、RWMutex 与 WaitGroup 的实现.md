@@ -557,3 +557,10 @@ func producer(item int) {
 > - Dmitry Vyukov,《Scalable Go Scheduler》
 > - Go Blog,《Introducing the Go Race Detector》: https://go.dev/blog/race-detector
 > - Russ Cox,《sync.Mutex, sync.RWMutex 设计演进》
+
+---
+
+> [!note] 思考题
+> 1. `sync.Mutex` 在 Go 中经历了从'简单自旋'到'饥饿模式'的演进。当一个 goroutine 等待锁超过 1ms 时，Mutex 会切换到饥饿模式——新到达的 goroutine 不再尝试获取锁，而是直接排队。这种设计解决了什么问题？如果所有锁请求的持有时间都很短（< 100μs），饥饿模式会被触发吗？
+> 2. `sync.RWMutex` 允许多个读者并发，但写者独占。当一个写者在等待锁时，后到的读者是否会被阻塞（即写者优先），还是读者可以'插队'？Go 的 RWMutex 实现中，这个设计选择的原因是什么？与 Java 的 `ReentrantReadWriteLock` 的公平策略有什么区别？
+> 3. `sync.WaitGroup` 的 `Add()` 和 `Done()` 内部使用原子操作维护计数器。如果在启动 goroutine 之前忘记调用 `Add()`，而是在 goroutine 内部第一行调用 `Add(1)`，可能发生什么竞态问题？`WaitGroup` 可以被复用（Wait 返回后再次 Add）吗？

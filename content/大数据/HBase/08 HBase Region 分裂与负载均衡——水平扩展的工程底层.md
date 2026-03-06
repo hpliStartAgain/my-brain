@@ -492,6 +492,11 @@ Region 分裂和负载均衡共同构成了 HBase 水平扩展能力的底层基
 
 ---
 
+> [!note] 思考题
+> 1. Region 分裂时，HBase 会找到 Region 的"中间 Key"作为分裂点，将 Region 一分为二。对于哈希散列的 RowKey，中间 Key 的计算是简单的字节层面的中点。但对于时间序列 RowKey（如 `userId_timestamp`），如果最近的数据都集中在某个时间段，找到的"中间 Key"可能并不是数据量的中点，导致两个子 Region 大小严重不均。预分区（Pre-splitting）是如何解决这个问题的？
+> 2. Region 分裂后，Master 的负载均衡器（`LoadBalancer`）会将新产生的 Region 调度到负载较低的 RegionServer。但 Region 迁移本身也是有代价的——需要将该 Region 的所有 HFile 的"服务权"从源 RS 转移到目标 RS（实际上 HFile 不移动，只是更新 `hbase:meta` 中的路由信息，但目标 RS 需要重新打开 Region）。频繁的 Region 迁移（如负载均衡器过于激进）会对集群稳定性产生什么影响？
+> 3. HBase 的自动分裂策略（`RegionSplitPolicy`）默认在 Region 大小超过阈值时触发。但在某些场景下，用户希望禁用自动分裂，完全依赖预分区（如时序数据库的时间分区）。禁用自动分裂后，如果预分区设计不合理（分区数量不足或边界不均），会有什么长期风险？如何监控 Region 大小分布来提前发现预分区不合理的问题？
+
 ## 参考资料
 
 - [1] HBase 原理 – Region 切分细节: http://hbasefly.com/2017/08/27/hbase-split/

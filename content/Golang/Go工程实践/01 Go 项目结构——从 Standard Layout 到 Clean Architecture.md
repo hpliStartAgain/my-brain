@@ -508,3 +508,10 @@ func CreateUser(db *sql.DB, w http.ResponseWriter, r *http.Request) {
 > - Robert C. Martin,《Clean Architecture》, Pearson 2017
 > - Go Blog,《Organizing a Go module》: https://go.dev/doc/modules/layout
 > - Dave Cheney,《Practical Go: Real world advice for writing maintainable Go programs》
+
+---
+
+> [!note] 思考题
+> 1. 在一个包含 gRPC 服务、HTTP 网关和定时任务三种入口的 Go 项目中，`cmd/` 下有三个 `main.go`，它们共享 `internal/service` 层的业务逻辑。如果某天需要将 gRPC 服务和 HTTP 网关合并为同一个进程（减少部署复杂度），Standard Layout 的哪些目录约定会成为阻碍？你会如何调整项目结构？
+> 2. `internal/` 目录利用 Go 编译器的访问限制实现了包级别的封装。但如果你的项目是一个开源框架（如 Gin），核心逻辑放在 `internal/` 下会导致外部用户无法扩展。Go 生态中的知名开源项目（如 Kubernetes、Prometheus）是如何处理'既要封装内部实现，又要暴露扩展点'这个矛盾的？
+> 3. Clean Architecture 强调依赖方向从外层指向内层（Handler → UseCase → Repository）。在 Go 中用 interface 实现依赖反转时，interface 应该定义在调用方（UseCase 层）还是实现方（Repository 层）？Go 社区的惯例与 Java 社区有什么本质区别？为什么？

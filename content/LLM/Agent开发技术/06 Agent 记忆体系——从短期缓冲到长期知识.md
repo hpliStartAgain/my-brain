@@ -404,3 +404,10 @@ Agent 记忆体系是从"工具"到"伙伴"的关键跨越。四层记忆各司�
 5. Zhong et al., "MemoryBank: Enhancing Large Language Models with Long-Term Memory", AAAI 2024
 6. OpenAI, "Memory and New Controls for ChatGPT", 2024
 7. Anthropic, "Memory MCP Server", github.com/modelcontextprotocol/servers, 2024
+
+---
+
+> [!note] 思考题
+> 1. Agent 的短期记忆（对话历史）受限于 LLM 的上下文窗口。即使模型支持 128K token，将所有对话历史塞入 Prompt 也会导致'注意力稀释'（信息太多模型反而找不到关键内容）。滑动窗口（保留最近 N 轮）和摘要压缩（用 LLM 总结历史对话）各有什么取舍？在什么场景下摘要压缩会丢失关键信息？
+> 2. Agent 的长期记忆（跨会话的知识）通常存储在向量数据库中。但记忆的'遗忘'和'更新'同样重要——如果用户修正了之前的偏好，旧记忆不应继续影响 Agent 行为。你如何设计记忆的版本管理和过期机制？直接覆盖旧记忆与保留历史版本各有什么优劣？
+> 3. 反思（Reflection）机制让 Agent 在任务完成后回顾执行过程，总结经验教训并存储为长期记忆。但反思的质量取决于 LLM 的自我评估能力——如果 LLM 无法准确判断'哪一步做得不好'，反思可能产生错误的经验。你如何验证反思结果的正确性？外部评估（如人工反馈）与自动评估（如结果验证）如何配合？

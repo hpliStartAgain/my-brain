@@ -595,3 +595,10 @@ Mybatis 的架构设计围绕一个核心目标：**在保持 SQL 控制权的�
 > - `org.apache.ibatis.session.Configuration` 源码
 > - `org.apache.ibatis.executor.BaseExecutor` 源码
 > - `org.apache.ibatis.executor.statement.PreparedStatementHandler` 源码
+
+---
+
+> [!note] 思考题
+> 1. MyBatis 的核心处理流程是 SqlSession → Executor → StatementHandler → ResultSetHandler。如果你需要在 SQL 执行前后记录慢查询日志，应该在哪一层切入？使用 MyBatis 拦截器（Interceptor）拦截 `Executor.query` 和拦截 `StatementHandler.query` 有什么区别？
+> 2. MyBatis 的 `Configuration` 对象是全局单例，在应用启动时解析所有 XML 映射文件并缓存。如果映射文件中有语法错误，是在启动时报错还是在首次调用时报错？这种'快速失败'策略与 JPA/Hibernate 的延迟验证有什么优劣对比？
+> 3. MyBatis 将 SQL 与 Java 代码解耦（SQL 写在 XML 或注解中），但 Hibernate 通过 HQL/JPQL 完全屏蔽了 SQL。在一个需要大量复杂查询（多表 JOIN、窗口函数、递归 CTE）的报表系统中，MyBatis 和 Hibernate 各有什么优势？

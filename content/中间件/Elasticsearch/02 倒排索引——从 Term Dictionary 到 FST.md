@@ -273,3 +273,10 @@ ES 中所有 `integer`、`long`、`float`、`double`、`geo_point` 类型字段�
 > - 《Elasticsearch: The Definitive Guide》, Chapter: Inside a Shard
 > - 论文：《Roaring Bitmaps: Implementation of an Optimized Software Library》
 > - Lucene 源码: `org.apache.lucene.codecs.lucene90`
+
+---
+
+> [!note] 思考题
+> 1. 倒排索引将'词条→文档列表'的映射存储在 Posting List 中。查询 `title:"distributed system"` 时，ES 查找 'distributed' 和 'system' 两个词条的 Posting List，取交集得到同时包含两个词的文档。短语查询还需要检查词条的位置信息（Position）——确保两个词相邻。Position 信息的存储开销有多大？在不需要短语查询的场景中，是否可以禁用 Position 以节省空间？
+> 2. ES 的相关性评分默认使用 BM25 算法（取代了旧版的 TF-IDF）。BM25 考虑了词频（TF）、文档频率（IDF）和文档长度。在一个商品搜索场景中，如果用户搜索 'iPhone'，包含 3 次 'iPhone' 的长文档（商品详情页）和包含 1 次 'iPhone' 的短文档（商品标题）——哪个排名更高？BM25 的 `k1` 和 `b` 参数如何影响这个结果？
+> 3. 分词器（Analyzer）决定了文本如何被拆分为词条。英文使用空格分词较简单，中文需要专门的分词器（如 IK、jieba）。如果分词器将'数据库管理系统'分为'数据库/管理/系统'，搜索'数据库管理'时能匹配吗？分词粒度太细（单字分词）和太粗（不分词）分别有什么问题？

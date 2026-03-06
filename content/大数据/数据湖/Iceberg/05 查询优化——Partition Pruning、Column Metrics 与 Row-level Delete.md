@@ -418,3 +418,9 @@ Iceberg 查询优化的核心思想是**层次化剪枝 + 统计驱动的 Data S
 - **Row-level Delete**：通过 Position/Equality Delete File 实现低写放大的行级删除，Compaction 定期合并恢复查询性能
 
 下一篇 [[06 Iceberg vs Delta Lake vs Hudi——格式开放性与生态广度对比]] 将从 Iceberg 的视角，对三大数据湖方案做最终的架构总结，给出在云原生、多引擎场景下的选型建议。
+
+
+> [!note] 思考题
+> 1. Iceberg 的多级过滤体系从粗到细依次是：Snapshot → Manifest（分区统计）→ 数据文件（列统计）→ Row Group（Parquet 内部）→ 行级别（Delete Files）。在实际查询中，最常见的性能瓶颈出现在哪一级过滤？当某一级过滤完全失效时（如 OR 组合查询），后续哪些级别仍然能提供优化？
+> 2. Iceberg 的 Row-level Delete 支持 Position Delete（标记具体行号）和 Equality Delete（标记满足条件的行）。在 CDC 同步场景（大量 DELETE + UPDATE）中，哪种 Delete 方式的总体代价更低？Position Delete 和 Equality Delete 的读取代价有什么本质差异？
+> 3. Iceberg 的列统计默认只收集前 N 列（默认 100 列）的统计信息，超过 N 的列不收集，以控制 Manifest 文件大小。如果最常用的过滤条件是第 150 列而该列没有统计，会导致 Manifest 级别过滤完全失效。如何配置列统计策略，使得最常用的过滤列一定有统计信息？

@@ -738,3 +738,10 @@ TCP 粘包/拆包是网络编程无法回避的基础问题，Netty 通过标准
 > - `io.netty.handler.codec.LengthFieldBasedFrameDecoder` 源码（含详细注释和 Javadoc 示例）
 > - `io.netty.handler.codec.MessageToByteEncoder` 源码
 > - Norman Maurer,《Netty in Action》第 10 章 编解码框架
+
+---
+
+> [!note] 思考题
+> 1. Netty 的 HTTP 编解码器将 HTTP 请求解析为 `HttpRequest`（Headers）和 `HttpContent`（Body）两个独立的消息。如果 Body 很大（如文件上传），`HttpObjectAggregator` 会将所有 `HttpContent` 聚合为 `FullHttpRequest`。在处理大文件上传时，`HttpObjectAggregator` 会导致什么问题？Netty 提供了什么替代方案（如 `HttpChunkedInput`）？
+> 2. WebSocket 连接是从 HTTP Upgrade 握手开始的。Netty 的 `WebSocketServerProtocolHandler` 自动处理握手过程。握手完成后，Pipeline 中的 HTTP 编解码器会被自动移除并替换为 WebSocket 帧编解码器。如果你需要在同一个端口上同时支持 HTTP 和 WebSocket（如 REST API + 实时推送），Pipeline 应该如何设计？
+> 3. WebSocket 的 `CloseFrame` 要求双方都发送关闭帧才能完成优雅关闭。如果客户端直接断开 TCP 连接（不发送 CloseFrame），服务端如何检测？Netty 的 `IdleStateHandler` 在 WebSocket 场景中扮演什么角色？心跳间隔设置过短或过长分别有什么风险？

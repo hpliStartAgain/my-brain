@@ -580,3 +580,10 @@ Nginx 的日志体系是可观测性的基础，本文涵盖以下核心知识�
 ---
 
 > **下一篇**：[[10 性能调优全攻略：worker 进程、连接数与内核参数]]
+
+---
+
+> [!note] 思考题
+> 1. OpenResty 的 `cosocket` 提供了非阻塞的 TCP/UDP 通信能力——可以在 Lua 中异步访问 Redis、MySQL 等。但 `cosocket` 不能在 `init_by_lua`、`set_by_lua` 等阶段使用——为什么？哪些阶段支持 `cosocket`？如果需要在 `init_by_lua` 中加载配置数据，你如何绕过这个限制？
+> 2. `lua_shared_dict` 的大小在启动时固定，是纯内存 KV 存储，所有 Worker 共享。在限流计数器场景中，`lua_shared_dict` 比 Redis 快两个数量级（无网络延迟）。但它不跨 Nginx 实例——多实例部署时计数不准确。在什么规模下你需要从 `shared_dict` 升级到 Redis 做分布式限流？
+> 3. OpenResty 的 `content_by_lua` 可以完全替代后端应用——直接在 Nginx 中实现 API 逻辑。但复杂的业务逻辑用 Lua 实现是否合适？Lua 的调试工具、包管理和团队技能栈是否是限制因素？OpenResty 更适合做'网关层轻逻辑'还是'完整应用'？

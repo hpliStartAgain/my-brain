@@ -493,3 +493,10 @@ overlays/
 4. External Secrets Operator：https://external-secrets.io/
 5. Bitnami Sealed Secrets：https://github.com/bitnami-labs/sealed-secrets
 6. HashiCorp Vault K8s Integration：https://developer.hashicorp.com/vault/docs/platform/k8s
+
+---
+
+> [!note] 思考题
+> 1. 多集群的动机包括：故障隔离（一个集群故障不影响其他）、地理分布（就近服务用户）、合规（数据主权要求数据留在特定区域）。Kubernetes Federation（KubeFed）尝试统一管理多集群——但项目发展缓慢。ArgoCD 和 Flux 通过 GitOps 管理多集群配置——你如何用 ArgoCD 将同一应用部署到 3 个集群？
+> 2. GitOps 的核心原则：Git 是唯一的真实来源——所有变更通过 Git PR 提交，ArgoCD/Flux 自动同步到集群。这消除了 `kubectl apply` 的手动操作——降低了误操作风险。但 GitOps 对'紧急修复'不够灵活——紧急修改需要经过 PR 流程。你如何设计'快速通道'允许紧急变更？
+> 3. 多集群的流量管理——用户请求如何路由到最合适的集群？DNS 基于地理位置路由（如 Route 53 Geolocation Routing）是常见方案。但 DNS 的 TTL 导致切换延迟。Global Load Balancer（如 GCP Multi-Cluster Ingress）提供更精确的流量管理。在你的多集群架构中，跨集群的服务发现如何实现？

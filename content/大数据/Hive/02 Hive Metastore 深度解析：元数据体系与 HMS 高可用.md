@@ -475,6 +475,11 @@ Hive Metastore 是整个 Hive 生态乃至整个大数据平台的元数据基�
 
 ---
 
+> [!note] 思考题
+> 1. Hive Metastore 将表的元数据（Schema、分区信息、统计信息）存储在关系型数据库（通常是 MySQL）中。在大型数仓中，HMS 的 MySQL 中可能存储数百万张表的元数据，`PARTITIONS` 表中的记录数可能达到数亿级别（如每天新增分区的表 × 数年历史）。这种规模下，`SHOW PARTITIONS` 或分区过滤查询的性能如何？有哪些 MySQL 索引和 Hive 配置可以优化元数据查询性能？
+> 2. HMS 的高可用通过多实例部署实现，多个 HMS 进程共享同一个 MySQL 后端。但多个 HMS 实例同时修改同一张表的元数据（如并发的 `ALTER TABLE ADD PARTITION`）会引发并发冲突。HMS 依赖数据库锁来保证元数据一致性。在高并发分区操作场景下（如数百个 Spark 作业同时动态分区写入），MySQL 锁竞争会成为性能瓶颈吗？如何通过 HMS 配置或架构手段减轻这个竞争？
+> 3. HMS 不仅被 Hive 使用，还被 Spark（SparkSQL 通过 HMS 读取表 Schema）、Presto/Trino、Impala 等多个计算引擎共享。这种"统一元数据服务"的设计带来了互操作性，但也带来了风险——如果 Spark 在写入数据后更新分区元数据失败（如 HMS 宕机），其他引擎可能看不到最新分区。在这种"数据已写入，元数据未更新"的不一致状态下，如何通过 `MSCK REPAIR TABLE` 或其他机制来修复元数据？
+
 ## 参考资料
 
 - [Hive Metastore Administration 官方文档](https://cwiki.apache.org/confluence/display/Hive/AdminManual+Metastore+3.0+Administration)

@@ -321,6 +321,11 @@ Structured Streaming 的容错模型建立在三个支柱之上：
 
 ---
 
+> [!note] 思考题
+> 1. Structured Streaming 的 Checkpoint 目录包含三类文件：Offset Log（记录每批次的 Source Offset）、Commit Log（记录已提交的批次 ID）、State 文件（有状态算子的状态快照）。如果 Checkpoint 过程中 Driver 宕机（比如在写完 Offset Log 但还没写 Commit Log 时），重启后作业会从哪个批次恢复？会产生重复消费吗？
+> 2. Checkpoint 文件会随着流作业运行时间增长而不断积累。Structured Streaming 会定期清理旧的 Checkpoint 文件（通过 `checkpointInterval` 控制保留的批次数量）。如果清理策略过于激进（只保留最近 1 个批次的 Checkpoint），在什么故障场景下会导致作业无法恢复？
+> 3. 当 Spark 应用代码发生变更（如修改了 SQL 逻辑或新增了算子）后，能否直接从旧版本的 Checkpoint 恢复？Structured Streaming 对"Checkpoint 兼容性"有什么约束？哪些代码变更是 Checkpoint 兼容的，哪些会强制要求清空 Checkpoint 重新启动？
+
 ## 参考资料
 
 - [How Spark Structured Streaming Recovers After Failures](https://www.canadiandataguy.com/p/how-spark-structured-streaming-recovers)

@@ -395,3 +395,10 @@ count by (alertname) (ALERTS{alertstate="firing"})
 5. Rob Ewaschuk (2012). *My Philosophy on Alerting*. Google SRE.
 6. Google SRE Book, Chapter 6 - Monitoring Distributed Systems：https://sre.google/sre-book/monitoring-distributed-systems/
 7. Grafana Best Practices - Dashboard Design：https://grafana.com/docs/grafana/latest/best-practices/
+
+---
+
+> [!note] 思考题
+> 1. 高基数是 Prometheus 性能的头号杀手——如果一个指标有 `user_id` 标签（百万级基数），时间序列数量爆炸。Prometheus 的内存使用与活跃时间序列数量成正比——每个时间序列约占 1-2KB 内存。100 万时间序列约占 1-2GB 内存。你如何检测和消除高基数标签？`tsdb` 的 `status` API 如何帮助？
+> 2. Prometheus Federation（联邦）允许一个 Prometheus 从其他 Prometheus 拉取指标——实现层级架构。但 Federation 拉取的是聚合后的指标——丢失了原始精度。在什么场景下 Federation 的精度损失是可接受的？Thanos 和 Mimir 是否是 Federation 的更好替代？
+> 3. Prometheus 的垂直分片——为不同的监控目标运行不同的 Prometheus 实例（如 Prometheus-infra 监控基础设施、Prometheus-app 监控应用）。这降低了单实例的负载但增加了管理复杂度。Prometheus Agent Mode（只采集不存储，Remote Write 到中心存储）如何简化分片架构？

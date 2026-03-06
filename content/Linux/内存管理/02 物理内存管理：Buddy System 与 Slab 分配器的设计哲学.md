@@ -540,3 +540,10 @@ Compaction 的代价是显著的 CPU 开销和内存带宽消耗（需要拷贝�
 - Linux Kernel Source: `mm/buddy.c`, `mm/slub.c`, `include/linux/mmzone.h`
 - [Physical Page Allocation - Kernel Documentation](https://www.kernel.org/doc/gorman/html/understand/understand009.html)
 - [The Slab Allocator in the Linux kernel](https://hammertux.github.io/slab-allocator)
+
+---
+
+> [!note] 思考题
+> 1. Buddy System 分配 5 个页面时会分配 8 个（2^3），浪费 3 个页面。长时间运行后高阶空闲页减少导致外部碎片。在什么场景下外部碎片会导致实际问题（如 HugePage 分配失败、DMA 缓冲区分配失败）？`/proc/buddyinfo` 如何帮助诊断碎片化程度？
+> 2. Slab 分配器的'对象复用'对安全性有什么影响？如果释放的内核对象内存被另一个类型的对象复用（Use-After-Free），可能导致什么安全漏洞？SLUB 的 `CONFIG_SLAB_FREELIST_HARDENED` 和 `CONFIG_SLAB_FREELIST_RANDOM` 是如何防御的？
+> 3. 内核中 `kmalloc` 使用 Slab 分配器分配小内存（物理连续），`vmalloc` 使用页表映射分配虚拟连续但物理不连续的大内存。网络驱动的 DMA 缓冲区为什么必须用 `kmalloc`？在什么场景下 `vmalloc` 更合适？`kvmalloc` 的自动选择策略是什么？

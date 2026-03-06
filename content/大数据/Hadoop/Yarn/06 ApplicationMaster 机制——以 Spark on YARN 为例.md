@@ -437,6 +437,11 @@ ApplicationMaster 是 YARN 框架无关性的具体实现者。通过 Spark on Y
 
 ---
 
+> [!note] 思考题
+> 1. Spark on YARN 的 cluster 模式下，Driver 作为 AM 运行在 YARN Container 中。这意味着 Driver 的资源（CPU、内存）需要通过 `--driver-memory` 和 `--driver-cores` 参数显式指定，并占用 YARN 的资源配额。如果 Driver 的内存配置不足（比如 DAG 非常复杂导致 SparkContext 内存消耗高），会发生什么？Driver OOM 与 Executor OOM 在 YARN 的日志和界面中有什么不同的表现？
+> 2. AM 向 RM 申请 Container 时，可以指定资源请求的"本地性偏好"（Node Locality / Rack Locality / Off-Switch）——优先在数据所在节点或机架上分配 Container，以减少网络传输。对于 Spark 作业，Executor 的数据本地性偏好是如何决定的？如果集群资源紧张，本地节点的资源不够用，YARN 会等待多久才放弃本地性偏好，转而在其他节点分配？
+> 3. YARN 的 AM 重试机制（`yarn.resourcemanager.am.max-attempts`）允许 AM 在失败后自动重启。Spark on YARN 利用这个机制实现了 Driver 级别的高可用——Driver 宕机后，新的 AM 在重启后需要重新申请所有 Executor Container，并从 Checkpoint 恢复作业状态（如果是 Structured Streaming）。在 AM 重启窗口期间，原来的 Executor Container 会怎样？它们会继续运行还是被 YARN 强制终止？
+
 ## 参考资料
 
 - Apache Spark 官方文档：[Running Spark on YARN](https://spark.apache.org/docs/latest/running-on-yarn.html)

@@ -736,3 +736,10 @@ Mybatis-Plus 以"约定优于配置、增强不替代"为核心设计哲学，�
 > - `com.baomidou.mybatisplus.core.injector.DefaultSqlInjector` 源码
 > - `com.baomidou.mybatisplus.extension.plugins.MybatisPlusInterceptor` 源码
 > - `com.baomidou.mybatisplus.generator.FastAutoGenerator` 源码
+
+---
+
+> [!note] 思考题
+> 1. MyBatis-Plus 通过约定（如实体类名对应表名、字段名对应列名）自动生成基础 CRUD 的 SQL。这种'零 XML 零注解'的方式极大提升了开发效率。但当表结构与实体类不完全匹配（如历史遗留的下划线 + 驼峰混合命名）时，MyBatis-Plus 的自动映射会失败。你如何在不放弃自动映射的前提下处理这些特殊情况？
+> 2. MyBatis-Plus 的 `LambdaQueryWrapper` 使用方法引用（如 `User::getName`）代替字符串列名，实现了编译期类型检查。但方法引用的底层是通过序列化获取方法名再转换为列名——这个转换依赖 `Serializable` 接口和反射。在 GraalVM Native Image（不支持运行时反射）环境下，`LambdaQueryWrapper` 能正常工作吗？
+> 3. MyBatis-Plus 的乐观锁插件通过 `@Version` 注解实现——UPDATE 时自动在 WHERE 条件中追加版本号检查。但如果一次批量更新（`updateBatchById`）中有 100 条记录，每条记录的版本号不同，乐观锁插件能正确处理吗？批量更新场景下乐观锁的正确使用方式是什么？

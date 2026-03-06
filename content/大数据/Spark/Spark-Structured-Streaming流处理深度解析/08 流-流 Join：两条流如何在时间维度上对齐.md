@@ -235,6 +235,11 @@ Watermark 延迟阈值越小，Buffer 清理越及时。但这会增加迟到数
 
 ---
 
+> [!note] 思考题
+> 1. 流-流 Join 通过双侧 State Buffer 来缓存未匹配的事件，等待另一侧的匹配事件到来。如果两侧流的事件时间偏差很大（比如左流平均延迟 1 分钟，右流平均延迟 10 分钟），State Buffer 的大小会受到什么影响？Watermark 应该如何设置才能在及时清理 Buffer 与保留足够匹配窗口之间取得平衡？
+> 2. 流-流 Inner Join 要求两侧都必须有 Watermark，否则 State Buffer 永不清理。但 Left Outer Join 在语义上允许右侧没有匹配行时输出 NULL。Spark 如何确定"右侧确实没有匹配行"而不是"右侧数据还没到达"？这个判断逻辑依赖 Watermark 的哪个特性？
+> 3. 流-流 Join 的 State Buffer 分布在各个 Executor 的 State Store 中。当 Executor 发生故障时，对应的 State Buffer 会丢失。Spark 是通过 Checkpoint 来恢复这些状态的，但 Checkpoint 是在批次结束时写入的。如果 Executor 在批次处理中途失败，这个批次的 State 更新是否会丢失？Spark 如何保证流-流 Join 的端到端一致性？
+
 ## 参考资料
 
 - Apache Spark 官方文档：Structured Streaming Join Operations

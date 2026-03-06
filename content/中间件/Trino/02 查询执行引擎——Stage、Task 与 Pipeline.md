@@ -393,3 +393,10 @@ Trino 的六层执行架构（Query → Stage → Task → Split → Pipeline �
 
 - **[[03 Connector 体系——Hive、Iceberg 与联邦查询]]**：Trino 的 Connector SPI 如何抽象不同存储系统，Hive Connector 的元数据访问和 Split 生成机制，以及 Iceberg 格式相对于传统 Hive 表格式的改进
 - **[[04 内存管理与资源调度]]**：深入 Trino 的分级内存管理（Query/Task/Operator 三级配额），以及资源组（Resource Group）如何在多租户场景下实现查询隔离和优先级调度
+
+---
+
+> [!note] 思考题
+> 1. Trino 将查询拆分为多个 Stage，每个 Stage 包含多个 Task（在不同 Worker 上并行执行）。Stage 之间通过 Exchange 传输数据。在一个多 JOIN 的复杂查询中，Stage 的数量如何影响查询延迟？Exchange 的数据序列化和网络传输开销在什么场景下成为瓶颈？
+> 2. Trino 的 Pipeline 执行模型——数据以 Page（列式内存格式）为单位在算子之间流动，不需要等前一个算子处理完所有数据。这种流水线式的执行对查询延迟有什么好处？与 Spark 的 Stage 之间的 Shuffle Barrier 相比有什么区别？
+> 3. Trino 的动态过滤（Dynamic Filtering）在 JOIN 执行时，Build 端生成过滤器推送到 Probe 端——减少 Probe 端的数据扫描量。在 Hive 分区表的 JOIN 场景中，动态过滤可以实现分区裁剪——将扫描的数据量减少数十倍。动态过滤在什么条件下无法生效？

@@ -354,3 +354,10 @@ ZooKeeper 的 quorum 要求**超过半数**的节点存活。因此：
 ZooKeeper 提供的是**顺序一致性**而非线性一致性——读 Follower 可能读到旧数据，需要 `sync()` 来保证线性读。超过半数节点同时故障是 ZAB（以及所有多数派协议）的数据安全下界。
 
 下一篇文章将在 ZAB 的基础上，介绍 ZooKeeper 最常见的工程应用场景：分布式锁、Leader 选举与服务发现。
+
+---
+
+> [!note] 思考题
+> 1. ZAB 的 Leader 选举使用 Fast Leader Election 算法——每个节点投票给拥有最新事务 ID（zxid）的节点。选举过程在节点间通过 TCP 通信交换选票。在 5 节点集群中，Leader 选举通常需要多长时间？在选举期间集群不可用——如何缩短选举时间？
+> 2. ZAB 的写操作流程：Client → Leader → Proposal（广播给所有 Follower）→ 多数 Follower ACK → Commit → 响应 Client。这个两阶段提交（Proposal + Commit）保证了所有节点看到相同顺序的事务。如果 Leader 在发送 Commit 之前崩溃，部分 Follower 有 Proposal 而没有 Commit——新 Leader 如何处理这些'未决事务'？
+> 3. ZooKeeper 的读操作可以在任何节点（包括 Follower）处理——但 Follower 可能落后于 Leader。这意味着读操作可能返回'过时'的数据。`sync()` 命令强制 Follower 与 Leader 同步——但增加了读延迟。在什么场景下你需要调用 `sync()` 确保读到最新数据？

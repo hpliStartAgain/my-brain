@@ -556,6 +556,11 @@ ResourceManager 的核心价值在于它的**极度聚焦**：它只做"资源�
 
 ---
 
+> [!note] 思考题
+> 1. YARN 的调度是心跳驱动的——调度决策发生在 NodeManager 向 RM 发送心跳时。这意味着调度的最小延迟等于 NM 的心跳间隔（默认 1 秒）。对于需要快速弹性扩容的流处理作业（如 Flink 在流量突增时需要立即启动更多 TaskManager），1 秒级的调度延迟是否可以接受？有什么方法可以降低 YARN 的调度延迟？
+> 2. RM 内存中维护了所有 NM 节点的资源状态、所有 Container 的分配状态，以及所有应用的队列信息。对于一个拥有 10000 个节点、同时运行 10000 个应用的超大规模集群，RM 内存中的这些数据结构会有多大？RM 的单线程调度循环（心跳驱动）在这种规模下会成为性能瓶颈吗？YARN 社区是如何解决 RM 的可扩展性问题的？
+> 3. YARN 的资源模型以 CPU 核数和内存为基本维度。但在实际生产中，磁盘 I/O 和网络带宽同样是关键资源——一个磁盘 I/O 密集型的 MapReduce 作业和一个网络密集型的 Spark Shuffle 作业同时运行在同一节点上，可能因为磁盘 I/O 竞争而互相影响，即使 CPU 和内存都有余量。YARN 是否支持将磁盘 I/O 和网络带宽纳入资源调度模型？如果不支持，工程上如何通过其他手段缓解这类资源竞争？
+
 ## 参考资料
 
 - Apache Hadoop 官方文档：[YARN Capacity Scheduler](https://hadoop.apache.org/docs/current/hadoop-yarn/hadoop-yarn-site/CapacityScheduler.html)

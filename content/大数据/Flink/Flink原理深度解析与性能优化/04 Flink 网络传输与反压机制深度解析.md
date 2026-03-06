@@ -514,3 +514,9 @@ Flink 网络传输与反压机制的核心要点：
 **反压根因四类**：计算密集 → 优化逻辑/增并行度；数据倾斜 → Key 加盐/特判热点；外部 IO 阻塞 → 异步 IO；GC 压力 → 增堆内存/切换 RocksDB。
 
 下一篇 [[05 Flink 状态后端深度解析]] 将深入 HashMapStateBackend 与 EmbeddedRocksDBStateBackend 的内部实现，解析两者在读写性能、内存占用、Checkpoint 开销上的根本差异，帮助你在生产中做出正确的状态后端选型。
+
+
+> [!note] 思考题
+> 1. Credit-based 流量控制为每个远程传输通道分配了独立的 Credit（可接收的 Buffer 数量），解决了 TCP 共享连接的 Head-of-Line Blocking 问题。但 Credit 的分配和管理需要额外的控制消息（Credit Grant、Buffer Announcement）在发送方和接收方之间传递。在网络延迟较高的跨机房部署场景下，这些控制消息的往返时间会对吞吐量产生多大影响？
+> 2. 反压在 Flink 中通过 Buffer 积满来自然传导——当下游 Buffer 满时，上游被阻塞，无法继续发送数据。这个反压信号最终会一路传回 Source，使 Source 降低读取速率。但如果 Source 是一个不支持"降速"的推送型数据源（如 Kafka 消费者无法"暂停"接收），Source Task 会被阻塞直到 Buffer 有空间。在这个阻塞期间，Checkpoint Barrier 能否正常传播？反压会如何影响 Checkpoint 的完成时间？
+> 3. Flink 1.13 引入了基于信用（Credit-based）的反压指标——`outPoolUsage` 和 `inPoolUsage` 分别表示输出和输入 Buffer Pool 的使用率。当某个算子的 `outPoolUsage` 长期接近 100% 时，意味着它在被下游反压。但有时 `outPoolUsage` 高的算子本身并不是瓶颈，而是被它的下游算子的瓶颈传导过来的。如何通过这些指标的组合分析，沿着数据流方向精确定位真正的瓶颈算子？

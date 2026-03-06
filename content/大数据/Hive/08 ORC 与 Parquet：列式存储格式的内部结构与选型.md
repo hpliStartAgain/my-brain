@@ -419,6 +419,11 @@ ORC 和 Parquet 都是成熟的列式存储格式，理解其内部结构是做�
 
 ---
 
+> [!note] 思考题
+> 1. ORC 的行组（Row Group / Stripe）级别统计信息（Min、Max、Sum、Count）允许查询引擎在扫描时跳过不满足 WHERE 条件的 Stripe（称为 Predicate Pushdown 到存储层）。但这个优化依赖数据的有序性——如果 Stripe 中的数据完全随机分布，Min/Max 范围会很宽，无法跳过任何 Stripe。在 Hive 写入 ORC 数据时，如何通过 `ORDER BY` 或 `SORT BY` 来提升 Stripe 级别统计的过滤效果？这与 Parquet 的 Row Group 级别统计有什么异同？
+> 2. 列式存储的压缩效率高于行式存储，因为同一列的数据类型相同且往往具有相关性（如一列 `country` 数据中有大量重复值），适合字典编码（Dictionary Encoding）和 RLE（Run-Length Encoding）压缩。但对于高基数的列（如 UUID、随机哈希值），字典编码反而会增加存储大小（字典本身很大且无法压缩）。ORC 和 Parquet 如何自动检测何时使用字典编码，何时回退到其他压缩算法？在 Schema 设计时，哪些列适合作为列式存储的过滤列（低基数），哪些不适合？
+> 3. Parquet 的元数据设计（Footer 在文件末尾）意味着读取文件时必须先读取文件末尾的 Footer 来了解文件结构，然后才能读取数据。对于存储在 HDFS 的大文件，这不是问题（Footer 可以被缓存）。但对于存储在 S3 的小文件（如流处理产生的大量小 Parquet 文件），每次读取都需要两次 HTTP 请求（一次读 Footer，一次读数据），产生大量额外的 API 调用开销。有哪些方法可以减少这种"Footer 开销"对 S3 上 Parquet 读取性能的影响？
+
 ## 参考资料
 
 - [ORC 文件格式规范](https://orc.apache.org/specification/ORCv1/)

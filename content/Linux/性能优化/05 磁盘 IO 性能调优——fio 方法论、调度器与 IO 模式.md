@@ -516,3 +516,10 @@ fio + blktrace + iostat 构成了磁盘 IO 性能调优的完整工具链：
 **诊断顺序**：`iostat -x`（是否饱和）→ `blktrace + btt`（I2D 调度器延迟）→ `iotop`（哪个进程）→ `fio`（设备真实能力与实际负载对比）
 
 下一篇 [[06 应用级 IO 优化——Direct IO、mmap 与 io_uring 选型]] 将视角提升到应用层：同一块 NVMe SSD，不同的 IO 接口（`buffered`/`direct`/`mmap`/`io_uring`）有截然不同的性能特征和适用场景——这是架构选型层面的决策，而不是调参。
+
+---
+
+> [!note] 思考题
+> 1. `fio` 测试中 `iodepth=32` 表示同时提交 32 个 IO 请求。增加 iodepth 可提高 IOPS——因为 SSD 内部有多个闪存芯片可并行处理。但 iodepth 过大会增加延迟。在 NVMe SSD 上，iodepth 从 1 增加到 128 时，IOPS 和平均延迟分别如何变化？存在一个'拐点'吗？
+> 2. NVMe SSD 通常使用 `none` IO 调度器。但多应用共享一块 NVMe 时，无调度可能导致某应用'饿死'。`mq-deadline` 的 FIFO 过期机制如何保证公平性？在容器环境中，blk-cgroup 的 IO 权重（`io.weight`）与调度器如何配合？
+> 3. 数据库 WAL 通常使用 Direct IO + `O_DSYNC`。Buffered IO + `fsync` 在吞吐量上可能更高（因为内核可以合并写入），但延迟更不可控。在一个需要保证写入持久化但也需要高吞吐的场景中（如 Kafka Broker），你会选择哪种模式？`O_DSYNC` 和 `fsync` 的语义有什么细微差别？

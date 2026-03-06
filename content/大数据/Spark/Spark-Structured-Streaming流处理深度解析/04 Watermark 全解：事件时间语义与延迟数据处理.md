@@ -407,6 +407,11 @@ Watermark 是 Structured Streaming 处理乱序数据、控制状态大小的核
 
 ---
 
+> [!note] 思考题
+> 1. Watermark 的推进算法基于"所有 Source 分区中最大事件时间的最小值减去延迟阈值"。在多分区 Kafka Source 场景下，如果某个分区长时间没有新数据（比如该分区的生产者宕机），这个分区的最大事件时间会停滞，导致整个 Watermark 停滞不前，进而阻止窗口关闭和状态清理。Spark 如何处理这种"僵死分区"问题？
+> 2. Watermark 是事件时间延迟容忍度的上界，超过这个上界的迟到数据默认被丢弃。但"丢弃"是唯一的处理策略吗？在某些业务场景（如金融对账）中，即使数据很晚到达，也必须被处理。有哪些工程手段可以在 Structured Streaming 框架内处理"超 Watermark 迟到数据"，而不是简单丢弃？
+> 3. Watermark 更新发生在批次结束时，而不是实时更新。这意味着在一个批次处理期间，Watermark 是固定的。如果一个批次内既包含大量历史数据（时间戳很老）又包含实时数据（时间戳很新），这个批次结束后 Watermark 会跳跃式前进很大一段距离，导致大量窗口同时关闭。这种"Watermark 跳跃"会引发什么性能问题？
+
 ## 参考资料
 
 - Apache Spark 官方文档：Structured Streaming - Handling Late Data and Watermarking

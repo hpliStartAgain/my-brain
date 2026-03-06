@@ -441,3 +441,10 @@ PSI 是比传统的 CPU 使用率更准确的"资源是否充足"的信号——
 5. Facebook Engineering (2018). *PSI - Pressure Stall Information*：https://facebookmicrosites.github.io/psi/
 6. Brendan Gregg (2020). *BPF Performance Tools*. Addison-Wesley, Chapter 6: CPUs.
 7. Tim Hockin (2019). *Kubernetes CPU Limits and Throttling*. Google Engineering Blog.
+
+---
+
+> [!note] 思考题
+> 1. Docker 的 Bridge 网络为每个容器创建 veth pair——一端在容器的 Network Namespace 内，另一端连接到宿主机的 docker0 网桥。容器间通过网桥通信，访问外部网络通过 NAT（iptables MASQUERADE）。NAT 对性能有什么影响？Host 网络模式（容器直接使用宿主机网络栈）在什么场景下性能优势明显？
+> 2. Overlay 网络（如 Docker Swarm 的 ingress、Kubernetes 的 Flannel VXLAN）通过隧道封装实现跨主机容器通信。VXLAN 在 UDP 包中封装原始以太网帧——增加了约 50 字节的头部开销和封装/解封装的 CPU 开销。在需要高网络性能的场景中（如 10Gbps+），Overlay 网络的开销是否可接受？Calico 的 BGP 路由模式如何避免封装开销？
+> 3. 容器的 DNS 解析默认使用 Docker 内置的 DNS 服务器（127.0.0.11）。在 Kubernetes 中，CoreDNS 处理 Service 名称解析。DNS 查询延迟在高 QPS 场景中可能成为瓶颈——`ndots:5`（默认）导致短域名被追加多个搜索域后缀尝试解析。你如何通过调优 `ndots` 和使用 NodeLocal DNSCache 来降低 DNS 延迟？

@@ -544,3 +544,10 @@ io_uring 用共享内存 ring buffer 几乎消除了系统调用开销；SPDK �
 **专栏创作完成。**
 
 本专栏从 [[01 文件系统的本质——从 open() 到磁盘扇区]] 出发，经过 [[02 VFS 虚拟文件系统——超级块、inode、dentry 与 file]]、[[03 ext4 深度解析——日志、Extent 树与 Flex BG]]、[[04 Page Cache 与脏页回写——Linux IO 的秘密缓冲层]]、[[05 块设备栈——从 bio 到 blk-mq 的 IO 路径]]、[[06 IO 调度器——CFQ、Deadline 与 mq-deadline 的演进]]、[[07 XFS 文件系统深度解析——B+ 树与日志架构]]、[[08 存储栈性能调优——从 fio 到 iotop 的全套方法论]]、[[09 文件系统的安全边界——权限、ACL 与 Capabilities]]，到本篇的现代存储技术，完整覆盖了 Linux 文件系统与存储栈的核心知识体系。
+
+---
+
+> [!note] 思考题
+> 1. NVMe SSD 上 `iostat` 的 `%util` 可能一直 100% 但设备远未饱和——因为 NVMe 支持并行处理。应该用 `avgqu-sz`（平均队列深度）或 `await`（平均等待时间）来判断饱和度。当 `await` 超过 SSD 的标称延迟（如 4KB 随机读 ~100μs）多少倍时，可以认为设备饱和？
+> 2. `noatime` 禁止更新访问时间，减少了纯读操作的写 IO。`relatime`（默认）只在 atime 早于 mtime 或超过一天时更新。在 Web 静态资源服务器上，`noatime` vs `relatime` 的性能差异有多大？有没有应用依赖 atime 信息（如 `tmpwatch` 清理临时文件）？
+> 3. 在容器化环境中，不同 IO 模式需要差异化存储。K8s StorageClass 定义了不同的存储后端。如何为数据库（低延迟 NVMe）、日志（高吞吐 SATA SSD）和临时文件（廉价 HDD）分别创建 StorageClass？CSI 驱动如何实现存储的动态供给？

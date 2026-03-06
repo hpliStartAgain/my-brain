@@ -507,6 +507,11 @@ HiveServer2 是 Hive 集群中最核心的服务组件，其内部架构的每�
 
 ---
 
+> [!note] 思考题
+> 1. HiveServer2 使用 Thrift 协议提供 SQL 服务，并通过 `hive.server2.thrift.min/max.worker.threads` 控制处理请求的线程数。如果客户端连接数超过最大线程数，新连接会被拒绝还是排队等待？在高并发的 BI 报表场景下（如数百个 Superset 并发查询），HS2 的线程模型如何应对？HiveServer2 的多实例部署（负载均衡）是标准解法，但多实例之间如何共享会话状态？
+> 2. HS2 的每个 Session 对应一个用户连接，Session 在整个生命周期中维护着编译器状态（如临时表、配置覆盖）。在长连接场景下（如 JDBC 连接池复用同一个 Session），如果前一个查询修改了 Session 级别的配置（如 `set hive.exec.dynamic.partition=true`），这个配置会影响后续使用同一 Session 的查询吗？如何在连接池场景下保证 Session 配置的隔离性？
+> 3. HS2 的 `hive.server2.async.exec.threads` 控制异步执行查询的线程数，查询被提交到这个线程池后立即返回，客户端通过轮询获取结果。如果一个查询执行时间很长（如数小时的 ETL 作业），JDBC 客户端需要长时间保持连接轮询。如果客户端因网络问题断开连接，服务端的查询会继续执行还是被取消？HS2 如何处理"孤儿查询"（客户端已断开但服务端仍在执行的查询）？
+
 ## 参考资料
 
 - [HiveServer2 官方文档](https://cwiki.apache.org/confluence/display/Hive/HiveServer2+Overview)

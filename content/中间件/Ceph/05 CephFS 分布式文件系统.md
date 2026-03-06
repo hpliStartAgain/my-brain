@@ -208,3 +208,10 @@ CephFS 的主要约束是：MDS 内存决定了能高效管理的文件数量上
 **延伸阅读**：
 - [[01 Ceph 全局架构——RADOS、CRUSH 与三大存储接口]]
 - [[01 JuiceFS 全局架构——元数据引擎加对象存储的分离设计]]（对比参考）
+
+---
+
+> [!note] 思考题
+> 1. Ceph OSD 的日志写入（BlueStore 的 WAL）放在 NVMe SSD 上可以显著降低写延迟。在混合存储部署（NVMe WAL + HDD 数据盘）中，NVMe 与 HDD 的比例应该如何规划？如果一块 NVMe 承担了太多 OSD 的 WAL，NVMe 本身的延迟会增加——如何避免？
+> 2. Ceph 的网络带宽在大规模恢复（Recovery）和重平衡（Rebalance）时可能成为瓶颈。将 public network（客户端访问）和 cluster network（OSD 间复制和恢复）分离到不同的网络是最佳实践。如果两个网络共享同一物理链路（通过 VLAN 隔离），QoS 配置如何保证 public network 不被 recovery 流量淹没？
+> 3. `osd_op_queue_cut_off` 和 `osd_op_queue_mclock_*` 参数控制 OSD 内部的请求调度。mClock 调度器（Ceph Pacific+）为客户端 IO、恢复 IO 和后台 IO 分配不同的权重。在白天（业务高峰）和夜间（恢复窗口）你会如何调整 mClock 的权重分配？

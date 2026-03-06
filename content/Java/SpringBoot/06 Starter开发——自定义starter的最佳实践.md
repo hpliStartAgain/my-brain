@@ -833,3 +833,10 @@ Starter 提供的组件不在使用方的 `@SpringBootApplication` 扫描包范�
 > - [Spring Boot 官方文档 - Creating Your Own Starter](https://docs.spring.io/spring-boot/docs/current/reference/html/features.html#features.developing-auto-configuration)
 > - `org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration` 源码（参考实现）
 > - `org.springframework.boot.context.properties.ConfigurationPropertiesBindingPostProcessor` 源码
+
+---
+
+> [!note] 思考题
+> 1. Spring Boot 2.x 默认使用 HikariCP 连接池。Hikari 的 `maximumPoolSize` 默认为 10。如果你的应用有 200 个并发请求都需要数据库查询，超出的 190 个请求会等待连接——如果等待超过 `connectionTimeout`（默认 30 秒），抛出异常。在这种场景下，是应该增大连接池还是优化查询速度？连接池过大会导致什么问题？
+> 2. Spring 的 `@Transactional` 声明式事务底层通过 AOP 代理实现。默认情况下，只有 `RuntimeException` 和 `Error` 会触发回滚，`checked Exception` 不会。在一个调用链中，Service A 调用 Service B（`REQUIRES_NEW`），B 的事务提交后 A 抛出异常——B 的事务会回滚吗？为什么？
+> 3. `@Transactional(readOnly=true)` 标记只读事务。在 MySQL + InnoDB 中，只读事务是否真的不获取锁？只读事务对 MySQL 的查询性能有什么优化（提示：不写 undo log、不需要 binlog）？在什么场景下忘记标记 `readOnly=true` 会导致性能差异？

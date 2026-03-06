@@ -439,3 +439,9 @@ Hidden Partitioning 是 Iceberg 对数据湖分区模型的一次彻底重新设
 这三个能力共同使 Iceberg 成为在**分区设计和演进**维度上远超 Delta Lake 和 Hudi 的方案。
 
 下一篇 [[04 事务与并发控制——乐观锁与 Optimistic Concurrency]] 将深入 Iceberg 如何通过 Snapshot 隔离和乐观并发控制实现 ACID 事务，以及与 Delta Lake 的事务隔离级别机制的精准对比。
+
+
+> [!note] 思考题
+> 1. Iceberg 的 Hidden Partitioning 让查询引擎根据用户的过滤条件（如 `WHERE event_time >= '2024-01-01'`）自动推导应该访问哪些分区。如果过滤条件是 `WHERE to_date(event_time) = '2024-01-01'`（通过函数处理），Iceberg 能否自动识别并应用分区裁剪？用户需要如何改写 SQL 来确保裁剪生效？
+> 2. Partition Evolution 支持修改分区规则而不重写历史数据。如果分区演进次数很多（表的分区规则经历了 10 次演进），查询规划阶段需要维护 10 套分区规则，这是否会显著增加查询规划的复杂度和时间？
+> 3. Iceberg 的 Bucket 分区（`BUCKET(col, N)`）与 Hive 的分桶表（CLUSTERED BY）相比，在 JOIN 优化（Bucket Map Join）上有什么异同？如果两张表都按相同 Key 和相同 Bucket 数量做了 Bucket 分区，Trino 能否自动识别并利用这个 Co-location 属性优化 Join，避免 Shuffle？

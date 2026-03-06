@@ -787,3 +787,10 @@ Mybatis 动态 SQL 的底层由两个精心设计的机制驱动：
 > - `org.apache.ibatis.scripting.xmltags.DynamicSqlSource` 源码
 > - `org.apache.ibatis.scripting.xmltags.ForEachSqlNode` 源码
 > - `org.apache.ibatis.ognl.OgnlCache` 源码
+
+---
+
+> [!note] 思考题
+> 1. MyBatis 的 `<if>` `<choose>` `<foreach>` 等动态 SQL 标签在底层被解析为一棵 SqlNode 树，运行时通过遍历树节点拼接 SQL。频繁的字符串拼接是否会成为性能瓶颈？MyBatis 对动态 SQL 的解析结果有缓存机制吗？
+> 2. `<foreach>` 标签用于 IN 查询时，如果集合有 10000 个元素，生成的 SQL 会包含 10000 个占位符。某些数据库（如 Oracle）对 IN 子句的参数数量有限制（最多 1000）。你如何在 MyBatis 层面优雅地处理这个限制？分批查询和临时表方案各有什么代价？
+> 3. OGNL 表达式在 `<if test="...">` 中被使用。`<if test="name != null and name != ''">` 是最常见的判空写法。但如果 `name` 是一个 `int` 类型（基本类型，默认值为 0），`test="name != null"` 是否会生效？OGNL 如何处理基本类型与包装类型的差异？

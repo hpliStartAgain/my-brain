@@ -545,3 +545,10 @@ graph TD
 5. Chandra, T.D., Griesemer, R., & Redstone, J. (2007). Paxos Made Live. *PODC 2007*.
 6. Hunt, P., Konar, M., Junqueira, F.P., & Reed, B. (2010). ZooKeeper: Wait-free coordination for Internet-scale systems. *USENIX ATC 2010*.
 7. Kleppmann, M. (2017). *Designing Data-Intensive Applications*. O'Reilly Media. Chapter 9: Consistency and Consensus.
+
+---
+
+> [!note] 思考题
+> 1. etcd 的分布式锁使用 Lease（租约）和事务：`Put(key, value, lease=<id>)` 配合 `If(key not exists) Then Put`。Lease 过期后 Key 自动删除——实现了锁的自动释放。etcd 的 Revision（全局递增版本号）保证了锁的获取顺序——类似 ZooKeeper 的顺序节点。etcd 锁与 ZooKeeper 锁在实现和性能上有什么区别？
+> 2. etcd 的 `concurrency` 包提供了开箱即用的分布式锁和选举 API——`concurrency.NewMutex` + `mutex.Lock(ctx)`。底层使用 Revision 排序确保公平性。在 Kubernetes 中，Controller Manager 使用 etcd 的 Leader Election 确保只有一个实例运行。如果 Leader 的 etcd 连接断开（如网络分区），Lease 过期后新 Leader 被选举——在这个窗口期两个 Leader 是否可能同时存在？
+> 3. etcd Lease 的 KeepAlive 需要定期续约。如果网络抖动导致续约延迟——Lease 过期，锁被释放。etcd 的 `GrantLease` TTL 设为多少合适？TTL 太短增加续约频率和误释放风险，太长延迟了死锁检测。在你的使用场景中如何确定最优 TTL？

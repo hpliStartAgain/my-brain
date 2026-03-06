@@ -592,3 +592,10 @@ func RecoveryMiddleware(next http.Handler) http.Handler {
 > - Go Blog,《Working with Errors in Go 1.13》: https://go.dev/blog/go1.13-errors
 > - Dave Cheney,《Don't just check errors, handle them gracefully》: https://dave.cheney.net/2016/04/27
 > - Go 源码：`errors/errors.go`、`errors/wrap.go`、`fmt/errors.go`
+
+---
+
+> [!note] 思考题
+> 1. 在一个多层调用链（Handler → Service → Repository → DB Driver）中，Repository 层捕获到 `sql.ErrNoRows`。如果直接 `return fmt.Errorf("user not found: %w", err)` 向上传播，Service 层可以用 `errors.Is(err, sql.ErrNoRows)` 匹配。但这意味着 Service 层需要知道底层使用了 SQL 数据库——这违反了依赖反转原则。你会如何设计错误类型来解决这个矛盾？
+> 2. Go 1.13 引入了 `errors.Is` 和 `errors.As`，但社区中仍有大量代码使用 `if err.Error() == "some string"` 的方式判断错误。`errors.Is` 的链式匹配（遍历 Unwrap 链）在性能上有什么开销？在高频调用路径（如每秒百万次的中间件错误判断）中，这个开销是否值得关注？
+> 3. `panic` + `recover` 在 Go 中被视为'核武器'，但标准库中 `encoding/json` 的内部实现大量使用 `panic` 来中断深层递归。在什么场景下用 `panic` 替代 `error` 返回值是合理的？如果一个 goroutine 内的 `panic` 没有被 `recover`，它会影响同进程内的其他 goroutine 吗？

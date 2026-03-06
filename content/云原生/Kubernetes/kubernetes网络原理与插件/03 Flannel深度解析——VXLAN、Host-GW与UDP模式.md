@@ -506,3 +506,10 @@ Flannel 是理解 CNI 插件技术演进的重要基础。理解 Flannel 的封�
 ---
 
 *本文是 [[Kubernetes网络原理与插件]] 专栏的第 3 篇。*
+
+---
+
+> [!note] 思考题
+> 1. kube-proxy 的 iptables 模式为每个 Service 创建一组 iptables 规则——使用概率分支实现负载均衡（如 3 个 Pod 各 33% 概率）。在 5000 个 Service 的集群中，iptables 规则可能达到数万条——规则匹配的 CPU 开销和更新延迟都很高。IPVS 模式使用内核的 IPVS 模块——Hash 表 O(1) 查找。你的集群是否应该迁移到 IPVS？迁移的风险是什么？
+> 2. kube-proxy 的 `externalTrafficPolicy: Local` 保证外部流量只路由到与入口节点相同节点上的 Pod——保留了客户端源 IP。但如果该节点上没有 Pod——流量被丢弃（返回 502）。`externalTrafficPolicy: Cluster`（默认）在所有节点上负载均衡但会 SNAT（丢失源 IP）。你如何在'保留源 IP'和'负载均衡均匀性'之间选择？
+> 3. eBPF-based kube-proxy 替代方案（如 Cilium 的 kube-proxy replacement）直接在内核中通过 eBPF 实现 Service 负载均衡——不需要 iptables/IPVS。性能更高且支持更丰富的负载均衡策略（如 Maglev 一致性哈希）。在什么规模下替换 kube-proxy 的收益值得迁移成本？

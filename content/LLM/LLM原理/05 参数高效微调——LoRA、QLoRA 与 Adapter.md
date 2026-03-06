@@ -319,3 +319,10 @@ $$W = W_0 + w_1 \cdot \Delta W_1 + w_2 \cdot \Delta W_2$$
 6. Aghajanyan et al., "Intrinsic Dimensionality Explains the Effectiveness of Language Model Fine-Tuning", ACL 2021
 7. Liu et al., "DoRA: Weight-Decomposed Low-Rank Adaptation", arXiv 2024
 8. Hayou et al., "LoRA+: Efficient Low Rank Adaptation of Large Models", arXiv 2024
+
+---
+
+> [!note] 思考题
+> 1. LoRA 通过在 Transformer 的注意力矩阵中添加低秩分解 `ΔW = AB`（A 和 B 是小矩阵）来实现参数高效微调。LoRA 的 rank `r` 决定了可训练参数的数量。`r` 太小会限制模型的适应能力，太大会接近全参数微调。在实践中如何选择合适的 `r`？不同任务类型（分类 vs 生成 vs 推理）对 `r` 的敏感度是否不同？
+> 2. QLoRA 在 LoRA 的基础上使用 4-bit 量化基座模型，大幅降低了微调所需的显存。4-bit 量化使用 NF4（Normal Float 4）数据类型——它比普通 INT4 精度更高。在 QLoRA 微调后，推理时是否必须使用 4-bit 模型？能否将 LoRA 权重合并回全精度基座模型？
+> 3. 多个 LoRA 适配器可以用于不同任务——'代码生成 LoRA'、'中文对话 LoRA'、'医疗问答 LoRA'。在推理时动态加载不同的 LoRA 适配器（LoRA Serving）的工程挑战是什么？多个 LoRA 适配器能否同时激活（LoRA 合并）？合并后的效果与分别推理相比会有损失吗？

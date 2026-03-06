@@ -515,3 +515,10 @@ sync.Map:       ~20ns/op（快约 1.7 倍）
 > - Dmitry Vyukov,《sync.Map design document》
 > - Go Blog,《Concurrency is not Parallelism》
 > - Go 1.13 Release Notes: sync.Pool victim cache
+
+---
+
+> [!note] 思考题
+> 1. `sync.Map` 内部维护了两个 map（read 和 dirty），读操作先查 read map（无锁），miss 后再查 dirty map（加锁）。当 miss 次数达到 dirty map 的长度时，dirty 会被提升为 read。在什么样的读写比例下，`sync.Map` 的性能会优于 `map` + `sync.RWMutex`？如果写操作占比超过 50%，`sync.Map` 的表现如何？
+> 2. `sync.Pool` 的对象可能在任意两次 GC 之间被回收。这意味着你不能假设从 Pool 中 Get 到的对象是'刚才 Put 进去的'。在使用 `sync.Pool` 缓存 `bytes.Buffer` 时，如果 Put 前没有 Reset，下次 Get 到的 Buffer 可能包含上次的残留数据——这是安全问题还是仅仅是功能 bug？在什么场景下这会导致严重后果？
+> 3. `atomic.Value` 的 `Store` 和 `Load` 提供了原子读写语义。但 `atomic.Value` 存储的是 `interface{}`，每次 Store 都会发生一次堆分配（interface 装箱）。Go 1.19 引入的 `atomic.Pointer[T]` 泛型版本是否解决了这个问题？在配置热更新场景中（读多写极少），`atomic.Value` 和 `sync.RWMutex` 的性能差异有多大？

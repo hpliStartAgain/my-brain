@@ -750,3 +750,9 @@ spark.ui.timeline.tasks.maximum = 1000   # 只保留最多 1000 个 Task 的时�
 这些服务共同构成了大数据平台的"黑匣子"——当一个作业出现问题时，是否有完整的历史数据可供追溯，直接决定了故障排查的效率。
 
 下一篇 [[08 大数据安全体系全景串联]] 将从更高的视角，将本专栏介绍的所有安全组件（UGI、Kerberos、Delegation Token、Ranger、Knox、DProxy、ATS）串联成一个有机整体，讨论它们在一次完整的数据访问请求中各自扮演的角色，以及生产中端到端安全链路的设计原则。
+
+
+> [!note] 思考题
+> 1. YARN 的 Log Aggregation 在作业完成后，将所有 Container 的日志从各 NodeManager 节点聚合到 HDFS 的指定目录（`yarn.nodemanager.remote-app-log-dir`）。聚合完成后，本地的 Container 日志被删除（默认 3 小时后）。在聚合过程中，如果某个 NodeManager 节点宕机（本地日志未完成聚合），这个节点的 Container 日志是否会丢失？YARN 的聚合机制如何处理这种"部分日志聚合失败"的情况？
+> 2. ATS（Application Timeline Server）v2 采用了 HBase 作为存储后端，相比 ATS v1（基于 LevelDB 的单机存储）提升了可扩展性。但 ATS v2 引入了 HBase 的依赖，增加了运维复杂性。在一个不希望引入 HBase 依赖的小型 Hadoop 集群中，ATS v1 的 LevelDB 存储在什么规模（并发作业数、历史作业数）下会成为性能瓶颈？如何估算 ATS v1 的存储容量上限？
+> 3. Spark History Server（SHS）依赖 YARN 写入 HDFS 的 EventLog 文件来重建 Spark UI。如果 EventLog 文件非常大（如一个运行 48 小时的超复杂 Spark 作业产生了数 GB 的 EventLog），SHS 解析这个文件需要数分钟，期间 SHS 的 UI 响应缓慢。如何通过 SHS 的配置（如 `spark.history.fs.eventLog.rolling.maxFileSize` 控制 EventLog 滚动）和 SHS 的缓存机制（`spark.history.store.maxDiskUsage`）来改善 SHS 的响应性能？

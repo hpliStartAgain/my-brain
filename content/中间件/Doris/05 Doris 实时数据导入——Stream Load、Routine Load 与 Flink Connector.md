@@ -262,3 +262,10 @@ Doris 的实时导入体系是其"实时分析"定位的核心支撑：
 **延伸阅读**：
 - [[01 Doris 全局架构——FE BE 分离与 MPP 执行]]
 - [[04 Doris 数据模型——Duplicate、Aggregate 与 Unique]]
+
+---
+
+> [!note] 思考题
+> 1. Doris 的同步物化视图在基表数据更新时自动维护——INSERT 到基表的数据会同步写入物化视图。但物化视图的维护有写放大——一条 INSERT 可能触发多个物化视图的更新。如果一个基表上创建了 5 个物化视图，写入吞吐量会下降多少？你如何在查询加速和写入性能之间权衡？
+> 2. Doris 支持倒排索引（Inverted Index）用于全文搜索和等值查询加速。与 Elasticsearch 的倒排索引相比，Doris 的实现在功能和性能上有什么差异？在日志分析场景中，Doris 的倒排索引是否能替代 Elasticsearch？
+> 3. Bitmap 索引适合低基数列（如性别、状态）的过滤。在高基数列（如 user_id）上创建 Bitmap 索引不仅占用大量存储，查询时的位图运算开销也很大。如何判断一个列是否适合 Bitmap 索引？Bloom Filter 索引与 Bitmap 索引的适用场景有什么区别？

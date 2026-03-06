@@ -275,3 +275,10 @@ graph TD
 > - Apache Kafka 官方文档: https://kafka.apache.org/documentation/
 > - Jay Kreps,《The Log: What every software engineer should know about real-time data's unifying abstraction》
 > - 《Kafka: The Definitive Guide》, O'Reilly
+
+---
+
+> [!note] 思考题
+> 1. Kafka 的 Topic 分为多个 Partition，每个 Partition 是一个有序的、不可变的消息日志。Producer 将消息追加写入 Partition 尾部——O(1) 的写入性能。Consumer 通过 Offset 拉取消息——顺序读磁盘。这种'追加写 + 顺序读'的设计为什么能在普通 HDD 上达到 GB/s 级的吞吐量？与 RabbitMQ 的基于内存队列的设计相比，Kafka 在持久性和吞吐量方面有什么根本区别？
+> 2. Partition 的数量决定了并行度——一个 Consumer Group 中最多有 `partition_count` 个 Consumer 同时消费。如果 Topic 有 10 个 Partition 但 Consumer Group 有 20 个 Consumer，10 个 Consumer 会空闲。Partition 数量过多也有代价——每个 Partition 对应一个日志目录和多个 Segment 文件。10000 个 Partition 对 Broker 的内存和文件描述符有什么影响？
+> 3. Kafka 2.8+ 引入了 KRaft 模式——使用内置的 Raft 协议替代 ZooKeeper 管理集群元数据。KRaft 的优势是减少外部依赖和简化部署。但 KRaft 目前是否支持所有 ZooKeeper 模式的功能？从 ZooKeeper 迁移到 KRaft 的风险是什么？

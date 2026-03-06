@@ -377,3 +377,10 @@ JuiceFS 的运维工作本质上是**三个系统的联合运维**（元数据�
 - [[01 JuiceFS 全局架构——元数据引擎与对象存储的分离设计]]
 - [[02 JuiceFS 元数据引擎——Redis、TiKV 与 SQL 后端的对比]]
 - [[03 JuiceFS 数据存储——分块、压缩与缓存]]
+
+---
+
+> [!note] 思考题
+> 1. JuiceFS 的读性能受限于对象存储的延迟（通常 10-50ms）和带宽。通过增大预读窗口（`--buffer-size`）和并发下载（`--max-uploads`/`--max-downloads`）可以提升顺序读性能。在 4KB 随机读场景中（如数据库 on JuiceFS），对象存储的高延迟是否使 JuiceFS 不适合这类工作负载？
+> 2. JuiceFS 的写性能在小文件写入时受限于元数据操作——每个文件创建需要一次元数据写入。使用 Redis 元数据引擎时，小文件创建速度约 10000-30000 files/s。在 CI/CD 场景中（大量临时小文件创建和删除），这个性能是否足够？
+> 3. JuiceFS 在 Kubernetes 中通过 CSI Driver 挂载为 PV。CSI Driver 在每个节点上运行一个 DaemonSet。如果节点上有 50 个 Pod 同时挂载 JuiceFS，CSI Driver 的资源消耗如何？每个挂载点是否创建独立的 FUSE 进程？FUSE 的开销在高 IO 场景中是否成为瓶颈？

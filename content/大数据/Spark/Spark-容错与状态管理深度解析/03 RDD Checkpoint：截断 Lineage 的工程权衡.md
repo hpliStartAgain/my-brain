@@ -411,6 +411,11 @@ RDD Checkpoint 是 Lineage 容错机制的必要补充：
 
 ---
 
+> [!note] 思考题
+> 1. RDD Checkpoint 需要一次额外的 Action 触发——调用 `rdd.checkpoint()` 仅仅是"标记"，真正的 Checkpoint 写入发生在第一次 Action 执行时（数据被计算出来后写入可靠存储）。这意味着如果一个 RDD 既需要 Checkpoint 又需要立即使用，它会被计算两次：一次计算并写入 Checkpoint，一次重新从 Checkpoint 读取。如何避免这个"双重计算"？最佳实践是什么？
+> 2. `rdd.persist()` 和 `rdd.checkpoint()` 都用于避免重复计算，但它们的语义有本质区别：`persist` 是临时缓存（Executor 内存 / 磁盘），`checkpoint` 是持久化到可靠存储（HDFS）。在迭代计算（如 PageRank）中，同时使用 `persist` 和 `checkpoint` 的正确模式是什么？为什么不能只用其中一种？
+> 3. Checkpoint 写入的路径（`sc.setCheckpointDir()`）需要是一个可靠的分布式文件系统（通常是 HDFS）。在 Spark on K8s 的场景下，如果使用 S3 作为 Checkpoint 目录，S3 的最终一致性（Eventual Consistency）会对 Checkpoint 的可靠性产生影响吗？S3 上的 Checkpoint 在哪些边界条件下可能导致数据不一致？
+
 ## 参考资料
 
 - [Spark Checkpoint 详解（博客园）](https://www.cnblogs.com/cenglinjinran/p/9542589.html)

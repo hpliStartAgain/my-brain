@@ -702,6 +702,11 @@ HBase 的存储粒度是 Store（列族级别）——一个 Store 的所有数�
 
 ---
 
+> [!note] 思考题
+> 1. HBase 的写入热点（Hot Region）是最常见的生产问题，根源通常是 RowKey 设计不合理（如顺序 ID、时间戳前缀）。在已上线的生产系统中，如果发现热点问题但无法立即修改 RowKey 设计（因为应用代码复杂，改造代价高），有哪些临时的运维手段可以缓解热点问题，而不需要修改应用逻辑？
+> 2. GC 压力是 RegionServer 性能问题的重要来源——JVM 的 Stop-the-World GC 会导致 RegionServer 短暂无响应，触发 ZooKeeper 会话超时，进而引发 RegionServer 被 Master 认为宕机并触发不必要的 Region 迁移。有哪些 JVM 和 HBase 层面的配置，可以在不切换 GC 算法（如 G1GC vs CMS）的前提下，减少 GC 对 ZooKeeper 心跳的影响？
+> 3. HBase 的读取性能依赖 BlockCache 命中率。在混合工作负载（同时有大量 Scan 和大量 Get）的场景下，Scan 产生的大量顺序读数据会将 Get 需要的热点数据从 BlockCache 中驱逐（Cache 污染）。`BucketCache`（堆外缓存）和 `LRUBlockCache`（堆内缓存）的两级缓存架构（Combined Cache）是如何解决这个"Scan 污染 Get 缓存"问题的？
+
 ## 参考资料
 
 - [1] HBase G1 GC 调优: https://blog.csdn.net/mtj66/article/details/78840059

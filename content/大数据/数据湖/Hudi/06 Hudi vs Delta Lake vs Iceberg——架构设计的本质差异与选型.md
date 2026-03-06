@@ -361,3 +361,9 @@ Iceberg 正在成为云数据湖的事实标准：
 | **未来方向** | 全局索引 + 更好多引擎 | UniForm 开放性 | 云原生标准化 |
 
 Hudi 专栏到此完结。下一步将进入 [[Apache Iceberg]] 专栏，深入 Iceberg 的三层元数据架构（Snapshot → Manifest List → Manifest File）、Hidden Partitioning 的实现原理，以及它如何在不依赖任何特定计算引擎的前提下，成为多引擎数据湖的开放标准。
+
+
+> [!note] 思考题
+> 1. Hudi、Delta Lake 和 Iceberg 都支持 ACID 事务，但实现机制有本质差异：Delta 依赖文件系统原子操作；Hudi 依赖 Timeline 状态机和文件级别乐观锁；Iceberg 依赖 Catalog 层的原子指针切换。在跨越多个文件的大型写入事务中，哪种机制的原子性保证最强？哪种最容易在故障恢复时留下不一致的中间状态？
+> 2. 三者对"引擎无关性"的追求程度不同：Iceberg 格式规范完全公开；Delta 早期是 Databricks 私有（后来 Delta 3.0 开源协议）；Hudi 与 Spark 生态紧密绑定。在 Presto/Trino + Flink + Spark 混合架构中，从"多引擎互操作性"这个单一维度来看，哪个格式是最优选择？
+> 3. 在核心业务是"实时 CDC 同步（每秒数千次 Upsert）+ 多团队并发查询（每天数万次查询）"的场景中，这两个需求对格式选择方向相反（Hudi 偏向写，Delta 偏向读）。有没有通过架构设计（如读写分离、定时格式转换）来同时满足这两个需求的方案？

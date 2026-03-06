@@ -463,6 +463,11 @@ HDFS 虽然不支持多 Client 并发写同一个文件，但完全支持多 Cli
 
 ---
 
+> [!note] 思考题
+> 1. HDFS 写入使用双队列（DataQueue 和 AckQueue）来实现流水线传输——DataQueue 中的 Packet 被发送给 DataNode 后进入 AckQueue 等待确认，收到确认后才从 AckQueue 移除。这个设计允许 Client 在等待 ACK 的同时继续发送新数据，提升吞吐量。如果 DataNode 返回的 ACK 中包含错误（表示某个 Block 写入失败），Client 会如何处理 AckQueue 中已发送但未确认的 Packet？
+> 2. HDFS 的租约（Lease）机制保证同一时刻只有一个 Writer 对一个文件进行写入。租约需要 Client 定期向 NameNode 续约（默认 60 秒）。如果 Writer 进程崩溃而没有正常关闭文件，NameNode 会在租约超时后（`dfs.namenode.lease-recheck-interval`）强制收回租约。在 Writer 崩溃到租约超时这段时间内，其他进程尝试打开同一文件写入会得到什么错误？有没有办法提前强制收回租约？
+> 3. HDFS 读取时，Client 会优先读取本地 DataNode（`DFS_CLIENT_READ_SHORTCIRCUIT`，短路读取），完全绕过网络栈，通过本地文件系统直接读取 DataNode 的 Block 文件。这个优化对读取吞吐量有多大提升？短路读取依赖 Unix Domain Socket，在 Docker 容器化环境下，如何正确配置短路读取使其在容器中也能生效？
+
 ## 参考资料
 
 - Apache Hadoop 官方文档：[HDFS Architecture - Data Replication](https://hadoop.apache.org/docs/current/hadoop-project-dist/hadoop-hdfs/HdfsDesign.html#Data_Replication)

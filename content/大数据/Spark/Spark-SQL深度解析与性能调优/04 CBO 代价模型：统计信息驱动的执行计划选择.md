@@ -523,6 +523,11 @@ CBO 是 RBO 的重要补充，解决了"规则无法量化代价"的问题：
 
 ---
 
+> [!note] 思考题
+> 1. CBO 的 Join Reordering 算法基于"最小化中间结果行数"的贪心策略。在什么情况下这个贪心策略会导致次优的执行计划？有哪些场景是 CBO 无法处理的？
+> 2. `ANALYZE TABLE` 收集的统计信息会在表数据发生变更后逐渐过时，但 Spark 默认不会自动刷新。在流批一体场景下（如持续写入 Delta Lake 的表），过时的统计信息对查询性能可能造成哪些具体危害？应该如何设计自动化的统计信息维护策略？
+> 3. 直方图中的"等宽直方图"和"等高直方图"各有适用场景。对于长尾分布的列（如热门用户 ID），哪种直方图能更准确地估算过滤后的基数？为什么 Spark 默认使用等高直方图（Height-Balanced Histogram）？
+
 ## 参考资料
 
 - [Spark 3.0 - AQE 浅析 (Adaptive Query Execution)（CSDN）](https://blog.csdn.net/zyzzxycj/article/details/106469572)

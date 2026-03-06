@@ -571,6 +571,11 @@ HBase 在 HDFS 之上引入了自己的取舍：**通过 MemStore 缓冲随机�
 
 ---
 
+> [!note] 思考题
+> 1. HBase 的列族（Column Family）设计要求在建表时预先定义，但列限定符（Column Qualifier）可以动态添加，数量没有上限。这种"半结构化"设计在存储层是如何实现的？如果一张表有 100 万个不同的列限定符，HBase 的存储效率与关系型数据库相比有何优劣？
+> 2. HBase 不支持跨行事务，每次操作只保证单行的原子性。在需要多行原子操作的业务场景（如转账：扣减 A 行余额，增加 B 行余额），通常的工程解法是什么？HBase 的 `checkAndPut` 和 `checkAndDelete` 提供了条件写入，它能否用来实现乐观锁模式的多行事务？
+> 3. BigTable 论文提出了列族存储的思想，HBase 是它的开源实现。但 BigTable 的底层存储是 GFS，HBase 的底层是 HDFS。HDFS 是为大文件顺序读写优化的，而 HBase 需要支持随机读写。HBase 是如何通过 MemStore + LSM-Tree 的设计，在 HDFS 这个"不支持随机写"的文件系统上实现高效随机写入的？
+
 ## 参考资料
 
 - [1] Chang, F., et al. "Bigtable: A Distributed Storage System for Structured Data." OSDI, 2006.

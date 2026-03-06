@@ -558,3 +558,10 @@ public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exc
 > - `io.netty.channel.AbstractChannelHandlerContext` 源码
 > - `io.netty.channel.ChannelHandlerContext` 接口源码
 > - Norman Maurer,《Netty in Action》第 6 章 ChannelHandler 与 ChannelPipeline
+
+---
+
+> [!note] 思考题
+> 1. TCP 是字节流协议，没有消息边界——这导致了粘包和拆包问题。Netty 提供了 `FixedLengthFrameDecoder`（固定长度）、`DelimiterBasedFrameDecoder`（分隔符）、`LengthFieldBasedFrameDecoder`（长度字段）三种解码器。在设计自定义 RPC 协议时，你会选择哪种方案？为什么几乎所有高性能 RPC 框架（Dubbo、gRPC）都选择'长度字段'方式？
+> 2. `LengthFieldBasedFrameDecoder` 的参数配置（`lengthFieldOffset`、`lengthFieldLength`、`lengthAdjustment`、`initialBytesToStrip`）是 Netty 学习中最容易出错的地方。如果协议格式是 `[4字节魔数][2字节长度][N字节数据]`，且长度字段的值包含了长度字段本身的 2 字节，`lengthAdjustment` 应该设为多少？
+> 3. Protobuf 序列化生成的字节没有自描述长度——`ProtobufDecoder` 需要配合 `ProtobufVarint32FrameDecoder` 使用。如果你直接将 Protobuf 字节写入 Channel 而没有添加长度前缀解码器，接收方解析时会出现什么错误？这个错误是立即出现还是在高并发时随机出现？

@@ -387,3 +387,10 @@ Kubernetes 1.17+ 中，Node 的心跳机制使用了 etcd Lease：
 - Kubernetes 1.17+ 的节点心跳改用 Lease，将 etcd 写压力降低了约 90%。
 
 下一篇文章将对比 etcd 与 ZooKeeper 的设计哲学差异——Raft vs ZAB、Watch vs Watcher、线性一致性读 vs 顺序一致性，以及在不同工程场景下的选型建议。
+
+---
+
+> [!note] 思考题
+> 1. etcd 的事务（Transaction）支持原子的 `If-Then-Else` 操作——如 `If(key1.version == 5) Then Put(key1, value) Else Get(key1)`。这种乐观锁机制用于实现分布式锁和 Leader 选举。与 ZooKeeper 的临时节点（Ephemeral Node）实现分布式锁相比，etcd 的事务方式有什么优劣？
+> 2. etcd 的 MVCC 使用 BoltDB 存储所有历史版本——每个 Key 的每次修改都会创建一个新版本。这意味着 etcd 的磁盘使用量会持续增长。Compaction 删除旧版本以回收空间——但 Compaction 后 BoltDB 的文件大小不会缩小（因为 BoltDB 不释放页面给 OS）。`defrag` 操作如何真正回收磁盘空间？defrag 期间 etcd 是否可用？
+> 3. etcd 的 Lease 机制为 Key 设置 TTL——Lease 过期后所有关联的 Key 自动删除。Kubernetes 的 Node Lease（`kube-node-lease` namespace）用于检测节点心跳。Lease 的续约（KeepAlive）需要定期发送请求到 etcd。如果网络抖动导致续约延迟，Lease 可能被误删——这会导致什么问题？如何设置合理的 Lease TTL？

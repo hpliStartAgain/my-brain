@@ -526,3 +526,10 @@ java -XX:+UseZGC \       # ZGC：低延迟 GC，减少 STW 期间的内存扫描
 - 修复：缓存分块提高数据复用率，`numactl --interleave=all` 利用多节点带宽
 
 下一篇 [[05 磁盘 IO 性能调优——fio 方法论、调度器与 IO 模式]] 将把调优视角移向存储层：`fio` 作为磁盘性能基准测试的标准工具，如何设计测试场景（iodepth/bs/numjobs 三参数的配合）来准确衡量存储设备性能；`blktrace` 如何追踪一个 IO 请求在内核块设备层的完整路径；以及 NVMe SSD 的最佳 IO 模式（`io_uring` vs `libaio` vs 同步 IO）如何选择。
+
+---
+
+> [!note] 思考题
+> 1. NUMA 架构中 `numactl --interleave=all` 将内存均匀分布在所有节点。在数据库共享缓冲池场景中这是合理的（因为所有 CPU 都访问缓冲池）。但对于单线程应用，interleave 反而增加了一半的远端访问。你如何根据应用的线程模型选择 NUMA 策略？
+> 2. 内存带宽是向量化查询引擎和 ML 推理的常见瓶颈。DDR4 双通道约 50GB/s。`perf stat` 的 `LLC-load-misses` 表示 L3 Miss（需要访问主存）——如果这个值很高，说明应用受内存带宽限制。除了升级内存（DDR5）和增加通道数，应用层有什么优化手段？
+> 3. 在 KVM 虚拟化中，虚拟机的 vCPU 可能被调度到不同 NUMA 节点的物理核上，导致内存访问延迟不可预测。`virsh numatune` 和 `vcpupin` 如何解决？在 OpenStack/K8s 环境中，如何在调度层面保证 VM/Pod 的 NUMA 亲和性？

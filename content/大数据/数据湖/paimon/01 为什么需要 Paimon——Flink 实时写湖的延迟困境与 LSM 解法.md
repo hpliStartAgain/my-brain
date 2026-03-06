@@ -352,3 +352,9 @@ Paimon 的诞生解决了 Flink 实时写湖场景中"不可变文件模型的�
 **Paimon 的核心价值主张**：在 Flink 流计算生态中，提供秒级延迟的流式 Upsert + ACID 语义 + 可查询的存储层——这是 Hudi 和 Iceberg 在 2022 年之前无法达到的。
 
 下一篇 [[02 LSM-Tree 存储引擎——为什么用 LSM 而非 CoW 文件覆盖]] 将深入 Paimon 的 LSM-Tree 实现细节：MemTable 的数据结构、SST 文件的分层合并策略、Compaction 的触发机制，以及 Paimon 如何在 HDFS/S3 等对象存储（不支持随机写）上实现 LSM-Tree 的核心语义。
+
+
+> [!note] 思考题
+> 1. Paimon 的核心洞察是"解耦写入路径和可见性路径"——数据写入后立即可见，LSM Compaction 在后台异步完成。这与 Hudi MoR 的"写 Log 文件，查询时合并"类似。Paimon 的 LSM 分层设计如何比 Hudi MoR 的"Base 文件 + Log 文件"更有效地控制读放大？在"尚未 Compaction"的状态下，两者的查询性能退化程度有什么本质差异？
+> 2. Paimon 起源于 Flink 社区（最初名为 Flink Table Store），与 Flink 集成最为紧密。对于 Paimon 的主键表（Primary Key Table），Spark 读取时需要理解 LSM 的多层文件结构并在读取时合并。Spark 的 Paimon Connector 实现了这个合并逻辑吗？如果 Spark 只读取了 Level-0 的文件而没有合并，会读到不一致的数据吗？
+> 3. Paimon 将"秒级可见"作为核心卖点，但这依赖 Checkpoint 触发的提交频率（如 Flink Checkpoint 间隔为 30 秒，则数据可见延迟约 30 秒）。在需要真正毫秒级可见性的场景（如实时风控），30 秒的延迟是否可以接受？Paimon 有没有比 Checkpoint 更频繁的提交机制？

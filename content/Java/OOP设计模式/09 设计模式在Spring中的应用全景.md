@@ -571,3 +571,10 @@ Spring 框架的设计是 GoF 23 种设计模式在工业级 Java 框架中最�
 > - Craig Walls,《Spring in Action》5th ed.
 > - Juergen Hoeller,《Spring Framework Reference Documentation》
 > - Rod Johnson,《Expert One-on-One J2EE Design and Development》, 2002（Spring 诞生的起点）
+
+---
+
+> [!note] 思考题
+> 1. 状态模式将对象的行为随状态变化委托给不同的状态类。订单状态流转（待支付→已支付→已发货→已完成/已取消）是经典案例。与直接在 Order 类中用 `switch(status)` 判断相比，状态模式的代码量更多——在什么复杂度下引入状态模式是值得的？如果状态只有 3 个且转换规则简单，状态模式是否是过度设计？
+> 2. 命令模式将请求封装为对象，支持撤销（Undo）和重做（Redo）。文本编辑器的操作历史就是命令模式。但在 Web 应用中，大部分操作（如数据库写入）不可逆。命令模式在 Web 后端有哪些实际应用场景？消息队列中的消息是否可以看作'命令对象'？
+> 3. 中介者模式（Mediator）将对象之间的多对多通信集中到一个中介者对象，降低耦合。MVC 中的 Controller 就是 Model 和 View 之间的中介者。但中介者自身可能变成'上帝对象'（God Object）——所有逻辑都集中在中介者中。如何在降低耦合和避免上帝对象之间取得平衡？

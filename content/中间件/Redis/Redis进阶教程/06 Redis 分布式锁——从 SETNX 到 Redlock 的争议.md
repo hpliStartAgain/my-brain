@@ -529,3 +529,10 @@ etcd 锁的 Revision 天然就是 fencing token——每个 key 操作都有全�
 4. Redisson Documentation：https://github.com/redisson/redisson/wiki/8.-Distributed-locks-and-synchronizers
 5. Apache Curator - InterProcessMutex：https://curator.apache.org/docs/recipes-locks/
 6. etcd Documentation - Distributed Locks：https://etcd.io/docs/v3.5/dev-guide/api_concurrency_reference/
+
+---
+
+> [!note] 思考题
+> 1. Redis GEO 使用 GeoHash 编码经纬度为 52 位整数——精度约 0.6 米。对于'附近的餐厅'场景（精度要求 100 米）完全足够。但在室内定位（精度要求 1-5 米）场景中，GeoHash 的哈希碰撞边界问题是否影响搜索结果？
+> 2. `GEOSEARCH` 的结果是精确距离排序的——Redis 先用 GeoHash 做粗过滤，再计算精确距离。在 100 万个位置中搜索 1km 范围内的结果，平均查询时间是多少？与 PostGIS 的 R-Tree 索引相比性能如何？
+> 3. 百万用户每秒更新位置——`GEOADD` 的 QPS 要求约百万/秒。单个 Redis 实例难以支撑。你如何通过分片（按地理区域分片到不同 Redis 实例）来水平扩展？跨分片的'附近搜索'如何处理——边界区域的位置可能在相邻分片中？

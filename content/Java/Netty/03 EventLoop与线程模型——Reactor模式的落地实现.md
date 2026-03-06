@@ -524,3 +524,10 @@ Stop-The-World GC 暂停会同时影响所有 `EventLoop` 线程，导致所有�
 > - `io.netty.util.concurrent.DefaultPromise` 源码
 > - JCTools 库 `MpscArrayQueue` 源码
 > - Norman Maurer,《Netty in Action》第 7 章 EventLoop 与线程模型
+
+---
+
+> [!note] 思考题
+> 1. Netty 的 `CompositeByteBuf` 允许将多个 `ByteBuf` 组合为一个逻辑视图，避免了内存拷贝。在 HTTP 响应中，Header 和 Body 通常是两个独立的 ByteBuf——使用 `CompositeByteBuf` 可以零拷贝地将它们合并为一个完整的响应。但 `CompositeByteBuf` 在什么场景下反而比直接拷贝更慢？
+> 2. Netty 的 `ByteBuf` 使用引用计数（Reference Counting）管理生命周期。`retain()` 增加计数，`release()` 减少计数，计数归零时回收内存。如果一个 ChannelHandler 从 `channelRead` 收到 ByteBuf 后既不处理也不传递给下一个 Handler，这个 ByteBuf 的引用计数会怎样？这是 Netty 内存泄漏最常见的原因吗？
+> 3. Netty 的池化内存分配器（PooledByteBufAllocator）参考了 jemalloc 的设计——使用 Arena、Chunk、Page 三级结构管理内存。池化分配器在高并发场景下避免了频繁的 `malloc/free` 系统调用。但池化也意味着内存不会立即归还给操作系统——在什么场景下你应该关闭池化（使用 `UnpooledByteBufAllocator`）？

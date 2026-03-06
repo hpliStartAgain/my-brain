@@ -371,3 +371,10 @@ Dubbo 协议的多路复用是应用层的（通过 Request ID），而 HTTP/2 �
 - **Triple 协议**：基于 HTTP/2 + Protobuf，完全兼容 gRPC，同时支持无 IDL 的 Java 接口模式，是 Dubbo 云原生化和跨语言互通的战略支柱。
 
 下一篇文章将深入 Dubbo 的集群层——四种负载均衡算法的实现细节、六种集群容错策略的适用场景，以及路由规则与标签路由的工程实践。
+
+---
+
+> [!note] 思考题
+> 1. Dubbo 2.x 默认使用 Hessian2 序列化——跨语言但性能一般。Dubbo 3.x 推荐 Triple 协议（基于 HTTP/2 + Protobuf）——兼容 gRPC 生态。Triple 协议比 Dubbo 协议在什么方面有优势（如跨语言、流式调用、穿透网关）？迁移到 Triple 协议需要修改业务代码吗？
+> 2. 序列化性能直接影响 RPC 延迟和吞吐。Protobuf 的序列化速度约为 JSON 的 5-10 倍，体积约为 JSON 的 1/3。但 Protobuf 需要预定义 `.proto` 文件——不如 JSON 灵活。在一个内部微服务之间通信（性能优先）和面向外部 API（兼容性优先）的混合系统中，你会如何选择序列化方式？
+> 3. Dubbo 协议的消息格式是 `16字节 Header + Body`。Header 中包含 Magic Number、Flag、Request ID 等。Request ID 用于在同一个 TCP 连接上多路复用——请求和响应通过 Request ID 关联。如果一个响应迟迟不返回（Provider 处理超时），Consumer 端的 `CompletableFuture` 如何超时？超时后连接是否需要关闭？

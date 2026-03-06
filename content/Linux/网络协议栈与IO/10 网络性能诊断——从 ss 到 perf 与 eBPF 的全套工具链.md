@@ -621,3 +621,10 @@ bpftrace/BCC（内核函数级追踪）→ 精确定位根因
 ```
 
 至此，Linux 网络协议栈与 IO 专栏的全部十篇文章已完成。从 `socket()` 系统调用到网卡 DMA，从 TCP 拥塞控制到 eBPF 内核追踪，从 epoll 事件驱动到 io_uring 异步批处理，从容器 veth pair 到 Cilium O(1) 策略匹配——这套知识体系覆盖了 Linux 网络栈的完整纵深。真正的掌握，发生在你下次遇到网络问题时，能从这份地图中找到正确的诊断路径，直达根因。
+
+---
+
+> [!note] 思考题
+> 1. 网络丢包可能发生在多个层级：网卡（ring buffer 满）、内核协议栈（SYN 队列满、Socket 缓冲区满）、应用层（来不及 recv）。`ethtool -S eth0` 显示网卡级别的丢包统计，`netstat -s` 显示协议栈级别。如何系统地从底层到上层逐级排查丢包位置？`dropwatch` 和 `perf trace --event skb:kfree_skb` 各有什么优势？
+> 2. 网络延迟抖动（jitter）可能由多种原因导致：软中断处理延迟（`softirq` 被其他任务抢占）、TCP 重传、GC 暂停。`ss -ti` 可以显示 TCP 连接的详细信息（RTT、retrans、cwnd）。如果 `ss` 显示 RTT 正常但应用层感知到的延迟很高，说明延迟来自哪一层？
+> 3. 在容器网络中（如 Calico、Flannel），数据包经过 veth pair、Linux bridge（或 eBPF 转发）、可能的 VXLAN 封装。每一层都可能增加延迟。你如何测量容器网络的每一跳延迟？`traceroute` 在容器网络中是否有效？eBPF 的 `tcp_retransmit_skb` 跟踪点如何帮助定位容器间的网络问题？

@@ -435,3 +435,10 @@ labels:
 4. Kubernetes Documentation - Finalizers：https://kubernetes.io/docs/concepts/overview/working-with-objects/finalizers/
 5. Kubernetes Documentation - Recommended Labels：https://kubernetes.io/docs/concepts/overview/working-with-objects/common-labels/
 6. Kubernetes API Conventions - Metadata：https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#metadata
+
+---
+
+> [!note] 思考题
+> 1. Pod 的 SecurityContext 控制容器的安全配置——`runAsNonRoot: true` 强制容器以非 root 用户运行，`readOnlyRootFilesystem: true` 将根文件系统设为只读。在什么场景下容器必须以 root 运行（如需要绑定低端口、修改系统配置）？你如何通过 capabilities（`add: [NET_BIND_SERVICE]`）给予最小必要权限？
+> 2. PodSecurityAdmission（PSA，替代了 PodSecurityPolicy）定义了三个安全级别：Privileged（无限制）、Baseline（阻止已知的权限提升）和 Restricted（严格限制）。在生产 Namespace 中应该使用什么级别？`enforce` vs `warn` vs `audit` 三种模式如何在迁移期间配合使用？
+> 3. ServiceAccount Token 自动挂载到每个 Pod（`/var/run/secrets/kubernetes.io/serviceaccount/token`）。如果应用不需要访问 Kubernetes API，自动挂载的 Token 是不必要的安全风险——攻击者可以利用它调用 API。`automountServiceAccountToken: false` 应该在什么粒度设置（Pod 级别 vs ServiceAccount 级别）？

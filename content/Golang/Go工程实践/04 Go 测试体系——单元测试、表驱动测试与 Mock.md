@@ -682,3 +682,10 @@ func TestUserRepository_Integration(t *testing.T) {
 > - testify: https://github.com/stretchr/testify
 > - uber-go/mock (gomock): https://github.com/uber-go/mock
 > - Go Blog,《Table-driven tests》
+
+---
+
+> [!note] 思考题
+> 1. Go 的 interface 使得 Mock 变得简单——只需实现相同的 interface 即可替换依赖。但如果被测函数直接调用了 `time.Now()` 或 `os.ReadFile()` 这类标准库函数（不通过 interface），你有哪些方式使其可测试？每种方式的侵入性和工程成本如何？
+> 2. 表驱动测试（Table-Driven Test）是 Go 社区的标准实践。但当测试用例超过 50 个、且每个用例需要不同的 Mock 配置时，表驱动测试会变得难以维护。在什么情况下应该放弃表驱动测试，改用独立的子测试函数？Go 的 `t.Run` 嵌套有层数限制吗？
+> 3. `go test -race` 使用 ThreadSanitizer 检测数据竞争。它的原理是在每次内存访问时插入检测代码。在一个包含大量 goroutine 的并发测试中，`-race` 会导致多大的性能开销（内存和 CPU）？如果 `-race` 没有报告任何竞争，能否保证代码一定没有数据竞争？为什么？

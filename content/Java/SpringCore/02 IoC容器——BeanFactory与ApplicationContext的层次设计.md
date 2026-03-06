@@ -855,3 +855,10 @@ Spring Boot 通过**自动配置**消除了这种分层的必要性：
 > - `org.springframework.context.support.AbstractApplicationContext` 源码（Spring 6.1.x）
 > - `org.springframework.beans.factory.support.DefaultListableBeanFactory` 源码
 > - `org.springframework.beans.factory.support.DefaultSingletonBeanRegistry` 源码（三级缓存所在）
+
+---
+
+> [!note] 思考题
+> 1. Bean 的完整生命周期包括：实例化 → 属性注入 → Aware 接口回调 → BeanPostProcessor.postProcessBeforeInitialization → @PostConstruct → InitializingBean.afterPropertiesSet → init-method → BeanPostProcessor.postProcessAfterInitialization → 使用 → @PreDestroy → DisposableBean.destroy → destroy-method。如果 `@PostConstruct` 和 `afterPropertiesSet()` 中都有初始化逻辑且存在冲突，哪个优先执行？
+> 2. `BeanPostProcessor` 在每个 Bean 初始化前后执行。Spring AOP 的 `AbstractAutoProxyCreator` 就是一个 BeanPostProcessor——它在 `postProcessAfterInitialization` 中为需要代理的 Bean 创建代理对象。如果有多个 BeanPostProcessor 且它们都修改了同一个 Bean，执行顺序如何控制？
+> 3. prototype 作用域的 Bean 不由 Spring 管理销毁——Spring 在创建后就'忘记'了它。这意味着 prototype Bean 的 `@PreDestroy` 不会被调用。在什么场景下这会导致资源泄漏？如果 prototype Bean 持有数据库连接或文件句柄，你如何确保它们被正确关闭？

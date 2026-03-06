@@ -724,3 +724,10 @@ Bean 的生命周期是 Spring 框架最核心的机制之一，本文完整覆�
 > - `org.springframework.beans.factory.support.DefaultSingletonBeanRegistry` 源码
 > - `org.springframework.context.annotation.CommonAnnotationBeanPostProcessor` 源码
 > - [Spring Framework 官方文档 - Bean Lifecycle](https://docs.spring.io/spring-framework/reference/core/beans/factory-nature.html)
+
+---
+
+> [!note] 思考题
+> 1. Spring AOP 的 `@Around` 通知中，`ProceedingJoinPoint.proceed()` 调用了目标方法。如果 `proceed()` 被调用了两次——目标方法会执行两次吗？在什么场景下你可能需要'调用两次'（如重试机制）？如果 `proceed()` 没有被调用（即 Around 通知直接返回了值），会发生什么？
+> 2. Spring AOP 默认使用运行时代理（JDK 动态代理或 CGLIB），AspectJ 支持编译时织入（CTW）和加载时织入（LTW）。编译时织入可以拦截 private 方法和字段访问，而运行时代理不能。在什么场景下你必须使用 AspectJ 而非 Spring AOP？
+> 3. Spring AOP 中多个切面的执行顺序由 `@Order` 或 `Ordered` 接口控制。如果 Aspect A（Order=1）和 Aspect B（Order=2）都有 `@Around` 通知，执行顺序是 A.before → B.before → target → B.after → A.after（洋葱模型）。如果 A 的 around 通知抛出异常，B 的 around 通知还会执行吗？

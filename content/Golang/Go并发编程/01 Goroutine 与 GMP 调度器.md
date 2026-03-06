@@ -439,3 +439,10 @@ runtime.GOMAXPROCS(runtime.NumCPU() * 2)
 > - Austin Clements,《Proposal: Non-cooperative goroutine preemption》（Go 1.14 抢占提案）
 > - Go 运行时源码：`runtime/proc.go`、`runtime/runtime2.go`
 > - Go Blog,《The Go scheduler》: https://go.dev/blog/scheduler
+
+---
+
+> [!note] 思考题
+> 1. GMP 模型中，当一个 Goroutine 执行系统调用（如文件 IO）时，绑定的 M（线程）会阻塞。此时调度器会创建新的 M 来运行 P 上的其他 Goroutine。如果同时有 1000 个 Goroutine 在执行阻塞系统调用，是否会创建 1000 个 OS 线程？`runtime.GOMAXPROCS` 限制的是 P 的数量还是 M 的数量？M 的数量上限是什么？
+> 2. Goroutine 的栈初始大小为 2KB（Go 1.4+），会按需增长到 1GB。栈增长时需要将栈上所有指针重定向到新地址——这就是'栈拷贝'（stack copying）。在栈拷贝期间，goroutine 是否需要暂停？如果一个 goroutine 的栈频繁在 grow 和 shrink 之间震荡，会导致什么性能问题？
+> 3. GMP 调度器的抢占机制在 Go 1.14 从'协作式'升级为'基于信号的异步抢占'。在 Go 1.14 之前，一个没有函数调用的纯计算 `for` 循环会导致什么问题？信号抢占的实现依赖 `SIGURG` 信号——如果用户代码也注册了 `SIGURG` 的 handler，是否会与调度器冲突？

@@ -391,3 +391,9 @@ Hudi 的 Index 机制是它能高效支持记录级 Upsert 的工程核心。从
 - 需要全局唯一主键或跨分区更新 → Record Level Index（Hudi 1.x）
 
 下一篇 [[05 增量查询与 Incremental Pull——流批一体的数据消费]] 将聚焦 Hudi 最独特的能力：下游如何精确消费"上次处理之后新变化的记录"，以及这个能力如何构建 10-100 倍于全量 ETL 的高效增量数据管道。
+
+
+> [!note] 思考题
+> 1. Hudi 的 Bloom Filter Index 通过在每个 Parquet 文件的 Footer 中嵌入 BloomFilter 来快速判断记录是否存在。Bloom Filter 有假阳性率，更大的 Filter 有更低的假阳性率但占用更多存储空间。如何根据每个文件的记录数和目标假阳性率，计算 Bloom Filter 的最优大小？
+> 2. Bucket Index 通过预先将 Key 空间哈希分桶，Upsert 时直接定位到对应 Bucket，查找复杂度 O(1) 远优于 Bloom Filter 的 O(文件数)。但 Bucket 数量是固定的，如果数据量增长导致某些 Bucket 的文件过大，该如何扩容 Bucket 数量？
+> 3. 全局索引（跨所有分区确保 Key 唯一）和非全局索引（仅在同一分区内唯一）有不同的性能特征。在数据按日期分区且同一用户 ID 可能跨多天都有记录的场景（用户历史行为日志），应该使用全局索引还是非全局索引？理由是什么？

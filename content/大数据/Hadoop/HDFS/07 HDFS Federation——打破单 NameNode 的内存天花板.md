@@ -533,6 +533,11 @@ Federation 是 HDFS 在面对超大规模集群时的水平扩展方案，其核
 
 ---
 
+> [!note] 思考题
+> 1. HDFS Federation 通过多个独立的 NameNode（Namespace）来突破单 NameNode 的内存限制，每个 Namespace 管理独立的目录树和文件，共享底层的 DataNode 存储池。但 Federation 不能跨 Namespace 重命名或移动文件（因为两个 NN 完全独立）。在多业务共享集群的场景下，如何合理地划分 Namespace 边界，既能隔离不同业务，又不频繁遇到"需要跨 Namespace 移动文件"的场景？
+> 2. ViewFS 是 Federation 的客户端路由层——它将不同路径前缀映射到不同的 Namespace（如 `/user` → NN1，`/data` → NN2）。这个映射配置存储在客户端的 `core-site.xml` 中。如果集群扩容需要调整 Namespace 划分（如将 `/data/log` 从 NN1 迁移到 NN3），需要修改所有客户端的配置并重启应用，这是一个运维痛点。有没有办法将 ViewFS 的路由配置集中化，实现动态更新而无需修改客户端配置？
+> 3. Federation 下多个 NameNode 共享同一批 DataNode，但每个 NN 只能看到自己的 Block Pool 中的 Block。DataNode 的总存储容量由所有 Block Pool 共同使用，没有隔离机制——某个 Namespace 的数据爆增会占满整个集群的磁盘，影响所有其他 Namespace。在多租户场景下，如何通过配额（Quota）机制来防止某个 Namespace"吃光"所有存储资源？
+
 ## 参考资料
 
 - Apache Hadoop 官方文档：[HDFS Federation](https://hadoop.apache.org/docs/current/hadoop-project-dist/hadoop-hdfs/Federation.html)

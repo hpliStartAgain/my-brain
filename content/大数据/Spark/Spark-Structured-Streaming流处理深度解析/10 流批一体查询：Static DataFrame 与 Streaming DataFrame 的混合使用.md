@@ -239,6 +239,11 @@ order_stream \
 
 ---
 
+> [!note] 思考题
+> 1. 流-批 Join 中，维表（Static DataFrame）在每个 MicroBatch 开始时被重新广播给所有 Executor。如果维表数据量很大（比如 1GB），频繁广播会给 Driver 和网络带来巨大压力。广播缓存（一次广播多批次复用）是优化手段，但如果维表在流作业运行期间更新了，缓存的广播变量如何刷新？有没有办法做到"感知维表变更后自动刷新"？
+> 2. Structured Streaming 的流-批 Join 要求维表在每个批次执行时是"静态快照"——即使底层数据源（如 Hive 表）在批次执行期间发生了写入，本批次读到的维表数据也是固定的。但如果维表是一个 Delta Lake 表并启用了 Time Travel，是否可以实现"每个批次读取与批次事件时间对齐的维表版本"？这种时间旅行 Join 在工程上如何实现？
+> 3. 在流批一体架构中，实时流处理和离线批处理共享同一套业务逻辑代码。但两者在 State 管理、输出模式、窗口语义上有很多差异。在设计流批一体 Pipeline 时，有哪些 Structured Streaming 的算子或特性在批处理模式下行为不同，需要特别注意？
+
 ## 参考资料
 
 - Apache Spark 官方文档：Structured Streaming Join Operations

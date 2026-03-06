@@ -386,3 +386,9 @@ Paimon 的定位：
 **Iceberg 的核心价值主张**：不是"最快的写入"，不是"最深的 Spark 集成"，而是**"在最大规模、最多引擎的场景下，提供最一致、最可靠的表格式标准"**。
 
 下一个专栏将进入 [[Apache Paimon]]，探索为 [[Apache Flink]] 流计算原生设计的第三代数据湖存储——它用 LSM-Tree 代替 Copy-on-Write 文件替换，将流式写入延迟从分钟级压缩到秒级，是实时数仓架构的重要基础。
+
+
+> [!note] 思考题
+> 1. Iceberg 格式规范完全公开（任何引擎都可按 Spec 实现读写）；Delta 3.0 开源了协议但高级功能仍是 Databricks 私有；Hudi 是开源 Apache 项目但 Java SDK 与实现紧密绑定。"格式开放性"与"生态成熟度"通常相互制衡——开放性最高的格式（Iceberg）生态是否一定最成熟？
+> 2. 在跨云、跨数据中心的数据共享场景（AWS + Azure 双云部署），哪种格式的 Catalog 架构更容易支持这种部署？Project Nessie（类 Git 的数据湖版本管理）与 Iceberg 的结合能带来什么额外价值？
+> 3. 如果一个新数据平台的主要计算引擎是 Flink（而不是 Spark），且需要同时支持高频 CDC Upsert 和低延迟分析查询，在 Hudi、Delta、Iceberg 三者之间如何选择？选择的核心依据是什么？

@@ -451,3 +451,10 @@ Lucene 的 Segment 机制与 [[LevelDB]]/RocksDB 的 [[LSM-Tree]] 在设计思�
 - **TieredMergePolicy** 在后台按层合并 Segment，物理清除已删除文档，控制 Segment 总数。
 
 理解这条链路，是解释 ES 所有写入相关问题（GC 压力、磁盘占用、查询抖动）的底层框架。下一篇文章将深入 ES 的查询执行机制，分析 [[BM25]] 评分模型与向量检索（HNSW）的实现原理。
+
+---
+
+> [!note] 思考题
+> 1. ES 的写入流程：文档写入 In-Memory Buffer + Translog → Refresh（默认 1 秒）将 Buffer 写入新 Segment（可搜索但未持久化）→ Flush 将 Segment fsync 到磁盘并清空 Translog。Refresh 间隔决定了'写入到可搜索'的延迟——1 秒的近实时（NRT）在什么场景下不够快？调低 `refresh_interval` 到 100ms 的代价是什么？
+> 2. Translog 记录了自上次 Flush 以来的所有写操作——用于节点崩溃后的数据恢复。Translog 默认每次写操作后 fsync（`durability: request`）。改为异步 fsync（`durability: async`）可以大幅提升写入吞吐——但在崩溃时可能丢失最近 5 秒的数据。在日志类数据（可以容忍少量丢失）和业务数据（不可丢失）中，你如何选择？
+> 3. 每次 Refresh 创建一个新 Segment——频繁 Refresh 导致大量小 Segment，查询时需要扫描所有 Segment（影响搜索性能）。Merge 合并小 Segment 为大 Segment——但 Merge 消耗 IO。在高写入 + 高查询并发的场景中，Refresh 和 Merge 的资源竞争如何平衡？`index.merge.scheduler.max_thread_count` 如何调优？

@@ -484,3 +484,10 @@ metadata:
 5. Kubernetes Enhancement Proposal - Server-Side Apply：https://github.com/kubernetes/enhancements/tree/master/keps/sig-api-machinery/3488-cel-admission-control
 6. Michael Hausenblas, Stefan Schimanski (2019). *Programming Kubernetes*. O'Reilly, Chapter 3-4.
 7. Kubernetes Deprecation Policy：https://kubernetes.io/docs/reference/using-api/deprecation-policy/
+
+---
+
+> [!note] 思考题
+> 1. ConfigMap 和 Secret 可以通过环境变量或 Volume 挂载注入到 Pod 中。环境变量的问题是更新 ConfigMap 后 Pod 内的环境变量不会自动更新——需要重启 Pod。Volume 挂载方式在 ConfigMap 更新后会自动更新文件（kubelet 定期同步，延迟约 1 分钟）。在什么场景下你需要'即时'的配置更新？Reloader 等工具如何实现 ConfigMap 变更后自动重启 Pod？
+> 2. Secret 以 Base64 编码存储在 etcd 中——Base64 不是加密。任何能访问 etcd 的人都能读取明文 Secret。etcd 的加密静态数据（Encryption at Rest）如何保护 Secret？External Secrets Operator 从外部密钥管理系统（AWS Secrets Manager、HashiCorp Vault）同步 Secret——比原生 Secret 更安全吗？
+> 3. 在 GitOps 工作流中，Secret 不应明文存储在 Git 仓库中。Sealed Secrets（加密后存储在 Git，集群内由控制器解密）和 SOPS（加密文件级别）是两种方案。在你的 CI/CD 流水线中，Secret 的管理流程是什么？如何做到'Secret 轮换不影响服务'？

@@ -428,3 +428,10 @@ LevelDB 的设计影响了一代存储引擎：
 - **[[03 SSTable 的文件格式与 Block 结构]]**：解析 SSTable 的文件布局，理解 Bloom Filter 和前缀压缩的实现
 - **[[04 Compaction——分层合并与版本管理]]**：深入 Compaction 的触发策略、合并算法和 Version/VersionEdit/VersionSet 的 MVCC 机制
 - **[[05 从 LevelDB 到 RocksDB——优化与演进]]**：分析 RocksDB 在 LevelDB 基础上的关键改进，以及其在 TiKV、Flink、Kafka Streams 中的应用
+
+---
+
+> [!note] 思考题
+> 1. LSM-Tree 的核心思想是'将随机写转化为顺序写'——数据先写入内存（MemTable），满后刷写到磁盘（SSTable）。这种设计在写密集场景中性能优异，但读取需要查找多层 SSTable——存在读放大。LevelDB 通过 Bloom Filter 减少无效磁盘读取——Bloom Filter 的误判率（默认约 1%）对读性能的影响有多大？在什么场景下你需要调大 Bloom Filter 的位数来降低误判率？
+> 2. LevelDB 的 Compaction 将多个 SSTable 文件合并排序——减少层数和重叠。Level 0 的 SSTable 之间 Key 范围可能重叠（因为直接从 MemTable flush），Level 1+ 的 SSTable Key 范围不重叠。Level 0 到 Level 1 的 Compaction 开销最大——为什么？这种'读放大、写放大、空间放大'的三角权衡如何影响 LevelDB 的设计选择？
+> 3. LevelDB 不支持并发写入——写操作通过 Mutex 串行化。RocksDB（LevelDB 的 Fork）通过 Group Commit 和并发 MemTable 写入大幅提升了写吞吐。LevelDB 的单线程写入在什么规模的应用中成为瓶颈？如果只是嵌入式 KV 存储（如浏览器本地存储），单线程写入是否足够？

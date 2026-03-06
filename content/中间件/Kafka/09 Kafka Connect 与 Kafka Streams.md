@@ -201,3 +201,10 @@ streams.start();
 > - Debezium 官方文档: https://debezium.io/documentation/
 > - Confluent Blog,《Kafka Streams vs Apache Flink》
 > - 《Kafka Streams in Action》, O'Reilly
+
+---
+
+> [!note] 思考题
+> 1. Kafka 集群最关键的监控指标包括：`UnderReplicatedPartitions`（副本落后的 Partition 数）、`ActiveControllerCount`（活跃 Controller 数）、`OfflinePartitionsCount`（离线 Partition 数）。`UnderReplicatedPartitions > 0` 持续出现意味着什么？可能的原因有哪些（磁盘慢、网络问题、Broker 过载）？
+> 2. Consumer Lag（消费延迟 = 最新 Offset - 消费 Offset）是衡量消费者健康度的关键指标。Lag 持续增大意味着消费速度跟不上生产速度。除了增加 Consumer 实例数，还有什么手段降低 Lag（如增大 `max.poll.records`、优化消息处理逻辑、并行处理）？
+> 3. Kafka 的分区重分配（`kafka-reassign-partitions`）用于平衡各 Broker 的负载或迁移数据到新 Broker。重分配过程中数据需要在 Broker 之间复制——产生大量网络和磁盘 IO。如何通过限流（`--throttle`）控制重分配的速度以避免影响生产消费？

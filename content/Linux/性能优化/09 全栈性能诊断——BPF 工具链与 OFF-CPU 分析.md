@@ -587,3 +587,10 @@ OFF-CPU 分析是性能诊断工具箱中最强大但最鲜被使用的工具—
 - ON-CPU + OFF-CPU 都不大，但延迟高 → 调度等待，CPU 亲和性或 cgroup 调优
 
 下一篇 [[10 性能调优实战案例——从症状到根因的完整诊断链路]] 是本专栏的收官篇，将三个真实的生产案例（Java 服务 P99 毛刺、数据库慢查询、高并发 API 网关吞吐量低）走完从"收到告警"到"找到根因并修复"的完整诊断链路，综合运用本专栏所有工具，展示真实场景中的多工具协作方式。
+
+---
+
+> [!note] 思考题
+> 1. 在'偶发 IO 延迟毛刺'场景中，如何用 bpftrace 定位毛刺发生时内核在做什么？`biolatency`（块设备层延迟分布）和 `ext4slower`（文件系统层慢操作）分别适用于什么层级？如果 `biolatency` 显示正常但 `ext4slower` 显示慢操作，说明瓶颈在哪一层？
+> 2. OFF-CPU 火焰图中 `futex_wait` 占大比例意味着线程在等待锁。如何进一步定位是哪个用户态锁——可以用 `bpftrace` 追踪 `pthread_mutex_lock` 的调用栈吗？在 Java 应用中，`futex_wait` 对应的可能是 `synchronized` 还是 `ReentrantLock`？
+> 3. eBPF 验证器限制了循环和指针访问。BPF CO-RE（Compile Once, Run Everywhere）通过 BTF（BPF Type Format）实现跨内核版本兼容。在什么场景下没有 CO-RE 会导致 eBPF 程序无法运行（如内核升级后结构体字段偏移变化）？libbpf 和 BCC 在 CO-RE 支持方面有什么差异？

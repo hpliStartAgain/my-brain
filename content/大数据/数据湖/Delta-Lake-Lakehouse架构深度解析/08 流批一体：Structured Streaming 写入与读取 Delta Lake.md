@@ -407,6 +407,11 @@ Delta Lake 与 Structured Streaming 的集成实现了真正意义上的流批�
 
 ---
 
+> [!note] 思考题
+> 1. Structured Streaming 写入 Delta 的 Exactly-Once 通过在 `_delta_log` 中记录每个 MicroBatch 的事务 ID 来实现。如果使用 `foreachBatch` 自定义 Sink 并手动管理 Batch ID，如何保证 Exactly-Once 语义不被破坏？
+> 2. 流作业暂停 24 小时后重启，需要追赶大量积压的 Delta 版本。这个追赶过程会产生多大的元数据读取压力？`ignoreChanges` 和 `ignoreDeletes` 选项在追赶过程中有什么作用？
+> 3. Delta Source 是基于"文件版本"的消费，没有 Kafka 那样的动态速率反馈。如果 Delta 表的写入速率突然暴增（批量导入大量数据），基于文件版本的消费模型如何避免流作业产生无法追赶的积压？
+
 ## 参考资料
 
 - [Delta Lake Structured Streaming 官方文档](https://docs.delta.io/latest/delta-streaming.html)

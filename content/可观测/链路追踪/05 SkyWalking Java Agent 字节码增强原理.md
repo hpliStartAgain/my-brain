@@ -538,3 +538,10 @@ SkyWalking 从 8.x 版本开始同时支持 sw8 和 W3C Trace Context，通过�
 4. Apache SkyWalking Java Agent 源码：https://github.com/apache/skywalking-java
 5. SkyWalking Agent Plugin Development Guide：https://skywalking.apache.org/docs/skywalking-java/latest/en/setup/service-agent/java-agent/java-plugin-development-guide/
 6. SkyWalking Cross Process Propagation Headers Protocol：https://skywalking.apache.org/docs/main/latest/en/api/x-process-propagation-headers-v3/
+
+---
+
+> [!note] 思考题
+> 1. OTel Metrics SDK 支持导出为 Prometheus 格式（Pull 模式，暴露 `/metrics` 端点）和 OTLP 格式（Push 模式，推送到 Collector）。在已有 Prometheus 基础设施的环境中，你会选择哪种导出方式？两种方式在时间序列的命名和标签格式上有什么差异？
+> 2. OTel 的 Metric 类型：Counter（单调递增，如请求总数）、Gauge（可增可减，如当前连接数）、Histogram（分布统计，如延迟分布）。OTel 的 Histogram 使用 Explicit Bucket Histogram（预定义桶边界）或 Exponential Histogram（自适应桶）。Exponential Histogram 在未知数据分布时更灵活——但 Prometheus 的 Histogram 使用固定桶。两者如何转换？
+> 3. Metrics 的高基数（High Cardinality）问题——如果标签值有百万级（如 `user_id`），时间序列数量爆炸导致存储和查询性能崩溃。OTel SDK 层面如何控制高基数（如在 SDK 中丢弃高基数标签）？Collector 的 `filter` Processor 是否能帮助？

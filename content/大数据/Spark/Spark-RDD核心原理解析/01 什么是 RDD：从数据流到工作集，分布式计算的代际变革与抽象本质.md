@@ -303,7 +303,7 @@ val count  = errors.count()                            // Action 触发
 ---
 
 > [!info] 核心文献参考
-> [1] Zaharia, M., et al. "Resilient Distributed Datasets: A Fault-Tolerant Abstraction for In-Memory Cluster Computing." NSDI 2012.
-> [2] Dean, J., & Ghemawat, S. "MapReduce: Simplified Data Processing on Large Clusters." OSDI 2004.
-> [3] Li, J., et al. "Piccolo: Building Fast, Distributed Programs with Partitioned Tables." OSDI 2010.
-> [4] Zaharia, M., et al. "Spark: Cluster Computing with Working Sets." HotCloud 2010.
+> 1. Zaharia, M., et al. "Resilient Distributed Datasets: A Fault-Tolerant Abstraction for In-Memory Cluster Computing." NSDI 2012.
+> 2. Dean, J., & Ghemawat, S. "MapReduce: Simplified Data Processing on Large Clusters." OSDI 2004.
+> 3. Li, J., et al. "Piccolo: Building Fast, Distributed Programs with Partitioned Tables." OSDI 2010.
+> 4. Zaharia, M., et al. "Spark: Cluster Computing with Working Sets." HotCloud 2010.

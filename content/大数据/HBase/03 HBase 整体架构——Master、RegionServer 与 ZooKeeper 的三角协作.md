@@ -664,6 +664,11 @@ admin.createTable(tableDescriptor, splitKeys);
 
 ---
 
+> [!note] 思考题
+> 1. HBase Master 负责 Region 的分配和 RegionServer 的管理，但它不参与数据的读写路径——客户端直接与 RegionServer 通信，通过 ZooKeeper 找到对应 Region 的位置。这种"Master 旁路数据路径"的设计有什么好处？如果 Master 宕机，正在进行的读写操作是否受影响？新建表和 Region 分裂操作呢？
+> 2. ZooKeeper 在 HBase 中承担了多个关键角色：存储 `hbase:meta` 表位置、Master 选主、RegionServer 存活检测。如果 ZooKeeper 集群发生网络分区（一部分节点与另一部分失联），HBase 可能出现什么问题？HBase 是如何避免"脑裂"（Split-Brain）导致两个 Master 同时认为自己是 Active 的？
+> 3. `hbase:meta` 表存储了所有用户表的 Region 信息（Region 边界 → RegionServer 映射），是客户端路由的核心。`hbase:meta` 本身也是一个 HBase 表，存储在某个 RegionServer 上，其位置记录在 ZooKeeper 中。如果存储 `hbase:meta` 的 RegionServer 宕机，会发生什么？HBase 的元数据恢复流程是怎样的？
+
 ## 参考资料
 
 - [1] Apache HBase Reference Guide — Architecture: https://hbase.apache.org/book.html#architecture

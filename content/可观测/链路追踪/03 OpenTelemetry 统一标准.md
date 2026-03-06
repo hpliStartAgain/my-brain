@@ -486,3 +486,10 @@ OTel 正在将 **Continuous Profiling** 作为第四种信号纳入标准。2024
 6. OpenTelemetry Profiling Vision：https://opentelemetry.io/docs/specs/otel/profiling/
 7. W3C Trace Context：https://www.w3.org/TR/trace-context/
 8. Sridharan, C. (2018). *Distributed Systems Observability*. O'Reilly Media.
+
+---
+
+> [!note] 思考题
+> 1. OTel Collector 是可观测数据的中间层——接收（Receivers）→ 处理（Processors）→ 导出（Exporters）。Collector 可以部署为 Agent（每个节点/Pod 一个）或 Gateway（集中部署）。Agent 模式减少了网络跳数但增加了节点资源消耗，Gateway 模式集中管理但可能成为瓶颈。在 Kubernetes 中你如何选择部署模式？
+> 2. Collector 的 Processor 支持数据转换——如 `batch`（批量处理减少导出次数）、`filter`（过滤不需要的数据）、`attributes`（添加/修改属性）和 `tail_sampling`（尾部采样）。尾部采样在 Collector 中等待 Trace 完成后再决定是否采集——需要在内存中缓存完整 Trace。在什么 Trace 量和延迟下尾部采样的内存需求是可控的？
+> 3. Collector 的高可用和水平扩展——多个 Collector 实例通过负载均衡接收数据。但尾部采样要求同一 Trace 的所有 Span 发送到同一个 Collector 实例——否则无法做出完整的采样决策。`loadbalancing` Exporter 通过 TraceID 路由解决这个问题——它的实现原理是什么？

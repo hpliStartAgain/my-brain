@@ -483,3 +483,10 @@ cgroup 内存子系统是容器化基础设施内存隔离的核心基石，本�
 - Linux Kernel Source: `mm/memcontrol.c`
 - Kubernetes Documentation: [Resource Management for Pods and Containers](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/)
 - [Diagnosing Linux cgroups v2 Memory Throttling - Netdata](https://www.netdata.cloud/academy/diagnosing-linux-cgroups/)
+
+---
+
+> [!note] 思考题
+> 1. CGroups v2 的 `memory.high`（软限制）超过时会'限流'内存分配。限流的具体机制是什么——是减缓 `brk()/mmap()` 的返回速度，还是增加 Page Fault 处理延迟？被限流的应用能感知到什么异常？
+> 2. 容器内 `/proc/meminfo` 显示宿主机信息。Java 8u191+ 的 `-XX:+UseContainerSupport` 自动读取 CGroups 限制。Python、Node.js 等不感知 CGroups——如何在这些运行时中正确获取容器可用内存？LXCFS 的方案是什么？
+> 3. Page Cache 被计入 CGroup 内存使用量。频繁读文件的容器可能因 Page Cache 膨胀触发 OOM Kill——即使 RSS 远低于限制。`memory.stat` 中的 `file` 和 `anon` 如何帮助区分？你如何避免这种'被 Page Cache 杀死'的问题？

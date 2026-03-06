@@ -237,6 +237,11 @@ DataNode `FsDataset` 存储引擎的几个核心工程精华：
 
 ---
 
+> [!note] 思考题
+> 1. DataNode 的 `FsDataset` 管理多块磁盘（Volume），通过轮询策略（Round-Robin）或可用空间策略（Available Space）将新 Block 分配到不同磁盘。如果某块磁盘的 I/O 速度慢（如某块 HDD 老化），Round-Robin 策略会继续向它分配相同数量的 Block，导致整体写入性能受到这块慢盘的拖累。Available Space 策略能解决这个问题吗？有没有基于 I/O 负载的更智能的分配策略？
+> 2. DataNode 上每个 Block 都有对应的 `.meta` 文件存储校验和（Checksum）。当 Client 读取 Block 时，DataNode 会计算数据的实际校验和并与 `.meta` 文件对比，检测静默数据损坏（Silent Data Corruption）。如果发现数据损坏，DataNode 会向 NameNode 报告，NameNode 将这个 Block 标记为损坏并触发副本补充。但如果所有副本都已损坏，数据就无法恢复了。在实际生产中，"所有副本同时损坏"的可能性有多大？主要的损坏场景是什么？
+> 3. DataNode 启动时会进行全量的 Block 扫描（Block Scanner），验证所有 Block 的校验和完整性。对于拥有数 PB 数据的 DataNode，全量扫描可能需要数天时间，同时产生大量磁盘 I/O 影响正常服务。`dfs.datanode.scan.period.hours` 控制扫描周期，默认 504 小时（约 3 周）。如何在不增加硬件成本的前提下，既保证数据完整性检查的覆盖率，又不影响正常读写性能？
+
 ## 参考资料
 
 - Apache Hadoop 官方文档：[DataNode Storage](https://hadoop.apache.org/docs/current/hadoop-project-dist/hadoop-hdfs/HdfsDesign.html)

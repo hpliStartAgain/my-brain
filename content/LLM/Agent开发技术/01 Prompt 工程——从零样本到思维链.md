@@ -442,3 +442,10 @@ Prompt 工程是 Agent 开发的基础——Agent 的每一次 LLM 调用都需�
 6. Lu et al., "Fantastically Ordered Prompts and Where to Find Them: Overcoming Few-Shot Prompt Order Sensitivity", ACL 2022
 7. Perez & Ribeiro, "Ignore This Title and HackAPrompt: Exposing Systemic Weaknesses of LLMs through a Global Scale Prompt Hacking Competition", EMNLP 2023
 8. OpenAI, "GPT Best Practices", 2023
+
+---
+
+> [!note] 思考题
+> 1. Few-shot Prompting 通过在 Prompt 中提供示例来引导模型行为。但示例的顺序、数量和多样性都会显著影响输出质量。在一个需要模型做分类的任务中，如果提供的 3 个 Few-shot 示例恰好都是同一类别，模型是否会产生偏向该类别的倾向？你如何设计示例的选择策略来最小化这种偏差？
+> 2. Chain-of-Thought（CoT）提示让模型'展示推理过程'。但 CoT 的中间步骤可能看起来合理实际上错误——模型只是在'模仿推理的语言模式'而非真正推理。你如何验证 CoT 中间步骤的正确性？如果中间步骤错误但最终答案正确（碰巧），你应该信任这个答案吗？
+> 3. System Prompt 和 User Prompt 在 API 调用中分开传递。攻击者可以通过 Prompt Injection（在用户输入中嵌入'忽略之前的指令'）来覆盖 System Prompt 的约束。目前主流模型（GPT-4、Claude）有哪些防御机制？在一个面向终端用户的 Agent 应用中，你如何在 Prompt 层面和代码层面双重防御 Prompt Injection？

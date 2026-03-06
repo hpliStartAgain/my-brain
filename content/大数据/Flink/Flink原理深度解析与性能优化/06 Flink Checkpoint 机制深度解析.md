@@ -466,3 +466,9 @@ Flink Checkpoint 机制的核心原理脉络：
 **Unaligned Checkpoint**：第一个 Barrier 到达即做快照，将 in-flight Buffer 也纳入快照，彻底消除对齐等待。代价是 Checkpoint 体积大、恢复时间长。推荐通过 `alignedCheckpointTimeout` 在高反压时自动降级，而非始终开启。
 
 下一篇 [[07 Flink 时间与 Watermark 底层机制]] 将深入 Watermark 在算子间的传播规则（最小值语义的由来）、Key Group 哈希空间的设计，以及 Timer 服务的底层实现机制。
+
+
+> [!note] 思考题
+> 1. Flink 的 Checkpoint 使用 Chandy-Lamport 算法的变体——通过在数据流中插入 Barrier 消息来触发所有 Task 的快照。Barrier 对齐（Aligned Checkpoint）要求多输入算子等待所有输入流的 Barrier 都到齐后才拍摄快照。在某个输入流速度很慢（或发生反压）的情况下，Barrier 对齐会导致其他输入流的数据积压在 Input Buffer 中。这会占用多少额外内存？Flink 1.11 引入的 Unaligned Checkpoint 是如何解决这个问题的？
+> 2. Savepoint 和 Checkpoint 都是 Flink 的状态持久化机制，但设计目标不同：Checkpoint 用于故障恢复（自动触发、自动删除），Savepoint 用于手动管理（升级、迁移）。从 Savepoint 恢复时，Flink 允许修改算子的并行度和 uid。但如果在代码中删除了一个有状态算子（没有对应 uid 的 Savepoint 条目），默认行为是什么？如何配置 Flink 在这种情况下允许恢复？
+> 3. Checkpoint 的性能直接影响作业的整体吞吐量——Checkpoint 期间，Task 需要将状态序列化并写入远程存储，这会占用网络 I/O 和 CPU 资源。在超大状态场景（如 TB 级 RocksDB State），异步快照（Asynchronous Snapshot）通过 RocksDB 的 SST 文件快照来避免阻塞数据处理。但如果在异步快照期间，状态发生了大量变更（大量新的 SST 文件生成），这会对 Checkpoint 的完整性产生影响吗？

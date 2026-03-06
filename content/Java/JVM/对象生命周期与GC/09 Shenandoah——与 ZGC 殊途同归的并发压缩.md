@@ -322,3 +322,10 @@ Serial（单线程，STW）
 5. 周志明, 《深入理解 Java 虚拟机（第三版）》, 第 3.8 章：低延迟垃圾收集器
 6. JEP 189: Shenandoah: A Low-Pause-Time Garbage Collector (JDK 12)
 7. OpenJDK Wiki, "Shenandoah GC", wiki.openjdk.org/display/shenandoah
+
+---
+
+> [!note] 思考题
+> 1. Shenandoah 使用'Brooks Pointer'（间接指针/转发指针）实现并发压缩——每个对象多一个指针字段指向自身，GC 移动对象后更新转发指针。与 ZGC 的着色指针方案相比，Brooks Pointer 的内存开销和运行时开销各有什么不同？在什么工作负载下 Shenandoah 会优于 ZGC？
+> 2. Shenandoah 和 ZGC 都声称实现了亚毫秒级 STW 停顿。但 Shenandoah 的并发阶段使用'写屏障'（类似 G1），而 ZGC 使用'读屏障'。两种屏障对应用吞吐量的影响模式有什么差异？在'读远多于写'的缓存服务场景中，哪种 GC 的吞吐量损失更小？
+> 3. Shenandoah 由 Red Hat 主导开发，但 Oracle 的 JDK 发行版不包含 Shenandoah（只有 OpenJDK 包含）。在生产环境选型时，如果你的公司使用 Oracle JDK，低延迟 GC 的唯一选择是 ZGC。你如何评估从 Oracle JDK 迁移到 OpenJDK 的风险和成本？

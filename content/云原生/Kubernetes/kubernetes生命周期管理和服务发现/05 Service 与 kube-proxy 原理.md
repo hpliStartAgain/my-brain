@@ -395,3 +395,10 @@ spec:
 4. Kubernetes Documentation - IPVS mode：https://kubernetes.io/docs/concepts/services-networking/service/#proxy-mode-ipvs
 5. Kubernetes Enhancement Proposal - nftables kube-proxy：https://github.com/kubernetes/enhancements/tree/master/keps/sig-network/3866-nftables-proxy
 6. Kubernetes Source Code - pkg/proxy：https://github.com/kubernetes/kubernetes/tree/master/pkg/proxy
+
+---
+
+> [!note] 思考题
+> 1. Liveness Probe 检测应用是否存活——失败则重启容器。但 Liveness Probe 配置不当可能导致'无限重启循环'——如应用因为依赖服务不可用而响应慢，Liveness 超时导致重启，重启后依赖仍不可用，再次超时重启...。在什么场景下 Liveness Probe 应该只检查应用自身的健康而非依赖服务？
+> 2. Readiness Probe 失败的 Pod 从 Service 的 Endpoints 中移除——不再接收流量。但 Readiness 失败不触发重启——Pod 仍在运行。这适合'暂时无法服务但能自愈'的场景（如数据库连接池耗尽后恢复）。如果 Readiness 长时间失败，你是否需要额外的告警来通知运维？
+> 3. gRPC 应用的健康检查——Kubernetes 1.24+ 原生支持 gRPC 探针。在此之前，常见做法是在应用中添加 HTTP 健康检查端点或使用 `grpc-health-probe` 二进制。gRPC 探针的 `grpc.health.v1.Health` 协议如何实现？你需要在应用中集成什么 SDK？

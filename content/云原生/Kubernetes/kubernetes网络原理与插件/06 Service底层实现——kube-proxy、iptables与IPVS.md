@@ -586,3 +586,10 @@ Service 解决了服务发现和负载均衡，NetworkPolicy 解决服务间的�
 ---
 
 *本文是 [[Kubernetes网络原理与插件]] 专栏的第 6 篇。相关专栏：[[04 流量管理——VirtualService、DestinationRule与灰度发布|Istio 流量管理]]（Service 之上的 L7 路由层）、[[05 Cilium深度解析——eBPF驱动的下一代网络与可观测性|Cilium eBPF 替代 kube-proxy]]*
+
+---
+
+> [!note] 思考题
+> 1. CNI 负责 L3/L4 网络（Pod IP 分配、路由、NetworkPolicy），Service Mesh 负责 L7 流量管理（路由、重试、熔断、mTLS）。两者在不同网络层协作。但 Cilium 模糊了这个边界——它同时提供 CNI 和 L7 策略（通过 Envoy 或 eBPF）。'一个组件解决所有问题'（Cilium）vs '每层一个专门组件'（Calico + Istio）哪种架构更好？
+> 2. Service Mesh 的 Sidecar 代理增加了每跳 2 次用户态代理的延迟。Cilium 的 eBPF 加速可以在内核层处理 L4 流量——只在需要 L7 策略时才经过用户态代理。这种'按需升级到 L7'的策略如何降低 Service Mesh 的性能开销？
+> 3. 在网络故障排查中，CNI 层和 Service Mesh 层的问题可能相互混淆——如 Pod 间通信失败是 CNI 路由问题还是 mTLS 证书过期？你如何系统地分层排查——先验证 L3/L4 连通性（`ping`/`telnet`），再验证 L7 策略（检查 Envoy 日志和配置）？

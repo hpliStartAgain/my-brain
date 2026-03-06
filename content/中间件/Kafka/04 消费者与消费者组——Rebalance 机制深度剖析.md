@@ -332,3 +332,10 @@ try {
 > - KIP-429: Kafka Consumer Incremental Rebalance Protocol
 > - KIP-345: Introduce static membership protocol to reduce consumer rebalances
 > - Confluent Blog,《From Eager to Incremental Rebalancing》
+
+---
+
+> [!note] 思考题
+> 1. Kafka 的 Partition 日志由多个 Segment 文件组成（默认 1GB/Segment）。每个 Segment 有 `.log`（数据）、`.index`（偏移量索引）和 `.timeindex`（时间戳索引）三个文件。索引是稀疏的——每隔 4KB 数据记录一个索引条目。这种稀疏索引在查找特定 Offset 时需要二分查找 + 线性扫描。对于 `Consumer.seek(offset)` 操作，查找延迟是否可接受？
+> 2. 数据保留策略可以按时间（`retention.ms`，默认 7 天）或按大小（`retention.bytes`）设置。Log Compaction 是另一种保留策略——保留每个 Key 的最新消息，删除旧消息。Log Compaction 适用于变更日志（Changelog）场景——如数据库 CDC。Compaction 的执行是后台异步的——在什么场景下 Compaction 的延迟会导致消费者读到已被'逻辑删除'的消息？
+> 3. Kafka 使用 `sendfile` 系统调用实现零拷贝——Consumer 拉取消息时数据直接从磁盘 Page Cache 传输到网络 Socket，不经过 JVM 堆。这就是 Kafka 高吞吐的关键之一。但如果 Consumer 拉取的数据不在 Page Cache 中（如消费延迟很大，拉取几天前的数据），就需要磁盘随机读——性能急剧下降。你如何设计 Kafka 集群以应对'补数据'场景？

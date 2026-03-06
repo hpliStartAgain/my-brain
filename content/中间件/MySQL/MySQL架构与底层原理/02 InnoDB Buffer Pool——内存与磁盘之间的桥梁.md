@@ -468,3 +468,10 @@ MySQL 5.7+ 支持**在线调整** Buffer Pool 大小（`SET GLOBAL innodb_buffer
 8. **调优**：`innodb_buffer_pool_size` 设为物理内存的 70%-80%，通过命中率和 `wait_free` 等指标持续监控
 
 Buffer Pool 是 InnoDB 所有读写操作的"必经之路"——理解了它的运作机制，就理解了 InnoDB 性能表现的底层逻辑。下一篇文章我们将深入 [[Redo Log]] 和 [[WAL]] 协议，解析 InnoDB 如何在 Buffer Pool 中修改数据的同时保证崩溃安全性。
+
+---
+
+> [!note] 思考题
+> 1. InnoDB 的 Buffer Pool 缓存了数据页和索引页——命中率是数据库性能的关键指标。`SHOW ENGINE INNODB STATUS` 中的 `Buffer pool hit rate` 低于 99% 通常意味着 Buffer Pool 过小。在一个 128GB 内存的数据库服务器上，Buffer Pool 应该设为多大（通常建议 70-80%）？如果数据集远大于 Buffer Pool（如 1TB 数据，128GB Buffer Pool），你如何优化查询以提高命中率？
+> 2. Redo Log 保证了事务的持久性（Durability）——事务提交时 Redo Log 必须刷写到磁盘。`innodb_flush_log_at_trx_commit` 的三个值（0/1/2）对持久性和性能有什么不同影响？设为 0（每秒刷盘）在崩溃时可能丢失 1 秒的数据——在什么业务场景下这个风险是可接受的？
+> 3. Undo Log 保存了数据修改前的版本——用于事务回滚和 MVCC 的一致性读。长事务会导致 Undo Log 无法回收——因为其他事务可能还需要读取旧版本。在什么场景下长事务最容易出现（如忘记提交的事务、大批量更新）？Undo Log 积压对磁盘空间和查询性能有什么影响？

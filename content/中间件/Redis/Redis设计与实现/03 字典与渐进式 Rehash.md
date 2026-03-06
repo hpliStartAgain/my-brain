@@ -539,3 +539,10 @@ ZSet 的 hashtable 编码实际上同时使用 dict 和 skiplist——dict 用�
 3. 黄健宏 - 《Redis 设计与实现》（第二版）- 第 4 章 字典
 4. antirez - Redis Rehash 设计笔记：http://antirez.com/
 5. Redis SCAN cursor 算法分析：https://engineering.redis.com/
+
+---
+
+> [!note] 思考题
+> 1. RDB 的 fork() 在 Redis 占用 64GB 内存时可能需要数百毫秒到数秒的暂停。`jemalloc` 的 Transparent Huge Pages 会放大 COW 的内存开销——Redis 官方建议关闭 THP。具体原因是什么？THP 的 2MB 页在 COW 时即使只修改 1 字节也会复制整个 2MB——这种'写放大'如何影响 fork 期间的内存使用？
+> 2. AOF 的 `appendfsync everysec` 由后台线程执行 fsync。如果 fsync 耗时超过 2 秒，Redis 主线程会阻塞等待——这就是'AOF 阻塞'。在什么磁盘条件下容易触发（如 HDD、IO 密集的混合负载）？`aof-no-fsync-on-rewrite yes` 在 AOF 重写期间跳过 fsync——可能丢失多少数据？
+> 3. Redis 7.0 的 Multi-Part AOF 将 AOF 拆分为 Base RDB + Incremental AOF。与旧版 AOF Rewrite（fork 子进程重写整个 AOF）相比，Multi-Part AOF 在内存使用和恢复速度方面有什么改善？增量 AOF 文件的管理策略是什么？

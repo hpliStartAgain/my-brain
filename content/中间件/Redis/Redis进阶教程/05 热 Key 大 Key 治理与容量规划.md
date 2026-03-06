@@ -424,3 +424,10 @@ MEMORY DOCTOR
 3. Redis Documentation - Latency analysis：https://redis.io/docs/management/optimization/latency/
 4. redis-rdb-tools：https://github.com/sripathikrishnan/redis-rdb-tools
 5. Alibaba Cloud - Redis 大 Key 治理最佳实践：https://help.aliyun.com/document_detail/353223.html
+
+---
+
+> [!note] 思考题
+> 1. 布隆过滤器的误判率与位数组大小和 Hash 函数数量有关。RedisBloom 的 `BF.RESERVE key 0.01 1000000` 创建一个容量 100 万、误判率 1% 的过滤器——需要约 1.2MB 内存。如果实际元素数量超过预设容量——误判率如何增长？Scaling Bloom Filter（自动扩容）如何缓解？
+> 2. HyperLogLog 用 12KB 内存估算基数，标准误差 0.81%。在 1 亿用户的 UV 统计中，HLL 的误差约 81 万——这在什么业务场景下可接受？精确计数用 Set 存储 1 亿个 64 位 ID 需要约 800MB——HLL 节省了 99.998% 的内存。如果需要 0.1% 以内的精度，有什么中间方案？
+> 3. Bitmap 用于签到场景——`SETBIT user:1001:202401 15 1` 记录 1 月 15 日签到。31 天的签到只需 4 字节。但如果 user_id 不连续（如从 10 亿开始），Bitmap 的偏移量很大——浪费大量空间。在什么 user_id 分布下 Bitmap 不适用？Roaring Bitmap 是否是更好的选择？

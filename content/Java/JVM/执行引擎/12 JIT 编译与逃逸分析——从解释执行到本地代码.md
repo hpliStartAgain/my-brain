@@ -348,3 +348,10 @@ JIT 编译是 Java 性能的最大秘密，也是 JVM 与其他语言运行时�
 6. Thomas Wuerthinger et al., "GraalVM: One VM to Rule Them All", Onward! 2013
 7. JEP 295: Ahead-of-Time Compilation (JDK 9, experimental)
 8. GraalVM Native Image Documentation, graalvm.org
+
+---
+
+> [!note] 思考题
+> 1. HotSpot 的 JIT 编译器有两个：C1（Client Compiler，优化快但程度浅）和 C2（Server Compiler，优化慢但程度深）。分层编译（Tiered Compilation）让代码先由 C1 编译，热度足够高后再由 C2 重新编译。如果一个方法被 C2 编译后，其调用的另一个方法发生了去优化（Deoptimization），C2 编译的代码是否需要全部废弃？
+> 2. 逃逸分析判断对象是否'逃逸'出方法或线程。如果对象未逃逸，JIT 可以进行标量替换（将对象拆解为基本类型变量）和锁消除。但逃逸分析本身有计算成本——对于只执行一两次的方法，花费时间做逃逸分析是否值得？JIT 是如何决定一个方法'值得'做逃逸分析的？
+> 3. JIT 编译后的机器码存储在 CodeCache 中。如果 CodeCache 满了（默认 240MB），JIT 编译器会停止工作，所有方法回退到解释执行——性能会断崖式下降。你如何监控 CodeCache 的使用量？在什么类型的应用中 CodeCache 最容易被耗尽（提示：考虑动态生成类的场景）？

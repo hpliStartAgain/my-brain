@@ -365,6 +365,11 @@ Delta Lake 的 DML 实现体系：
 
 ---
 
+> [!note] 思考题
+> 1. Delta Lake 的 MERGE 分两阶段：扫描找到匹配文件，重写这些文件。对于拥有 10000 个 Parquet 文件的大表，MERGE 只更新 1000 条记录时，第一阶段的扫描代价是多少？如何通过数据跳过和分区裁剪优化 MERGE 的扫描范围？
+> 2. Delta 的 UPDATE/DELETE 通过 CoW 重写整个文件实现。如果修改 1 行数据但所在文件有 10GB，代价极高。如何通过文件大小控制和 Z-Order 数据组织来减少这种"以小博大"的 UPDATE 代价？
+> 3. Delta v3.1+ 引入了删除向量（Deletion Vectors）——不立即重写文件，而是记录哪些行被删除。这将写放大从 O(文件大小) 降低到 O(删除行数)，但引入了读放大。在什么读写比例下，删除向量比 CoW 重写的总体代价更低？
+
 ## 参考资料
 
 - [Delta Lake Deletion Vectors 官方文档](https://docs.delta.io/latest/delta-deletion-vectors.html)

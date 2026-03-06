@@ -512,3 +512,10 @@ Netty 的内存管理体系是工程师智慧的结晶，整个设计的逻辑�
 > - `io.netty.buffer.PoolSubpage` 源码
 > - Jason Evans,《A Scalable Concurrent malloc(3) Implementation for FreeBSD》, 2006
 > - Netty 官方文档：Reference Counted Objects
+
+---
+
+> [!note] 思考题
+> 1. Netty 的 `Recycler` 是一个轻量级对象池，用于复用 `ByteBuf`、`ChannelHandlerContext` 等频繁创建销毁的对象。`Recycler` 使用 ThreadLocal 的 `WeakOrderQueue` 实现跨线程回收。如果一个对象在线程 A 创建、在线程 B 使用完毕后回收，回收路径是什么？跨线程回收的性能开销与同线程回收相比如何？
+> 2. Netty 的 `MpscQueue`（多生产者单消费者队列）是无锁的，用于 EventLoop 的任务队列。为什么选择 MPSC 而非 MPMC（多生产者多消费者）？EventLoop 的单线程消费模型与 MPSC 队列的配合如何实现了'无锁高并发'？如果将 MPSC 替换为 `ConcurrentLinkedQueue`，性能差异有多大？
+> 3. Netty 通过 `FileRegion`（底层调用 `sendfile` 系统调用）实现文件传输的零拷贝——数据直接从文件系统缓冲区传输到网络接口，不经过用户态。但 `sendfile` 在什么情况下无法使用（如 SSL 加密传输）？此时 Netty 会退化为什么传输方式？

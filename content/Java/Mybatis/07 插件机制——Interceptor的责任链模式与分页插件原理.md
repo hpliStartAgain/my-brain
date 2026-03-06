@@ -778,3 +778,10 @@ Mybatis 插件机制是一个精心设计的扩展框架：
 > - `org.apache.ibatis.plugin.InterceptorChain` 源码
 > - [PageHelper GitHub](https://github.com/pagehelper/Mybatis-PageHelper)
 > - [Mybatis 官方文档 - Plugins](https://mybatis.org/mybatis-3/configuration.html#plugins)
+
+---
+
+> [!note] 思考题
+> 1. MyBatis 的插件机制允许拦截 Executor、StatementHandler、ParameterHandler 和 ResultSetHandler 四大接口的方法调用。底层通过 JDK 动态代理实现。如果多个插件拦截同一个方法，它们的执行顺序由什么决定？内层代理先执行还是外层代理先执行？
+> 2. 分页插件（如 PageHelper）的核心原理是拦截 Executor 的 query 方法，修改 SQL 为 `SELECT ... LIMIT offset, size`，并额外执行一条 `SELECT COUNT(*) ...` 获取总数。在深分页场景（offset=1000000）中，LIMIT 的性能会急剧下降。分页插件有能力自动优化为'游标分页'（基于上一页最后一条的 ID）吗？还是必须由用户手动改写查询？
+> 3. MyBatis 插件可以修改 SQL 文本、替换参数、甚至修改返回结果。在一个多租户系统中，插件自动为所有 SQL 追加 `AND tenant_id = #{tenantId}` 条件。这种'透明租户隔离'的方案在什么场景下会失败（如子查询、UNION、EXISTS 等复杂 SQL）？

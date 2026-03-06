@@ -518,3 +518,10 @@ $ cat /proc/sys/vm/zone_reclaim_mode
 - Linux Kernel Source: `mm/vmscan.c`（kswapd、shrink_lruvec、direct reclaim）
 - [Overview of Memory Reclaim in Linux Kernel](https://lpc.events/event/11/contributions/896/attachments/793/1493/slides-r2.pdf)
 - [Linux Kernel vs. Memory Fragmentation - TiDB Blog](https://www.pingcap.com/blog/linux-kernel-vs-memory-fragmentation-2/)
+
+---
+
+> [!note] 思考题
+> 1. 当可用内存低于阈值时 kswapd 后台回收。如果回收跟不上分配速度，进入'直接回收'导致进程阻塞。在延迟敏感的 Java 应用中，直接回收可能导致秒级抖动。如何通过 `vm.min_free_kbytes` 和 `vm.watermark_scale_factor` 来预防？设置过大有什么代价？
+> 2. `vm.swappiness` 控制回收文件页与匿名页的偏好。Redis 官方建议设为 1 而非 0——为什么？设为 0 在内核 3.5+ 意味着'除非内存极度紧张否则不 Swap'，但仍有极端场景会触发 Swap。在什么场景下即使 swappiness=0 仍然会发生 Swap？
+> 3. 脏页回写是内存回收的瓶颈。`vm.dirty_ratio` 和 `vm.dirty_background_ratio` 控制脏页阈值。在 SSD 服务器上这些参数的最优值与 HDD 有什么不同？为什么在高写入场景中降低 `dirty_ratio` 反而可能提升应用的延迟稳定性？

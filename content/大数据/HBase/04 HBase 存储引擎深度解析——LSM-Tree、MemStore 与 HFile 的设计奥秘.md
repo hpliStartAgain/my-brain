@@ -591,6 +591,11 @@ HBase 选择 LSM-Tree 而非 B+Tree 的工程决策，换来了极高的写入�
 
 ---
 
+> [!note] 思考题
+> 1. LSM-Tree 通过将随机写转化为顺序写来获得高写入吞吐，但这以读放大为代价——读取一个 Key 可能需要检查 MemStore、BlockCache 以及多个 HFile。HBase 通过 BloomFilter 来减少不必要的 HFile 扫描。BloomFilter 是有假阳性率的——它可能误判"该 Key 在此 HFile 中存在"。这个假阳性会导致什么额外代价？如何根据数据规模选择合适的 BloomFilter 大小？
+> 2. HFile 是 HBase 的持久化存储格式，基于 SSTable 结构，内部数据按 RowKey 有序排列。当执行 Scan 操作时，需要同时扫描 MemStore 和多个 HFile，然后按时间戳合并结果。如果一张表有 100 个 HFile（Compaction 长期未执行），一次全表 Scan 的 I/O 放大系数是多少？Minor Compaction 和 Major Compaction 在改善 Scan 性能方面各有什么贡献？
+> 3. MemStore 使用 `ConcurrentSkipListMap` 作为内存数据结构，支持并发读写和有序遍历。当 MemStore 达到 `hbase.hregion.memstore.flush.size`（默认 128MB）时触发 Flush。在高并发写入场景下，如果多个 Region 的 MemStore 同时达到 Flush 阈值，会引发大量并发的 HDFS 写操作，导致 RegionServer 的磁盘和网络 I/O 峰值。HBase 的 `hbase.regionserver.global.memstore.size` 全局阈值是如何协调这个问题的？
+
 ## 参考资料
 
 - [1] O'Neil, P., et al. "The Log-Structured Merge-Tree (LSM-Tree)." Acta Informatica, 1996.

@@ -510,3 +510,10 @@ public class SpringExtensionInjector implements ExtensionInjector {
 三者组合，构成了 Dubbo "微内核 + 插件化"架构的骨架——框架本身只提供了空的扩展点定义，所有功能都通过 SPI 实现注册，且可以被无限替换和扩展。
 
 下一篇文章将深入服务导出与服务引用的完整流程——从 `@DubboService` 注解到 Netty Server 监听端口的每一个步骤。
+
+---
+
+> [!note] 思考题
+> 1. Dubbo 2.x 使用'接口级'服务注册——每个服务接口（如 `com.example.UserService`）注册为独立的节点。Dubbo 3.x 引入了'应用级'服务注册——一个应用只注册一次，包含该应用提供的所有服务。应用级注册在什么场景下显著减少了注册中心的压力？在数千微服务的集群中，接口级注册可能产生多少注册节点？
+> 2. 注册中心（ZooKeeper、Nacos）是 Dubbo 的单点依赖——如果注册中心不可用，Consumer 无法发现新的 Provider。但 Dubbo 有本地缓存机制——Consumer 缓存了最近的 Provider 列表。注册中心短暂不可用时，已有的 Consumer 调用不受影响。那'新启动的 Consumer'能否正常工作？
+> 3. 从 ZooKeeper 迁移到 Nacos 作为注册中心是常见需求（Nacos 部署更简单、支持配置管理）。Dubbo 3.x 支持多注册中心——可以同时注册到 ZK 和 Nacos。迁移期间如何保证平滑过渡？双注册双订阅的策略在什么时机可以安全切断旧注册中心？

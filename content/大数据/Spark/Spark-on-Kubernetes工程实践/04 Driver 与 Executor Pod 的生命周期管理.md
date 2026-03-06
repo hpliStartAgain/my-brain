@@ -377,6 +377,11 @@ Driver 和 Executor Pod 生命周期管理的核心要点：
 
 ---
 
+> [!note] 思考题
+> 1. Driver Pod 完成后，K8s 默认会保留 Pod（处于 `Completed` 或 `Failed` 状态），以便获取日志。但在高频作业场景下，大量已完成的 Pod 会占用 K8s etcd 存储并影响 API Server 性能。`spark.kubernetes.driver.deleteOnTermination` 参数控制是否自动删除已完成的 Driver Pod。在什么场景下应该保留，什么场景下应该删除？如何在日志保留与 etcd 压力之间取得平衡？
+> 2. Executor Pod 的注册过程是异步的——Spark 通过 `spark-submit` 提交作业后，Driver 开始创建 Executor Pod，但这些 Pod 可能因为镜像拉取、节点调度等原因延迟启动。`spark.kubernetes.allocation.batch.size` 和 `spark.kubernetes.allocation.batch.delay` 控制 Executor 的分批创建速率。如果一次性创建大量 Executor Pod（如 1000 个），会对 K8s API Server 产生什么冲击？
+> 3. 当 Executor Pod 被 K8s 驱逐（Eviction）时（如节点内存压力触发），Spark 会将其视为 Executor 失败并重新申请。但如果整个节点的内存压力持续存在，新创建的 Executor Pod 仍然会被调度到同一节点（K8s 调度器不了解 Spark 的 Executor 历史失败原因）。这种"反复驱逐-重建"的循环会导致作业永远无法完成。如何通过 K8s 的亲和性/反亲和性规则或污点容忍来避免这个问题？
+
 ## 参考资料
 
 - Apache Spark 官方文档：Running Spark on Kubernetes - Dynamic Resource Allocation

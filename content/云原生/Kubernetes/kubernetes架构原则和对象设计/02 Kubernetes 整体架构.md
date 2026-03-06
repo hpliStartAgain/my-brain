@@ -448,3 +448,10 @@ K8s 控制平面有两种典型的 etcd 部署方式：
 6. Kubernetes Design Proposals - Scheduling Framework：https://github.com/kubernetes/enhancements/tree/master/keps/sig-scheduling/624-scheduling-framework
 7. Brendan Burns, Joe Beda, Kelsey Hightower (2019). *Kubernetes: Up and Running*, 2nd Edition. O'Reilly.
 8. Michael Hausenblas, Stefan Schimanski (2019). *Programming Kubernetes*. O'Reilly, Chapter 1-3.
+
+---
+
+> [!note] 思考题
+> 1. Pod 的三种探针：Liveness（存活，失败则重启）、Readiness（就绪，失败则从 Service 摘除）、Startup（启动，防止慢启动应用被 Liveness 误杀）。在一个 Java 应用中（启动需要 60 秒），如果不设置 Startup Probe 而 Liveness Probe 的 `initialDelaySeconds` 设为 30 秒——应用会在启动期间被反复杀死重启。如何正确配置三种探针的关系？
+> 2. 资源的 Request（保证最低资源）和 Limit（最大资源上限）的设置至关重要。Request 决定调度（调度器根据 Node 的可用 Request 分配 Pod），Limit 由 CGroups 强制执行。如果 Request=100m CPU、Limit=1000m CPU——Pod 平时使用 100m，突发时可以 burst 到 1000m。但如果 Node 上所有 Pod 同时 burst，CPU 不够用——谁的性能受影响？CPU 的 CFS throttling 如何工作？
+> 3. Pod 的 QoS Class（Guaranteed、Burstable、BestEffort）由资源配置决定。Guaranteed（Request=Limit）的 Pod 在内存压力下最后被 OOM Kill。在关键服务中你是否应该总是设置 Guaranteed QoS？Guaranteed 意味着不能 burst——是否浪费了资源？

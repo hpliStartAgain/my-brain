@@ -625,6 +625,11 @@ graph TD
 
 ---
 
+> [!note] 思考题
+> 1. YARN 队列规划需要在资源保障（每个队列有最低容量保证）和资源利用率（允许弹性共享）之间取得平衡。在实际的多团队共享集群中，队列容量的设置往往基于历史用量，但业务的资源需求会随时间变化（如季报期间 BI 团队需要更多资源，平时则很少使用）。如何设计一套动态调整队列容量的机制，在不重启 RM 的前提下响应业务需求变化？YARN 的在线配置刷新（`yarn rmadmin -refreshQueues`）能做到什么程度的动态调整？
+> 2. 容量调度器的抢占（Preemption）机制在资源紧张时会强制终止低优先级队列中正在运行的 Container，将资源归还给高优先级队列。但强制终止 Container 会打断正在运行的 Task，导致 Task 需要重新执行（浪费了之前的计算）。对于运行了数小时的大型 MapReduce 或 Spark 作业，被抢占后需要重算的代价是巨大的。如何设计抢占策略，使得抢占产生的重算代价最小？
+> 3. 随着 Kubernetes 成为容器编排的事实标准，大型互联网公司（如 Alibaba、LinkedIn）已经开始将 Spark、Flink 迁移到 K8s，逐渐淡出 YARN。但对于已经深度依赖 YARN 的传统大数据团队（有 Hadoop 生态的历史积累），从 YARN 迁移到 K8s 的主要技术挑战是什么？（如 Kerberos 认证集成、HDFS 数据本地性、监控体系迁移）在 K8s 完全替代 YARN 之前，两者共存的混合架构应该如何设计？
+
 ## 参考资料
 
 - Apache Hadoop 官方文档：[YARN Architecture](https://hadoop.apache.org/docs/current/hadoop-yarn/hadoop-yarn-site/YARN.html)

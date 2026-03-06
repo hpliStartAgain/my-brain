@@ -570,3 +570,10 @@ while (1) {
 3. `sk->sk_data_ready()` 是 TCP 接收与 epoll 之间的桥梁——数据到来时唤醒等待的进程
 
 下一篇 [[04 epoll 深度解析——事件驱动 IO 的内核实现]] 将从这个 `sk_data_ready()` 入口出发，完整追踪 epoll 的内核实现：`epoll_create()` 创建的 eventpoll 结构、`epoll_ctl()` 注册 fd 时在 socket 等待队列上安装的"哨兵"、`epoll_wait()` 的睡眠与唤醒机制，以及 LT（水平触发）与 ET（边缘触发）在内核层面的实现差异。
+
+---
+
+> [!note] 思考题
+> 1. TCP 滑动窗口的接收窗口（rwnd）由接收方通告，拥塞窗口（cwnd）由发送方维护。实际发送窗口 = min(rwnd, cwnd)。在一个接收方处理能力很强（rwnd 很大）但网络拥塞严重（cwnd 很小）的场景中，增大接收缓冲区能否提升吞吐量？为什么？
+> 2. 快速重传（Fast Retransmit）在收到 3 个重复 ACK 后立即重传丢失的报文，而不等待超时。但 3 个重复 ACK 的前提是后续报文已到达——如果连续丢失多个报文，可能收不到 3 个重复 ACK，只能等待 RTO 超时。SACK（Selective ACK）如何解决这个问题？SACK 对接收端的实现复杂度有什么影响？
+> 3. BBR 拥塞控制不依赖丢包反馈——它通过测量带宽（delivery rate）和 RTT 来估算最优发送速率。BBR 的 Probe BW 和 Probe RTT 两个阶段分别做什么？在高丢包率网络（如 2% 随机丢包）中，BBR 的吞吐量比 CUBIC 高多少？BBR 是否在所有网络环境中都优于 CUBIC？

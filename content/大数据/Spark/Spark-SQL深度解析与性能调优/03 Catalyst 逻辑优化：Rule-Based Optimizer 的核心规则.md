@@ -543,6 +543,11 @@ Catalyst 的 Rule-Based Optimizer 通过数十条精心设计的等价变换规�
 
 ---
 
+> [!note] 思考题
+> 1. 谓词下推（Predicate Pushdown）在遇到 `LEFT OUTER JOIN` 右表的过滤条件时，无法下推到 Join 之前。这是为什么？如果强行下推会导致什么语义错误？
+> 2. Catalyst 的 RBO 规则是无状态的等价变换，不依赖数据统计信息。那么"列裁剪"规则是否也属于纯等价变换？在涉及 `SELECT *` 加上 UDF 的场景下，列裁剪是否可能裁掉"看起来不需要"但实际有副作用的列？
+> 3. 子查询优化将 `IN` 子查询转化为 Semi Join。但对于 `NOT IN` 含 NULL 值的情况，SQL 标准规定的三值逻辑（TRUE/FALSE/UNKNOWN）与 Anti Join 的处理方式存在细微差异。Spark 是如何正确处理这个语义陷阱的？
+
 ## 参考资料
 
 - [Catalyst Optimizer in Spark SQL（waitingforcode.com）](https://www.waitingforcode.com/apache-spark-sql/catalyst-optimizer-in-spark-sql/read)

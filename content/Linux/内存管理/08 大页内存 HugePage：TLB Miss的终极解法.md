@@ -299,3 +299,10 @@ HugePage 是解决大内存时代 TLB Miss 问题的系统级方案，本文核�
 - Brendan Gregg, *Systems Performance, 2nd Ed.*, Chapter 7: Memory（HugePage section）
 - Redis Documentation: [Latency - Transparent huge pages](https://redis.io/docs/management/optimization/latency/)
 - [Transparent Hugepages: measuring the performance impact](https://alexandrnikitin.github.io/blog/transparent-hugepages-measuring-the-performance-impact/)
+
+---
+
+> [!note] 思考题
+> 1. 4KB 页面在 1GB 工作集时需要 262144 个 TLB 条目。2MB HugePage 将条目数减至 512。但 HugePage 的内部碎片更大。在什么内存使用模式下 HugePage 收益最大（如 JVM 堆、数据库 Buffer Pool）？小内存应用（如微服务容器，RSS<100MB）是否需要 HugePage？
+> 2. Transparent Huge Pages 的 `khugepaged` 线程在后台合并页面时会引起延迟抖动。Redis、MongoDB 建议关闭 THP——根本原因是什么？是 THP 的合并/拆分开销还是内存分配模式与 THP 不兼容？THP 的 `defrag` 模式 `madvise` 如何让应用选择性使用 THP？
+> 3. 1GB HugePage 必须在启动时预分配，运行时无法动态分配。DPDK 使用 1GB HugePage 映射 DMA 缓冲区。预留过多未使用的 HugePage 内存能被其他进程使用吗？如何在不重启的情况下释放预留的 HugePage？

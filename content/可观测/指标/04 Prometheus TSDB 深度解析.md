@@ -493,3 +493,10 @@ data/
 4. Ganesh Vernekar (2019). *Prometheus TSDB: Past, Present, and Future*. KubeCon EU.
 5. Brian Brazil (2018). *Prometheus: Up & Running*, Chapter 20: TSDB. O'Reilly Media.
 6. Prometheus Documentation - Storage：https://prometheus.io/docs/prometheus/latest/storage/
+
+---
+
+> [!note] 思考题
+> 1. Exporter 是将非 Prometheus 格式的指标转化为 Prometheus 格式的适配器。Node Exporter（系统指标）、MySQL Exporter（数据库指标）、Redis Exporter（Redis 指标）是最常用的。在选择 Exporter 时你关注什么（如是否由官方维护、指标覆盖度、性能开销）？如果没有现成的 Exporter，自己编写一个需要多少工作量？
+> 2. 自定义业务指标（如订单处理延迟、支付成功率）需要在应用中集成 Prometheus Client Library。`Counter`、`Gauge`、`Histogram` 和 `Summary` 四种指标类型各适合什么场景？`Histogram` 和 `Summary` 的区别是什么——为什么官方推荐 Histogram 而非 Summary？
+> 3. 指标命名规范——Prometheus 的 Naming Convention 要求使用 `snake_case`、包含单位后缀（如 `_seconds`、`_bytes`）、Counter 使用 `_total` 后缀。好的命名使指标自解释——如 `http_requests_total` 比 `requests` 更清晰。在你的项目中如何推行统一的命名规范？

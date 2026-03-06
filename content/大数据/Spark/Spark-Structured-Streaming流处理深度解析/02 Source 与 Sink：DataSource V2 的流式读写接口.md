@@ -377,6 +377,11 @@ Spark 为每个 InputPartition 启动一个 Task，4 个 Task 并行读取 4 个
 
 ---
 
+> [!note] 思考题
+> 1. Kafka Source 通过维护每个分区的 Offset 来实现断点续传。在流作业重启时，Spark 会从 Checkpoint 记录的上次提交 Offset 开始消费，而不是 Kafka 的 Consumer Group Offset。这意味着即使手动调整了 Kafka Consumer Group 的 Offset，Spark 也不会使用它。这种设计有什么优缺点？在什么运维场景下这个行为会让人困惑？
+> 2. `maxOffsetsPerTrigger` 参数限制了每个 MicroBatch 从 Kafka 最多拉取的消息数量。如果生产端的写入速率突然飙升（比如上游系统故障恢复后的流量洪峰），这个参数会导致积压持续增长。在积压场景下，是否应该动态调大 `maxOffsetsPerTrigger`？这样做有什么风险？
+> 3. DataSource V2 的 Streaming Source 接口要求实现 `latestOffset()` 和 `planInputPartitions()` 两个核心方法。`latestOffset()` 会在每个 MicroBatch 开始时被调用一次，用于确定本批次读取的上界。如果这个方法的执行很慢（比如需要查询远程服务），会对整体吞吐量产生什么影响？
+
 ## 参考资料
 
 - Apache Spark 官方文档：Structured Streaming Programming Guide - Sinks

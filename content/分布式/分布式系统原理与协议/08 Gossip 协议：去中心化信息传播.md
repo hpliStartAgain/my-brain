@@ -367,3 +367,10 @@ Gossip 的每轮消息量与集群节点数成正比（O(n) 条总消息/轮）�
 6. DeCandia, G., et al. (2007). Dynamo: Amazon's Highly Available Key-value Store. *SOSP 2007*.
 7. Leitao, J., Pereira, J., & Rodrigues, L. (2007). Epidemic broadcast trees. *SRDS 2007*.
 8. Kleppmann, M. (2017). *Designing Data-Intensive Applications*. O'Reilly Media. Chapter 5: Replication.
+
+---
+
+> [!note] 思考题
+> 1. 拜占庭容错（BFT）处理节点可能'作恶'（发送错误信息）的场景——而 Raft/Paxos 只处理节点'崩溃'（停止响应）。PBFT（Practical BFT）容忍 f 个恶意节点需要 3f+1 个节点（而 Raft 只需要 2f+1）。为什么 BFT 需要更多节点？在什么场景下你需要 BFT 而非 CFT（Crash Fault Tolerance）？
+> 2. 区块链的共识机制（如 PoW、PoS）是 BFT 在开放网络中的应用——参与者不固定且互不信任。PoW 通过计算难题保证'作恶成本高于收益'。但 PoW 的能耗问题导致以太坊转向 PoS。PoS 的安全性假设与 PoW 有什么根本区别？
+> 3. 在企业级分布式系统中（如银行间结算网络），节点数量固定且半信任——PBFT 是合适的共识算法。Hyperledger Fabric 使用 PBFT 的变体。与传统的中心化结算系统相比，基于 PBFT 的分布式结算在性能和可靠性方面有什么权衡？

@@ -542,3 +542,10 @@ outbound|80||backend-service.default.svc.cluster.local
 ---
 
 *本文是 [[服务网格]] 专栏的第 3 篇。*
+
+---
+
+> [!note] 思考题
+> 1. xDS 协议包括 CDS（集群发现）、EDS（端点发现）、LDS（监听器发现）和 RDS（路由发现）。当 Service 的 Endpoint 变化（如 Pod 扩缩容），istiod 通过 EDS 推送新的端点列表到 Envoy。从 Pod 就绪到 Envoy 收到更新的延迟通常是多少？在极端情况下（如大规模滚动更新），这个延迟如何影响流量路由？
+> 2. Envoy 的流量管理支持权重路由（`VirtualService` 的 `weight`）、Header 匹配路由和故障注入。在金丝雀发布中，将 5% 流量路由到新版本——如何验证新版本的正确性？如果新版本有 bug，如何快速回滚到 0%？Istio 的 `VirtualService` + `DestinationRule` 如何配合实现？
+> 3. Envoy 的重试策略（`retryOn: 5xx, connect-failure`）自动重试失败请求。但重试可能导致'重试风暴'——上游服务已过载，大量重试加剧过载。重试预算（Retry Budget）限制重试请求的比例——如何配置以防止重试风暴？Envoy 的断路器（Circuit Breaker）与重试如何配合？

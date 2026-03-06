@@ -475,3 +475,10 @@ Swap 不是洪水猛兽，也不是扩容内存的廉价替代品，它是 Linux
 - Linux Kernel Source: `mm/swap_state.c`, `mm/swapfile.c`, `mm/vmscan.c`
 - [zswap: A compressed cache for swap pages](https://www.kernel.org/doc/html/latest/admin-guide/mm/zswap.html)
 - [Arch Wiki: Swap](https://wiki.archlinux.org/title/Swap)
+
+---
+
+> [!note] 思考题
+> 1. 在容器化环境中，容器超出 CGroups 限制但未触发 OOM Kill 时，内核会将匿名页换出到 Swap——导致性能急剧下降。Kubernetes 1.22+ 开始支持 Swap——它的设计是如何在隔离性和灵活性之间权衡的？你认为生产 K8s 集群是否应该启用 Swap？
+> 2. zram（内存压缩 Swap）将页面压缩后存储在内存中。压缩比通常在 2:1 到 3:1。在什么场景下 zram 是比 SSD Swap 更好的选择？zram 的 CPU 开销（压缩/解压）在什么工作负载下可能成为瓶颈？
+> 3. `swapoff -a` 时所有换出页面需要换入。如果换出量为 10GB，可能耗时数分钟并引起严重 IO 压力。在生产环境中如何安全关闭 Swap？逐步减小 `vm.swappiness` 并等待自然换入是否是一个可行策略？

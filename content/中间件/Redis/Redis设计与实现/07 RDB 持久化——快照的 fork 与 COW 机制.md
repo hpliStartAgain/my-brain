@@ -334,3 +334,10 @@ INFO persistence
 3. Redis Documentation - Persistence：https://redis.io/docs/management/persistence/
 4. Linux Documentation - overcommit：https://www.kernel.org/doc/Documentation/vm/overcommit-accounting
 5. 黄健宏 - 《Redis 设计与实现》（第二版）- 第 10 章 RDB 持久化
+
+---
+
+> [!note] 思考题
+> 1. `down-after-milliseconds` 设为 5 秒（快速检测）还是 30 秒（避免误判）取决于网络质量。在一个跨可用区部署（AZ 间延迟 1-2ms，偶尔抖动到 100ms）的环境中，这个值应该设为多少？如果 Sentinel 自身也部署在不同 AZ——Sentinel 之间的通信延迟如何影响故障判定？
+> 2. Sentinel 选举新主节点时优先选择复制偏移量最大的从节点（数据最新）。但在跨机房场景中，你可能希望新主节点在特定机房。`replica-priority` 为 0 的从节点永远不会被选为主节点——你如何利用这个特性实现'指定机房优先'的故障转移策略？
+> 3. Spring Boot 的 `spring.redis.sentinel.master` 配置自动发现主节点。客户端库通过订阅 Sentinel 的 `+switch-master` 频道感知主从切换。但从发现切换到重新连接有延迟——在这个窗口内的请求可能失败。你如何在应用层处理这个瞬间的连接中断？

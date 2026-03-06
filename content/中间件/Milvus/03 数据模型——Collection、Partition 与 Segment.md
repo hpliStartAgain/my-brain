@@ -385,3 +385,10 @@ Collection（逻辑表，Schema 定义）
 
 - **[[04 查询引擎——混合检索与过滤]]**：深入查询执行计划，理解向量 ANN 搜索与标量布尔过滤的协同策略，分析分布式查询的精度控制
 - **[[05 Milvus 在 RAG 场景中的应用]]**：从工程实践角度，讲解如何将 Milvus 作为 RAG 系统的向量检索后端，包括 Embedding 选型、文档分块、混合检索等最佳实践
+
+---
+
+> [!note] 思考题
+> 1. Milvus 的数据写入流程：写入消息队列（Kafka）→ DataNode 消费并写入 Growing Segment → Segment 满后 Seal → IndexNode 构建索引 → 变为 Sealed Segment。在 Growing Segment 上的查询使用暴力搜索（Brute Force）——因为还没有 ANN 索引。如果写入速率很高，大量数据在 Growing Segment 中，查询性能如何？
+> 2. Milvus 支持删除操作——但向量索引不支持原地删除。删除通过'标记删除'（Bitset）实现——查询时过滤已删除的向量。大量删除后，Bitset 变大，查询时的过滤开销增加。Compaction 合并 Segment 并物理删除已标记的向量。在什么频率下你应该触发 Compaction？
+> 3. Milvus 的一致性级别支持 Strong（强一致性）、Bounded Staleness、Session 和 Eventually。Strong 一致性保证查询能看到最新写入——但需要等待所有 QueryNode 同步完成。在 RAG 场景中（写入频率低但查询对'看到最新数据'有要求），应该选择什么一致性级别？

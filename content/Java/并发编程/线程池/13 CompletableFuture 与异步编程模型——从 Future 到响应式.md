@@ -602,3 +602,10 @@ public Mono<String> fetchWithCF() {
 3. Lea, Doug, "Scalable IO in Java", 2002
 4. Project Reactor 文档, "Which operator do I need?", projectreactor.io
 5. JEP 266: More Concurrency Updates — `orTimeout`, `completeOnTimeout`
+
+---
+
+> [!note] 思考题
+> 1. `CompletableFuture.thenApply()` 在哪个线程上执行？如果上一步的 Future 已经完成，`thenApply` 可能在调用线程上同步执行；如果未完成，在完成 Future 的线程上执行。`thenApplyAsync()` 保证在线程池中执行。在什么场景下不使用 `Async` 版本会导致性能问题（提示：如果回调函数执行很慢且在 Netty 的 EventLoop 线程上执行）？
+> 2. `CompletableFuture.allOf(cf1, cf2, cf3)` 等待所有 Future 完成。但 `allOf` 的返回类型是 `CompletableFuture<Void>`——你无法直接获取各个 Future 的结果。你如何优雅地获取所有 Future 的结果并组合？`allOf` 后再逐个 `cf.join()` 是否是最佳实践？
+> 3. `CompletableFuture` 的异常处理链：`exceptionally()` 处理异常并返回默认值，`handle()` 同时处理正常结果和异常。如果链路中有多个 `thenApply`，中间某一步抛出异常——后续的 `thenApply` 会被跳过直到遇到 `exceptionally` 或 `handle`。这种行为与 try-catch 的异常传播有什么异同？在异常链路上 `thenCompose` 和 `thenApply` 的行为有区别吗？

@@ -408,6 +408,11 @@ AQE 是 Spark 3.0 最重要的性能特性，彻底改变了静态优化的范�
 
 ---
 
+> [!note] 思考题
+> 1. AQE 以 Shuffle 边界为 QueryStage 的分割点，每个 Stage 完成后才能做动态决策。这意味着 AQE 对没有 Shuffle 的 Pipeline（如全部是窄依赖的计算）完全无法介入。在什么类型的 SQL 查询中，AQE 几乎没有优化空间？
+> 2. AQE 的 Skew Join 优化通过将倾斜分区切分成多个小分区来并行处理。但切分后，非倾斜侧的对应分区必须被"复制"到多个 Task 中。如果倾斜侧有 5 个分区都是热点，而每个热点被切成 10 份，非倾斜侧的数据会被读取多少次？这对 I/O 意味着什么？
+> 3. AQE 在每个 QueryStage 完成后会重新优化后续计划，这引入了额外的规划开销。在生产中，有没有场景会因为 AQE 的动态重优化而导致总体执行时间反而比关闭 AQE 更长？
+
 ## 参考资料
 
 - [Spark 3.0 - AQE 浅析（Adaptive Query Execution）（CSDN）](https://blog.csdn.net/zyzzxycj/article/details/106469572)

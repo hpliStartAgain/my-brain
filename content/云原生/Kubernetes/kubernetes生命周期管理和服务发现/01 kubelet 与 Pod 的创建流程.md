@@ -375,3 +375,10 @@ K8s 1.26+ 引入了 **Evented PLEG**——基于 CRI 的事件流（而非轮询
 4. Kubernetes Source Code - pkg/kubelet：https://github.com/kubernetes/kubernetes/tree/master/pkg/kubelet
 5. Kubernetes Enhancement Proposal - Evented PLEG：https://github.com/kubernetes/enhancements/tree/master/keps/sig-node/3386-kubelet-evented-pleg
 6. Ian Lewis (2017). *The Almighty Pause Container*. https://www.ianlewis.org/en/almighty-pause-container
+
+---
+
+> [!note] 思考题
+> 1. Init Container 在主容器之前按顺序执行——用于初始化工作（如等待依赖服务就绪、下载配置文件、修改文件系统权限）。Init Container 共享 Volume 但不共享网络 Namespace（在 Kubernetes 1.28+ 可以共享）。在什么场景下你需要 Init Container 而非在主容器的启动脚本中完成初始化？
+> 2. PreStop Hook 在容器被终止前执行——典型用途是优雅关闭（如停止接受新请求、完成正在处理的请求）。但 PreStop 有超时限制（`terminationGracePeriodSeconds` 默认 30 秒）——超时后容器被 SIGKILL 强制杀死。在需要 60 秒以上优雅关闭的场景中（如处理长连接、完成大事务），你如何调整？
+> 3. Pod 的终止流程：1) Pod 被标记为 Terminating → 2) PreStop Hook 执行 → 3) SIGTERM 发送给容器 → 4) 等待 `terminationGracePeriodSeconds` → 5) SIGKILL。但同时 Endpoints Controller 从 Service 中移除 Pod IP——这个操作与步骤 1 是并行的。如果 Service 的移除比 Pod 终止慢——正在终止的 Pod 仍然收到新请求。你如何通过 PreStop Hook 中的 `sleep 5` 来等待 Endpoints 更新？

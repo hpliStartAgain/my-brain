@@ -619,3 +619,10 @@ graph TD
 - `ethtool -K eth0 gro on`：确保 GRO 开启，减少协议栈处理次数
 
 下一篇 [[08 高性能网络编程——io_uring 网络、SO_REUSEPORT 与多队列 NIC]] 将从应用层视角整合前面所有知识：io_uring 的异步 socket API（`IORING_OP_RECV`/`SEND`/`ACCEPT`）如何在 Linux 6.x 中统一磁盘和网络 IO；`SO_REUSEPORT` 如何让多个进程/线程各自监听同一端口消除 accept 锁竞争；以及 NIC 多队列与应用线程的亲和性配置方法论。
+
+---
+
+> [!note] 思考题
+> 1. 单 Reactor 单线程（Redis 模型）适合 CPU 轻量的场景——所有 IO 和计算都在一个线程中。如果某个请求的处理耗时较长（如 Redis 的 KEYS * 命令），会阻塞所有其他请求。Redis 6.0 引入了多线程 IO——但命令执行仍然是单线程的。多线程 IO 具体加速了网络栈的哪个环节？
+> 2. 主从 Reactor 模式（Netty 的 BossGroup + WorkerGroup）中，Boss 线程负责 accept，Worker 线程负责读写。如果 Worker 线程中执行了耗时操作（如数据库查询），会阻塞该线程上所有 Channel 的处理。除了使用独立的业务线程池，还有什么设计模式可以解决？协程（如 Go 的 goroutine）是否消除了这个问题？
+> 3. Reactor 模式的性能天花板是什么？当网络带宽（如 100Gbps）远超单核处理能力时，单个 Reactor 线程成为瓶颈。多 Reactor 线程如何分担负载？RSS（Receive Side Scaling）如何在网卡层面将数据包分发到不同 CPU 核的 Reactor 线程？

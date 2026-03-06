@@ -436,3 +436,10 @@ RocksDB 将 LevelDB 的理论价值转化为生产可用的工程能力，其核
 - 通过开源生态的发展，成为分布式数据库（TiKV、CockroachDB）、流处理系统（Flink、Kafka Streams）等基础设施的通用存储底座
 
 从 LevelDB 到 RocksDB 的演进路径，是存储引擎设计从"理论正确"走向"工程可用"的典范——核心思想不变，但在生产环境中打磨出的每一处细节改进，都有其真实的业务痛点和工程代价的精确权衡。
+
+---
+
+> [!note] 思考题
+> 1. LevelDB 是单线程写入、单线程 Compaction 的简单设计——适合嵌入式场景但不适合高性能服务。RocksDB 在 LevelDB 基础上增加了：并发写入（Group Commit）、并发 Compaction、Column Family、Rate Limiter 等。在什么规模的应用中你会选择 RocksDB 而非 LevelDB？LevelDB 的代码更简单——作为学习 LSM-Tree 的入门是否更合适？
+> 2. RocksDB 被 TiKV、CockroachDB、Kafka Streams 等系统作为嵌入式存储引擎使用。RocksDB 的 Column Family 允许在同一个 DB 实例中创建多个独立的 KV 空间——共享 WAL 和 MemTable 但有独立的 SSTable。Column Family 对事务（跨 CF 的原子写入）有什么影响？
+> 3. 除了 LevelDB/RocksDB，Pebble（Go 实现的 LSM-Tree，CockroachDB 使用）和 BadgerDB（Go 实现，KV 分离设计）是其他选择。BadgerDB 的 KV 分离将 Value 存储在独立的 Value Log 中——减少了 Compaction 的写放大（只需要合并 Key）。KV 分离在什么场景下优势最大（如 Value 很大，>1KB）？在 Value 很小时 KV 分离是否有额外开销？

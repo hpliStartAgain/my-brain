@@ -343,3 +343,10 @@ SELECT trace FROM information_schema.OPTIMIZER_TRACE\G
 5. **JOIN 连接顺序优化**：优先选行数少的表为驱动表，被驱动表的连接列必须有索引；8.0.18+ Hash Join 在无索引等值 JOIN 场景大幅优于 BNL
 6. **Optimizer Hints 是最后手段**：应先更新统计信息、优化索引、改写 SQL，再考虑 Hints
 7. **Optimizer Trace 揭示决策过程**：当执行计划不符合预期时，用 Trace 查看代价估算，找到优化器做出错误选择的真正原因
+
+---
+
+> [!note] 思考题
+> 1. 分库分表将数据按分片键分散到多个数据库实例。水平分片（按行拆分）和垂直分片（按列拆分）各适合什么场景？在一个按 `user_id` 分片的订单表中，如果查询 `SELECT * FROM orders WHERE merchant_id = 123`（非分片键），需要查询所有分片——性能很差。如何在分片键之外的查询上保持性能？异构索引表和 Elasticsearch 辅助查询各有什么优劣？
+> 2. ShardingSphere-JDBC 以 JDBC Driver 的形式嵌入应用——拦截 SQL 并路由到正确的分片。ShardingSphere-Proxy 作为独立的数据库代理——对应用透明。两种方式在性能开销、运维复杂度和适用场景方面有什么区别？在 Kubernetes 环境中哪种更合适？
+> 3. 分库分表后的数据迁移（如从 8 个分片扩展到 16 个分片）需要重新分配数据。在线迁移（不停机）的挑战是什么——如何保证迁移期间数据的一致性？'双写'方案和'增量同步'方案各有什么优劣？

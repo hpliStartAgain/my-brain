@@ -529,3 +529,10 @@ graph TD
 5. Joao et al., "CrewAI: Framework for Orchestrating Role-Playing AI Agents", GitHub 2024
 6. Anthropic, "Building Effective Agents: Prefer Simple, Composable Patterns", 2024
 7. Chase, "The Problem with LangChain", 2023 (批评性分析)
+
+---
+
+> [!note] 思考题
+> 1. LangChain 的 Chain 抽象（LCEL）将 Prompt → LLM → OutputParser 组合为管道。但当逻辑变得复杂（需要条件分支、循环、并行执行）时，Chain 的线性模型变得笨拙。LangGraph 引入了'图'结构——节点是函数，边是条件转换。在什么复杂度下你会从 LangChain Chain 迁移到 LangGraph？Graph 抽象的学习成本是否值得？
+> 2. LlamaIndex 专注于 RAG 和数据索引，而 LangChain 更通用（支持各种 Agent 模式）。在一个'以知识库问答为核心，辅以少量工具调用'的应用中，你会选择哪个框架？两个框架可以混合使用吗？例如用 LlamaIndex 处理检索，用 LangChain 编排 Agent 逻辑。
+> 3. Agent 框架的抽象层增加了调试难度——当 Agent 行为不符合预期时，你需要追踪 Prompt 内容、LLM 输出、工具调用参数和返回值。LangChain 的 LangSmith 提供了可观测性平台。在没有 LangSmith 的情况下，你如何搭建 Agent 的可观测性体系？最少需要记录哪些信息？

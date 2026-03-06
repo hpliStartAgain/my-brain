@@ -334,6 +334,11 @@ Key 的超时时间戳 = T
 
 ---
 
+> [!note] 思考题
+> 1. `flatMapGroupsWithState` 允许用户完全自定义状态管理逻辑，是最灵活的有状态算子。但这种灵活性也带来了风险——用户可能在状态中存储无限增长的数据结构（如 List）。与内置的窗口聚合算子相比，`flatMapGroupsWithState` 的状态生命周期管理完全由用户负责。如果用户忘记在状态函数中清理过期状态，State Store 会如何响应？State TTL（`GroupStateTimeout`）与 Watermark-based 清理有什么区别？
+> 2. `flatMapGroupsWithState` 使用 `GroupStateTimeout` 来处理超时逻辑（如用户长时间无活动则关闭 Session）。`ProcessingTimeTimeout` 和 `EventTimeTimeout` 的触发时机和语义有什么不同？在事件时间乱序严重的场景下，`EventTimeTimeout` 是否比 `ProcessingTimeTimeout` 更安全？
+> 3. `flatMapGroupsWithState` 要求用户定义的状态类型必须是可序列化的（Encoder 支持的类型）。在作业升级时，如果新版本的状态类型与旧版本不兼容（比如增加了字段），Spark 从旧 Checkpoint 恢复时会发生什么？有哪些工程实践可以实现状态 Schema 的平滑演进？
+
 ## 参考资料
 
 - Apache Spark 官方文档：Arbitrary Stateful Operations

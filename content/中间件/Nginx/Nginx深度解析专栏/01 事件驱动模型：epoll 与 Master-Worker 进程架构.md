@@ -572,3 +572,10 @@ worker_rlimit_core unlimited;  # 允许 core dump（生产环境调试时有用�
 ---
 
 > **下一篇**：[[02 配置体系解析：指令、上下文与继承规则]]
+
+---
+
+> [!note] 思考题
+> 1. Nginx 的 Worker 进程使用 epoll 事件循环处理数千并发连接。如果某个请求处理逻辑中有阻塞操作（如访问磁盘上的大文件），Worker 会被阻塞影响该 Worker 上所有其他连接。Nginx 的线程池（`aio threads`）如何解决？在什么场景下你需要启用线程池？
+> 2. Nginx 的优雅重启（`nginx -s reload`）中新旧 Worker 同时运行。`SO_REUSEPORT` 如何在多 Worker 之间分配新连接？与传统的 `accept_mutex` 相比，`SO_REUSEPORT` 在连接分发的均匀性和延迟方面有什么改善？
+> 3. Nginx 单个 Worker 能处理数万并发连接——远超 Apache 的 per-connection-thread 模型。但 Nginx 不适合 CPU 密集型任务。在什么场景下 Nginx + 后端应用服务器比纯 Nginx Lua 处理更合适？OpenResty 的 `cosocket` 非阻塞模型能否弥补 Nginx 在复杂业务逻辑处理上的不足？

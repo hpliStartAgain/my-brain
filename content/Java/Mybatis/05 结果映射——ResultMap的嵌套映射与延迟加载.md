@@ -711,3 +711,10 @@ public class ResultLoader {
 > - `org.apache.ibatis.executor.loader.ResultLoaderMap` 源码
 > - `org.apache.ibatis.executor.loader.cglib.CglibProxyFactory` 源码
 > - [Mybatis 官方文档 - ResultMap](https://mybatis.org/mybatis-3/sqlmap-xml.html#Result_Maps)
+
+---
+
+> [!note] 思考题
+> 1. MyBatis 的 `<association>` 支持嵌套查询（nested select）和嵌套结果映射（nested result map）两种方式实现关联查询。嵌套查询会导致 N+1 问题——查询主表后对每条记录再查子表。嵌套结果映射使用 JOIN 一次查出所有数据。在什么场景下嵌套查询反而优于 JOIN（提示：考虑数据量和缓存）？
+> 2. 延迟加载（Lazy Loading）通过动态代理在首次访问关联属性时触发 SQL 查询。MyBatis 使用 CGLIB 或 Javassist 创建代理对象。如果延迟加载的对象被序列化（如返回给前端的 JSON 响应），代理对象的序列化会触发所有延迟加载查询吗？这可能导致什么问题？如何避免？
+> 3. `<discriminator>` 标签可以根据某列的值动态选择不同的 ResultMap（类似多态映射）。在一个'订单表'中，`type` 列决定了订单的具体子类型（实物订单、虚拟订单、退款订单）。使用 `<discriminator>` 实现多态映射与在 Service 层通过 `switch` 手动转换相比，维护成本和类型安全性各有什么差异？

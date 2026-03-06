@@ -478,3 +478,10 @@ Lamport 在 2001 年发表了一篇题为 *Paxos Made Simple* 的论文，试图
 5. Ongaro, D., & Ousterhout, J. (2014). In Search of an Understandable Consensus Algorithm. *USENIX ATC 2014*.
 6. Kleppmann, M. (2017). *Designing Data-Intensive Applications*. O'Reilly Media. Chapter 9.
 7. Howard, H. (2019). Flexible Paxos: Quorum Intersection Revisited. *arXiv:1608.06696*.
+
+---
+
+> [!note] 思考题
+> 1. Gossip 协议通过'节点间随机交换信息'实现最终一致性——每个节点定期随机选择几个节点交换状态。信息的传播速度是 O(log n)——在 1000 节点集群中约需要 10 轮交换就能让所有节点获得信息。Redis Cluster 和 Consul 都使用 Gossip。Gossip 的'最终一致性'延迟如何量化？在什么场景下 Gossip 的延迟是不可接受的？
+> 2. Gossip 协议的三种变体：Anti-Entropy（定期全量交换，带宽高但一致性快）、Rumor Mongering（只传播新信息，带宽低但可能不完整）和 Aggregate（传播聚合值如计数、平均）。Redis Cluster 使用哪种变体？Cassandra 使用哪种？
+> 3. Gossip 的'扇出'参数（fanout）控制每轮选择多少个节点通信。fanout 越大传播越快但带宽开销越高。在 100 节点集群中，fanout=3 和 fanout=10 的传播速度和带宽开销差异有多大？

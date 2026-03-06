@@ -481,3 +481,10 @@ K8s 1.18+ 支持在一个 Scheduler 进程中配置多个 **Scheduling Profile**
 5. Kubernetes Documentation - Pod Priority and Preemption：https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/
 6. Kubernetes Source Code - pkg/scheduler：https://github.com/kubernetes/kubernetes/tree/master/pkg/scheduler
 7. Huang Wei (2020). *Scheduling Framework Deep Dive*. KubeCon EU.
+
+---
+
+> [!note] 思考题
+> 1. Job 保证 Pod 成功执行指定次数（`completions`）。如果 Pod 失败，Job 自动重建——`backoffLimit`（默认 6）限制重试次数。但如果 Pod 因为 OOM 反复失败，6 次重试后 Job 标记为失败——你如何区分'临时错误'（值得重试）和'永久错误'（不应重试）？`activeDeadlineSeconds` 设置 Job 的最大运行时间——超时后所有 Pod 被终止。
+> 2. CronJob 按 Cron 表达式定期创建 Job。`concurrencyPolicy: Forbid` 禁止并发执行——如果上一次 Job 未完成，新 Job 不会创建。但在什么场景下并发执行是安全的（`Allow`）？如果 CronJob 的执行时间偶尔超过调度间隔——`Forbid` 策略会'跳过'本次执行还是'延迟'执行？
+> 3. Kubernetes 1.25+ 的 Indexed Job 为每个 Pod 分配唯一索引（`JOB_COMPLETION_INDEX` 环境变量）——适合并行处理分片数据（如每个 Pod 处理数据的一个分片）。与使用 Message Queue（每个 Pod 从队列获取任务）的方式相比，Indexed Job 在什么场景下更简单？

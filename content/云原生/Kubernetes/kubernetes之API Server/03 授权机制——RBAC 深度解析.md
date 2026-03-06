@@ -420,3 +420,10 @@ kubectl auth can-i --list --as=system:serviceaccount:default:my-app -n default
 3. Kubernetes Documentation - Using RBAC Authorization：https://kubernetes.io/docs/reference/access-authn-authz/rbac/
 4. Kubernetes Security Best Practices - RBAC：https://kubernetes.io/docs/concepts/security/rbac-good-practices/
 5. Kubernetes Source - plugin/pkg/auth/authorizer/rbac：https://github.com/kubernetes/kubernetes/tree/master/plugin/pkg/auth/authorizer/rbac
+
+---
+
+> [!note] 思考题
+> 1. RBAC 通过 Role/ClusterRole 定义权限，RoleBinding/ClusterRoleBinding 将权限绑定到用户或 ServiceAccount。在一个多团队共享集群的场景中，团队 A 只能管理 namespace-a 中的资源——你如何设计 Role 和 RoleBinding？如果团队 A 需要读取集群级资源（如 Node 信息），是否需要 ClusterRoleBinding？
+> 2. RBAC 的权限是'允许'模型——没有显式的'拒绝'规则。如果一个用户同时绑定了多个 Role，最终权限是所有 Role 的并集。这意味着你不能通过添加 Role 来'撤回'某个权限。在需要'除了某个操作外允许所有操作'的场景中，你如何设计 RBAC 规则？
+> 3. ServiceAccount 的权限控制经常被忽视——默认的 `default` ServiceAccount 通常没有额外权限。但如果 Pod 绑定了高权限的 ServiceAccount（如有 `cluster-admin` 权限），Pod 被入侵后攻击者可以控制整个集群。你如何审计集群中的 ServiceAccount 权限？`kubectl auth can-i --list --as system:serviceaccount:ns:sa` 如何帮助？

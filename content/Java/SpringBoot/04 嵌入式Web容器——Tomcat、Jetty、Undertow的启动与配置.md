@@ -648,3 +648,10 @@ public class App extends SpringBootServletInitializer {
 > - `org.springframework.boot.web.servlet.context.ServletWebServerApplicationContext` 源码
 > - `org.springframework.boot.autoconfigure.web.servlet.ServletWebServerFactoryAutoConfiguration` 源码
 > - [Spring Boot 官方文档 - Embedded Web Servers](https://docs.spring.io/spring-boot/docs/current/reference/html/howto.html#howto.webserver)
+
+---
+
+> [!note] 思考题
+> 1. Spring Boot 内嵌 Tomcat，应用以 JAR 包形式运行而非部署到外部 Tomcat。内嵌 Tomcat 的线程池默认最大线程数是 200（`server.tomcat.threads.max`）。在一个 IO 密集型应用（大量数据库查询和 HTTP 调用）中，200 个线程是否足够？如何根据应用特征（CPU 密集 vs IO 密集）合理设置线程池大小？
+> 2. `DispatcherServlet` 是 Spring MVC 的前端控制器，负责将 HTTP 请求分发到对应的 Controller 方法。请求匹配过程中，`HandlerMapping` 根据 URL 和 HTTP 方法查找 Handler，`HandlerAdapter` 调用 Handler 并处理返回值。如果两个 Controller 方法映射了相同的 URL 和 HTTP 方法，Spring 启动时会报错还是运行时随机选择？
+> 3. Spring Boot 3.0 默认使用 Jakarta EE（`jakarta.servlet.*`）替代 Java EE（`javax.servlet.*`）。这个包名变更意味着所有使用 `javax.servlet` 的第三方库（如旧版 Filter、Listener）都不兼容。在升级到 Spring Boot 3.0 时，你如何评估和处理这种兼容性断裂？

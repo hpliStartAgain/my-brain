@@ -514,3 +514,10 @@ JMM 是 Java 并发体系的理论基石。核心要点：
 4. Goetz et al., "Java Concurrency in Practice", Addison-Wesley, 2006
 5. Shipilev, Aleksey, "Safe Publication and Safe Initialization in Java", shipilev.net, 2014
 6. Preshing, Paul, "The Happens-Before Relation", preshing.com, 2013
+
+---
+
+> [!note] 思考题
+> 1. happens-before 关系定义了操作之间的可见性保证。`synchronized` 的 happens-before 规则是：'对同一个监视器的解锁操作 happens-before 于后续对同一个监视器的加锁操作'。如果线程 A 在 `synchronized(lock1)` 中修改了变量 x，线程 B 在 `synchronized(lock2)` 中读取 x（注意是不同的锁），线程 B 能看到 A 的修改吗？为什么？
+> 2. JMM 允许编译器和 CPU 在不违反 happens-before 规则的前提下对指令重排序。经典的 DCL（双重检查锁）问题：`instance = new Singleton()` 可能被重排序为'先赋值引用，后执行构造函数'。`volatile` 通过禁止重排序解决了这个问题。但如果构造函数中没有 `final` 字段的初始化，DCL 在没有 `volatile` 的情况下是否仍然不安全？`final` 字段的初始化安全保证（`final field semantics`）是什么？
+> 3. Java 9 引入了 `VarHandle`，提供了比 `volatile` 更细粒度的内存序控制（如 `getOpaque`、`getAcquire`、`setRelease`）。`getAcquire/setRelease` 提供了'单向屏障'——比 `volatile` 的'双向屏障'开销更小。在什么场景下使用 `acquire/release` 语义足够，不需要 `volatile` 的全序保证？

@@ -649,3 +649,10 @@ optimize_nvme() {
 **读写放大是性能损耗的核心**：通过批量写入（减少小 IO）、关闭不必要的同步（`noatime`、`data=writeback`）、使用正确的 fsync 策略（`fdatasync` 而非 `fsync`），可以将写放大降低 2-5 倍。
 
 下一篇 [[09 文件系统的安全边界——权限、ACL 与 Capabilities]] 将从另一个维度解析文件系统：访问控制。Linux 的 DAC 权限模型（rwx 位）是如何工作的？为什么 POSIX ACL 是对 rwx 的必要补充？`setuid`/`setgid` 位的安全风险，以及 Capabilities 如何替代 `sudo` 提供更细粒度的权限授予。
+
+---
+
+> [!note] 思考题
+> 1. BFQ 在高 IOPS 场景（NVMe，100K+ IOPS）中调度开销是否成为瓶颈？BFQ 的调度算法复杂度是 O(log n)——在每秒处理 50 万个 IO 请求时，调度本身消耗的 CPU 时间占比是多少？内核社区是否有 BFQ 在 NVMe 上的基准测试数据？
+> 2. 混合读写负载中，`mq-deadline` 优先调度读请求（`read_expire=500ms`）。但写操作被延迟可能导致脏页积压——当脏页达到 `dirty_ratio` 时反过来阻塞所有写操作，间接影响读性能。这种'写饥饿导致读阻塞'的连锁反应在什么负载模式下最容易触发？
+> 3. CFQ 在 Linux 5.0 被移除。CFQ 的'完全公平'理念在 HDD 上通过合并相邻请求和排序磁头位置来提升效率。SSD 不需要这些优化——随机 IO 性能与顺序 IO 接近。BFQ 继承了 CFQ 的公平性理念但适应了 SSD——具体做了哪些改变？

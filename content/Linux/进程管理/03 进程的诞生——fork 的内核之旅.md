@@ -487,3 +487,10 @@ Nginx 的每个 worker 进程启动后，随着请求处理，会逐渐写入自
 **clone 是本质**：`fork()`、`vfork()`、`pthread_create()` 都是 `clone()` 的特例，区别仅在于 `flags` 参数控制哪些资源被共享。
 
 下一篇 [[04 进程的灵魂替换——exec 家族与程序加载]] 将接续 `fork()` 的故事：子进程创建完成后，如何通过 `execve()` 彻底替换为新程序——包括 ELF 文件格式的解析、新地址空间的建立，以及动态链接器 `ld-linux.so` 的介入时机。
+
+---
+
+> [!note] 思考题
+> 1. CFS 使用'虚拟运行时间'（vruntime）作为调度键——vruntime 最小的进程优先运行。高优先级（低 nice 值）的进程 vruntime 增长更慢——因此获得更多 CPU 时间。nice 值从 -20 到 19 映射到权重——nice 值每增加 1，进程获得的 CPU 时间减少约 10%。在一个 nice=0 和 nice=19 的进程竞争同一个 CPU 时，它们的 CPU 时间比例大约是多少？
+> 2. CFS 使用红黑树（按 vruntime 排序）管理可运行进程。`pick_next_task` 选择红黑树最左节点——O(1) 复杂度。但进程入队/出队是 O(log n)。在进程数量达到数万时，红黑树的调度开销是否成为瓶颈？CFS bandwidth throttling（CGroups CPU 限制）是如何在 CFS 基础上实现的？
+> 3. CFS 的调度延迟（`sched_latency_ns`，默认 6ms）保证每个可运行进程在这个时间窗口内至少执行一次。如果有 100 个可运行进程，每个进程的时间片是 60μs——频繁的上下文切换会导致 TLB 和 Cache 污染。在什么场景下你需要增大 `sched_latency_ns`？这对交互式应用的响应性有什么影响？

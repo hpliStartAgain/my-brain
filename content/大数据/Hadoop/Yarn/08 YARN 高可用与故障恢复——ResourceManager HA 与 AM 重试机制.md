@@ -441,6 +441,11 @@ YARN 的高可用架构体现了"**最小化持久化，最大化心跳重建**"
 
 ---
 
+> [!note] 思考题
+> 1. RM HA 的故障切换（Failover）需要新的 Active RM 恢复之前 Active RM 的全部状态（所有应用、Container、队列信息）。YARN 通过 RMStateStore（ZooKeeper 或 HDFS）来持久化这些状态。在拥有数千个并发应用的大型集群中，RMStateStore 中存储的状态数据有多大？Failover 过程中加载这些状态需要多长时间？在这段时间内，NM 和客户端的行为是什么？
+> 2. RM Failover 后，旧 Active RM 上已经分配给 AM 的 Container 会怎样？新 Active RM 从 RMStateStore 恢复状态后，知道这些 Container 的分配信息，但它需要重新建立与 AM 和 NM 的连接。在重连之前，AM 的心跳请求会失败。AM 感知到 RM 切换后，会如何重新注册并同步当前 Container 状态？
+> 3. AM 的最大重试次数（`yarn.resourcemanager.am.max-attempts`）默认为 2。在生产环境中，某些 AM（如长时间运行的 Flink 流处理作业的 AM）可能因为瞬时的 JVM GC 暂停导致 ZK 会话超时，进而被 RM 认为 AM 失败，触发 AM 重启。如果 AM 因为这种"虚假失败"反复重启，每次重启都会带来流处理作业的短暂中断。如何合理调整心跳超时和 AM 重试策略，既能快速响应真实的 AM 失败，又能容忍短暂的 GC 暂停？
+
 ## 参考资料
 
 - Apache Hadoop 官方文档：[ResourceManager High Availability](https://hadoop.apache.org/docs/current/hadoop-yarn/hadoop-yarn-site/ResourceManagerHA.html)

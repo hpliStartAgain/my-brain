@@ -549,3 +549,10 @@ private void resize() {
 3. 阿里巴巴 TransmittableThreadLocal 开源项目，github.com/alibaba/transmittable-thread-local
 4. Goetz et al., "Java Concurrency in Practice", Ch.3: Sharing Objects, Sec.3.3 Thread Confinement
 5. OpenJDK 源码：`java.lang.ThreadLocal.ThreadLocalMap`
+
+---
+
+> [!note] 思考题
+> 1. ThreadLocal 的 ThreadLocalMap 使用弱引用（WeakReference）指向 ThreadLocal key。当 ThreadLocal 变量没有外部强引用时，key 会被 GC 回收，但 value 不会——因为 value 被 Entry 强引用。这就是 ThreadLocal 内存泄漏的根本原因。但 ThreadLocalMap 在 `get/set/remove` 时会清理 key 为 null 的 Entry——那泄漏是在什么条件下发生的？
+> 2. 在线程池场景中，ThreadLocal 的危害被放大——线程被复用意味着 ThreadLocal 中的数据不会被自动清理。如果线程 A 处理请求 1 时设置了 `userContext.set(user1)`，线程 A 处理请求 2 时如果没有清除 ThreadLocal，会读到 user1 的数据——这是一个严重的安全漏洞。除了在 `finally` 中调用 `remove()`，你有什么机制来保证 ThreadLocal 一定被清理？
+> 3. Java 21 的虚拟线程（Virtual Thread）与 ThreadLocal 存在兼容性问题——虚拟线程的数量可能达到百万级，每个虚拟线程都有自己的 ThreadLocalMap，内存开销巨大。JDK 21 引入了 `ScopedValue` 作为 ThreadLocal 的替代。`ScopedValue` 与 ThreadLocal 的核心区别是什么？在什么场景下 `ScopedValue` 无法替代 ThreadLocal？

@@ -519,3 +519,9 @@ result.getSideOutput(lateOrders)
 **窗口不触发的排查路径**：时间语义确认 → Watermark Metrics → 时间戳提取检查 → Idle Source 检查
 
 下一篇 [[05 窗口完全指南]] 将在掌握时间语义的基础上，系统讲解 Flink 四种窗口类型（滚动、滑动、会话、全局），以及触发器、驱逐器、窗口函数的正确使用方式。
+
+
+> [!note] 思考题
+> 1. `maxOutOfOrderness`（最大乱序时间）的设置是一个工程权衡：设置太小会丢弃大量迟到数据，设置太大会增加窗口延迟。在实际生产中，如何通过监控数据来科学地确定这个参数？如果不同时间段（白天 vs 深夜）的数据乱序程度差异很大，应该如何处理？
+> 2. 在多并行度场景下，每个 SubTask 独立维护自己的 Watermark，下游算子接收到来自多个上游 SubTask 的 Watermark 后，取最小值作为自身的 Watermark（短板效应）。如果某个 SubTask 所在的节点负载过高，处理速度远慢于其他 SubTask，会导致整个作业的 Watermark 进度被这个慢节点"拖住"。有哪些手段可以缓解这个问题而不修改 Watermark 策略？
+> 3. Flink 的 `allowedLateness` 机制允许在窗口关闭后，迟到的数据仍然触发窗口重新计算并更新结果。这在 Append 模式的 Sink（如文件系统）下会产生问题——已经写出的结果需要被更正。在使用 `allowedLateness` 时，如何设计 Sink 来处理这种"结果修正"语义？

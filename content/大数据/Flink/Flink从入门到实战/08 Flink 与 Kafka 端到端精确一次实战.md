@@ -444,3 +444,9 @@ Flink + Kafka 端到端精确一次的完整配置清单：
 **决策建议**：财务/账单/聚合结果类业务用 Exactly-Once；有唯一 ID 的消息转发类业务优先考虑 At-Least-Once + 幂等去重（延迟更低、性能更好）。
 
 下一篇 [[09 Flink on YARN 与 Kubernetes 生产部署]] 将讲解 Flink 在 YARN 和 Kubernetes 两种资源管理平台上的部署模式（Session Mode、Per-Job Mode、Application Mode），以及生产环境的高可用配置与资源规划。
+
+
+> [!note] 思考题
+> 1. Flink + Kafka 的端到端精确一次依赖 Kafka 事务（两阶段提交）。Kafka 事务的 PreCommit 阶段在 Checkpoint 完成后触发，真正提交（Commit）发生在下一个 Checkpoint 开始时。这意味着在两个 Checkpoint 之间，已写入 Kafka 但未提交的数据对消费者是不可见的（隔离级别为 `read_committed`）。这个设计导致了端到端延迟至少是一个 Checkpoint 周期。如何在保证精确一次的前提下尽量降低这个延迟？
+> 2. Kafka 事务 Producer 的 `transactional.id` 是事务的唯一标识符。如果 Flink 作业从 Checkpoint 恢复，新的 Producer 实例会使用相同的 `transactional.id`，并强制终止（Abort）之前未完成的事务。但如果有两个相同 `transactional.id` 的 Producer 同时活跃（比如由于 Split-Brain 导致新旧 Producer 并存），会发生什么？Flink 如何通过 Epoch 机制防止这种情况？
+> 3. 精确一次的两阶段提交对 Sink 有要求——Sink 必须支持事务（PreCommit + Commit + Rollback）。对于不支持事务的 Sink（如写文件系统），Flink 通过"先写临时文件，Checkpoint 完成后 rename"来模拟事务。但这个"rename 即提交"的策略在分布式文件系统上有什么限制？在使用 S3 作为 Sink 时，rename 不是原子操作，如何解决？

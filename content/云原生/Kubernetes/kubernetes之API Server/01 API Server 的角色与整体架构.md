@@ -418,3 +418,10 @@ kubectl 在首次运行时会查询 Discovery API 并缓存结果（`~/.kube/cac
 5. Kubernetes Source Code - staging/src/k8s.io/apiserver：https://github.com/kubernetes/kubernetes/tree/master/staging/src/k8s.io/apiserver
 6. Daniel Smith (2019). *API Machinery Deep Dive*. KubeCon.
 7. Michael Hausenblas, Stefan Schimanski (2019). *Programming Kubernetes*. O'Reilly, Chapter 2.
+
+---
+
+> [!note] 思考题
+> 1. API Server 是 Kubernetes 唯一直接操作 etcd 的组件——所有其他组件（Controller Manager、Scheduler、kubelet）通过 API Server 间接访问 etcd。这种'单一入口'设计简化了安全控制（只需保护 API Server），但也使 API Server 成为潜在瓶颈。在 5000 节点的集群中，API Server 的 QPS 可能达到数万——如何通过多实例水平扩展和负载均衡来应对？
+> 2. API Server 的请求处理链：认证（Authentication）→ 授权（Authorization）→ 准入控制（Admission Control）→ 持久化到 etcd。Mutating Admission Webhook 可以修改请求对象（如注入 Sidecar），Validating Admission Webhook 可以拒绝不合规的请求。Webhook 的调用增加了 API 请求的延迟——在什么场景下 Webhook 延迟成为问题？`failurePolicy: Ignore` 跳过不可用的 Webhook 是否安全？
+> 3. API Server 的 Watch 机制是 Kubernetes 响应式架构的基础——Controller 通过 Watch 监听资源变化并做出响应。大量 Watch 连接（如 1000 个 Controller 各 Watch 不同资源）对 API Server 的内存和 CPU 有什么影响？`--watch-cache-sizes` 参数如何优化 Watch 性能？

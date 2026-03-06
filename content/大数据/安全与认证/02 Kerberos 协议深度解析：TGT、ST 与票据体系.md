@@ -549,3 +549,9 @@ export HADOOP_OPTS="-Dsun.security.krb5.debug=true $HADOOP_OPTS"
 - **时钟同步是 Kerberos 的基础设施**：所有节点的时钟偏差必须 < 5 分钟，这是排查 Kerberos 问题的第一步
 
 理解了这些底层机制，就能读懂 [[01 Java 安全基石：UserGroupInformation 与 Subject 深度解析]] 中 UGI 持有的那张 TGT 的来龙去脉，也为 [[03 Hadoop 安全模式：Kerberos 集成全链路解析]] 中 Delegation Token 的设计做好了铺垫。
+
+
+> [!note] 思考题
+> 1. Kerberos 协议的核心设计是"客户端永远不直接向服务端发送密码"——认证通过票据（Ticket）传递，而不是直接传递共享密钥。TGT（Ticket-Granting Ticket）是客户端与 KDC 之间信任的凭证，ST（Service Ticket）是客户端与具体服务之间信任的凭证。如果攻击者截获了一个有效的 TGT（Pass-the-Ticket 攻击），他能做什么？有没有办法让 KDC 提前使一个 TGT 失效（类似 HTTPS 证书吊销机制）？
+> 2. Kerberos 的 ST 中包含了客户端的 IP 地址（`TicketFlags.ADDRESSLESS` 为 false 时），服务端会验证请求来源 IP 与 ST 中记录的 IP 是否一致。这个设计可以防止票据被其他 IP 的攻击者使用（即使票据被盗）。但在 NAT、负载均衡、容器化（Pod IP 动态变化）的现代网络架构中，IP 地址检查会导致大量合法请求被拒绝。生产环境通常如何处理这个问题（即 `no_addresses` 标志的含义和权衡）？
+> 3. Kerberos 的 Delegation Token（委托令牌）允许一个服务代表客户端向其他服务发起请求（Forwardable Ticket）。在 Hadoop 中，Delegation Token 被广泛用于服务间认证（如 Spark Driver 代表用户访问 HDFS）。Delegation Token 的过期时间通常比 TGT 短（默认 7 天），而且不能像 TGT 一样通过 keytab 自动续约。如何设计一套自动化的 Delegation Token 续约机制，确保长时间运行的 Spark 作业（如运行 10 天的历史回溯）不会因 Token 过期而中断？

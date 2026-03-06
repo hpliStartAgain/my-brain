@@ -479,3 +479,10 @@ io-threads-do-reads yes       # 开启多线程读（默认只开多线程写）
 3. Redis 6.0 Threaded IO：https://redis.io/topics/threads
 4. RESP Protocol Specification：https://redis.io/docs/reference/protocol-spec/
 5. 黄健宏 - 《Redis 设计与实现》（第二版）
+
+---
+
+> [!note] 思考题
+> 1. SDS 的空间预分配策略（长度<1MB 时翻倍，>1MB 时每次多分配 1MB）减少了频繁 append 操作的内存分配次数。但这种策略在什么场景下导致显著的内存浪费（如大量短字符串 append 一次后不再修改）？`sds` 的惰性空间释放（free 后不立即归还内存）对内存碎片率有什么影响？
+> 2. Redis 的 Sorted Set 使用跳表而非红黑树——Antirez 的理由是实现简单、范围查询友好。但跳表的空间开销（每个节点平均 1.33 个指针层级）比红黑树（固定 2 个子指针）更大。在百万级元素的 Sorted Set 中，跳表比红黑树多占用多少内存？这个差异在实际场景中是否重要？
+> 3. Redis 7.0 的 Listpack 替代了 Ziplist。Ziplist 的'级联更新'问题——修改一个节点可能导致后续所有节点的 `prevlen` 字段变化。最坏情况下一次 O(n²) 的连锁更新。Listpack 通过不存储前一个节点的长度来消除这个问题——但这意味着 Listpack 不支持反向遍历？Redis 如何处理？

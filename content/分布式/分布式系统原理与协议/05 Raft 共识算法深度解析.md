@@ -502,3 +502,10 @@ Raft 性能对以下参数非常敏感：
 6. Huang, C., et al. (2020). TiDB: A Raft-based HTAP Database. *VLDB 2020*.
 7. Kleppmann, M. (2017). *Designing Data-Intensive Applications*. O'Reilly Media. Chapter 9.
 8. The Raft Website. https://raft.github.io/（含可视化动画）
+
+---
+
+> [!note] 思考题
+> 1. Lamport 逻辑时钟为每个事件分配一个递增的逻辑时间戳——如果事件 A 'happened before' B，则 L(A) < L(B)。但 L(A) < L(B) 不意味着 A happened before B（可能是并发的）。向量时钟（Vector Clock）通过维护每个节点的计数器解决了这个问题——但向量时钟的空间复杂度是 O(n)。在 1000 节点集群中，每条消息附带 1000 个计数器——这个开销如何优化？
+> 2. DynamoDB 使用向量时钟检测数据冲突——当两个节点并发更新同一 Key 时，向量时钟判断为'冲突'而非覆盖。冲突的解决由客户端负责（如'最后写入者胜出'或'合并'）。在什么业务场景下'最后写入者胜出'可能导致数据丢失？Amazon 的购物车为什么使用'合并'策略？
+> 3. 混合逻辑时钟（HLC，Hybrid Logical Clock）结合了物理时钟和逻辑时钟——在物理时钟同步良好时使用物理时间戳，在物理时钟跳变时退回到逻辑时钟。CockroachDB 使用 HLC。HLC 相比纯逻辑时钟的优势是什么？它如何在没有原子钟的环境中提供'近似'的全局时间？

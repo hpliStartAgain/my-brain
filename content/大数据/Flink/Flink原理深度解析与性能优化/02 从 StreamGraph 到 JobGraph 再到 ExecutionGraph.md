@@ -441,3 +441,9 @@ Flink 的三张图构成了一条完整的编译流水线，每张图专注于�
 这三张图的设计体现了 Flink 分层架构的核心思想：**逻辑与物理分离，每一层只做一类变换**。这种设计不仅使得优化逻辑清晰可维护，也使得不同的部署场景（本地/YARN/K8s）可以共享相同的 StreamGraph 和 JobGraph，只在 ExecutionGraph 层根据集群环境做差异化调度。
 
 下一篇 [[03 Flink 内存模型深度解析]] 将深入 TaskManager 的内存分区设计，解析 Flink 为什么将 JVM 堆外内存用于网络 Buffer 和托管内存，以及生产中最常见的 OOM 问题的根因分析。
+
+
+> [!note] 思考题
+> 1. JobGraph 阶段会将满足条件的算子链（Operator Chain）合并成单个 Task，以减少数据传输开销。算子链合并的核心条件是"数据分区方式为 Forward"（即上游算子的一个分区只将数据发送给下游算子的一个对应分区）。如果用户在代码中显式调用 `disableChaining()` 或 `startNewChain()`，什么场景下这样做是有益的，什么场景下反而会降低性能？
+> 2. ExecutionGraph 是 StreamGraph 和 JobGraph 的"并行化展开"——每个算子的逻辑节点变成 N 个并行的 `ExecutionVertex`（N 为并行度）。ExecutionGraph 由 JobMaster 维护，并在作业执行期间动态更新（记录每个 SubTask 的状态）。如果 JobMaster 内存中的 ExecutionGraph 非常大（如一个拥有数千个并行 SubTask 的超大规模作业），会对 JobMaster 产生什么内存压力？Flink 有没有机制控制 ExecutionGraph 的内存占用？
+> 3. Flink 1.14 引入了"自适应调度器"（Adaptive Scheduler），允许在运行时动态调整作业的并行度，而不需要重启作业。这个能力需要对 ExecutionGraph 进行在线修改，打破了"ExecutionGraph 一旦生成就固定"的传统假设。自适应调度器修改并行度后，正在进行的 Checkpoint 会怎样？已有的状态如何重新分配给新的 SubTask？

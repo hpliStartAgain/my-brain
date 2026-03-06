@@ -483,3 +483,10 @@ Ceph 的运维核心是**理解集群状态机和数据流**：
 **延伸阅读**：
 - [[01 Ceph 全局架构——RADOS、CRUSH 与三大存储接口]]
 - [[04 数据一致性——PG、副本策略与 Recovery]]
+
+---
+
+> [!note] 思考题
+> 1. 向 Ceph 集群添加新 OSD 后，CRUSH 算法会自动重新分布部分 PG 到新 OSD——但这会产生大量数据迁移。`osd_max_backfills`（默认 1）限制了每个 OSD 同时进行的 backfill 操作数。增大这个值可以加速扩容但影响前台性能。在一个 PB 级集群中添加一个机架的 OSD 时，你如何制定迁移计划——是一次性添加所有 OSD 还是分批添加？
+> 2. OSD 故障后，Ceph 等待 `mon_osd_down_out_interval`（默认 600 秒）才将 OSD 标记为 out 并开始数据重建。这个等待是为了避免临时故障（如重启）触发不必要的数据迁移。但在等待期间，PG 的副本数是不足的——数据处于降级状态。如何在'避免误触发'和'快速恢复冗余'之间取得平衡？
+> 3. Ceph 集群监控需要关注哪些关键指标？`ceph health detail` 的常见警告（如 `HEALTH_WARN: x pgs degraded`、`nearfull osd`、`slow requests`）分别意味着什么？如何构建 Prometheus + Grafana 的 Ceph 监控面板？最应该设置告警的指标是哪几个？

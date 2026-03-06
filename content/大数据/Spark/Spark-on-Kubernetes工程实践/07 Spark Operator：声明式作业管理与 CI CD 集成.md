@@ -423,6 +423,11 @@ Spark Operator 将 Spark 作业管理从"命令式脚本"升级为"声明式资�
 
 ---
 
+> [!note] 思考题
+> 1. Spark Operator 基于 K8s Controller 的 Reconcile Loop 模式工作——它持续监听 `SparkApplication` CRD 的变化，并驱动集群状态向期望状态收敛。如果 Spark Operator 本身宕机，正在运行的 Spark 作业会怎样？已提交的 `SparkApplication` 资源还存在，但没有控制器监控——作业是否会自动停止？Operator 重启后能恢复对这些作业的管理吗？
+> 2. `SparkApplication` 的 `restartPolicy` 支持 `OnFailure` 和 `Always` 策略。对于幂等的批处理作业，`OnFailure` 自动重试是合理的。但对于有状态的流处理作业（Structured Streaming），自动重启需要确保从 Checkpoint 恢复，而不是重新开始。Spark Operator 在处理流作业重启时，如何保证 Checkpoint 路径的正确性？是否有可能因为配置不当导致流作业"假重启"（从头开始而不是断点续传）？
+> 3. 在 CI/CD 流水线中，`SparkApplication` YAML 的版本管理是一个工程问题——镜像 Tag、配置参数、资源配额都需要随代码版本变化。GitOps 工具（如 ArgoCD）可以自动同步 K8s 资源，但 `SparkApplication` 是一次性作业而不是长期运行的 Deployment。如何设计一套基于 GitOps 的 Spark 作业版本管理方案，使得每次代码合并后能自动触发对应版本的 Spark 作业？
+
 ## 参考资料
 
 - [kubeflow/spark-operator GitHub](https://github.com/kubeflow/spark-operator)

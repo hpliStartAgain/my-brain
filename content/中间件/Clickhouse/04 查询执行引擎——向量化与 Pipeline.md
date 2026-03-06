@@ -302,3 +302,10 @@ ClickHouse 查询执行引擎的性能来自多个层次的协同优化：
 - [[01 ClickHouse 全局架构——列式存储与 MPP 执行引擎]]
 - [[02 MergeTree 引擎家族——主键索引与数据排序]]
 - [[06 ClickHouse 性能调优——表设计、查询优化与资源管理]]
+
+---
+
+> [!note] 思考题
+> 1. 物化视图（Materialized View）在数据写入时自动触发聚合计算并存储结果。例如 `CREATE MATERIALIZED VIEW hourly_stats ... SELECT toStartOfHour(timestamp), count(), sum(amount) FROM events GROUP BY toStartOfHour(timestamp)`。查询小时级聚合直接读物化视图而非原始表——性能提升数十倍。但物化视图的维护有什么代价？如果原始数据需要修改（如迟到数据补写），物化视图如何更新？
+> 2. `EXPLAIN PIPELINE` 显示了 ClickHouse 查询的执行计划和并行度。`max_threads`（默认等于 CPU 核数）控制单个查询的并行线程数。在一个 64 核的服务器上，如果有 10 个并发查询各使用 64 线程，CPU 会被严重过载。你如何设置 `max_threads` 和 `max_concurrent_queries` 来平衡单查询性能和并发能力？
+> 3. ClickHouse 的 `LowCardinality` 数据类型对低基数列（如 country、status）使用字典编码——用整数索引替代重复字符串。这可以将存储大小减少 10 倍以上，同时加速过滤和 GROUP BY。但对高基数列（如 UUID）使用 `LowCardinality` 反而增加开销——字典大小超过内存缓存时性能退化。如何判断一个列是否适合 `LowCardinality`？

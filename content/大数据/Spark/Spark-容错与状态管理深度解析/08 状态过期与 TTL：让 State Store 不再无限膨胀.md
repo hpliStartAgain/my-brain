@@ -431,6 +431,11 @@ if (state.hasTimedOut) {
 
 ---
 
+> [!note] 思考题
+> 1. State TTL 的核心机制是：在写入状态时记录过期时间戳，在后续批次读取时检查是否过期。这意味着"过期"的判断是惰性的（lazy）——过期状态并不会立即被删除，而是在下次被访问时才被清理。如果某些状态被写入后从未再被访问（比如某个用户永远不再活跃），它在 State Store 中会如何被清理？Spark 有没有机制主动扫描和清除这类"僵尸状态"？
+> 2. Watermark-based 的状态清理依赖事件时间 Watermark 的推进。如果某个 Kafka 分区长时间没有新消息（该分区对应的业务线停止了），Watermark 会停滞，窗口不会关闭，State 不会被清理。这和 TTL 机制的"处理时间"清理形成了对比——TTL 不依赖事件时间，而是依赖 MicroBatch 的处理时间推进。在什么业务场景下，TTL 比 Watermark 清理更可靠？
+> 3. State TTL 在配置时需要指定 `ttlDuration`，这个值应该设置多长？在用户行为分析场景中（如统计 30 分钟内的用户活动窗口），如果 TTL 设置得比事件时间窗口还短，会发生什么？TTL 时间的起算点是"状态被创建时"还是"状态最后一次被更新时"？这个差异在哪些场景下会影响业务正确性？
+
 ## 参考资料
 
 - [Apache Spark Structured Streaming and Watermarks（waitingforcode.com）](https://www.waitingforcode.com/apache-spark-structured-streaming/apache-spark-structured-streaming-watermarks/read)

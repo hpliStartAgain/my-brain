@@ -478,3 +478,10 @@ Agent 的三大核心能力构成了完整的能力闭环：
 6. OpenAI, "Function Calling Documentation", 2023
 7. Anthropic, "Building Effective Agents", 2024
 8. Sumers et al., "Cognitive Architectures for Language Agents", TMLR 2024
+
+---
+
+> [!note] 思考题
+> 1. ReAct（Reasoning + Acting）框架让 Agent 交替进行推理和行动。但 Agent 的推理链可能陷入死循环——例如反复调用同一个工具但无法获得想要的结果。你如何设计'循环检测'和'优雅降级'机制？最大迭代次数限制是唯一的方案吗？
+> 2. Agent 的规划能力（Planning）决定了它能否将复杂任务分解为可执行的子任务。当前 LLM 的规划能力在面对需要 10+ 步骤的复杂任务时会显著下降。你认为规划能力的瓶颈是 LLM 的推理深度限制，还是 Prompt 设计的问题？Tree-of-Thought 等方法能在多大程度上提升长链规划的可靠性？
+> 3. Function Calling 是 Agent 调用工具的核心机制。当可用工具数量很多（50+）时，LLM 选择正确工具的准确率会下降。你如何组织工具的层级结构（如先选择类别再选择具体工具），或者实现'工具检索'（根据用户意图动态检索最相关的工具子集）来提升选择准确率？

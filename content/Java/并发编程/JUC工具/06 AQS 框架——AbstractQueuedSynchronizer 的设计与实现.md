@@ -568,3 +568,10 @@ AQS 是 JDK 并发包的核心基础设施，它的设计展示了"抽象的力�
 3. Craig, Landin, Hagersten, "Building FIFO and Priority-Queuing Spin Locks from Atomic Swap", Technical Report, 1993
 4. Goetz et al., "Java Concurrency in Practice", Appendix: Annotation Types
 5. Shipilev, Aleksey, "JVM Anatomy Quarks: LockSupport", shipilev.net
+
+---
+
+> [!note] 思考题
+> 1. AQS 使用一个 `volatile int state` 变量和一个 CLH 队列（双向链表）实现同步。`ReentrantLock` 用 state 表示重入次数，`Semaphore` 用 state 表示许可数，`CountDownLatch` 用 state 表示计数。如果你需要实现一个'同时最多允许 3 个线程进入，且支持重入'的自定义同步器，state 应该如何设计？
+> 2. AQS 的 CLH 队列中，等待线程被 `LockSupport.park()` 阻塞。当释放锁时，AQS 唤醒队列中的下一个节点。但 `park/unpark` 有一个特性：如果 `unpark` 在 `park` 之前调用，后续的 `park` 会立即返回（许可制）。这个特性对 AQS 的实现有什么帮助？如果没有这个特性，AQS 需要做什么额外的同步？
+> 3. AQS 的 `tryAcquire` 方法由子类实现（模板方法模式）。公平锁的 `tryAcquire` 会检查等待队列——如果有等待线程则不尝试 CAS。非公平锁直接 CAS 竞争。在高竞争场景下，非公平锁可能导致某些线程'饥饿'（长时间得不到锁）。但 Java 的非公平锁在实际中很少出现饥饿——为什么？

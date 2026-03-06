@@ -408,3 +408,10 @@ Client-Side Caching 解决了[[04 缓存设计模式与一致性问题|多级缓
 5. Lettuce Documentation：https://lettuce.io/core/release/reference/
 6. Redisson Documentation：https://github.com/redisson/redisson/wiki
 7. Jedis Documentation：https://github.com/redis/jedis
+
+---
+
+> [!note] 思考题
+> 1. 分布式 Session 存储在 Redis 中——每个请求都读写 Session。如果 Session 数据较大（如包含用户权限列表、购物车），每次序列化/反序列化的开销在高并发下是否成为瓶颈？JWT Token（无状态、不需要存储）vs Redis Session（有状态、可以主动失效）——在什么安全需求下你会选择 Redis Session？
+> 2. 滑动窗口限流用 Sorted Set 实现——`ZADD key <timestamp> <request_id>`，过滤窗口外的旧记录后 `ZCARD` 计数。每个请求产生一条 Sorted Set 记录——在 10 万 QPS 下每秒产生 10 万条记录。Sorted Set 的内存占用和清理开销如何？令牌桶算法（Lua 脚本实现）在内存效率方面是否更优？
+> 3. 多服务共享 Redis 的'多租户'问题——Key 命名冲突、资源竞争、故障扩散。命名空间前缀（`service_a:key`）简单但不完全隔离。独立 Redis 实例彻底隔离但成本高。Redis 7.0 的 ACL 基于 Key Pattern 的权限控制能否提供足够的隔离？

@@ -656,3 +656,10 @@ Netty 的全局架构建立在主从 Reactor 线程模型之上，各组件各�
 > - `io.netty.bootstrap.ServerBootstrap` 源码
 > - `io.netty.channel.DefaultChannelPipeline` 源码
 > - Douglas Schmidt,《Reactor: An Object Behavioral Pattern》, 1995
+
+---
+
+> [!note] 思考题
+> 1. Netty 的 Reactor 模式中，BossGroup 负责接受连接，WorkerGroup 负责处理 IO 读写。BossGroup 通常只需要 1 个 EventLoop（线程），但 WorkerGroup 默认使用 CPU 核数 × 2 个 EventLoop。如果你的业务是 CPU 密集型（如加解密），WorkerGroup 的线程数应该增大还是减小？为什么？
+> 2. Netty 的 EventLoop 保证了一个 Channel 的所有 IO 事件都由同一个线程处理——这消除了多线程竞争。但如果 ChannelHandler 中有一个耗时操作（如数据库查询），会阻塞 EventLoop 线程，影响该线程上所有 Channel 的处理。除了使用 `DefaultEventExecutorGroup` 将耗时操作卸载到业务线程池，还有哪些方案？
+> 3. Netty 4.x 的 EventLoop 采用'一个线程绑定多个 Channel'的模型，而 Netty 3.x 是'一个线程对应一个 Channel'。前者在大量空闲连接（如 WebSocket 长连接场景）时的优势是什么？如果某个 Channel 突然收到大量数据，会影响绑定在同一个 EventLoop 上的其他 Channel 吗？

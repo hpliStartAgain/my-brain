@@ -457,3 +457,10 @@ Page Cache 虽然对 I/O 性能贡献巨大，但它同样是内存压力的来�
 - [Linux Page Cache Basics - Thomas Krenn Wiki](https://www.thomas-krenn.com/en/wiki/Linux_Page_Cache_Basics)
 - [The Linux Page Cache and pdflush](http://web.archive.org/web/20160518040713/http://www.westnet.com/~gsmith/content/linux-pdflush.htm)
 - Linux Kernel Source: `mm/filemap.c`, `mm/page-writeback.c`, `fs/sync.c`
+
+---
+
+> [!note] 思考题
+> 1. 在 64GB 内存的服务器上 Page Cache 可能占 50GB+。运维人员看到 `free` 输出中大量'已使用'内存会误以为内存不足。`available` 列如何正确反映可用内存？在 CGroups 环境中，`free` 命令的输出是否考虑了 CGroup 限制？
+> 2. Linux 使用'双链表 LRU'（Active List + Inactive List）管理 Page Cache。大文件顺序扫描会'污染'Active List。Linux 的 Second Chance 和 Inactive List 的'提升门槛'如何缓解缓存污染？`vm.vfs_cache_pressure` 参数如何调节 dcache/icache 与 Page Cache 的回收比例？
+> 3. Direct IO 绕过 Page Cache 直接读写磁盘。数据库通常使用 Direct IO 因为有自己的 Buffer Pool。但 Direct IO 要求对齐到扇区大小。如果应用需要读取 100 字节，Direct IO 会读整个 4KB 扇区——在随机小 IO 场景下 Direct IO 效率是否更低？什么场景下 Buffered IO 性能反而更好？

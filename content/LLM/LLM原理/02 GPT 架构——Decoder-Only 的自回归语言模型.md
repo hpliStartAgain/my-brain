@@ -490,3 +490,10 @@ $$\mathcal{L} = -\frac{1}{T} \sum_{t=1}^{T} \log P(x_t | x_1, \ldots, x_{t-1}; \
 9. Sennrich et al., "Neural Machine Translation of Rare Words with Subword Units", ACL 2016
 10. Kaplan et al., "Scaling Laws for Neural Language Models", arXiv 2020
 11. Holtzman et al., "The Curious Case of Neural Text Degeneration", ICLR 2020 (Nucleus Sampling)
+
+---
+
+> [!note] 思考题
+> 1. Transformer 有三种架构变体：Encoder-Only（BERT）、Encoder-Decoder（T5）和 Decoder-Only（GPT）。为什么 GPT 系列和几乎所有大型语言模型都选择了 Decoder-Only 架构？Decoder-Only 在生成任务上有什么结构性优势？BERT 的 Encoder-Only 架构为什么不适合文本生成？
+> 2. GPT 使用 Causal Attention Mask（因果注意力掩码）——每个 token 只能关注它之前的 token，不能'偷看'未来。这种约束在训练时通过一个下三角矩阵实现。但在推理时，生成第 N 个 token 需要重新计算前 N-1 个 token 的 KV（除非使用 KV Cache）。KV Cache 的显存占用与什么因素成正比？在长对话场景中 KV Cache 会成为显存瓶颈吗？
+> 3. GPT 的预训练目标是'预测下一个 token'（Next Token Prediction）。这个看似简单的目标如何使模型学会了推理、翻译、编程等复杂能力？有观点认为'预测下一个 token 的过程中模型内部建立了世界模型'——你如何评价这个观点？有什么实验证据支持或反驳它？

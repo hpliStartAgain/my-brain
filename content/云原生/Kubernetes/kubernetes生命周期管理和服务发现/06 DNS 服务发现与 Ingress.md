@@ -508,3 +508,10 @@ graph TD
 5. Kubernetes Enhancement Proposal - Gateway API：https://github.com/kubernetes-sigs/gateway-api
 6. Kubernetes Documentation - NodeLocal DNSCache：https://kubernetes.io/docs/tasks/administer-cluster/nodelocaldns/
 7. Kubernetes Source Code - CoreDNS kubernetes plugin：https://github.com/coredns/coredns/tree/master/plugin/kubernetes
+
+---
+
+> [!note] 思考题
+> 1. 滚动更新（RollingUpdate）是 Deployment 的默认策略——逐步替换旧 Pod。`maxSurge: 25%`（允许临时多出 25% 的 Pod）和 `maxUnavailable: 25%`（允许最多 25% 不可用）控制更新速度。在一个 4 副本的 Deployment 中，默认设置下同时有多少个新旧 Pod 在运行？
+> 2. 回滚通过 `kubectl rollout undo deployment/name` 执行——恢复到上一个 ReplicaSet。Kubernetes 默认保留最近 10 个 ReplicaSet（`revisionHistoryLimit`）。但回滚只恢复 Pod Template——不恢复 ConfigMap 或 Secret 的变更。如果故障是由 ConfigMap 变更引起的，`rollout undo` 无法解决。你如何实现'ConfigMap 版本化'（如将 ConfigMap 名称中包含 hash）？
+> 3. 蓝绿部署和金丝雀发布不是 Kubernetes 原生支持的——需要通过 Ingress 权重路由或 Argo Rollouts 实现。Argo Rollouts 提供了 `Canary` 和 `BlueGreen` 策略——支持渐进式流量切换和自动回滚（基于 Prometheus 指标）。在什么场景下 Argo Rollouts 比原生 Deployment 更合适？

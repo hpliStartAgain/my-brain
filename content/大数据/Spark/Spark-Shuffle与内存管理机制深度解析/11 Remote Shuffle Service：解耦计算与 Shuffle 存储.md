@@ -412,6 +412,11 @@ RSS 是 Spark Shuffle 架构演进中最重要的一步——将 Shuffle 的中�
 
 ---
 
+> [!note] 思考题
+> 1. Push-based Shuffle 要求 Map Task 在写出完成后主动将数据"推送"到 RSS Server。与传统 Pull-based Shuffle（Reducer 主动拉取）相比，Push 模式在 RSS Server 宕机时的容错处理有何不同？如果 RSS Server 在 Map 阶段写出途中宕机，Spark 如何保证数据完整性？
+> 2. RSS 将 Shuffle 数据存储在独立服务中，使得 Spark 的 Executor 可以实现真正的无状态化（Stateless Executor）。这对动态资源分配（Dynamic Resource Allocation）有什么深远影响？传统模式下 DRA 为什么不能在 Shuffle 写出后立即释放 Executor？
+> 3. 不同的 RSS 实现（Celeborn、Uniffle、Cosco 等）在 Server 端的数据管理策略有所不同。有的按 PartitionId 分文件存储，有的按 MapId 分文件存储。这两种策略在 Reduce 端的随机读性能和顺序读性能上有什么差异？在 Reducer 数量极大（10000+）的场景下，哪种策略更有优势？
+
 ## 参考资料
 
 - [Apache Celeborn 官方文档](https://celeborn.apache.org/)

@@ -379,6 +379,11 @@ HDFS 的容错体系是一个层次分明、相互配合的完整工程体系：
 
 ---
 
+> [!note] 思考题
+> 1. NameNode 通过 DataNode 心跳来检测节点存活，默认心跳间隔 3 秒，超时时间 10 分钟。这意味着一个 DataNode 宕机后，NameNode 最长需要 10 分钟才能开始副本补充（Under-Replicated Block 的修复）。在这 10 分钟内，如果宕机节点上的某些 Block 只有一个副本（因为另一个副本所在的 DataNode 之前也宕机了），这些 Block 实际上是不可读的。如何通过监控指标提前发现"单副本 Block"的风险？
+> 2. HDFS 的副本补充（Re-Replication）优先级策略会优先处理副本数最少的 Block（如副本因子 3 但只剩 1 个副本的情况，优先于副本因子 3 但还有 2 个副本的情况）。在大规模 DataNode 批量宕机（如机房停电导致一个机架完全断电）场景下，大量 Block 同时需要补充副本，补充过程会产生巨大的集群内部网络流量，可能导致正常的 HDFS 读写性能大幅下降。HDFS 提供了哪些参数来控制副本补充的速率，避免"自愈风暴"？
+> 3. HDFS 写入时，客户端向 Pipeline 中的所有 DataNode 发送数据，但写入确认是"链式 ACK"——最后一个 DataNode 先 ACK，逐级传回，直到第一个 DataNode 向 Client 发送 ACK。如果在写入过程中，Pipeline 中间的某个 DataNode 宕机，HDFS 的 Pipeline Recovery 机制是什么？客户端会感知到这个故障并重建 Pipeline，还是整个写入操作失败需要重新开始？
+
 ## 参考资料
 
 - Apache Hadoop 官方文档：[HDFS Architecture - Fault Tolerance](https://hadoop.apache.org/docs/current/hadoop-project-dist/hadoop-hdfs/HdfsDesign.html#Robustness)

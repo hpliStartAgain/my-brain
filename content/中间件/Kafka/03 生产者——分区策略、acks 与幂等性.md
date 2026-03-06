@@ -300,3 +300,10 @@ Zombie Fencing 解决的问题：假设 Producer 在事务中途宕机并重启�
 > - Confluent Blog,《Exactly-Once Semantics Are Possible: Here's How Kafka Does It》
 > - KIP-98: Exactly Once Delivery and Transactional Messaging
 > - KIP-480: Sticky Partitioner
+
+---
+
+> [!note] 思考题
+> 1. Consumer Group 的 Rebalance 在 Consumer 加入或离开时触发——重新分配 Partition 与 Consumer 的对应关系。Rebalance 期间所有 Consumer 暂停消费——在大型集群中（50 个 Partition、20 个 Consumer），Rebalance 可能持续数十秒。Stop-the-World Rebalance 的影响如何最小化？Cooperative Rebalance（增量 Rebalance）如何改善？
+> 2. Consumer 提交 Offset 的方式有两种：自动提交（`enable.auto.commit=true`，每 5 秒提交一次）和手动提交（`commitSync/commitAsync`）。自动提交可能在消息处理失败后仍然提交了 Offset——导致消息丢失。手动提交可能在消息处理成功后提交失败——导致重复消费。在什么场景下你需要使用手动提交？如何在'至少一次'语义下处理重复消息？
+> 3. Consumer 的 `max.poll.interval.ms`（默认 5 分钟）控制两次 `poll()` 之间的最大间隔——超过后 Consumer 被认为死亡并触发 Rebalance。如果消息处理耗时超过 5 分钟（如批量写入数据库），Consumer 会被踢出 Group。你如何处理耗时长的消息处理？增大 `max.poll.interval.ms` 还是减小 `max.poll.records`？

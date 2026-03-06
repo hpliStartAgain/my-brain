@@ -619,3 +619,10 @@ readelf -l /usr/bin/sudo | grep LOAD | head -1
 - vDSO：高频系统调用无需特权切换，性能极致
 
 下一篇 [[05 进程的终结与善后——exit、wait 与僵尸进程]] 将从进程的另一端——终结——出发，解析 `exit()` 的内核路径、资源释放的顺序，以及僵尸进程的本质与产生条件。
+
+---
+
+> [!note] 思考题
+> 1. Linux 的实时调度策略 SCHED_FIFO（先入先出）和 SCHED_RR（时间片轮转）优先于 CFS。实时进程的优先级范围是 1-99（99 最高）。如果一个 SCHED_FIFO 优先级 99 的进程陷入死循环，它会独占 CPU 导致系统无响应吗？`sched_rt_runtime_us`（默认 950000，即 0.95 秒/秒）如何保护系统？
+> 2. 多核负载均衡中，CFS 定期（`sched_migration_cost_ns`）检查各 CPU 的负载并迁移进程。但进程迁移会导致 Cache 失效——刚建立好的 L1/L2 Cache 在迁移后需要重新预热。`sched_migration_cost_ns`（默认 500μs）如何控制迁移的激进程度？在 NUMA 架构中，跨 NUMA 节点迁移的代价有多大？
+> 3. Linux 的 SCHED_DEADLINE 调度策略基于 EDF（Earliest Deadline First）算法——每个任务声明自己的周期（period）和执行时间（runtime），调度器保证在 deadline 前完成。SCHED_DEADLINE 适合什么类型的实时任务？与 SCHED_FIFO 相比，它的准入控制（admission control）如何防止系统过载？

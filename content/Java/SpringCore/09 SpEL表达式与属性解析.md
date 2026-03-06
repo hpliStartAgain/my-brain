@@ -778,3 +778,10 @@ spring:
 > - `org.springframework.core.env.PropertySourcesPropertyResolver` 源码
 > - `org.springframework.boot.context.properties.ConfigurationPropertiesBindingPostProcessor` 源码
 > - [Spring Framework 官方文档 - Spring Expression Language](https://docs.spring.io/spring-framework/reference/core/expressions.html)
+
+---
+
+> [!note] 思考题
+> 1. Spring 的 `MessageSource` 接口提供国际化支持。`ResourceBundleMessageSource` 从 `messages_zh_CN.properties` 等文件加载翻译。在一个多租户系统中，不同租户可能需要不同的翻译（即使语言相同）。标准的 `MessageSource` 能支持这种需求吗？你需要如何扩展？
+> 2. Spring 的 `ConversionService` 和 `PropertyEditor` 都用于类型转换。Spring 3.0 引入了 `ConversionService` 作为 `PropertyEditor` 的替代。两者的核心区别是什么？为什么 Spring 要引入新的类型转换体系？`ConversionService` 在线程安全性方面有什么优势？
+> 3. 在 REST API 中，请求参数的类型转换（如字符串转日期）通常由 `@DateTimeFormat` 注解完成。但不同客户端可能使用不同的日期格式（如 ISO 8601 vs Unix 时间戳）。你如何让同一个 API 端点同时支持多种日期格式？自定义 `Converter<String, LocalDateTime>` 与全局 `@DateTimeFormat` 各有什么适用场景？

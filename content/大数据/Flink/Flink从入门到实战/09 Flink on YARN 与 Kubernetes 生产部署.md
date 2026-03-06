@@ -480,3 +480,9 @@ Flink 生产部署的核心知识点：
 - 内存比例：托管内存 40%（RocksDB）+ 网络内存 10% + JVM 堆 25% + 其他
 
 下一篇 [[10 生产运维：监控、调优与常见问题排查]] 将覆盖 Flink 作业投产后的日常运维工作：Prometheus + Grafana 监控体系的搭建、关键 Metrics 的解读（吞吐、延迟、反压、Checkpoint 成功率），以及最常见的 10 类故障的排查思路与解决方案。
+
+
+> [!note] 思考题
+> 1. Flink 的 Application Mode 将 `main()` 方法在 JobManager 上执行（而不是 Client 侧），这避免了大型 JAR 文件通过网络传输到 JobManager 的开销。但 Application Mode 下，如果 `main()` 方法中有用户代码逻辑（比如读取配置文件、初始化外部连接），这些操作会在 JobManager 上执行。JobManager 是否应该访问业务相关的外部资源？这在安全性和运维上有什么影响？
+> 2. Flink on K8s 的 Session Mode 允许多个作业共享同一个 Flink 集群，节省资源。但 Session Mode 存在"资源争抢"问题——一个作业的内存泄漏会影响同集群的所有作业。与 YARN 的队列隔离相比，Flink Session Mode 的资源隔离粒度更粗。在多团队共用集群的场景下，Application Mode（每个作业独立集群）和 Session Mode（共享集群）的选择应该考虑哪些具体因素？
+> 3. Flink 的 HA（高可用）依赖 ZooKeeper 或 K8s 来存储 JobManager 元数据（如 Checkpoint 路径、作业状态）。当 JobManager 发生故障并触发主从切换时，新的 JobManager 如何从存储中恢复完整的作业执行状态？切换过程中正在处理中的 Checkpoint 会怎样？切换时间的长短主要取决于哪些因素？

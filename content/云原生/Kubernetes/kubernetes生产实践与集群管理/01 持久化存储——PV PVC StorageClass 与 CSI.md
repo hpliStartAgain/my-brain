@@ -430,3 +430,10 @@ StorageClass: volumeBindingMode=WaitForFirstConsumer
 4. Kubernetes Documentation - Volume Snapshots：https://kubernetes.io/docs/concepts/storage/volume-snapshots/
 5. CSI Spec：https://github.com/container-storage-interface/spec
 6. Kubernetes Source Code - pkg/controller/volume：https://github.com/kubernetes/kubernetes/tree/master/pkg/controller/volume
+
+---
+
+> [!note] 思考题
+> 1. kubeadm 是 Kubernetes 官方的集群安装工具——适合自建集群。托管服务（EKS、GKE、AKS）由云厂商管理控制平面——用户只需管理 Worker 节点。在什么场景下自建集群比托管服务更合适（如合规要求、成本控制、特殊硬件需求）？托管服务的控制平面 SLA 通常是多少（如 99.95%）？
+> 2. Kubernetes 版本升级（如 1.28 → 1.29）需要先升级控制平面再升级 Worker 节点。kubeadm 支持逐节点升级——`kubeadm upgrade apply v1.29.0`。在升级期间控制平面和 Worker 的版本差异（skew policy，最多差 2 个小版本）如何保证兼容？你在升级前需要做哪些检查（API 废弃、PodDisruptionBudget）？
+> 3. 高可用控制平面需要至少 3 个 Master 节点——API Server 通过负载均衡器暴露，etcd 集群 3 节点。在自建集群中，控制平面节点和 Worker 节点是否应该分开（dedicated Master）？在小型集群（<20 节点）中，控制平面节点是否可以同时运行工作负载？

@@ -397,6 +397,11 @@ Hadoop 2.x 引入了基于**事务数（txid count）**的滚动策略：`dfs.na
 
 ---
 
+> [!note] 思考题
+> 1. NameNode 启动时需要将 FsImage 加载到内存，然后重放所有 EditLog 来恢复最新状态。如果 EditLog 积累了大量操作（如运行了数月未做 Checkpoint），这个重放过程可能需要数十分钟，导致 NameNode 长时间不可用。Secondary NameNode 通过定期合并 FsImage + EditLog 来生成新的 FsImage，压缩 EditLog 长度。在 HA 模式下，Secondary NameNode 被 Standby NameNode 取代，Standby NameNode 如何承担这个 Checkpoint 职责的？
+> 2. EditLog 是追加写入的，每条操作都以事务形式记录（带有 Transaction ID）。如果 NameNode 在将一条操作写入 EditLog 的过程中崩溃（写了一半），重启后 NameNode 如何处理这条不完整的日志记录？EditLog 的完整性检查机制是什么？
+> 3. FsImage 存储的是某个时间点的完整文件系统快照，格式是 Protobuf 序列化的二进制文件。对于超大型集群（如 FsImage 达到数 GB），每次生成 FsImage 的 Checkpoint 操作本身就是一个巨大的 I/O 操作。如何在不阻塞 NameNode 正常服务的前提下执行 Checkpoint？Hadoop 的 `dfsadmin -saveNamespace` 命令与自动 Checkpoint 在执行方式上有什么本质区别？
+
 ## 参考资料
 
 - Apache Hadoop 官方文档：[HDFS User Guide - Checkpointing](https://hadoop.apache.org/docs/current/hadoop-project-dist/hadoop-hdfs/HdfsUserGuide.html)

@@ -416,3 +416,10 @@ graph TD
 6. Vogels, W. (2009). Eventually Consistent. *Communications of the ACM, 52*(1), 40–44.
 7. Bailis, P., & Ghodsi, A. (2013). Eventual Consistency Today: Limitations, Extensions, and Beyond. *ACM Queue, 11*(3).
 8. Attiya, H., Bar-Noy, A., & Dolev, D. (1995). Sharing Memory Robustly in Message-Passing Systems. *Journal of the ACM, 42*(1), 124–142.
+
+---
+
+> [!note] 思考题
+> 1. Basic Paxos 解决了单值共识问题——多个 Proposer 可能并发提议值，最终所有进程就同一个值达成一致。Paxos 的核心是'两阶段'：Prepare（获取承诺）和 Accept（提交值）。如果两个 Proposer 交替 Prepare 导致'活锁'（互相覆盖对方的 Prepare），如何解决？Multi-Paxos 引入 Leader 来避免这个问题——与 Raft 的 Leader 概念有什么异同？
+> 2. Paxos 以难以理解著称——Lamport 的原始论文使用了希腊议会的比喻。Raft 论文的核心贡献是'将 Paxos 的正确性以更容易理解的方式呈现'。你认为 Raft 在算法本质上与 Multi-Paxos 有区别吗？还是只是'包装'不同？
+> 3. Paxos 在工业界的实现包括 Google 的 Chubby（分布式锁服务）和 Spanner（分布式数据库）。Spanner 使用 Paxos 保证跨数据中心的强一致性——结合 TrueTime（原子钟+GPS）实现全球一致的事务。TrueTime 的误差范围（通常 <7ms）如何影响事务的等待时间？

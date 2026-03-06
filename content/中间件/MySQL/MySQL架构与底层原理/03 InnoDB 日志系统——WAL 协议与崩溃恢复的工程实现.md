@@ -459,3 +459,10 @@ ALTER INSTANCE ENABLE INNODB REDO_LOG;
 8. **MySQL 8.0 的改进**：无锁写入、动态容量、临时禁用等，持续提升日志系统的性能和灵活性
 
 Redo Log 与上一篇讲的 [[Buffer Pool]] 形成了 InnoDB 的"性能-安全"双引擎：Buffer Pool 让读写操作在内存中完成（性能），Redo Log 保证内存中的修改不会因崩溃而丢失（安全）。下一篇文章我们将深入 [[Undo Log]] 与 [[MVCC]]——它们是 InnoDB 实现事务隔离性和并发控制的核心机制。
+
+---
+
+> [!note] 思考题
+> 1. InnoDB 的聚簇索引（主键索引）将数据行存储在 B+ 树的叶子节点中——主键的物理排列决定了数据的物理存储顺序。使用 UUID 作为主键会导致插入时页分裂频繁（因为 UUID 随机分布）——对写入性能的影响有多大？自增 ID 和有序 UUID（如 ULIDv7）各有什么优劣？
+> 2. 覆盖索引（Covering Index）是指查询所需的所有列都包含在索引中——无需回表查询。`EXPLAIN` 输出中 `Extra: Using index` 表示使用了覆盖索引。在一个 `SELECT name, age FROM users WHERE city = 'Beijing'` 的查询中，你需要什么索引来实现覆盖索引？联合索引的列顺序（`(city, name, age)` vs `(city, age, name)`）有什么影响？
+> 3. InnoDB 的辅助索引（二级索引）的叶子节点存储的是主键值而非行指针。通过辅助索引查找数据需要两次 B+ 树查找：辅助索引 → 主键值 → 聚簇索引 → 数据行（回表）。在主键很长（如 36 字节的 UUID）时，每个辅助索引都要存储这个长主键——这对辅助索引的大小和性能有什么影响？

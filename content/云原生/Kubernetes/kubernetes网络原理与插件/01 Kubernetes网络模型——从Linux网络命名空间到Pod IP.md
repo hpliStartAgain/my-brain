@@ -621,3 +621,10 @@ Pod 创建前后，节点内核数据结构的变化：
 ---
 
 *本文是 [[Kubernetes网络原理与插件]] 专栏的第 1 篇。相关前置：[[02 Linux Namespace 深度解析|Docker Namespace]]、[[05 容器网络原理|Docker 容器网络]]。后续专栏：[[01 服务网格概述——从微服务治理痛点到Sidecar模式|服务网格专栏]]*
+
+---
+
+> [!note] 思考题
+> 1. Kubernetes 网络模型要求：每个 Pod 有独立 IP、Pod 之间可以直接通信（不需要 NAT）、Node 可以直接与 Pod 通信。CNI 插件负责实现这个模型。Flannel（简单，VXLAN 封装）和 Calico（功能丰富，BGP 路由或 VXLAN）是最常用的 CNI。在什么场景下你需要 Calico 而非 Flannel（如需要 NetworkPolicy、BGP 路由）？
+> 2. Pod 的 IP 地址由 CNI 插件从 CIDR 池中分配。如果 Pod CIDR 与节点网络或 Service CIDR 冲突——通信会出问题。在设计集群网络时，你如何规划 Pod CIDR、Service CIDR 和节点网络的地址空间以避免冲突？在 VPC 环境中（如 AWS VPC CNI），Pod 直接使用 VPC IP——这对 IP 地址消耗有什么影响？
+> 3. AWS VPC CNI 将 Pod IP 直接分配为 VPC 的 ENI 辅助 IP——Pod 在 VPC 中直接可达（无需 Overlay）。但每个 EC2 实例的 ENI 和 IP 数量有限——这限制了每个节点的 Pod 数量。在 `m5.large`（3 ENI，每个 10 IP）上最多运行多少 Pod？如何通过 ENI prefix delegation 扩展？

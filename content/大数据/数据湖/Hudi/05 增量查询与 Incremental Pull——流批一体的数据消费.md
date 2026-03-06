@@ -434,3 +434,9 @@ Hudi 的 Incremental Query 不是一个锦上添花的功能，而是 Hudi 整�
 在大规模数据湖中，将全量 ETL 改造为增量 ETL，通常是**性价比最高的性能优化手段**——不需要修改业务逻辑，只需要将 `spark.read.format("hudi").load(path)` 改为增量模式，配合 Checkpoint 状态管理，即可获得 10-100 倍的计算量降低。
 
 最后一篇 [[06 Hudi vs Delta Lake vs Iceberg——架构设计的本质差异与选型]] 将综合本专栏所有篇章的内容，对三大数据湖方案进行全面的架构对比，给出明确的场景化选型决策框架。
+
+
+> [!note] 思考题
+> 1. Hudi 的增量查询允许消费者只处理"自某个 Commit 时间点以来的所有变更记录"。如果某次增量中包含了 `DELETE` 操作，增量查询如何返回这些被删除的记录，使下游能做出相应的删除处理？`HoodieRecord` 中哪个字段标识了一条记录是"删除"？
+> 2. Flink 持续写入 Hudi 表时可能同时有多个 INFLIGHT Commit。如果 Spark 在有 INFLIGHT Commit 的时刻开始增量查询，它看到的是截止到上一个 COMPLETED Commit 的增量，还是包括 INFLIGHT 的部分数据？这是否会导致数据不一致的消费？
+> 3. Hudi 的 Bootstrap 功能允许将现有 Parquet 文件"引导"进 Hudi 管理而无需重写数据。Bootstrap 后，Bloom Filter Index 不会索引历史数据，对历史记录的 UPDATE 需要走慢路径（全分区扫描）。Bootstrap 功能在什么场景下是合理的技术选择，而不是从头重建 Hudi 表？

@@ -246,3 +246,10 @@ m1 没有丢失！
 > - KIP-101: Alter Replication Protocol to use Leader Epoch rather than High Watermark for Truncation
 > - Confluent Blog,《Kafka Internals: Topics, Partitions, Replication》
 > - 《Kafka: The Definitive Guide》, Chapter 5
+
+---
+
+> [!note] 思考题
+> 1. ISR（In-Sync Replicas）是与 Leader 保持同步的副本集合。Follower 落后 Leader 超过 `replica.lag.time.max.ms`（默认 30 秒）后被移出 ISR。如果所有 Follower 都被移出 ISR（只剩 Leader），`min.insync.replicas=2` 的 Topic 写入会失败。在网络抖动导致所有 Follower 短暂落后的场景中，你如何避免频繁的 ISR 收缩？
+> 2. 当 Leader 所在 Broker 宕机时，Controller 从 ISR 中选举新 Leader。`unclean.leader.election.enable=false`（默认）禁止非 ISR 成员被选举为 Leader——宁可 Partition 不可用也不丢数据。设为 `true` 则允许'不干净'的选举——可能丢失未同步的消息。在什么业务场景下你会设为 `true`（可用性优先于一致性）？
+> 3. Kafka 的副本复制是异步的——Follower 从 Leader 拉取（fetch）消息。高水位（High Watermark）标记了所有 ISR 副本都已同步的位置——Consumer 只能读到高水位之前的消息。如果 Leader 有 100 条消息但高水位在 90，Consumer 只能读到前 90 条。这种设计如何保证已消费的消息在 Leader 故障后不丢失？

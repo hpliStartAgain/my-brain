@@ -698,3 +698,10 @@ graph TD
 ---
 
 *本文是 [[服务网格]] 专栏的第 5 篇。相关专栏：[[07 NetworkPolicy与CoreDNS——网络安全策略与集群DNS|K8s NetworkPolicy]]、[[02 认证机制深度解析|K8s 认证机制]]、[[03 授权机制——RBAC 深度解析|K8s RBAC 授权]]*
+
+---
+
+> [!note] 思考题
+> 1. Istio 自动生成四个'黄金信号'指标：延迟、流量、错误率和饱和度。这些指标通过 Envoy 的 stats 模块暴露，被 Prometheus 采集。在一个 1000 Pod 的集群中，Envoy 的指标数量可能达到数百万时间序列——Prometheus 的存储和查询压力如何？你如何通过指标聚合或采样来降低压力？
+> 2. 分布式追踪（Tracing）需要每个服务传递 trace header（如 `x-request-id`、`x-b3-traceid`）。Istio 的 Envoy Sidecar 自动注入这些 header——但应用代码需要将收到的 header 传递到下游调用中。如果应用忘记传递 header——追踪链路会断裂。除了改代码，有没有基础设施层面的方案来保证 header 传递？
+> 3. Envoy 的 Access Log 记录了每个请求的详细信息（源/目标服务、延迟、状态码、响应标志）。`RESPONSE_FLAGS` 字段（如 `UO`=upstream overflow、`UF`=upstream connection failure）帮助快速定位问题。在故障排查中，你如何结合 Access Log 和 Tracing 来定位'某个请求慢在哪个服务'？

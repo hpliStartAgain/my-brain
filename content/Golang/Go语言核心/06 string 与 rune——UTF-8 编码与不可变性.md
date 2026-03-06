@@ -529,3 +529,10 @@ matches := dateRegexp.FindStringSubmatch("今天是 2026-03-04，明天是 2026-
 > - Go Blog,《Strings, bytes, runes and characters in Go》: https://go.dev/blog/strings
 > - Go 语言规范：String types 章节
 > - unicode/utf8 包文档
+
+---
+
+> [!note] 思考题
+> 1. Go 的 `string` 底层是一个 `{pointer, len}` 结构，指向一段只读的 UTF-8 字节序列。`s[i]` 返回的是第 i 个字节（`byte`），而不是第 i 个字符（`rune`）。对于包含中文的字符串 `s := "你好世界"`，`len(s)` 的值是多少？如何正确地获取'字符数'？`utf8.RuneCountInString` 的时间复杂度是 O(1) 还是 O(n)？为什么？
+> 2. 字符串拼接 `s = s + "suffix"` 在循环中会导致大量内存分配（每次拼接都创建新的字符串）。`strings.Builder` 通过内部维护一个 `[]byte` 来减少分配。但 `strings.Builder` 有一个约束：调用 `String()` 后不能再继续写入。这个约束的原因是什么？`String()` 方法内部做了什么优化来避免最后一次拷贝？
+> 3. `[]byte` 和 `string` 之间的转换 `string(b)` 和 `[]byte(s)` 在语义上都涉及内存拷贝。但 Go 编译器在某些场景下会优化掉这个拷贝（如 `map[string(b)]` 查找）。你知道哪些不拷贝的优化场景？在高性能场景下，使用 `unsafe.String` 或 `unsafe.SliceData` 进行零拷贝转换有什么风险？

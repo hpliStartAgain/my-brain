@@ -548,6 +548,11 @@ HBase 的高可用体系体现了分布式系统高可用设计的几个普适�
 
 ---
 
+> [!note] 思考题
+> 1. RegionServer 宕机后，WAL Split 是恢复流程的关键步骤：Master 将宕机 RS 的 WAL 文件按 Region 切分，分发给负责接管这些 Region 的其他 RS 进行重放。WAL Split 的时间与宕机 RS 上 Region 数量和 WAL 文件大小成正比。在拥有 1000 个 Region 的 RS 宕机时，WAL Split 可能需要数分钟，这期间相关 Region 不可用。有哪些配置和架构手段可以缩短 MTTR（平均恢复时间）？
+> 2. HBase 的主从复制（Replication）通过异步复制 WAL 来实现跨集群同步，常用于异地容灾或读写分离。但异步复制存在复制延迟——在主集群写入数据后，从集群可能短暂看不到最新数据。在什么业务场景下，这个复制延迟是不可接受的？HBase 有没有机制实现同步复制（写主集群时同时确保从集群也写入成功）？
+> 3. HBase 的 Snapshot 功能可以在不拷贝数据的情况下快速创建表的只读快照（通过 HFile 链接实现），用于备份或克隆表。Snapshot 期间 HFile 不会被 Major Compaction 删除（因为 Snapshot 持有引用）。如果一个 Snapshot 长期不删除，而表数据持续更新，会导致什么问题？如何设计自动化的 Snapshot 生命周期管理策略？
+
 ## 参考资料
 
 - [1] HBase RegionServer 宕机恢复原理: https://www.cnblogs.com/cxhfuujust/article/details/11996272.html

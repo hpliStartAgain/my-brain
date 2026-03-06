@@ -425,3 +425,9 @@ Flink 的内存模型是其性能和稳定性的底层基础，核心设计动�
 **OOM 定位三步法**：看 OOM 错误类型 → 定位区域 → 调整对应参数
 
 下一篇 [[04 Flink 网络传输与反压机制深度解析]] 将深入网络层，解析 Credit-based 流量控制如何在 Task 之间精确传递背压信号，以及 Unaligned Checkpoint 背后的网络设计代价。
+
+
+> [!note] 思考题
+> 1. Flink 的 Network Memory 用于存储 Task 间传输的数据缓冲区（Buffer Pool）。Network Memory 的大小影响了反压触发的阈值——Buffer 越大，下游消费速度越慢时上游才会感受到背压。在 Credit-based 流量控制中，每个远程传输连接会预分配一定数量的 Exclusive Buffer。如果 Network Memory 设置过小，导致无法为所有连接分配足够的 Exclusive Buffer，会发生什么？
+> 2. Flink 的 Managed Memory 是由 Flink 自己管理的堆外内存，主要用于状态后端（RocksDB）和批处理算子（Sort、HashJoin）。当 Flink 作业同时包含流处理逻辑（使用 RocksDB State）和批处理逻辑（使用 Sort）时，Managed Memory 如何在两者之间分配？有没有配置参数控制这个分配比例？
+> 3. JVM Metaspace 存储类的元数据信息。Flink 作业在运行时会动态生成大量代码（如 CodeGen 生成的算子代码、Kryo 序列化器的代理类），这些动态生成的类会被加载到 Metaspace 中。如果一个长期运行的 Flink 流作业不断触发代码重新生成（比如 Flink SQL 的动态 DDL 变更），Metaspace 会无限增长吗？如何监控和控制 Metaspace 的使用？

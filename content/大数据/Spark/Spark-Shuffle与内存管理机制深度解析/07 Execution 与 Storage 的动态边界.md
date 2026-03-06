@@ -390,6 +390,11 @@ val maxExecutionMemory = maxMemory - storagePool.memoryUsed
 
 ---
 
+> [!note] 思考题
+> 1. Execution 内存可以借用 Storage 内存，并且有权强制驱逐 Storage 缓存数据来获取空间。但 Storage 借用 Execution 内存后，Execution 需要时只能等待 Storage 主动归还，而不能强制驱逐。这种"不对称"设计的合理性是什么？如果允许 Execution 强制驱逐已借用其空间的 Storage 数据，会有什么问题？
+> 2. `storageFraction`（默认 0.5）定义了 Storage 在统一内存池中的"保护线"——Storage 持有的数据量低于这条线时不会被 Execution 驱逐。但如果所有缓存的 RDD 加起来远超这条线，Execution 借用内存时会发生什么？缓存逐出（Eviction）的策略是 LRU 吗？
+> 3. 在同一个 Executor 上运行多个 Task 时，所有 Task 共享同一个 `UnifiedMemoryManager` 的内存池。`TaskMemoryManager` 负责管理单个 Task 的内存页。当一个 Task 申请内存失败被迫 Spill 时，是否会影响同 Executor 上其他 Task 的正常执行？内存竞争是否会引发连锁 Spill？
+
 ## 参考资料
 
 - [Spark 统一内存管理：UnifiedMemoryManager](https://blog.csdn.net/aijiudu/article/details/78032663)

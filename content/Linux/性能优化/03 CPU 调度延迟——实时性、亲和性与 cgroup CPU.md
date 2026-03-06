@@ -543,3 +543,10 @@ CPU 调度延迟是低延迟服务 P99 毛刺最常见的隐藏原因之一，�
 - **cgroup CPU throttling** → 提高 CPU limit / 移除 limit / 使用 cgroup v2 burst
 
 下一篇 [[04 内存性能调优——NUMA 拓扑、大页与内存带宽]] 将深入内存性能的硬件维度：NUMA 不均衡（跨节点内存访问慢 2 倍）、HugePage 减少 TLB Miss（工作集大的数据库/缓存服务的必选项）、以及内存带宽饱和（当内存总线成为瓶颈时，加更多 CPU 核也无法提升性能）的诊断与优化。
+
+---
+
+> [!note] 思考题
+> 1. CFS 的调度延迟取决于可运行进程数。Kubernetes 节点上 50+ Pod 竞争 CPU 时，CFS 的调度延迟如何影响延迟敏感应用？`sched_min_granularity_ns`（最小时间片）设置过小会增加上下文切换开销，过大会增加调度延迟——如何找到平衡？
+> 2. 在 NUMA 架构中，CPU 亲和性（`taskset`）可以避免跨节点内存访问（~70ns vs ~120ns）。但绑定可能导致负载不均。在一个 2-Socket 64 核的 NUMA 机器上运行数据库，你会选择将数据库绑定到一个 Socket 还是让 CFS 自由调度？`numactl --interleave=all` 在这里有什么作用？
+> 3. CGroups v2 的 `cpu.max` 限制 CPU 带宽。被限流时 `cpu.stat` 的 `nr_throttled` 持续增加。如果一个容器的 CPU limit 设为 2 核，但它的代码在 GC 时需要 4 核并发——GC 会被限流导致停顿时间翻倍。你如何判断 CPU 限流是否影响了 GC 性能？是调大 limit 还是优化 GC？

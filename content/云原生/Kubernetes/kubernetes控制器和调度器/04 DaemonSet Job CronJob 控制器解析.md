@@ -428,3 +428,10 @@ kube_job_status_succeeded / kube_job_status_failed
 4. Kubernetes Enhancement Proposal - Indexed Job：https://github.com/kubernetes/enhancements/tree/master/keps/sig-apps/2214-indexed-job
 5. Kubernetes Enhancement Proposal - Pod Failure Policy：https://github.com/kubernetes/enhancements/tree/master/keps/sig-apps/3329-retriable-and-non-retriable-failures
 6. Kubernetes Documentation - DaemonSet Update Strategy：https://kubernetes.io/docs/tasks/manage-daemon/update-daemon-set/
+
+---
+
+> [!note] 思考题
+> 1. StatefulSet 为每个 Pod 提供稳定的网络标识（`pod-0`、`pod-1`）和稳定的持久存储（PVC 与 Pod 一一对应）。有序部署（0→1→2）和有序终止（2→1→0）保证了有状态应用的一致性。但有序部署在 Pod 启动慢时导致部署时间长——`podManagementPolicy: Parallel` 可以并行启动，但什么场景下并行启动会导致问题（如主从数据库需要先启动主节点）？
+> 2. StatefulSet 的 PVC 在 Pod 删除后不自动删除——需要手动清理。这是为了防止数据意外丢失。但在测试环境中，残留的 PVC 浪费存储资源。你如何自动化清理不再需要的 PVC？Kubernetes 1.27+ 的 `persistentVolumeClaimRetentionPolicy` 如何解决这个问题？
+> 3. StatefulSet 的滚动更新默认从最高序号的 Pod 开始（2→1→0）。`partition` 参数允许只更新序号 ≥ partition 的 Pod——实现灰度更新。在一个 3 副本的 ZooKeeper StatefulSet 中，如何用 `partition` 先更新 1 个节点验证后再全量更新？

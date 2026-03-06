@@ -629,3 +629,9 @@ Allow Conditions:
 - **审计体系**：异步批量写入不影响性能，Solr 实现实时查询，是合规和排查的核心工具
 
 认证（Kerberos）解决了"你是谁"，Ranger 解决了"你能做什么"。下一篇 [[05 Apache Knox 网关深度解析]] 将从另一个维度切入：如何通过统一的 API 网关层，为外部用户提供安全的单一入口访问 Hadoop 集群，而无需暴露集群内部的 Kerberos 细节。
+
+
+> [!note] 思考题
+> 1. Ranger 采用"策略集中管理，执行本地化"的架构——Ranger Admin 集中存储和管理所有权限策略，各服务（HDFS、Hive、HBase）的 Ranger Plugin 定期从 Admin 拉取策略缓存到本地，权限判断在本地完成。这个设计在 Ranger Admin 宕机时仍能保证服务可用（使用本地缓存的策略）。但本地缓存有多长时间的延迟（`ranger.plugin.hdfs.policy.pollIntervalMs`）？在策略更新后的这段延迟期间，访问控制的行为是基于旧策略的——这在哪些安全场景下是不可接受的？
+> 2. Ranger 的 Row-Level Security（行级安全）和 Column Masking（列脱敏）功能允许对同一张 Hive 表，不同用户看到不同的行和列（如运营人员看到脱敏的手机号，数据工程师看到完整数据）。这些功能在 Hive 层面是通过动态视图还是查询改写（Query Rewrite）来实现的？对查询性能有多大影响？如果用户绕过 Hive 直接用 Spark 读取底层 HDFS 文件，Row-Level Security 和 Column Masking 还有效吗？
+> 3. Ranger Audit 记录了所有通过 Ranger Plugin 的访问操作（允许和拒绝），可以写入 HDFS、Solr 或 Kafka。在高并发访问场景（每秒数万次 HDFS 操作），Ranger Audit 会产生大量的审计日志写入请求。如果 Ranger Audit 的目标存储（如 Solr）发生故障，Ranger Plugin 的行为是什么？会阻塞业务请求等待 Audit 写入，还是允许操作继续执行并丢弃 Audit 记录？

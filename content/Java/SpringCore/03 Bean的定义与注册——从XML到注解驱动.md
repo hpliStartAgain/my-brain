@@ -681,3 +681,10 @@ public interface FactoryBean<T> {
 > - `org.springframework.context.annotation.ClassPathBeanDefinitionScanner` 源码
 > - `org.springframework.context.annotation.ConfigurationClassParser` 源码
 > - [Spring Framework 官方文档 - Annotation-based Container Configuration](https://docs.spring.io/spring-framework/reference/core/beans/annotation-config.html)
+
+---
+
+> [!note] 思考题
+> 1. `@Autowired` 默认按类型注入，当同类型有多个 Bean 时需要配合 `@Qualifier` 指定名称。`@Resource` 默认按名称注入。在 Spring Boot 中，构造器注入（不需要 `@Autowired` 注解）被推荐为最佳实践。构造器注入相比字段注入（`@Autowired` 在字段上）在可测试性、不可变性和循环依赖检测方面有什么优势？
+> 2. 当一个接口有多个实现类时（如 `OrderService` 有 `DefaultOrderService` 和 `VipOrderService`），如何通过 `@Autowired List<OrderService>` 注入所有实现？注入的 List 中 Bean 的顺序由什么决定？`@Order` 和 `@Priority` 在这里的作用是什么？
+> 3. `@Autowired(required=false)` 允许依赖不存在时注入 `null`。但在 Spring Boot 中，如果某个 Bean 的条件装配（`@ConditionalOnProperty`）关闭了，依赖它的其他 Bean 注入时会失败。你如何设计一个'可选依赖'——当某个功能被禁用时，相关 Bean 自动跳过而不报错？

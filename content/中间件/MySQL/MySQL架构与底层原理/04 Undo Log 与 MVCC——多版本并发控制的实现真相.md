@@ -310,3 +310,10 @@ MVCC 解决的是**读写并发**的问题（读不阻塞写，写不阻塞读�
 6. **DELETE 的延迟清理**：打删除标记而非立刻物理删除，保证 MVCC 读取的正确性
 7. **Purge 线程**：清理安全清理线之前的旧版本；长事务阻塞 Purge，导致 Undo 膨胀和 History list length 飙升
 8. **MVCC 的边界**：只对快照读有效，写写冲突仍需锁来解决
+
+---
+
+> [!note] 思考题
+> 1. MySQL 的默认隔离级别是 REPEATABLE READ（RR）。在 RR 级别下，InnoDB 使用 MVCC 实现一致性读——每个事务看到的是事务开始时刻的数据快照。但 RR 级别下的 `SELECT ... FOR UPDATE`（当前读）会加锁而非使用快照。在同一个事务中混合使用快照读和当前读可能看到不一致的数据——这个'幻读'问题 InnoDB 是通过什么机制（Next-Key Lock）解决的？
+> 2. MVCC 通过 Undo Log 链维护数据的多个版本。每条记录有隐藏的 `trx_id`（最后修改的事务 ID）和 `roll_pointer`（指向 Undo Log 的上一个版本）。ReadView 决定了事务能看到哪些版本——活跃事务列表中事务的修改不可见。在 RC（Read Committed）和 RR 隔离级别下，ReadView 的创建时机有什么区别？这个区别如何导致 RC 能看到其他已提交事务的修改而 RR 不能？
+> 3. InnoDB 在 RR 级别下使用 Gap Lock 防止幻读——锁住索引记录之间的'间隙'。但 Gap Lock 可能导致非预期的锁等待和死锁。例如 `SELECT * FROM t WHERE id > 10 FOR UPDATE` 会锁住 id > 10 的所有间隙——其他事务无法在这个范围内插入新行。在高并发插入场景中，Gap Lock 如何影响性能？将隔离级别降为 RC 能消除 Gap Lock 吗？

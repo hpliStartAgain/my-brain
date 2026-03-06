@@ -386,3 +386,10 @@ apiserver_storage_db_total_size_in_bytes
 5. Kubernetes Enhancement Proposal - Streaming List：https://github.com/kubernetes/enhancements/tree/master/keps/sig-api-machinery/3157-watch-list
 6. Wojciech Tyczynski (2019). *Scalability Updates and Scalability Testing Framework*. KubeCon EU.
 7. Antonio Ojea (2023). *API Server Internals Deep Dive*. KubeCon NA.
+
+---
+
+> [!note] 思考题
+> 1. CRD（Custom Resource Definition）允许用户定义新的 API 资源——如 `Certificate`、`VirtualService`。CRD 由 API Server 原生支持（存储在 etcd 中）。Aggregated API Server 是独立的 API 服务器——通过 APIService 注册到主 API Server。在什么场景下 CRD 足够使用？什么场景下需要 Aggregated API Server（如需要自定义的存储后端、复杂的验证逻辑）？
+> 2. CRD 的 Structural Schema（结构化 Schema）在 Kubernetes 1.15+ 成为必需——所有 CRD 必须定义 OpenAPI v3 Schema。Schema 验证在 API Server 层执行——确保 CR 的数据格式正确。但 Schema 无法表达复杂的业务约束（如'字段 A 存在时字段 B 必须存在'）。你如何通过 Validating Webhook 实现更复杂的验证？
+> 3. Operator 模式是 CRD + Controller 的组合——Controller 监听 CR 变化并执行对应的业务逻辑。Operator SDK、Kubebuilder 和 controller-runtime 是常用的 Operator 开发框架。在什么场景下开发自定义 Operator 是值得的（如有状态应用的生命周期管理、复杂的运维自动化）？开发和维护 Operator 的成本如何评估？

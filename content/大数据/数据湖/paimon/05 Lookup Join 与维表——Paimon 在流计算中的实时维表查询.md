@@ -415,3 +415,9 @@ Paimon 的 Lookup Join 能力，让数据湖表从"只能批量读取"的被动�
 - **维表极大（> 10 亿条）或完全随机访问**：考虑 HBase（本地 SSD 点查）或接受 Paimon 的 S3 延迟
 
 下一篇 [[06 Paimon vs Delta Lake vs Iceberg vs Hudi——流存储视角的架构总结]] 将从 Paimon 的视角，对四大数据湖方案做最终的完整对比，重点聚焦**流存储能力**这个 Paimon 的核心差异化维度。
+
+
+> [!note] 思考题
+> 1. Paimon 的 Lookup Join 将维表数据缓存在 Flink TaskManager 的本地磁盘（通过 RocksDB），点查时直接查询本地缓存而不需要网络请求。与传统的 HBase Lookup Join（每次查询都需要一次网络往返）相比，Paimon Lookup Join 的延迟优势在高 QPS 场景下有多大？本地缓存的维护代价（增量同步 Paimon 表的变更）是多少？
+> 2. Paimon Lookup Join 的本地缓存需要与 Paimon 维表保持同步——当维表数据发生变化（如商品价格更新），缓存需要被刷新。Paimon 通过消费维表的 Changelog 来实现缓存的增量更新。如果维表的更新频率很高（每秒数千次更新），缓存的同步延迟和同步 I/O 开销是否会成为瓶颈？
+> 3. Paimon Lookup Join 依赖维表的主键来进行点查（等值查询）。如果业务需要基于非主键列进行 Lookup（如根据用户手机号查询用户信息，而主键是用户 ID），Paimon 是否支持这种非主键维度的快速查询？如果不支持，应该如何设计数据模型来满足这个需求？

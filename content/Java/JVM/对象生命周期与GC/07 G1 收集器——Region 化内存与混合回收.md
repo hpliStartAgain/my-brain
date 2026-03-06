@@ -316,3 +316,10 @@ G1 是 HotSpot GC 演进历史上最重要的里程碑之一。它的核心贡�
 4. 美团技术博客, "新一代垃圾回收器ZGC的探索与实践", 2020
 5. OpenJDK Wiki, "G1 GC Tuning Guide", wiki.openjdk.org
 6. JEP 248: Make G1 the Default Garbage Collector (JDK 9)
+
+---
+
+> [!note] 思考题
+> 1. G1 将堆划分为大小相等的 Region（默认 2048 个），每个 Region 可以是 Eden、Survivor、Old 或 Humongous。当一个对象大小超过 Region 的 50% 时被分配到 Humongous Region。频繁创建大于 Region 50% 的对象会导致什么问题？你如何调整 G1 参数来缓解 Humongous 分配的性能影响？
+> 2. G1 的 Mixed GC 会同时回收 Young Region 和部分 Old Region。G1 通过 Remembered Set（RSet）记录跨 Region 的引用关系，避免全堆扫描。RSet 的维护成本约占堆的 10%-20%——在什么场景下 RSet 的内存开销会特别大？如果 Region 之间的跨引用非常密集，G1 的效率会退化到什么程度？
+> 3. G1 的 `-XX:MaxGCPauseMillis` 设置目标停顿时间（默认 200ms）。G1 通过统计每个 Region 的回收价值（可回收空间/回收耗时）来选择性回收——这就是'Garbage First'名称的由来。但如果你将目标停顿设为 10ms，G1 可能每次只回收极少的 Region，导致堆空间不断增长。最终会触发什么？这种'目标停顿过低导致反效果'的现象如何避免？

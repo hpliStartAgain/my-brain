@@ -414,3 +414,10 @@ SkyWalking 的指标来源于 Segment 数据，理论上与 Prometheus 的指标
 3. Sigelman, B., et al. (2010). Dapper, a Large-Scale Distributed Systems Tracing Infrastructure. Section 4.4: Trace Collection.
 4. Shkuro, Y. (2019). *Mastering Distributed Tracing*. Chapter 7: Sampling.
 5. SkyWalking Dynamic Configuration：https://skywalking.apache.org/docs/main/latest/en/setup/backend/dynamic-config/
+
+---
+
+> [!note] 思考题
+> 1. Envoy Sidecar 自动生成 L7 指标（请求延迟、错误率、QPS）和 Trace Span——无需应用代码修改。但 Envoy 生成的 Span 只覆盖网络层——应用内部的处理逻辑（如业务逻辑、数据库查询）需要 OTel SDK 补充。如何将 Envoy 的 Span 和应用的 Span 关联到同一个 Trace？
+> 2. Istio 的指标默认使用 Prometheus 格式——但 Istio 也支持通过 OTel 协议导出。在一个使用 Istio + OTel 的环境中，指标的采集路径是什么——Envoy → Prometheus 还是 Envoy → OTel Collector → 后端？两种路径各有什么优劣？
+> 3. Service Mesh 提供的'免费'可观测性——不需要修改应用代码就能获得服务间调用的指标和追踪。但这些数据只覆盖'网络边界'——应用内部的可观测性仍需 OTel SDK。在什么场景下 Service Mesh 的'免费'可观测性已经足够？什么场景下必须引入应用级别的 OTel 埋点？

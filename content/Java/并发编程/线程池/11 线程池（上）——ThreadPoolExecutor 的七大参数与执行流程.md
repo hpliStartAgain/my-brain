@@ -538,3 +538,10 @@ executor.setKeepAliveTime(60, TimeUnit.SECONDS); // 动态调整存活时间
 3. 阿里巴巴 Java 开发手册，并发处理章节
 4. 美团技术博客, "Java 线程池实现原理及其在美团业务中的实践", 2020
 5. OpenJDK 源码：`java.util.concurrent.ThreadPoolExecutor`
+
+---
+
+> [!note] 思考题
+> 1. ThreadPoolExecutor 的拒绝策略有四种：AbortPolicy（抛异常）、CallerRunsPolicy（调用者线程执行）、DiscardPolicy（静默丢弃）和 DiscardOldestPolicy（丢弃队列头部任务）。`CallerRunsPolicy` 在任务积压时让提交者线程自己执行——这实现了一种隐式的反压（back-pressure）。但如果提交者是 Tomcat 的 HTTP 线程，CallerRunsPolicy 会导致 HTTP 线程被阻塞——影响其他请求的处理。在 Web 应用中，哪种拒绝策略最安全？
+> 2. 阿里《Java开发手册》建议'不要使用 Executors 创建线程池，而是通过 ThreadPoolExecutor 构造函数'。核心原因是 `newFixedThreadPool` 使用无界队列可能导致 OOM，`newCachedThreadPool` 不限制线程数可能导致线程爆炸。但直接使用 ThreadPoolExecutor 构造函数时，`corePoolSize`、`maximumPoolSize` 和队列容量的最佳配置如何确定？有通用的计算公式吗？
+> 3. `ThreadPoolExecutor.prestartAllCoreThreads()` 在启动时就创建所有核心线程。在什么场景下预启动核心线程是有必要的？如果不预启动，前几个任务的响应时间会受到影响吗？`allowCoreThreadTimeOut(true)` 允许核心线程超时销毁——在什么场景下你需要这个特性？

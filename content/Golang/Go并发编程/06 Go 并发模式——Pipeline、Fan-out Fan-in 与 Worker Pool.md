@@ -814,3 +814,10 @@ func goodSubmit(ctx context.Context, pool *WorkerPool, tasks []Task) error {
 > - Go Blog,《Go Concurrency Patterns: Pipelines and cancellation》: https://go.dev/blog/pipelines
 > - Sameer Ajmani,《Advanced Go Concurrency Patterns》, Google I/O 2013
 > - Katherine Cox-Buday,《Concurrency in Go》, O'Reilly 2017
+
+---
+
+> [!note] 思考题
+> 1. 在 Pipeline 模式中，每个 stage 是一个独立的 goroutine，通过 channel 连接。如果 Pipeline 有 5 个 stage，每个 stage 的处理速度不同（stage 3 最慢），整个 Pipeline 的吞吐量由最慢的 stage 决定。你有哪些方式提升 stage 3 的吞吐量？增加 channel 的缓冲区大小能解决这个问题吗？
+> 2. Worker Pool 模式中，N 个 worker goroutine 从一个共享的 job channel 中消费任务。如果 N=100 但任务处理速度远快于任务产生速度，大部分 worker 会阻塞在 channel 的 receive 上。这些空闲的 goroutine 会消耗 CPU 资源吗？与创建 100 个 OS 线程的 Worker Pool 相比，goroutine 版本的空闲开销差异有多大？
+> 3. Fan-out/Fan-in 模式中，如果某个 Fan-out goroutine 发生 panic，其他 goroutine 和 Fan-in 的汇聚逻辑会受到什么影响？你如何设计一个'即使部分 worker 失败，也能收集已完成结果并返回部分错误'的健壮 Fan-out/Fan-in？`errgroup` 包能满足这个需求吗？

@@ -502,3 +502,10 @@ TLS 卸载是 Nginx 最重要的安全功能，性能优化聚焦在减少握手
 ---
 
 > **下一篇**：[[07 Location 匹配：优先级规则与正则引擎]]
+
+---
+
+> [!note] 思考题
+> 1. `limit_req` 的 `burst` 和 `nodelay` 如何配合允许短暂流量高峰？`burst=20 nodelay` 表示突发的 20 个请求立即处理（不排队），但之后的请求被限流。如果不加 `nodelay`，突发请求会排队——排队延迟对用户体验的影响是什么？
+> 2. `limit_conn` 限制并发连接数可以防御 Slowloris 攻击。但 NAT 环境下多用户共享 IP——`limit_conn` 可能误伤。你如何结合 `$binary_remote_addr`（IP）和 `$http_x_api_key`（API Key）实现更精细的限流？
+> 3. 在微服务网关中，限流键可能是 API Key、用户 ID 或租户 ID——这些信息在请求头或 JWT Token 中。Nginx 原生无法解析 JWT。OpenResty 的 `lua-resty-jwt` 如何在限流前解析 Token 并提取用户信息？这个解析步骤的性能开销如何？

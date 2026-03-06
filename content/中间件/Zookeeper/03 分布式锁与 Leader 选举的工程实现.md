@@ -519,3 +519,10 @@ cache.start(StartMode.BUILD_INITIAL_CACHE); // 预加载所有子节点数据
 Curator 框架解决了原生 ZooKeeper API 在工程使用中的主要痛点（Session 重建、Watcher 重注册、重试等），是生产中的标配。
 
 下一篇文章将深入 ZooKeeper 的数据持久化机制——事务日志（WAL）与快照（Snapshot）的格式与恢复流程。
+
+---
+
+> [!note] 思考题
+> 1. ZooKeeper 的 Watch 是一次性的——触发后需要重新注册。在重新注册期间可能错过事件。Curator（ZooKeeper 的高级客户端库）的 TreeCache 和 PathChildrenCache 自动处理 Watch 的重新注册——但仍有极小的窗口可能错过事件。这种'事件丢失'在什么场景下会导致问题？如何设计应用逻辑来容忍偶尔的事件丢失？
+> 2. ZooKeeper 的 Watch 通知只告诉客户端'数据变了'而不告诉'变成了什么'——客户端收到通知后需要再读取一次获取新值。这种设计减少了通知的数据量但增加了一次往返。与 etcd 的 Watch（直接推送新值）相比，哪种设计更高效？
+> 3. 在一个有 1000 个客户端同时 Watch 某个 ZNode 的场景中，ZNode 更新时需要通知所有客户端——这种'扇出'的网络开销可能导致 ZooKeeper 服务器压力大增。如何减少 Watch 的数量？是否应该使用'事件总线'模式（少数客户端 Watch ZooKeeper，然后通过消息队列扇出给其他客户端）？

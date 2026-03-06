@@ -597,3 +597,10 @@ kill <PID>
 - `SIGKILL` 对僵尸无效——僵尸进程已经死亡，无法处理任何信号
 
 下一篇 [[06 进程状态机——TASK_RUNNING 到 TASK_DEAD 的完整生命周期]] 将系统梳理 Linux 内核进程状态（R/S/D/T/Z/X）的精确含义、转换条件，以及生产中最令人困惑的 D 状态（不可中断睡眠）的本质与诊断。
+
+---
+
+> [!note] 思考题
+> 1. 管道（pipe）是最简单的 IPC 机制——匿名管道只能在父子进程间使用（通过 fork 继承 fd）。管道的缓冲区大小默认 64KB（Linux）——如果写入速度超过读取速度，writer 会阻塞。在高吞吐的生产者-消费者场景中，管道的 64KB 缓冲区是否太小？`fcntl(F_SETPIPE_SZ)` 可以调大到 1MB——有上限吗？
+> 2. POSIX 共享内存（`shm_open` + `mmap`）允许多个进程映射同一块物理内存——零拷贝通信。但共享内存需要进程自己处理同步（如使用信号量或 futex）。在什么场景下共享内存是唯一合理的 IPC 选择（如大数据量、低延迟要求）？Memcached 的 `-s` 选项使用 Unix Domain Socket 而非共享内存——为什么？
+> 3. System V 消息队列（`msgget/msgsnd/msgrcv`）和 POSIX 消息队列（`mq_open/mq_send/mq_receive`）都是内核维护的消息队列。它们与用户态消息队列（如 ZeroMQ、Disruptor）相比性能差距有多大？内核消息队列的优势是什么（如可靠性、持久性）？

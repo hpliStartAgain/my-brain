@@ -428,6 +428,11 @@ YARN 调度器是整个集群资源利用效率的核心杠杆。选错调度器
 
 ---
 
+> [!note] 思考题
+> 1. Capacity Scheduler（CS）的"弹性共享"特性允许一个队列在其他队列空闲时使用超过自己容量配置的资源，但当资源紧张时必须归还。这个"归还"过程不是立即的——运行中的 Container 不会被强制终止，只有当 Container 自然完成时才会释放资源。因此，资源归还可能需要等待数分钟甚至数小时（对于长期运行的作业）。在什么场景下，这个"弹性归还慢"的问题会导致 SLA 违约？抢占（Preemption）机制是如何解决这个问题的？
+> 2. Fair Scheduler（FS）的目标是让所有应用公平分配资源。在集群资源充足时，每个应用能获得尽可能多的资源；在资源紧张时，每个应用获得相同份额。但"公平"在实践中很难定义——一个有 1 个 Task 的小作业和一个有 1000 个 Task 的大作业，"公平"是按作业数还是按 Task 数？FS 的 `max-running-apps` 参数如何防止大量小作业"淹没"集群，同时不饿死大作业？
+> 3. Capacity Scheduler 支持通过标签（Node Label）将集群节点分为不同分区，不同队列只能使用特定标签的节点资源。这实现了硬件隔离——SSD 节点只给高优先级队列使用，普通 HDD 节点给批处理队列使用。在实际运维中，节点标签是静态配置的。如果一批 SSD 节点因硬件故障需要临时降级为普通节点，如何动态修改节点标签？这会对正在运行的、已分配到这些节点的 Container 产生什么影响？
+
 ## 参考资料
 
 - Apache Hadoop 官方文档：[Capacity Scheduler](https://hadoop.apache.org/docs/current/hadoop-yarn/hadoop-yarn-site/CapacityScheduler.html)

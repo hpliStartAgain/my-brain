@@ -551,3 +551,10 @@ LLM Agent 技术正在以极快的速度演进——本专栏介绍的技术，�
 8. OpenAI, "Building Safe AI Systems at Scale", openai.com, 2024
 9. Shankar et al., "Who Validates the Validators? Aligning LLM-Assisted Evaluation of LLM Outputs", EMNLP 2024
 10. Bai et al., "Constitutional AI: Harmlessness from AI Feedback", arXiv 2022
+
+---
+
+> [!note] 思考题
+> 1. Agent 的评估不同于传统 ML 模型——Agent 的输出不仅包括最终答案，还包括推理过程、工具调用序列和中间状态。你如何设计 Agent 的评估指标？'最终答案正确率'是否足够？'路径效率'（用最少步骤完成任务）和'鲁棒性'（面对异常输入的表现）应该如何量化？
+> 2. Agent 的回归测试面临挑战——LLM 的输出具有随机性（即使 temperature=0，不同批次的推理可能产生不同结果）。你如何设计确定性的自动化测试？'语义等价判断'（用另一个 LLM 判断两个输出是否语义相同）是否可靠？
+> 3. 在生产环境中，Agent 的可靠性需要监控和告警。你应该监控哪些关键指标——LLM 调用延迟、工具调用成功率、任务完成率、用户满意度？当 Agent 的任务完成率下降时，如何快速定位是 LLM 能力退化、工具故障还是输入分布变化导致的？

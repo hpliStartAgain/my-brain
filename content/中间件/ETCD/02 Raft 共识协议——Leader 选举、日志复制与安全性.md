@@ -292,3 +292,10 @@ etcd 在 Raft 之上做了多项性能优化：
 - **成员变更**：Joint Consensus 两阶段方案保证扩缩容时不出现双 Leader；etcd 使用单步变更简化实现。
 
 下一篇文章将深入 etcd 的存储引擎——BoltDB 的 B+ 树存储结构、WAL 的格式与恢复流程，以及 Compaction（历史版本清理）的触发机制与碎片整理（Defragmentation）。
+
+---
+
+> [!note] 思考题
+> 1. Raft 的 Leader 选举使用随机化的选举超时——Follower 在超时后成为 Candidate 并发起投票。随机超时避免了多个 Follower 同时发起选举导致的'选票分裂'。如果集群中 3 个节点的选举超时都设为相同值（如 1000ms），选票分裂的概率有多高？Raft 论文中推荐的超时范围是什么？
+> 2. Raft 的日志复制要求 Leader 将日志条目复制到多数节点后才能提交（commit）。如果一个 Follower 长时间离线后重新加入，它需要从 Leader 获取所有缺失的日志条目。如果缺失的日志量很大（如 GB 级），这个'追赶'过程会消耗大量网络带宽。etcd 的 Snapshot 机制如何加速这个过程？
+> 3. Raft 保证了线性一致性（Linearizability）——读操作能看到最新的已提交写入。但默认的 Raft 读操作需要经过 Leader 确认——增加了读延迟。etcd 的 `--read-only` 选项支持 Serializable 读（从任意节点读取，可能读到旧数据）。在什么场景下 Serializable 读是可接受的？Kubernetes 的 Watch 机制依赖线性一致性吗？

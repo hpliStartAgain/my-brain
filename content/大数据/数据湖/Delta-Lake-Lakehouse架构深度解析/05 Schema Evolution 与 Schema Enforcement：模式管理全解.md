@@ -350,6 +350,11 @@ Delta Lake 的 Schema 管理体系实现了"灵活 + 可靠"的平衡：
 
 ---
 
+> [!note] 思考题
+> 1. Delta Lake 的 Schema Enforcement 在写入时拒绝不匹配的数据。如果源数据有表中不存在的额外列（宽模式写入窄表），是报错还是自动忽略？`overwrite` 和 `append` 模式下 Schema Enforcement 行为是否相同？
+> 2. Delta 支持 Schema Evolution（`mergeSchema = true`）——可以添加新列但历史数据中该列值为 NULL。Delta 的 Schema Evolution 是否支持修改列的数据类型（如 INT 升级为 BIGINT）？哪些类型变更是安全的（向后兼容）？
+> 3. 在多引擎共享场景中（Spark 写入、Trino 读取），Spark 通过 Schema Evolution 添加了新列，在 Trino Schema 缓存刷新前的窗口期内，Trino 的查询会报错还是静默返回不完整的列？
+
 ## 参考资料
 
 - [Delta Lake Schema Evolution 官方文档](https://docs.delta.io/latest/delta-batch.html#automatic-schema-update)

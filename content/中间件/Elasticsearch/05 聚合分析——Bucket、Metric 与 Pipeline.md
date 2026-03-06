@@ -567,3 +567,10 @@ ES 聚合的内存消耗随嵌套深度指数级增长：
 聚合的核心资源是 JVM Heap，Circuit Breaker 机制提供了最后一道防线。生产中最重要的聚合优化原则：**用 Filter 缩小候选集、控制 Terms size、避免过深嵌套、必要时采用预聚合**。
 
 下一篇文章将深入 ES 的集群管理机制——选主（Master Election）、分片分配策略与脑裂防护。
+
+---
+
+> [!note] 思考题
+> 1. ES 的分片分配策略（Shard Allocation）决定了 Shard 如何分布在各 Data 节点上。默认策略尽量均匀分配 Shard 数量。但 Shard 大小可能不均匀——有些 Shard 100GB，有些只有 1GB。基于 Shard 数量的均衡不等于基于磁盘使用量的均衡。`cluster.routing.allocation.disk.watermark.low/high` 如何在磁盘使用率层面控制分配？
+> 2. ES 集群的容量规划需要考虑：数据量（原始数据 × 1.1 膨胀 + 副本）、查询 QPS 和延迟要求、写入吞吐量。在日志场景中，每天写入 500GB 原始日志，1 副本，保留 30 天——需要多少磁盘空间？如果需要支持 100 QPS 的聚合查询，需要多少 Data 节点（假设每个节点可以处理 20 QPS）？
+> 3. Hot-Warm-Cold 架构将数据按时间分层存储——最新数据在 Hot 节点（NVMe SSD，高性能），较旧数据迁移到 Warm 节点（SATA SSD），最老数据到 Cold 节点（HDD）。ILM（Index Lifecycle Management）自动管理数据迁移。在什么时间点应该将 Index 从 Hot 迁移到 Warm？迁移过程中查询性能是否受影响？

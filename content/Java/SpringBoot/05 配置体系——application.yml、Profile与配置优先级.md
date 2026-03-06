@@ -757,3 +757,10 @@ Spring Boot 配置体系的核心设计思想是**分层与可替换**：
 > - `org.springframework.boot.context.config.StandardConfigDataLocationResolver` 源码
 > - [Spring Boot 官方文档 - Externalized Configuration](https://docs.spring.io/spring-boot/docs/current/reference/html/features.html#features.external-config)
 > - [Spring Boot 2.4 配置文件处理变更说明](https://spring.io/blog/2020/08/14/config-file-processing-in-spring-boot-2-4)
+
+---
+
+> [!note] 思考题
+> 1. Spring Boot 默认使用 SLF4J + Logback。项目中如果同时引入了使用 Log4j2、JUL（java.util.logging）、JCL（commons-logging）的第三方库，日志输出会混乱。Spring Boot 通过桥接器（如 `jcl-over-slf4j`、`jul-to-slf4j`）将所有日志框架统一到 SLF4J。但这种桥接是否有性能开销？在日志量极大的场景（每秒百万行）下是否值得关注？
+> 2. Spring Boot Actuator 提供了 `/actuator/loggers` 端点，允许在运行时动态调整日志级别（如将某个包的级别从 INFO 改为 DEBUG）。这个功能在生产排查中非常有用。但动态调整后日志量激增——在没有日志采样的情况下，DEBUG 日志可能打满磁盘。你如何实现'临时开启 DEBUG 级别 5 分钟后自动恢复'的功能？
+> 3. Logback 的异步 Appender（`AsyncAppender`）将日志写入操作卸载到独立线程，避免阻塞业务线程。但异步 Appender 有一个队列（默认 256）——当队列满时，默认行为是丢弃 TRACE/DEBUG/INFO 级别的日志。在什么场景下这种丢弃策略会导致排查困难？你如何调整丢弃策略？

@@ -721,3 +721,9 @@ DataStream<Result> result = mainStream
 **分区策略**：6 种策略各有适用场景；Rebalance 全局均匀但网络连接多，Rescale 局部高效但适用于整数倍关系
 
 下一篇 [[04 时间语义与 Watermark 实战]] 将深入 Flink 最难理解但也最重要的特性——时间语义，彻底厘清 EventTime、ProcessingTime、IngestionTime 的差异，以及 Watermark 如何让 Flink 正确处理乱序数据。
+
+
+> [!note] 思考题
+> 1. Flink 的 `keyBy()` 操作通过对 Key 做哈希来决定数据路由到哪个 SubTask。这意味着相同 Key 的所有记录保证到同一个 SubTask，可以维护 Keyed State。但如果 Key 的基数（Cardinality）很低（比如只有 3 个不同的 Key，但有 100 个并行 SubTask），会导致大多数 SubTask 处于空闲状态，形成严重的数据倾斜。针对这种"低基数 Key 倾斜"，有哪些 Flink 级别的解决方案？
+> 2. Flink 的 `flatMap` 算子允许每条输入记录输出 0 到 N 条记录。当输出 0 条时（相当于 Filter），Flink 内部的 Buffer 和 Network 层如何处理这种"空输出"？频繁的 `flatMap` 输出 0 条记录与直接使用 `filter` 算子，在性能上是否有差异？
+> 3. DataStream 的 `connect()` 和 `union()` 都能合并两条流，但语义不同：`union()` 要求两条流的类型完全相同，`connect()` 允许两条流类型不同但只能使用 `CoFlatMapFunction` 分别处理。在什么业务场景下必须使用 `connect()` 而不是 `union()`？`connect()` 之后的 `CoProcessFunction` 能否维护跨两条流的共享状态？

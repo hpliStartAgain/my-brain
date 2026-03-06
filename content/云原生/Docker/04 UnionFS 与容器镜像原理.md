@@ -441,3 +441,10 @@ RUN apt-get install -y build-essential && \
 5. Docker Documentation - Storage Drivers：https://docs.docker.com/storage/storagedriver/
 6. Docker Documentation - Multi-stage Builds：https://docs.docker.com/build/building/multi-stage/
 7. Kubernetes Documentation - Images：https://kubernetes.io/docs/concepts/containers/images/
+
+---
+
+> [!note] 思考题
+> 1. Docker Volume 由 Docker 管理（存储在 `/var/lib/docker/volumes/`），Bind Mount 直接挂载宿主机目录。Volume 的优势是 Docker 管理生命周期（自动清理、备份方便），Bind Mount 的优势是直接访问宿主机文件。在开发环境中（需要实时同步代码到容器），你会用哪种？在生产数据库场景中呢？
+> 2. 存储驱动（overlay2 是现代 Linux 默认）管理镜像层和容器层。overlay2 的 COW 在写入大文件时有性能开销——首次写入需要从底层复制整个文件。在容器内频繁写入日志文件时，性能是否受影响？为什么建议将日志输出到 stdout/stderr 由 Docker 的日志驱动处理，而非写入容器文件系统？
+> 3. tmpfs Mount 将数据存储在内存中——容器停止后数据消失。在什么场景下 tmpfs 有价值（如存储敏感信息避免落盘、性能测试中消除磁盘 IO 变量）？Kubernetes 的 `emptyDir.medium: Memory` 与 Docker 的 tmpfs Mount 是否等价？

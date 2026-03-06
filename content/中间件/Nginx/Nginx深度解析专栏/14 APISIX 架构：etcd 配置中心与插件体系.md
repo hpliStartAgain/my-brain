@@ -754,3 +754,10 @@ APISIX 的高性能、动态配置能力建立在三个关键机制上：
 ---
 
 > **下一篇**：[[15 生产实战：完整流量链路与专栏知识体系总结]]
+
+---
+
+> [!note] 思考题
+> 1. 选型维度：性能（Nginx/APISIX 更快）、插件生态（Kong 最丰富）、K8s 集成（Envoy Gateway 最深）、运维复杂度（APISIX 依赖 etcd，Kong 依赖 PostgreSQL）。在一个中小型团队（5-10 人）中，你最优先考虑什么维度？
+> 2. Kubernetes Gateway API 是 Ingress 的演进——提供了更丰富的路由规则和角色分离。但 Gateway API 仍在快速发展——API 版本可能变化。现在就迁移到 Gateway API 是否过早？还是继续使用成熟的 Ingress + Annotations？
+> 3. 从单体到微服务迁移中，API 网关的演进路线：Nginx → Kong/APISIX → Envoy + Istio。你如何规划网关演进以避免中途推倒重来？在什么节点需要'升级'网关（如服务数量超过 50？需要灰度发布？需要服务网格）？

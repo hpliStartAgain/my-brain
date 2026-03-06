@@ -440,3 +440,10 @@ sequenceDiagram
 4. Kubernetes Documentation - Resource QoS：https://kubernetes.io/docs/tasks/configure-pod-container/quality-service-pod/
 5. Kubernetes Enhancement Proposal - Sidecar Containers：https://github.com/kubernetes/enhancements/tree/master/keps/sig-node/753-sidecar-containers
 6. Kubernetes Source Code - pkg/kubelet/kuberuntime：https://github.com/kubernetes/kubernetes/tree/master/pkg/kubelet/kuberuntime
+
+---
+
+> [!note] 思考题
+> 1. Kubernetes Service 通过 Label Selector 关联 Pod——Service 的 ClusterIP 是虚拟 IP，由 kube-proxy 通过 iptables/IPVS 实现负载均衡。iptables 模式在 Service 数量多时（5000+）性能下降——因为每个 Service 产生 O(n) 条 iptables 规则。IPVS 模式使用 Hash 表——O(1) 查找。在什么规模下你应该切换到 IPVS 模式？
+> 2. Headless Service（`clusterIP: None`）不分配 ClusterIP——DNS 查询直接返回 Pod 的 IP 列表。StatefulSet 通常使用 Headless Service——每个 Pod 有稳定的 DNS 名（`pod-0.service.namespace.svc.cluster.local`）。在什么场景下客户端需要直接连接特定 Pod 而非通过 Service 负载均衡？
+> 3. EndpointSlice（替代 Endpoints）将端点信息分片存储——在大规模 Service（数千 Pod）中减少了 etcd 和 API Server 的压力。每个 EndpointSlice 最多 100 个端点。在 Pod 频繁扩缩容时，EndpointSlice 的更新频率如何影响 kube-proxy 的配置同步？

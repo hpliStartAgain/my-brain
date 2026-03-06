@@ -727,3 +727,10 @@ Caused by: java.net.BindException: Address already in use
 > - `org.springframework.boot.web.servlet.context.ServletWebServerApplicationContext` 源码
 > - `org.springframework.boot.context.event.EventPublishingRunListener` 源码
 > - [Spring Boot 官方文档 - Application Events and Listeners](https://docs.spring.io/spring-boot/docs/current/reference/html/features.html#features.application-events-and-listeners)
+
+---
+
+> [!note] 思考题
+> 1. Spring Boot 的自动装配通过 `@EnableAutoConfiguration` 触发，底层使用 `SpringFactoriesLoader` 加载 `META-INF/spring.factories` 中的配置类。Spring Boot 2.7+ 引入了 `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports` 替代 `spring.factories`。这个变更的动机是什么？新机制在性能和可维护性方面有什么改进？
+> 2. 自动装配的条件注解（如 `@ConditionalOnClass`、`@ConditionalOnMissingBean`）决定了配置类是否生效。如果你自定义了一个 `DataSource` Bean，Spring Boot 的 `DataSourceAutoConfiguration` 会自动退让（因为 `@ConditionalOnMissingBean(DataSource.class)`）。但如果你的自定义 Bean 的初始化依赖了自动装配的其他 Bean，初始化顺序会出问题吗？
+> 3. `@AutoConfigureBefore` 和 `@AutoConfigureAfter` 控制自动装配类之间的顺序，但它们不能控制自动装配类与用户定义的 `@Configuration` 类之间的顺序。在什么场景下，用户配置和自动装配之间的顺序会导致问题？你如何调试 Spring Boot 的自动装配加载顺序？

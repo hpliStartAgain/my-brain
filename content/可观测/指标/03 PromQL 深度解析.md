@@ -591,3 +591,10 @@ sum(rate(http_requests_total{service="order"}[5m]))  # 只加载 order 的时间
 4. Julius Volz (2020). *PromQL for Humans*. PromCon Online.
 5. Brian Brazil (2018). *Prometheus: Up & Running*, Chapter 14: PromQL. O'Reilly Media.
 6. Robust Perception Blog - rate vs irate：https://www.robustperception.io/irate-graphs-are-better-graphs
+
+---
+
+> [!note] 思考题
+> 1. 告警规则定义在 Prometheus 中（`alert: HighCPU expr: cpu_usage > 0.8 for: 5m`），触发后发送到 Alertmanager。Alertmanager 负责去重、分组和路由。`group_by: [alertname, cluster]` 将相同 alertname 和 cluster 的告警分为一组——一次通知包含组内所有告警。在什么场景下你需要调整 `group_by` 以减少通知数量？
+> 2. 告警的'for'持续时间——`for: 5m` 要求条件持续 5 分钟才触发告警。这避免了瞬时波动导致的误告警。但 5 分钟意味着故障发生后至少 5 分钟才收到告警。在不同的告警级别（Critical vs Warning）中，`for` 应该设为多长？
+> 3. Alertmanager 的 Inhibition 规则——当'父告警'已触发时抑制'子告警'。如 `inhibit_rules: source_match: {severity: critical}, target_match: {severity: warning}, equal: [instance]`——同一实例的 critical 告警会抑制 warning 告警。这如何减少告警噪音？你需要多少层次的 inhibition 规则？

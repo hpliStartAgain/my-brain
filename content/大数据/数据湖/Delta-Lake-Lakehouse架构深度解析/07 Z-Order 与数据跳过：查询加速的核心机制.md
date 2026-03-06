@@ -437,6 +437,11 @@ Delta Lake 的查询加速体系是一个分层次的系统，从粗粒度到细
 
 ---
 
+> [!note] 思考题
+> 1. Z-Order 将多个列的值映射到一维排序键，使多维空间上相近的数据在物理存储上也相近。如何通过查询模式分析来判断对哪些列组合应用 Z-Order 收益最大？Z-Order 与简单的 `ORDER BY`（单列优化）相比各有什么优缺点？
+> 2. 数据跳过对"等值查询"非常有效，但对"不等值查询"（`WHERE col != 'X'`）几乎无效。在什么查询模式下，数据跳过的文件跳过率接近 0？如何通过查询重写来提高跳过率？
+> 3. 对于持续流式写入的 Delta 表（每分钟写入新数据），如何设计 Z-Order OPTIMIZE 的触发策略——既能保持较好的数据布局，又不会因为频繁 OPTIMIZE 产生巨大的写放大？
+
 ## 参考资料
 
 - [Delta Lake Data Skipping 官方文档](https://docs.delta.io/latest/optimizations-oss.html)

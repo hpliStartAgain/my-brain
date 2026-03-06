@@ -261,6 +261,11 @@ Append 模式要求写出的行"不再修改"。对于窗口聚合，一个窗�
 
 ---
 
+> [!note] 思考题
+> 1. Append 模式要求只输出"最终确定不会再改变"的行。对于有聚合操作的查询，这意味着必须配合 Watermark 使用——只有窗口关闭后，窗口内的聚合结果才是确定的。但 Watermark 是基于"事件时间延迟"估算的，不是精确的。如果实际延迟比 Watermark 设定的上界更大，会发生什么？迟到数据如何影响 Append 模式输出的"正确性"？
+> 2. Complete 模式在每个批次输出全量聚合结果。对于高基数的聚合 Key（比如用户 ID 有 1 亿个），Complete 模式每批次都要向 Sink 写出 1 亿行数据，这显然不现实。Complete 模式的实际适用场景边界在哪里？有没有办法在 Sink 端只接收"变更了的聚合结果"而不是全量？
+> 3. Update 模式只输出本批次中发生了变化的行，适合更新型 Sink（如 Redis、Cassandra）。但不同 Sink 的"幂等写入"能力差异很大——有的 Sink 支持 UPSERT，有的只支持 INSERT。当 Spark 重试一个批次（因为 Task 失败）时，Update 模式下的写出是幂等的吗？如何保证端到端精确一次？
+
 ## 参考资料
 
 - Apache Spark 官方文档：Structured Streaming Output Modes

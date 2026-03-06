@@ -691,3 +691,10 @@ graph TD
 - [Linux Performance Analysis - Brendan Gregg](https://slideshare.net/brendangregg/linux-performance-analysis-and-tools)
 - Linux `man` pages: `free(1)`, `vmstat(8)`, `sar(1)`, `pmap(1)`, `perf-mem(1)`
 - Linux `/proc` Documentation: `Documentation/filesystems/proc.rst`
+
+---
+
+> [!note] 思考题
+> 1. 在 CGroups 环境中 `free` 命令的 `available` 是否考虑 CGroup 限制？在容器内部如何获取真正的 available 内存？`cat /sys/fs/cgroup/memory/memory.usage_in_bytes` 和 `memory.limit_in_bytes` 的差值是否等于 available？
+> 2. `perf stat` 可统计 TLB Miss 和 Cache Miss。在 TLB Miss 率>5% 的应用中，除 HugePage 外还有哪些优化手段？减少工作集大小、改善数据结构的内存局部性、NUMA 感知分配分别在什么场景下有效？
+> 3. `vmstat` 的 `si/so` 长期不为零意味着频繁 Swap。但短暂的 Swap 活动是否值得关注？如何区分正常 Swap 使用和危险信号？`sar -B` 中 `pgscand`（直接回收扫描）比 `pgscank`（kswapd 扫描）更值得关注——为什么？

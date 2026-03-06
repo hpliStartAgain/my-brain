@@ -587,3 +587,10 @@ SPDK IO 路径（每次 IO）：
 **实践顺序**：先用 `perf stat -e syscalls:*` 找到高频系统调用，再根据调用类型选择对应的优化手段，最后用基准测试量化效果。
 
 下一篇 [[09 全栈性能诊断——BPF 工具链与 OFF-CPU 分析]] 将聚焦最难排查的性能问题类型：进程不在 CPU 上（off-CPU）的时间——等锁、等 IO、等调度。这类问题在 on-CPU 火焰图中完全不可见，需要专门的 off-CPU 分析工具（`offcputime`、`wakeuptime`、bpftrace 锁追踪）才能定位。
+
+---
+
+> [!note] 思考题
+> 1. 系统调用在开启 KPTI 后开销约 200-500ns。vDSO 将 `gettimeofday()` 等高频调用实现为纯用户态代码。vDSO 中的时间数据通过共享内存页由内核更新——更新频率是多少？如果在两次更新之间多次调用 `clock_gettime()`，是否会返回相同的值？
+> 2. seccomp BPF 过滤器在每次系统调用时执行。Docker 默认的 seccomp 配置禁用了约 44 个系统调用。过滤器的规则数量如何影响每次系统调用的额外延迟？在高频系统调用场景（如网络服务每秒百万次 `recvmsg`）中，seccomp 的开销是否可以忽略？
+> 3. DPDK 通过内核旁路在用户态处理网络 IO。XDP（eXpress Data Path）在网卡驱动层用 eBPF 程序处理数据包——不完全旁路内核但极早地做出转发/丢弃决策。DPDK 和 XDP 的适用场景有什么区别？XDP 为什么在安全防护（DDoS 过滤）场景中比 DPDK 更合适？

@@ -502,3 +502,10 @@ public boolean validate(long stamp) {
 4. OpenJDK 源码：`java.util.concurrent.locks.ReentrantReadWriteLock`
 5. OpenJDK 源码：`java.util.concurrent.locks.StampedLock`
 6. Shipilev, Aleksey, "StampedLock is an optimistic and exclusive lock", shipilev.net
+
+---
+
+> [!note] 思考题
+> 1. `ReentrantReadWriteLock` 的读锁和写锁共享同一个 AQS state——高 16 位存读锁计数，低 16 位存写锁计数。这限制了最大重入次数为 65535。在什么场景下读锁的重入次数可能超过 65535？此时会发生什么？
+> 2. `StampedLock` 的乐观读（`tryOptimisticRead()`）不加锁——它只返回一个 stamp，读操作结束后通过 `validate(stamp)` 检查期间是否有写操作。如果 validate 失败，需要升级为悲观读锁重试。在'读多写极少'的场景中，乐观读几乎不会失败——但在'读多写也多'的场景中，频繁的 validate 失败和重试是否会导致性能低于 `ReentrantReadWriteLock`？
+> 3. `StampedLock` 不支持重入，且不支持 `Condition`——这限制了它的适用范围。Java 并发库中为什么没有一个'既支持乐观读，又支持重入和条件等待'的锁？实现这样的锁在技术上有什么困难？

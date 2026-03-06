@@ -606,3 +606,10 @@ Recording Rule 的命名约定是 `level:metric:operations`——`service:http_r
 5. Brian Brazil (2018). *Prometheus: Up & Running*. O'Reilly Media.
 6. Prometheus Documentation - Exposition Formats：https://prometheus.io/docs/instrumenting/exposition_formats/
 7. Prometheus Documentation - Recording Rules：https://prometheus.io/docs/prometheus/latest/configuration/recording_rules/
+
+---
+
+> [!note] 思考题
+> 1. PromQL 的 `rate()` 和 `irate()` 计算 Counter 的增长率。`rate()` 使用整个时间窗口的首尾值计算平均速率——平滑但延迟高。`irate()` 使用最近两个样本计算瞬时速率——灵敏但噪声大。在告警规则中你应该用 `rate()` 还是 `irate()`？在 Dashboard 中呢？
+> 2. `histogram_quantile(0.99, rate(http_request_duration_seconds_bucket[5m]))` 计算 P99 延迟。但 Histogram 的桶边界（`le`）如果设置不当——如最大桶是 1s 但实际有 5s 的请求——P99 计算不准确。你如何设计 Histogram 的桶边界以覆盖实际的延迟分布？Prometheus 的 Native Histogram（实验特性）如何自适应桶边界？
+> 3. PromQL 的 `by` 和 `without` 控制聚合维度。`sum(rate(http_requests_total[5m])) by (service)` 按 service 聚合请求率。如果忘记 `by`——聚合了所有维度——结果可能不是你期望的。在编写 PromQL 时你如何避免'维度丢失'的错误？Recording Rule 如何减少复杂查询的计算开销？

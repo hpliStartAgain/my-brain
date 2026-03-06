@@ -477,3 +477,10 @@ graph TD
 5. Bartek Plotka, Fabian Reinartz (2019). *Thanos - Highly Available Prometheus Setup with Long Term Storage Capabilities*. KubeCon EU.
 6. Grafana Labs (2022). *Introducing Grafana Mimir*. Grafana Blog.
 7. VictoriaMetrics Benchmarks：https://docs.victoriametrics.com/articles/benchmarks.html
+
+---
+
+> [!note] 思考题
+> 1. Prometheus 的 TSDB 将数据分为 2 小时一个 Block——Block 内的数据不可变。WAL（Write-Ahead Log）记录最近的写入。Compaction 将多个小 Block 合并为大 Block 以提高查询效率。在什么场景下 Compaction 的 IO 开销需要关注？
+> 2. Prometheus 的本地存储不支持高可用——单实例崩溃后数据丢失。Thanos Sidecar 将 Block 上传到对象存储实现长期存储和高可用。Thanos Query 可以跨多个 Prometheus 实例查询——实现全局视图。Thanos 的 Store Gateway 如何从对象存储查询历史数据？查询延迟与本地存储相比差多少？
+> 3. VictoriaMetrics 是 Prometheus 的替代方案——兼容 PromQL 且存储效率更高（压缩率是 Prometheus 的 2-5 倍）。VictoriaMetrics 支持集群模式（水平扩展）。在什么规模下你会考虑从 Prometheus 迁移到 VictoriaMetrics？迁移的兼容性问题有哪些？

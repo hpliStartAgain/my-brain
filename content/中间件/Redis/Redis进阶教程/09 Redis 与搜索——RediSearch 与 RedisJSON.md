@@ -494,3 +494,10 @@ redis-cli MODULE LIST
 3. Redis Documentation - Vector Similarity Search：https://redis.io/docs/stack/search/reference/vectors/
 4. Redis Stack Overview：https://redis.io/docs/stack/
 5. HNSW Paper - Malkov & Yashunin (2018)：https://arxiv.org/abs/1603.09320
+
+---
+
+> [!note] 思考题
+> 1. Redis Function 持久化存储——不再需要每次 `EVAL` 发送脚本内容。Function 支持 `FUNCTION LOAD` 加载和 `FUNCTION DUMP/RESTORE` 在 Cluster 节点间同步。与 `EVALSHA` 相比（需要先 `SCRIPT LOAD`，且 Redis 重启后丢失），Function 的管理优势在哪里？
+> 2. ACL 的 Key Pattern 权限——`~cache:*` 只允许访问 `cache:` 前缀的 Key。在多租户 Redis 中，每个租户的 Key 使用独立前缀（`tenant_a:*`、`tenant_b:*`），ACL 限制每个租户只能访问自己的前缀。这种隔离在安全性方面是否足够？如果 ACL 规则配置错误导致越权——你如何审计？
+> 3. Client Eviction（`maxmemory-clients`）防止单个客户端的大缓冲区耗尽内存。Pub/Sub 的慢消费者——如果消费速度跟不上发布速度，输出缓冲区持续增长。在没有 Client Eviction 之前，`client-output-buffer-limit` 如何处理？Client Eviction 与 `client-output-buffer-limit` 的关系是什么？

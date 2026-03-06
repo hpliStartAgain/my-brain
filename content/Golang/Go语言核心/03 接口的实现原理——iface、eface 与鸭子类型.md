@@ -541,3 +541,10 @@ fmt.Println(x)  // 2.71
 > - Russ Cox,《Go Interfaces》: https://research.swtch.com/interfaces
 > - Go 语言规范：Interface Types 章节
 > - Dave Cheney,《Beware of Copying Mutexes in Go》（接口与 nil 的相关问题）
+
+---
+
+> [!note] 思考题
+> 1. Go 的 interface 在底层分为 `iface`（有方法的 interface）和 `eface`（`interface{}`/`any`）两种结构。`iface` 包含一个 `itab` 指针和一个 data 指针。当同一个具体类型被赋值给同一个 interface 类型多次时，runtime 会复用 `itab`（通过哈希表缓存）。这个缓存的生命周期是什么？在什么情况下 itab 缓存会成为性能瓶颈？
+> 2. 一个 `*T` 类型可以实现 interface 的所有方法（包括 receiver 为 `T` 和 `*T` 的方法），但 `T` 类型只能实现 receiver 为 `T` 的方法。为什么 Go 做出这个非对称设计？如果允许 `T` 调用 `*T` 的方法（通过自动取地址），会引入什么问题？
+> 3. 将一个较大的 struct（如 1KB）赋值给 interface 时，Go 运行时会在堆上分配一份拷贝。这意味着频繁的 interface 装箱（boxing）会增加 GC 压力。Go 编译器对小于等于指针大小的值做了什么优化来避免堆分配？`interface{}` 存储一个 `int` 和存储一个 `[1024]byte` 的性能差异有多大？

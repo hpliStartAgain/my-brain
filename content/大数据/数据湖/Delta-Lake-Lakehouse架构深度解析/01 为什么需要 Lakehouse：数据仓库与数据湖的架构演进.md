@@ -229,6 +229,11 @@ Delta Lake 并不是唯一的 Lakehouse 格式，Apache 基金会下有两个竞
 
 ---
 
+> [!note] 思考题
+> 1. 数据湖的"沼泽化"根源在于数据写入没有 Schema 约束。Lakehouse 通过事务日志和 Schema 约束来解决这个问题，但数据仍然以 Parquet 文件存储在 S3/HDFS 上。与传统数仓（Snowflake、BigQuery）的"存储与计算一体"架构相比，Lakehouse 的"存储与计算分离"架构在数据质量保证上有什么固有的局限性？
+> 2. Lakehouse 声称通过流批一体消灭了 Lambda 架构的双重维护问题。但 Lakehouse 的流式写入（如 Structured Streaming 写 Delta Lake）仍然是微批次模式，存在秒级延迟。在需要毫秒级延迟的实时场景，Lakehouse 是否真的能完全替代 Lambda 架构的流处理层？
+> 3. 多引擎共享 Delta/Iceberg/Hudi 表时，不同引擎对表格式的读写支持完整度不同，且版本更新时可能存在协议兼容性问题。如何管理表格式协议的版本升级，确保不同版本的引擎能和平共处？
+
 ## 参考资料
 
 - Armbrust et al. [Lakehouse: A New Generation of Open Platforms that Unify Data Warehousing and Advanced Analytics.](https://www.cidrdb.org/cidr2021/papers/cidr2021_paper17.pdf) CIDR 2021.

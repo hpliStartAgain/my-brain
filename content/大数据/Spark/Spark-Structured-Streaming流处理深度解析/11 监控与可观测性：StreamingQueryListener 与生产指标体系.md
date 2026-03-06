@@ -489,6 +489,11 @@ spark.streams.addListener(monitor)
 
 ---
 
+> [!note] 思考题
+> 1. `StreamingQueryProgress` 中的 `inputRowsPerSecond` 和 `processedRowsPerSecond` 是两个关键指标。当 `inputRowsPerSecond` 持续大于 `processedRowsPerSecond` 时，意味着消费速度跟不上生产速度，积压在增长。但 `processedRowsPerSecond` 只反映批次处理速率，并不直接告诉你瓶颈在哪里（CPU、I/O 还是 Shuffle）。如何通过哪些额外的指标组合来精确定位处理速率低的根因？
+> 2. `StreamingQueryListener` 的回调函数（`onQueryProgress`、`onQueryTerminated`）在 Driver 端的事件线程中执行。如果用户在回调函数中执行了耗时操作（比如向外部监控系统发送 HTTP 请求），会影响流作业的批次调度吗？正确的实践是什么？
+> 3. 在生产中，一个 Spark 应用可能同时运行多个 `StreamingQuery`（多路并行处理）。每个 Query 都有独立的 Checkpoint 和 State，但它们共享同一个 `SparkContext` 的资源。如果某个 Query 的批次处理时间突然变长（比如因为数据倾斜），会对其他 Query 的调度产生影响吗？如何在多 Query 场景下实现资源隔离？
+
 ## 参考资料
 
 - Apache Spark 官方文档：Structured Streaming Monitoring

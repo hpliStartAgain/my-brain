@@ -788,3 +788,10 @@ public class UserService {
 > - `org.apache.ibatis.executor.BatchExecutor` 源码
 > - `org.apache.ibatis.executor.CachingExecutor` 源码
 > - `org.apache.ibatis.cache.TransactionalCacheManager` 源码
+
+---
+
+> [!note] 思考题
+> 1. MyBatis 提供了三种 Executor 实现：SimpleExecutor（每次创建新 Statement）、ReuseExecutor（复用 Statement）和 BatchExecutor（批量执行）。在一个循环中执行 1000 次 INSERT 语句时，三种 Executor 的性能差异有多大？BatchExecutor 的 `flushStatements()` 在什么时机被调用？
+> 2. SqlSession 不是线程安全的——MyBatis 文档明确建议'每个线程使用自己的 SqlSession'。但在 Spring 整合中，`SqlSessionTemplate` 通过 ThreadLocal 代理实现了线程安全。如果一个 `@Transactional` 方法内多次调用 Mapper，它们是否共享同一个 SqlSession？事务提交后 SqlSession 会被关闭还是归还连接池？
+> 3. Executor 的 `query` 方法首先会检查一级缓存（Local Cache）。一级缓存的 key 由哪些要素组成（SQL 文本、参数值、分页信息等）？如果两次查询的 SQL 完全相同但使用了不同的 `RowBounds` 分页参数，会命中一级缓存吗？

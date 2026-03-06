@@ -432,6 +432,11 @@ DataFrame/Dataset/SQL 三种 API 汇入同一管道，区别仅在于进入管�
 
 ---
 
+> [!note] 思考题
+> 1. Spark SQL 的五阶段执行管道中，哪个阶段是"不可跳过"的，哪些阶段可以被 AQE 在运行时重做？这种分层设计对错误处理意味着什么？
+> 2. DataFrame API 和 SQL 字符串最终殊途同归，都转化为同一棵 LogicalPlan 树。那么 Dataset 的强类型检查是在哪个阶段失去的？什么情况下类型安全会在编译期而非运行期失效？
+> 3. `QueryExecution` 的 `analyzed`、`optimized`、`sparkPlan` 字段都是惰性求值的。如果在生产代码中频繁调用 `df.queryExecution.optimizedPlan.toString`，会有什么隐患？
+
 ## 参考资料
 
 - [Deep Dive into Spark SQL's Catalyst Optimizer（Databricks Blog, 2015）](https://www.databricks.com/blog/2015/04/13/deep-dive-into-spark-sqls-catalyst-optimizer.html)

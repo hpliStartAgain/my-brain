@@ -656,3 +656,10 @@ VFS 的四大对象（加上 `address_space`）构成了 Linux 文件系统抽�
 3. **`struct file` 独立于 inode**：支持多进程/多 fd 独立读写同一文件，各自维护偏移
 
 下一篇 [[03 ext4 深度解析——日志、盘区树与 Flex BG]] 将深入 Linux 最广泛使用的文件系统 ext4 的磁盘布局：Extent 树如何存储文件数据块的位置？日志（journal）如何保证崩溃后的一致性？Flex BG 是什么，为什么能提升大文件的 IO 性能？
+
+---
+
+> [!note] 思考题
+> 1. inode 不包含文件名——文件名在 dentry 中。一个 inode 可对应多个 dentry（硬链接）。但目录不能创建硬链接——因为会导致目录树形成环路，`find` 和 `rm -rf` 等递归操作会无限循环。符号链接（symlink）不存在这个问题——为什么？symlink 的 inode 存储了什么？
+> 2. dentry cache 是文件系统性能的关键缓存。`slabtop` 中 dentry 占用过高时，`echo 2 > /proc/sys/vm/drop_caches` 可手动清理。但清理后所有路径查找都需要重新从磁盘读取——短期内性能会下降。内核的自动 Slab 回收（shrinker）在什么条件下触发？`vm.vfs_cache_pressure` 如何调节回收力度？
+> 3. procfs 和 sysfs 中的'文件'不存储在磁盘上——read 操作调用内核函数动态生成数据。如果你需要向内核暴露运行时参数，procfs（`/proc/sys/`）和 sysfs（`/sys/`）哪种更合适？debugfs（`/sys/kernel/debug/`）的使用场景是什么？它们在安全性和稳定性方面有什么差异？

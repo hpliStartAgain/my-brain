@@ -543,3 +543,10 @@ func main() {
 > - Go 文档,《runtime/trace》: https://pkg.go.dev/runtime/trace
 > - Brendan Gregg,《The Flame Graph》: https://queue.acm.org/detail.cfm?id=2927301
 > - `golang.org/x/perf/cmd/benchstat`
+
+---
+
+> [!note] 思考题
+> 1. `go tool pprof` 的 CPU Profile 采用每秒 100 次的采样频率。如果一个函数的每次执行耗时只有 1μs（远小于 10ms 的采样间隔），它在 CPU Profile 中可能完全不出现。这种情况下你如何定位这类'高频但单次极短'的热点函数？`runtime/trace` 和 CPU Profile 的适用场景有什么本质差异？
+> 2. 在编写 benchmark 时，`b.N` 由 testing 框架自动调整以获得稳定结果。但如果被测函数内部有缓存（如 sync.Pool 或 mmap），随着 `b.N` 增大，后续迭代会命中缓存导致结果偏快。这种'预热效应'会导致 benchmark 结果失真吗？你如何在 benchmark 中控制这种变量？
+> 3. `pprof` 的堆内存 Profile 显示的是'当前活跃的分配'还是'累计分配总量'？如果你在 Profile 中看到某个函数分配了 500MB 内存，但 `runtime.MemStats.HeapInuse` 只有 100MB，可能的原因是什么？`-alloc_space` 和 `-inuse_space` 两种视图分别适用于排查什么类型的内存问题？

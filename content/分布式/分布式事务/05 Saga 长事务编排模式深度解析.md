@@ -603,3 +603,10 @@ graph TD
 5. Netflix Conductor: Workflow Orchestration Engine. https://github.com/Netflix/conductor
 6. Berger, S. (2020). Saga Pattern in Microservices. *InfoQ*.
 7. Kleppmann, M. (2017). *Designing Data-Intensive Applications*. O'Reilly Media. Chapter 7: Transactions.
+
+---
+
+> [!note] 思考题
+> 1. 本地消息表模式：业务操作和消息写入在同一个本地事务中——保证原子性。后台任务定期扫描消息表将消息发送到 MQ。消费者处理消息后回调确认。这种模式的可靠性来源于'本地事务保证业务操作和消息记录的原子性'。但消息可能被重复发送（如发送成功但确认失败）——消费端如何实现幂等？
+> 2. 消息表的扫描和发送增加了数据库的负载——在高写入场景中，消息表可能成为瓶颈。你如何优化消息表的扫描频率和批量大小？定时扫描（如每 5 秒）和事件触发（如写入后立即发送）各有什么优劣？
+> 3. 本地消息表 vs Transactional Outbox Pattern（如 Debezium CDC 捕获消息表变更并发送到 Kafka）——CDC 方式不需要定时扫描，延迟更低。但 CDC 增加了基础设施复杂度。在什么规模下引入 CDC 是值得的？

@@ -265,3 +265,10 @@ FLP 告诉我们，在异步环境中，完美的共识（同时满足所有三�
 6. Kleppmann, M. (2017). *Designing Data-Intensive Applications*. O'Reilly Media. Chapter 9: Consistency and Consensus.
 7. Lynch, N. (1996). *Distributed Algorithms*. Morgan Kaufmann. Chapter 5-7.
 8. Chandra, T.D., & Toueg, S. (1996). Unreliable failure detectors for reliable distributed systems. *Journal of the ACM, 43*(2), 225–267.
+
+---
+
+> [!note] 思考题
+> 1. Raft 的 Leader 选举使用任期（Term）和随机化超时。如果 Leader 与 Follower 之间的心跳中断超过选举超时——Follower 成为 Candidate 发起选举。在网络分区恢复后，旧 Leader（低 Term）发现新 Leader（高 Term）——旧 Leader 自动降级为 Follower。在分区期间旧 Leader 已接受的写入会丢失吗？
+> 2. Raft 的日志复制保证了'已提交的日志不会丢失'——通过'Leader 的日志是最完整的'这一安全性保证。但在 Leader 崩溃和新 Leader 选举期间，部分'未提交'的日志可能被新 Leader 覆盖。在什么场景下客户端需要关注'写入已确认但实际未提交'的风险？Raft 的线性一致性读如何避免'读到未提交的数据'？
+> 3. Raft 集群的可用性取决于多数节点在线。5 节点集群容忍 2 个节点故障。但在实际部署中，节点分布在不同的故障域（如可用区）——如果 3 个节点在同一可用区，该可用区故障会导致集群不可用。你如何规划 Raft 节点的物理分布以最大化容错能力？

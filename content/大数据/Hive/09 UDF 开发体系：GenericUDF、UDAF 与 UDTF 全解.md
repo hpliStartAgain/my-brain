@@ -602,6 +602,11 @@ Hive UDF 体系是扩展 SQL 能力的核心机制，三种类型各司其职：
 
 ---
 
+> [!note] 思考题
+> 1. `GenericUDF` 的 `evaluate()` 方法在每行数据上被调用，如果 UDF 内部进行了昂贵的初始化操作（如加载机器学习模型、建立数据库连接），这些操作在 `initialize()` 方法中只执行一次，在整个 Task 生命周期内复用。但如果 `evaluate()` 方法存在线程安全问题（如使用了共享的 `SimpleDateFormat` 实例），在向量化执行模式下（多行同时处理）可能引发并发 Bug。如何为 GenericUDF 编写正确的线程安全代码？
+> 2. UDAF（聚合函数）的实现需要定义一个 `AggregationBuffer` 来存储每个分组的中间聚合状态。如果 UDAF 的中间状态非常大（如收集一个 Key 对应的所有原始值用于去重计数），会导致 Reducer 的内存压力暴增，进而 OOM。Hive 的近似计数函数（`approx_count_distinct`，基于 HyperLogLog）是如何通过有界的中间状态实现近似去重计数的？如何在自定义 UDAF 中实现类似的"有界内存"聚合？
+> 3. UDTF（表生成函数）将一行输入转换为多行输出，如 `explode()` 将数组展开为多行。UDTF 必须与 `LATERAL VIEW` 配合使用，将展开的多行与原始行的其他列关联。如果 UDTF 产生的行数非常多（如将一个包含 10 万个元素的数组 `explode` 展开），对 MapTask 的内存和输出数据量有什么影响？在大规模数组展开场景下，有没有比 UDTF 更高效的替代方案？
+
 ## 参考资料
 
 - [Hive UDF 官方文档](https://cwiki.apache.org/confluence/display/Hive/HivePlugins)

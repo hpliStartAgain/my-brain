@@ -356,6 +356,11 @@ Hash Shuffle 的历史提供了一个完整的工程反思案例：
 
 ---
 
+> [!note] 思考题
+> 1. Hash Shuffle 产生 `M × R` 个文件（M 为 Mapper 数，R 为 Reducer 数）。Consolidated Hash Shuffle 优化将文件数降低到 `Core × R`。这个优化的核心假设是什么？在什么情况下 Consolidated Hash Shuffle 也会遇到文件数爆炸的问题？
+> 2. Hash Shuffle 不排序，直接按 partitionId 哈希分桶写文件。这在 Reducer 端做聚合（如 `groupByKey`）时意味着需要用 HashMap 在内存中积累同一 Key 的所有数据。相比 Sort Shuffle 的合并排序方式，Hash Shuffle 的 Reducer 端在处理大数据集时有哪些具体的内存风险？
+> 3. Spark 1.6 之后默认切换到 Sort Shuffle，Hash Shuffle 被彻底移除（Spark 2.0）。但 Hash Shuffle "不排序"的思路并未消失——`BypassMergeSortShuffleWriter` 在小 Reducer 数时依然使用类 Hash Shuffle 的多文件写出方式，只是最后做了一次文件合并。为什么"最后合并"能解决 Hash Shuffle 的根本问题？
+
 ## 参考资料
 
 - [彻底搞懂 Spark 的 Shuffle 过程（shuffle write）](https://zhuanlan.zhihu.com/p/55954840)

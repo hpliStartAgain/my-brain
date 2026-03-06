@@ -551,3 +551,10 @@ Transformer 为大语言模型提供了架构基础，但从架构到一个能�
 8. Devlin et al., "BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding", NAACL 2019
 9. Radford et al., "Improving Language Understanding by Generative Pre-Training", 2018 (GPT-1)
 10. Raffel et al., "Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer", JMLR 2020 (T5)
+
+---
+
+> [!note] 思考题
+> 1. RNN/LSTM 按顺序处理序列，无法并行化——处理 1000 个 token 需要 1000 步。Transformer 的 Self-Attention 可以并行计算所有 token 之间的关系，但计算复杂度是 O(n²)。在序列长度为 100K token 时，Self-Attention 的显存和计算开销如何增长？Flash Attention 是如何将 O(n²) 的显存降低到 O(n) 的？
+> 2. Self-Attention 的核心公式 `Attention(Q,K,V) = softmax(QK^T / √d_k)V` 中，`√d_k` 的缩放因子看似简单但至关重要。如果不做缩放，当 `d_k` 很大时 `QK^T` 的值会非常大，导致 softmax 输出接近 one-hot——梯度消失。这个问题在 Multi-Head Attention 中如何被缓解（提示：每个 head 的 `d_k` 更小）？
+> 3. Transformer 使用位置编码（Positional Encoding）注入序列位置信息。原始论文使用正弦/余弦固定编码，而 RoPE（Rotary Position Embedding）在现代 LLM 中被广泛采用。RoPE 的核心思想是什么？它相比绝对位置编码和相对位置编码（如 ALiBi）在长序列外推能力上有什么优势？

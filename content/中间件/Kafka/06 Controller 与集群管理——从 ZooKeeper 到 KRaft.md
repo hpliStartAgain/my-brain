@@ -200,3 +200,10 @@ node.id=1
 > - KIP-500: Replace ZooKeeper with a Self-Managed Metadata Quorum
 > - Apache Kafka 文档,《KRaft: Apache Kafka Without ZooKeeper》
 > - Confluent Blog,《Apache Kafka Beyond 1 Million Partitions》
+
+---
+
+> [!note] 思考题
+> 1. Kafka Connect 提供了 Source Connector（外部系统→Kafka）和 Sink Connector（Kafka→外部系统）的标准框架。Debezium 是最流行的 Source Connector——通过 CDC（Change Data Capture）将数据库变更实时同步到 Kafka。Debezium 读取 MySQL Binlog / PostgreSQL WAL——这种方式与定期轮询（Polling）相比有什么优势？
+> 2. Kafka Connect 的分布式模式（distributed mode）在多个 Worker 节点之间自动分配 Task。如果一个 Worker 宕机，它的 Task 会被重新分配到其他 Worker——实现高可用。但 Task 重新分配期间的数据一致性如何保证？如果 Source Connector 在发送消息到 Kafka 后但未提交 Offset 前宕机，重启后会重复发送消息吗？
+> 3. Kafka Connect 的 Single Message Transforms（SMT）允许在数据流经 Connector 时进行简单转换（如添加字段、修改路由 Topic）。但 SMT 的能力有限——不支持聚合、JOIN 等复杂操作。在什么场景下你需要引入 Kafka Streams 或 Flink 替代 SMT？SMT 的处理延迟对端到端延迟的影响有多大？

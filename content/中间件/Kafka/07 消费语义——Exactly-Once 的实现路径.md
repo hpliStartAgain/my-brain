@@ -194,3 +194,10 @@ Kafka Streams 在内部自动管理事务：每个 Task（对应一个 Source Pa
 > - KIP-447: Producer scalability for exactly once semantics
 > - Confluent Blog,《Transactions in Apache Kafka》
 > - Apache Kafka 文档,《Kafka Streams EOS》
+
+---
+
+> [!note] 思考题
+> 1. Kafka Streams 是一个库（不是独立的集群）——嵌入在 Java 应用中运行。与 Flink 相比，Kafka Streams 不需要独立部署集群——降低了运维复杂度。但 Kafka Streams 只能消费 Kafka 数据——不支持其他数据源。在什么场景下 Kafka Streams 比 Flink 更合适（如简单的流处理、不需要复杂的时间窗口和状态管理）？
+> 2. Kafka Streams 的状态存储（State Store）使用 RocksDB 持久化到本地磁盘。状态通过 Changelog Topic 备份到 Kafka。如果一个 Streams 实例崩溃，新实例需要从 Changelog Topic 恢复状态——恢复时间取决于状态大小。在状态大小为 100GB 时，恢复需要多长时间？Standby Replicas 如何减少恢复时间？
+> 3. Kafka Streams 的 `KTable` 表示一个不断更新的表——底层就是一个 compacted Topic。`KStream.join(KTable)` 实现了流表 JOIN——每条流消息与表的最新值 JOIN。这种 JOIN 的语义与传统数据库 JOIN 有什么不同？如果 KTable 的更新有延迟（如几秒），JOIN 结果是否可能使用'旧'的表值？

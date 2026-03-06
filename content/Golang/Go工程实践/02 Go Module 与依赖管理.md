@@ -395,3 +395,10 @@ use (
 > - Go 文档,《Go Modules Reference》: https://go.dev/ref/mod
 > - Russ Cox,《Minimal Version Selection》: https://research.swtch.com/vgo-mvs
 > - Go 文档,《Module authentication using go.sum》: https://go.dev/ref/mod#go-sum-files
+
+---
+
+> [!note] 思考题
+> 1. 当你的项目同时依赖库 A v1.2.0 和库 B v1.3.0，而 A 依赖库 C v1.1.0、B 依赖库 C v1.4.0 时，Go Module 的 MVS（最小版本选择）算法会选择 C 的哪个版本？如果 C v1.4.0 引入了一个 breaking change（尽管没有升级 major 版本），你的项目会在编译期还是运行期发现问题？MVS 与其他语言（如 npm 的 semver range）的版本选择策略有什么根本区别？
+> 2. `go mod vendor` 将所有依赖复制到 `vendor/` 目录中。在 CI/CD 环境下，`go mod vendor` + `go build -mod=vendor` 与直接 `go build`（依赖 module cache）相比，构建的可重复性（reproducibility）有什么差异？在什么场景下 vendor 模式是必要的？
+> 3. Go Module 的 `replace` 指令可以将远程依赖替换为本地路径。在微服务架构中，多个服务共享一个内部 SDK 库，开发阶段需要频繁修改 SDK 并在服务中测试。你会选择 `replace` 指令、Go workspace（go.work）还是发布预发布版本（v0.x.x-beta）？三种方案各有什么工程代价？

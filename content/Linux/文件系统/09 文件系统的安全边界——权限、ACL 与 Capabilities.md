@@ -562,3 +562,10 @@ Linux 文件系统的安全边界由多层机制协同构成：
 4. **启用并配置 SELinux**：生产 RHEL/CentOS 系统保持 Enforcing 模式，不轻易 `setenforce 0`
 
 下一篇 [[10 现代存储技术——NVMe、io_uring 与用户态存储]] 将探索 Linux 存储栈的前沿发展：NVMe 协议为什么能达到百万 IOPS？io_uring 如何用 ring buffer 几乎消除系统调用开销？SPDK（Storage Performance Development Kit）如何完全绕过内核，在用户态直接操作 NVMe 设备？
+
+---
+
+> [!note] 思考题
+> 1. POSIX ACL 扩展了传统 rwx 权限模型。`setfacl -m u:alice:rx /data` 为特定用户设置权限。ACL 增加了管理复杂度——在什么规模的团队中引入 ACL 是值得的？ACL 与 LDAP/AD 集成后如何简化管理？
+> 2. SELinux 的强制访问控制即使 root 也受策略限制。但 SELinux 策略配置极其复杂。在容器环境中 SELinux 与 seccomp、capabilities 的分工是什么？如果三者都启用，安全检查的执行顺序是怎样的？它们分别防御哪类攻击？
+> 3. Linux capabilities 将 root 的特权分为 40+ 种细粒度能力。`CAP_NET_BIND_SERVICE` 允许绑定低端口而不需要 root。但 `CAP_SYS_ADMIN` 几乎等于 root——它包含了哪些危险操作？在容器安全中，为什么 Kubernetes 默认不授予 `CAP_SYS_ADMIN`？

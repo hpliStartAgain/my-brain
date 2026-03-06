@@ -332,3 +332,10 @@ MergeTree 变体引擎（Replacing/Aggregating/Summing/Collapsing）在 Merge �
 - [[01 ClickHouse 全局架构——列式存储与 MPP 执行引擎]]
 - [[03 数据写入与 Part 合并]]
 - [[06 ClickHouse 性能调优——表设计、查询优化与资源管理]]
+
+---
+
+> [!note] 思考题
+> 1. MergeTree 的排序键（ORDER BY）定义了数据在磁盘上的排列顺序。查询如果使用了排序键的前缀作为过滤条件，可以利用主键索引快速定位数据。但如果查询过滤的列不在排序键中（如对非排序列做精确匹配），就需要扫描所有 granule。Data Skipping Index（如 `minmax`、`set`、`bloom_filter`）如何在这种场景下减少扫描量？
+> 2. MergeTree 的数据是'先写入临时 part，后台异步合并（merge）'的模式。合并操作类似 LSM-Tree 的 Compaction——将多个小 part 合并为大 part。如果写入速度远大于合并速度，part 数量会持续增长——查询时需要扫描更多 part，性能下降。`parts_to_throw_insert` 参数在什么时候触发？你如何通过调优合并策略避免 part 积压？
+> 3. 分区键（PARTITION BY）将数据按时间（如按天/按月）分割到不同分区。分区裁剪（partition pruning）使得查询 `WHERE date = '2024-01-15'` 只扫描对应分区。但分区过多（如按秒分区）会导致每个分区的 part 过小——合并效率低且文件数过多。分区粒度如何选择？在时序数据场景中，按天分区和按月分区各适合什么数据量级？

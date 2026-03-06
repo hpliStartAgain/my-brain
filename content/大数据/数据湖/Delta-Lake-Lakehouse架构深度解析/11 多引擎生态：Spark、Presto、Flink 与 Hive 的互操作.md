@@ -377,6 +377,11 @@ Delta Lake 的多引擎生态体系建立在开放协议（Delta Protocol）的�
 
 ---
 
+> [!note] 思考题
+> 1. Delta 的协议版本控制了引擎所需支持的功能集。当 Delta 表升级到新协议（如启用 Deletion Vectors，需要 reader version=3），旧版本 Presto 将无法读取该表。如何管理协议版本升级，确保所有引擎在升级 Delta 协议之前已支持新版本？
+> 2. Flink 以批量模式或流模式读取 Delta 表。Flink 流模式与 Structured Streaming 的 Delta Source 在 Checkpoint 管理（记录已消费的 Delta 版本）和 Exactly-Once 保证上有什么差异？
+> 3. 在 Hive 和 Spark 双写过渡期，Hive 不理解 Delta Log 协议，其写入操作会直接产生 Parquet 文件但不更新 Delta Log，破坏事务日志一致性。如何在迁移期间防止 Hive 的写入破坏 Delta 表的一致性？
+
 ## 参考资料
 
 - [Delta Lake Protocol 规范（GitHub）](https://github.com/delta-io/delta/blob/master/PROTOCOL.md)

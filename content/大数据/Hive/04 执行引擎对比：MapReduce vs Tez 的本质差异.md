@@ -326,6 +326,11 @@ MapReduce 和 Tez 代表了两种不同的批处理哲学：
 
 ---
 
+> [!note] 思考题
+> 1. MapReduce 每个 Stage 的中间结果必须写入 HDFS（物化），下一个 Stage 再从 HDFS 读取，这产生了大量额外的 I/O。Tez 允许 Stage 之间直接传输数据（内存到内存），跳过 HDFS 物化。但内存到内存传输意味着如果某个 Stage 失败，其上游数据可能已经消失（已从内存清除），必须从最近的物化点重新计算。Tez 如何在"减少物化（提升性能）"和"保留足够检查点（保证容错）"之间取得平衡？
+> 2. MapReduce 的 JVM 启动代价是一个著名的性能问题——每个 Task 都需要启动一个新的 JVM 进程（包含 JVM 初始化、类加载等开销），对于大量小 Task 的作业，JVM 启动时间可能超过实际计算时间。Tez 通过 Container 复用（`tez.am.container.reuse.enabled`）解决了这个问题，允许下一个 Task 在上一个 Task 完成后直接复用同一个 Container（JVM 进程），避免重新启动。Container 复用的代价是什么？复用时如何保证 Task 之间的类加载隔离，防止一个 Task 修改的静态状态污染下一个 Task？
+> 3. Hive on Spark 是将 Hive 的执行引擎替换为 Spark，同时保留 Hive 的编译器（语义分析、优化器）。但 Hive on Spark 与 Spark SQL 直接读取 HMS 元数据是不同的实现路径。在功能完整性（是否支持所有 Hive 语法）和性能上，Hive on Spark 与直接使用 SparkSQL + HMS 有什么核心差异？为什么大多数公司最终选择了 SparkSQL + HMS 而不是 Hive on Spark？
+
 ## 参考资料
 
 - [Apache Tez 官方文档](https://tez.apache.org/user-guide.html)

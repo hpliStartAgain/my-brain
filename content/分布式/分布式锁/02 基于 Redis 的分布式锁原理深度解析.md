@@ -664,3 +664,10 @@ public class OrderService {
 4. Antirez. (2016). Distributed locks with Redis (Redlock). https://redis.io/docs/manual/patterns/distributed-locks/
 5. Junqueira, F., & Reed, B. (2013). *ZooKeeper: Distributed Process Coordination*. O'Reilly Media.
 6. Redisson GitHub 源码. https://github.com/redisson/redisson/blob/master/redisson/src/main/java/org/redisson/RedissonLock.java
+
+---
+
+> [!note] 思考题
+> 1. Redis 分布式锁的基本形式 `SET key value NX EX 30` 有一个根本问题——如果业务执行时间超过 30 秒，锁自动过期后被其他客户端获取，原客户端仍在执行——违反了互斥性。Redisson 的 Watchdog（默认每 10 秒续期）如何解决？如果 Watchdog 线程因 STW GC 暂停超过 30 秒——锁仍会过期。你如何降低这个风险？
+> 2. Redis 锁的'释放安全'——只有锁的持有者才能释放锁。`SET key <unique_value> NX EX 30` 中的 `unique_value` 用于标识持有者。释放时需要原子地'检查值并删除'——通过 Lua 脚本 `if redis.call('get', KEYS[1]) == ARGV[1] then redis.call('del', KEYS[1]) end`。为什么不能用 `GET + DEL` 两条命令？
+> 3. Redis 主从架构下的锁丢失风险——客户端在主节点获取锁后，主节点崩溃，从节点提升为主——但锁数据可能未复制到从节点。Redlock 通过在多个独立 Redis 实例上获取锁来缓解——但 Martin Kleppmann 的批评认为 Redlock 仍然不安全。你在生产中如何应对这个风险？

@@ -400,6 +400,11 @@ Container 的生命周期是 YARN 工程设计精华的集中体现：
 
 ---
 
+> [!note] 思考题
+> 1. Container 的本地化（Localization）阶段会将应用依赖的资源（JAR 文件、配置文件、符号链接）下载到 NM 本地缓存。本地化缓存是跨应用共享的——同一个 JAR 文件只下载一次，后续应用直接使用缓存。但缓存是有大小限制的（`yarn.nodemanager.localizer.cache.target-size-mb`），超出时会触发最近最少使用（LRU）的清理。在什么场景下，缓存频繁失效会显著增加 Container 的启动延迟？
+> 2. Container Token 是 YARN 安全体系的核心——NM 只接受携带有效 Token 的 Container 启动请求，防止伪造。Token 由 RM 生成，包含了 Container 的资源量、过期时间等信息，并用 RM 的私钥签名。如果 Token 即将过期而 AM 还没有使用这个 Container（比如 AM 处理繁忙），RM 会自动延期 Token 吗？Token 过期后 AM 需要重新申请 Container 吗？
+> 3. Container 进程在 NM 上以特定的 Linux 用户身份运行（提交作业的用户身份，而不是 YARN 系统用户）。这要求 NM 节点上存在对应的 Linux 用户账号。在大型组织中，用户账号管理通常通过 LDAP 或 AD 集中管理，NM 节点依赖网络用户查找（如 `nscd` 缓存）。如果 LDAP 不可用，NM 节点无法验证用户身份，会发生什么？如何在 LDAP 故障时保持 YARN 作业的基本可用性？
+
 ## 参考资料
 
 - Apache Hadoop 官方文档：[YARN Node Labels](https://hadoop.apache.org/docs/current/hadoop-yarn/hadoop-yarn-site/NodeLabel.html)

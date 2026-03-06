@@ -406,6 +406,11 @@ RDD Lineage 容错是 Spark 分布式容错体系的基石：
 
 ---
 
+> [!note] 思考题
+> 1. RDD 的 Lineage 容错基于"重算"——任何丢失的分区都可以通过重新执行上游计算来恢复。但重算有一个隐含假设：上游数据是稳定的，不会在重算时得到不同结果。如果 RDD 的 Source 是一个有副作用的外部系统（如消息队列），重算能保证幂等性吗？在什么场景下 Lineage 容错的"可重算"假设会失效？
+> 2. 宽依赖的 Lineage 容错代价远高于窄依赖——重算一个宽依赖 RDD 的单个分区，需要重新计算所有上游分区（因为 Shuffle 混洗了数据）。在一个有 10 个 Shuffle Stage 的复杂作业中，如果最后一个 Stage 的某个 Task 失败，最坏情况下需要重算多少数据？Spark 是如何通过 Stage 的 Map Output 追踪机制来避免全局重算的？
+> 3. `FetchFailedException` 是 Spark 中一类特殊的失败——Reducer 无法从 Mapper 的输出位置获取 Shuffle 数据，这通常意味着 Mapper 所在的 Executor 已经宕机，Shuffle 文件丢失。此时 TaskScheduler 不仅要重试失败的 Reducer Task，还必须重新运行产生 Shuffle 数据的上游 Stage。这个"Stage 级回滚"是如何触发的？会不会引发连锁的多 Stage 重算？
+
 ## 参考资料
 
 - [Spark 容错机制（博客园）](https://www.cnblogs.com/duanxz/p/6329675.html)

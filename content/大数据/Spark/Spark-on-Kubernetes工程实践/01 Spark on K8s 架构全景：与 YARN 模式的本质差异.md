@@ -235,6 +235,11 @@ Spark on K8s 的核心架构特点：
 
 ---
 
+> [!note] 思考题
+> 1. Spark on YARN 中，ApplicationMaster 扮演了 Spark Driver 的容器，而 ResourceManager 负责资源调度。Spark on K8s 中，Driver 直接作为一个 Pod 运行，K8s 的 kube-scheduler 负责调度。这两种模式在 Driver 失败时的恢复行为有什么根本差异？YARN 能自动重启 AM，K8s 默认能做到吗？
+> 2. Spark on K8s 使用 `client` 模式时，Driver 在提交机器上本地运行，而 Executor 在 K8s 集群中运行。这会导致 Driver 和 Executor 之间的网络通信必须跨越集群外部。在什么网络环境下，`client` 模式是不可行的？`cluster` 模式下 Driver Pod 的网络地址又如何被外部的 `spark-submit` 进程获知？
+> 3. K8s 的调度器是通用的容器调度器，不理解 Spark 作业的内部结构（如 Stage 依赖关系）。YARN 的 Capacity Scheduler 也不理解 Spark，但 YARN 有队列管理和资源保证机制。在多租户场景下，Spark on K8s 如何实现等价于 YARN 队列的资源隔离？Namespace + ResourceQuota 的组合能完全替代 YARN 队列吗？
+
 ## 参考资料
 
 - Apache Spark 官方文档：Running Spark on Kubernetes

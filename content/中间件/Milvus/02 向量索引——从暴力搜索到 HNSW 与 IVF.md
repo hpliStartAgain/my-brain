@@ -427,3 +427,10 @@ results = collection.search(
 
 - **[[03 数据模型——Collection、Partition 与 Segment]]**：深入 Milvus 的 Schema 设计和数据导入机制，理解 Segment 状态机与索引的关联
 - **[[04 查询引擎——混合检索与过滤]]**：理解标量过滤与向量检索的协同策略，以及分布式查询的精度保证
+
+---
+
+> [!note] 思考题
+> 1. IVF（Inverted File Index）将向量空间划分为多个 Voronoi 单元——查询时只搜索最近的 `nprobe` 个单元。`nprobe` 越大召回率越高但搜索越慢。在 100 万 128 维向量上，`nprobe=16`（总共 1024 个单元）的召回率和 QPS 大约是多少？`nprobe` 的最优值如何通过实验确定？
+> 2. HNSW（Hierarchical Navigable Small World）是一种基于图的索引——构建多层跳表结构的图。查询时从最高层开始贪心搜索，逐层下降到最底层。HNSW 的 `M`（每个节点的最大邻居数）和 `ef_construction`（构建时搜索宽度）如何影响索引质量和构建时间？HNSW 的内存占用通常是原始向量的多少倍？
+> 3. Product Quantization（PQ）将高维向量分为多个子向量，每个子向量用聚类中心的 ID 替代——大幅压缩存储空间。128 维向量用 PQ-8 压缩后只需 8 字节（原始 512 字节）。但 PQ 的距离计算是近似的——在什么精度要求下 PQ 的近似误差是可接受的？IVF_PQ 组合索引如何在内存和精度之间取得平衡？

@@ -418,3 +418,10 @@ etcdctl defrag --endpoints=https://127.0.0.1:2379
 6. boltdb/bbolt Documentation：https://github.com/etcd-io/bbolt
 7. Kubernetes Enhancement Proposal - Watch Bookmark：https://github.com/kubernetes/enhancements/tree/master/keps/sig-api-machinery/956-watch-bookmark
 8. Michael Hausenblas, Stefan Schimanski (2019). *Programming Kubernetes*. O'Reilly, Chapter 1 (etcd).
+
+---
+
+> [!note] 思考题
+> 1. Operator 模式将运维知识编码为 Controller——自动化有状态应用的部署、扩缩容、备份和恢复。在数据库场景中（如 MySQL Operator），Operator 可以自动完成主从切换、备份调度和版本升级。但 Operator 本身可能有 bug——Operator 的错误操作可能导致数据丢失。你如何测试 Operator 的可靠性？Operator 的'人工审批'机制如何设计？
+> 2. OperatorHub.io 和 ArtifactHub 提供了大量社区开发的 Operator。在选择第三方 Operator 时，你最关注什么维度（成熟度、社区活跃度、企业支持、代码质量）？使用第三方 Operator 的风险是什么（如 Operator 停止维护、与 Kubernetes 版本不兼容）？
+> 3. Kubebuilder 是 Operator 开发的标准框架——基于 controller-runtime 库。开发一个简单的 Operator（如自动创建配置文件的 Controller）需要多少工作量？Operator SDK 与 Kubebuilder 的区别是什么？在什么场景下你会选择编写 Shell Hook（如 kube-webhook）而非完整的 Operator？

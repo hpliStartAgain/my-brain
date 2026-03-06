@@ -610,3 +610,10 @@ EBS 存储服务器：SSD 阵列
 - 实测：blk-mq + NVMe 可以达到 100 万+ IOPS（单核单队列架构下只能达到 ~20 万）
 
 下一篇 [[06 IO 调度器——CFQ、Deadline 与 mq-deadline 的演进]] 将聚焦于 IO 调度器的内部机制：为什么 HDD 需要 CFQ 而 SSD 不需要？mq-deadline 如何在保证 IO 延迟上限的同时维持吞吐量？以及不同负载场景下调度器的选型建议。
+
+---
+
+> [!note] 思考题
+> 1. blk-mq 为每个 CPU 核心创建软件队列，映射到硬件队列。NVMe SSD 支持 64K 硬件队列——blk-mq 可以充分利用。在 HDD（单队列）上 blk-mq 仍然有价值——减少了软件队列的锁竞争。但 HDD 的 IOPS 只有数百——blk-mq 的多队列优势是否被 HDD 的物理限制淹没？
+> 2. IO Scheduler 的 `none` 在 NVMe 上通常最佳。但多应用共享 NVMe 时，`mq-deadline` 的 FIFO 过期保证了公平性。blk-cgroup 的 `io.weight`（比例权重）和 `io.max`（绝对限制）如何与 IO Scheduler 配合？在 cgroup v2 中，IO 限制是在调度器层面还是在提交层面实施的？
+> 3. `/sys/block/sda/queue/nr_requests` 控制每个队列的最大排队请求数。增大可提高吞吐但增加延迟。在延迟敏感的数据库场景中，`nr_requests` 与应用层 `iodepth` 的关系是什么？如果 `nr_requests=128` 但应用只提交 `iodepth=4`，增大 `nr_requests` 是否有意义？

@@ -743,3 +743,10 @@ etcd 的本质是一个需要像对待生产数据库一样对待的关键基础
 - [[01 etcd 全局架构——Raft 共识与 MVCC 存储]]
 - [[03 存储引擎——BoltDB、WAL 与 Compaction]]
 - [[05 etcd vs ZooKeeper——设计哲学与选型对比]]
+
+---
+
+> [!note] 思考题
+> 1. `etcdctl snapshot save` 创建 etcd 的快照备份。恢复时通过 `etcdctl snapshot restore` 从快照创建新的数据目录。但恢复后集群的 member ID 和 cluster ID 都会改变——这意味着什么？恢复后的集群能否直接被现有的 Kubernetes 控制平面使用？
+> 2. etcd 集群出现 'database space exceeded' 告警后变为只读。紧急恢复步骤是：1) Compaction 2) Defrag 3) 调大 quota。但 Compaction 和 Defrag 都需要 etcd 可写——只读模式下如何执行？`etcdctl alarm disarm` 的作用是什么？这个操作是否安全？
+> 3. 将 etcd 集群从 3 节点迁移到新的 3 台机器——你如何在不停机的情况下完成迁移？'逐节点替换'（先添加新节点再移除旧节点）和'快照恢复到新集群'两种方案各有什么风险？在 Kubernetes 场景中，迁移 etcd 还需要更新哪些配置？

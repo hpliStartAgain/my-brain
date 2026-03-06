@@ -314,6 +314,11 @@ Whole-Stage CodeGen 是 Spark SQL 在 CPU 效率层面的核心优化：
 
 ---
 
+> [!note] 思考题
+> 1. Whole-Stage CodeGen 将多个算子融合成一个紧凑的 `next()` 循环，消除了 Volcano 模型的虚函数调用开销。但 JVM 的 JIT 编译器本身也会对虚函数调用进行内联优化（Inline Cache）。在什么情况下，不使用 CodeGen 的 Volcano 模型经过 JIT 充分预热后，性能反而可以接近 CodeGen？
+> 2. CodeGen 生成的 Java 代码在运行时通过 `Janino` 编译器动态编译。如果一个复杂 SQL 生成的代码超过 JVM 方法大小限制（64KB 字节码），会发生什么？Spark 是如何处理这个边界的？
+> 3. CodeGen 的 `produce()/consume()` 模型是一种 Push 驱动的数据流模型，与 Volcano 的 Pull 模型相反。在包含 `Sort` 或 `HashAggregate` 这类需要"积累所有数据才能输出"的算子时，Push 模型会如何处理？这是否意味着这些算子天然成为 CodeGen 的边界点？
+
 ## 参考资料
 
 - Neumann T: Efficiently Compiling Efficient Query Plans for Modern Hardware（VLDB 2011）——produce/consume 模型的原始论文

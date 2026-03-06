@@ -468,3 +468,10 @@ MCP 解决了 LLM 工具集成领域最根本的工程问题——碎片化与�
 4. MCP Python SDK, github.com/modelcontextprotocol/python-sdk
 5. MCP TypeScript SDK, github.com/modelcontextprotocol/typescript-sdk
 6. Anthropic, "MCP Server Repository", github.com/modelcontextprotocol/servers
+
+---
+
+> [!note] 思考题
+> 1. MCP（Model Context Protocol）定义了 Agent 与外部工具之间的标准化通信协议。与直接编写 Function Calling 的 JSON Schema 相比，MCP 的标准化层增加了什么价值？在一个需要对接 20+ 工具的 Agent 系统中，MCP 的统一协议如何降低集成成本？
+> 2. MCP 的安全模型需要处理'Agent 代表用户调用工具'的授权问题。如果 Agent 需要访问用户的数据库执行查询，MCP 如何传递和验证用户的权限？在多租户场景中，如何防止 Agent 跨租户访问数据？
+> 3. MCP 的工具描述（Tool Description）以自然语言形式告诉 LLM 工具的功能和参数。如果工具描述写得不够精确，LLM 可能错误地选择工具或传递错误参数。你如何设计高质量的工具描述？有没有自动化测试工具描述质量的方法？

@@ -465,3 +465,10 @@ Compaction 是 LSM-Tree 写入模型的必然代价，也是维护读取性能�
 ### 7.2 后续章节导引
 
 - **[[05 从 LevelDB 到 RocksDB——优化与演进]]**：分析 RocksDB 在 Compaction 策略（Universal Compaction、FIFO Compaction）、多线程 Compaction、Rate Limiter 等方面对 LevelDB 的工程改进，以及这些改进如何解决 LevelDB 在大规模生产场景中暴露的局限性
+
+---
+
+> [!note] 思考题
+> 1. SSTable 文件内部由多个 Block 组成：Data Block（存储 KV 数据，默认 4KB）、Index Block（存储每个 Data Block 的 Key 范围）、Meta Block（Bloom Filter 等）和 Footer。Data Block 内部使用前缀压缩（Prefix Compression）减少 Key 的存储空间——相邻 Key 共享前缀。在什么 Key 模式下前缀压缩效果最好（如 `user:1001:name`、`user:1001:email`）？
+> 2. Index Block 存储了每个 Data Block 的最大 Key 和偏移量。查找一个 Key 时，先在 Index Block 中二分查找定位 Data Block，再在 Data Block 内部二分查找定位 Key。如果 SSTable 文件很大（如 256MB），Index Block 本身也很大——是否需要多级索引？RocksDB 的 Partitioned Index 如何解决这个问题？
+> 3. Bloom Filter Block 为每个 Data Block 维护一个 Bloom Filter。查找 Key 时先检查 Bloom Filter——如果返回'不存在'则跳过该 SSTable。Bloom Filter 使用多个 Hash 函数将 Key 映射到位数组。位数组大小和 Hash 函数数量如何影响误判率？在 LevelDB 默认配置下（10 bits per key），误判率约为多少？

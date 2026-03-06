@@ -547,3 +547,10 @@ CFS 的设计体现了"以最简洁的模型解决最复杂的问题"的工程�
 - **负载均衡**：周期性和空闲时在 CPU 间迁移进程，保持多核利用率
 
 下一篇 [[09 实时调度与调度策略全景——SCHED_FIFO、SCHED_RR 与 SCHED_DEADLINE]] 将解析 CFS 之上的实时调度层：为什么需要实时调度？`SCHED_FIFO` 与 `SCHED_RR` 的本质区别？`SCHED_DEADLINE` 如何用 EDF 算法提供硬实时保证？调度类的优先级层次如何工作？
+
+---
+
+> [!note] 思考题
+> 1. CGroups v1 使用独立的文件系统层级（hierarchy）管理每种资源（cpu、memory、blkio 等）——一个进程可以在不同 hierarchy 中属于不同 cgroup。CGroups v2 统一为单一层级——所有资源控制在同一棵树上。v2 的统一层级解决了 v1 的什么问题？在 v1 到 v2 迁移中，最大的兼容性挑战是什么？
+> 2. CGroups 的 CPU controller 有两种模式：`cpu.shares`（比例权重，v1 特有）和 `cpu.max`（绝对限制，v2）。在 Kubernetes 中，`resources.requests.cpu` 映射为 `cpu.shares`，`resources.limits.cpu` 映射为 `cpu.max`。如果一个 Pod 的 request=1 核、limit=2 核——在 CPU 空闲时它能用 2 核，在竞争时至少保证 1 核。但 `cpu.max` 的限流是按周期（100ms）执行的——如果 Pod 在 50ms 内用完了 2 核的配额，剩下 50ms 内 CPU 会被限流。这种'突发后限流'对延迟敏感应用有什么影响？
+> 3. CGroups 的 `pids.max` 限制 cgroup 中的进程/线程总数。在 Java 应用中，线程池 + GC 线程 + JIT 编译线程可能达到数百个。如果 `pids.max` 设置不当（如 100），应用可能因为无法创建新线程而崩溃——错误表现为 `pthread_create failed: Resource temporarily unavailable`。你如何合理设置 `pids.max`？如何监控 cgroup 中的线程数量？

@@ -396,3 +396,9 @@ Hudi 的诞生有明确的工程起点：Uber 的 CDC 增量数仓问题。这�
 Hudi 不是"更好的 Delta Lake"，也不是"Delta Lake 的替代品"——它们是**面向不同问题**的解法。如果你的数据管道大量依赖 CDC 同步、按主键 Upsert 和增量 ETL 消费，Hudi 是更自然的选择；如果你的场景主要是批量 DML 和流批一体写入，Delta Lake 的事务保证更为完善。
 
 下一篇 [[02 存储类型深度解析——CoW vs MoR 的设计权衡与适用场景]] 将深入 Hudi 最重要的技术选型问题：你的表到底应该用 Copy-on-Write（CoW）还是 Merge-on-Read（MoR）？这个决策直接决定你的写入吞吐量、读取延迟和资源消耗，是使用 Hudi 的第一道必答题。
+
+
+> [!note] 思考题
+> 1. Hudi 通过 Index 机制精确定位需要更新的记录，避免了传统全量覆盖方案的线性代价。但 Hudi 的 Bloom Filter Index 本身也需要在每个 Parquet 文件的 Footer 中存储和维护。当表的分区数和文件数极多时（如数百万个文件），Index 查找阶段需要打开所有分区内的文件读取 BloomFilter，这个扫描代价是否会成为新的瓶颈？
+> 2. Hudi 的 Timeline 支持消费者只处理"上次消费以来的增量变更"，类似 Kafka 的 Offset 消费。但如果消费者在消费增量的过程中重启（未完整消费一个 Commit），重启后应该从哪个时间点开始重新消费？Hudi 的 Timeline 如何保证增量消费的 Exactly-Once 语义？
+> 3. `HoodieTimelineArchiver` 会归档旧的 Timeline 条目，将其合并压缩。如果归档策略过于激进，消费者无法找到"上次消费位置"对应的 Commit，增量消费会怎样处理这种"起始点不存在"的情况？

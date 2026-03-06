@@ -822,3 +822,10 @@ public class OrderEventHandler {
 > - `org.springframework.transaction.support.AbstractPlatformTransactionManager` 源码
 > - `org.springframework.transaction.support.TransactionSynchronizationManager` 源码
 > - [Spring Framework 官方文档 - Transaction Management](https://docs.spring.io/spring-framework/reference/data-access/transaction.html)
+
+---
+
+> [!note] 思考题
+> 1. Spring 的 `Resource` 接口统一了 classpath 资源、文件系统资源、URL 资源和 ServletContext 资源的访问方式。`ResourceLoader.getResource("classpath:config.xml")` 和 `getResource("file:/etc/config.xml")` 返回不同实现。在 Spring Boot Fat JAR 中，classpath 资源实际上在 JAR 包内——此时 `Resource.getFile()` 会抛异常。你如何正确读取 Fat JAR 中的 classpath 资源？
+> 2. Spring 的 `Environment` 接口封装了 PropertySource 和 Profile。`@Value("${server.port:8080}")` 使用 SpEL 注入配置值。如果配置值包含特殊字符（如 `$` 或 `{}`），注入时会报错。你如何在配置文件中转义这些特殊字符？`@Value` 和 `@ConfigurationProperties` 在处理特殊字符方面有什么区别？
+> 3. Spring 的 `PropertySource` 可以自定义实现——从数据库、Consul、Vault 等外部系统加载配置。如果你实现了一个 `DatabasePropertySource` 从数据库读取配置，但数据库还没有初始化（DataSource Bean 尚未创建），会出现鸡生蛋的问题。你如何解决'配置来源依赖于容器中的 Bean，但 Bean 的创建又依赖于配置'这个循环依赖？

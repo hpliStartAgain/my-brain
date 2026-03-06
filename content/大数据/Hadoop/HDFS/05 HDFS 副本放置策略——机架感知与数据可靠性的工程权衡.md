@@ -419,6 +419,11 @@ HDFS 的默认三副本两机架放置策略，是经过多年工程实践验证
 
 ---
 
+> [!note] 思考题
+> 1. HDFS 默认的 3 副本放置策略（第 1 副本在 Writer 本地或随机节点，第 2 副本在不同机架，第 3 副本在第 2 副本所在机架的另一个节点）在可靠性和写入性能之间做了权衡。第 3 副本与第 2 副本在同一机架，这意味着如果这个机架整体断电，有两个副本会同时丢失，只剩 1 个副本，数据面临丢失风险。这是 HDFS 设计者有意识的权衡吗？为什么不选择三个副本全部在不同机架？
+> 2. HDFS 的副本数是文件级别的配置，不同文件可以有不同的副本因子（如重要数据 5 副本，临时数据 1 副本）。副本因子为 1 的文件在 DataNode 宕机时会立即丢失，但它节省了 2/3 的存储空间。在什么具体的生产场景下，合理使用副本因子 1（或者纠删码 EC）是值得的？纠删码相比多副本的核心优缺点是什么？
+> 3. 当集群进行滚动升级（每次停止一个 DataNode 更新）时，HDFS 的副本数会暂时低于设定值（因为某个 DataNode 不可用）。NameNode 的 Under-Replicated Block 检测机制会触发副本补充：找到只有 1 或 2 个副本的 Block，在健康的 DataNode 上创建新副本。如果大量 Block 同时处于 Under-Replicated 状态（如批量升级），这个补充过程会对集群带宽产生什么冲击？如何控制副本补充的速率？
+
 ## 参考资料
 
 - Apache Hadoop 官方文档：[HDFS Architecture - Replica Placement](https://hadoop.apache.org/docs/current/hadoop-project-dist/hadoop-hdfs/HdfsDesign.html#Replica_Placement:_The_First_Baby_Steps)

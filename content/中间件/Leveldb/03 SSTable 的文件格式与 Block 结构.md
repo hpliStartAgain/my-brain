@@ -470,3 +470,10 @@ SSTable 的文件格式体现了在多个约束条件下的精确权衡：
 
 - **[[04 Compaction——分层合并与版本管理]]**：理解多个 SSTable 如何通过 Compaction 进行有序合并，以及 VersionEdit/VersionSet 如何管理 SSTable 文件集合的 MVCC 版本
 - **[[05 从 LevelDB 到 RocksDB——优化与演进]]**：分析 RocksDB 在 SSTable 格式、索引结构、压缩算法上的改进，以及这些改进背后的工程动机
+
+---
+
+> [!note] 思考题
+> 1. LevelDB 使用 Leveled Compaction——每一层的总大小是上一层的 10 倍（默认）。Level 0 最多 4 个 SSTable 文件，Level 1 最大 10MB，Level 2 最大 100MB...。Compaction 选择一个 Level L 的 SSTable 与 Level L+1 中 Key 范围重叠的 SSTable 合并。在什么场景下 Compaction 的写放大最严重（如大量更新已有 Key）？
+> 2. RocksDB 提供了多种 Compaction 策略：Leveled（LevelDB 默认）、Universal（类似 Size-Tiered）和 FIFO。Universal Compaction 将相似大小的 SSTable 合并——写放大更小但空间放大更大。在时序数据（TTL 删除旧数据）场景中，FIFO Compaction 直接删除过期的 SSTable——几乎没有写放大。你如何根据工作负载选择 Compaction 策略？
+> 3. Compaction 消耗 CPU 和磁盘 IO——可能影响前台的读写性能。LevelDB 在后台单线程执行 Compaction。RocksDB 支持多线程并发 Compaction（`max_background_compactions`）。在 NVMe SSD 上，单线程 Compaction 是否会成为瓶颈？如何判断 Compaction 是否跟不上写入速度（Compaction 积压）？
