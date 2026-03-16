@@ -2,7 +2,7 @@
 type: task
 status: doing
 priority: P0
-deadline: 2026-03-13
+deadline: 2026-03-20
 domain: 计算治理
 lifecycle: engineering
 progress: "50"
@@ -11,8 +11,43 @@ started_date: 2026-03-12
 ---
 
 ## 🎯 目标与验收标准
-- [x] 完成Spark向量化作业画像作业代码开发与关键逻辑优化。
-- [ ] 完成作业画像测试，无报错且不明显增加作业运行耗时。
+
+### 本周目标（3.16-3.20）
+- [x] 完成 GSS 评分模型代码开发与关键逻辑优化
+- [ ] 完成作业画像单元测试：14 个 SQL 级 UDF 全部有单测（覆盖 Parquet/ORC/CSV 格式识别、Hive UDF 检测、ColumnarToRow 计数），测试通过率 100%
+- [ ] 端到端冒烟测试：取近 7 天 bdwh 用户 EventLog（≥500 个作业），确认 GSS 评分无 NULL、无异常负值，运行耗时不超过原有 PantherSparkEventJob 的 20%
+- [ ] `physicalPlanDescription` 格式兼容性验证：`extractInputFormat` 和 `countFileScanNodes` 正确识别 Spark 3.2+ 的 `(N) Scan parquet` 格式（非旧版 `FileScan parquet`）
+
+## ⚙️ 参考执行路径
+
+### Step 1：单元测试补全（3.16-3.17）
+
+重点验证以下 UDF 输入输出对：
+
+| UDF | 测试输入 | 期望输出 |
+|-----|---------|---------|
+| `extractInputFormat` | `"(1) Scan parquet"` | `"parquet"` |
+| `countHiveUDFs` | `"HiveTableScan ... udf:my_func"` | `1` |
+| `countColumnarToRow` | `"ColumnarToRow\nRowToColumnar\nColumnarToRow"` | `2` |
+| `calculateGSSBaseScore` | Parquet + Aggregate + 无 UDF | `≥80` |
+
+### Step 2：冒烟测试（3.17-3.19）
+
+```bash
+# 在测试集群提交画像作业，指定近 7 天 bdwh EventLog
+spark-submit \
+  --class com.sohu.bdplatform.panther.PantherSparkEventJob \
+  --conf spark.executor.memory=4g \
+  pantherSparkJob.jar \
+  --dt 7d --user bdwh --mode profile
+
+# 验证输出
+hive -e "SELECT count(*), min(job_gss_score), max(job_gss_score),
+               avg(job_gss_score), count(CASE WHEN job_gss_score IS NULL THEN 1 END) as null_cnt
+         FROM dwd_panther_spark_job WHERE dt='$(date -d yesterday +%Y%m%d)'"
+```
+
+期望：null_cnt = 0，min ≥ 0，max ≤ 100，作业总耗时与基线相比增幅 < 20%
 
 ## ⚙️ 技术原理
 

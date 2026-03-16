@@ -1,41 +1,3 @@
----
-type: task
-status: doing
-priority: P0
-deadline: 2026-03-27
-domain: 集群智能运维
-lifecycle: engineering
-progress: "30"
-completed_date:
-started_date: 2026-03-11
----
-
-## 🎯 本周验收目标（3.16-3.20）
-
-- [ ] 完成「三、可行性判断」章节：明确给出 Go/No-Go 结论，并列出阻碍因素（SCMDB 缺失、Loki 未覆盖等）和解决路径
-- [ ] 完成「四、产品形态与功能边界」章节：清晰定义三种交互模式（被动增强/ChatOps/健康日报）的用户场景、输入输出和技术实现路径，H1/H2 功能边界 In/Out scope 列明
-- [ ] 完成「五、实施路线图」章节：给出 Phase 0（告警迁移）/ Phase 1（聚合降噪+健康日报）/ Phase 2（LLM 根因）的时间节点，与 H1 OKR 中 KR1-KR4 对齐
-- [ ] 报告整体进度从 30% 推进到 ≥ 70%，可在团队内部评审分享
-
-## ⚙️ 参考执行路径
-
-本周重点完成上述三个章节。以下为各章节参考提纲：
-
-### 「三、可行性判断」写作提纲
-
-- **技术可行性**：数据底座（VictoriaMetrics 指标可用、Loki H1 完成、Ambari 变更可 API 获取）评估打分
-- **工程可行性**：团队现有 Go-eino Multi-Agent 工程能力已验证（告警迁移系统），可复用
-- **风险项**：SCMDB 需从零建设（4月）、Loki 覆盖率 H1 才完成、内网 LLM 需确认接口可用
-- **结论**：Phase 0 完全可行，Phase 1 H1 可落地，Phase 2 推 H2
-
-### 「四、产品形态」写作提纲
-
-| 模式 | 触发方式 | 输出 | 技术实现 |
-|------|---------|------|---------|
-| 被动增强 | Foxeye 告警 Webhook | 企微聚合事件卡片（1条根因+N条衍生） | SCMDB 拓扑查询 + 5min 时间窗口 |
-| ChatOps | 企微 @Bot 消息 | 自然语言回答+Grafana 跳转链接 | 内网 LLM + VM/Loki/Ambari 工具封装 |
-| 健康日报 | 每日 09:00 定时 | 企微日报卡片（关键指标+告警分布+变更汇总） | 规则巡检引擎 + Markdown 渲染 |
-
 # 大数据集群 AiOps 可行性分析报告
 
 > 作者：汀（搜狐 RDC SRE）
@@ -64,8 +26,6 @@ started_date: 2026-03-11
 ## 二、当前基础设施现状评估
 
 ### 2.1 可观测体系（数据地基）
-
-基于当前进行中的任务，推断我们的可观测现状如下：
 
 ```
 可观测成熟度评估：★★★☆☆（建设中）
@@ -245,18 +205,18 @@ graph TB
 ```mermaid
 graph TB
     subgraph P1["模块一：集群健康看板（Phase 1）"]
-        M11["组件健康评分\nNameNode / RM / HiveServer / Kafka"]
+        M11["组件健康评分</br>NameNode / RM / HiveServer / Kafka"]
         M12["动态基线告警（取代固定阈值）"]
         M13["YARN 队列水位实时展示"]
     end
     subgraph P2["模块二：智能告警降噪（Phase 1）"]
-        M21["组件拓扑聚合\nNameNode 异常 → 收敛 HiveServer 告警"]
+        M21["组件拓扑聚合</br>NameNode 异常 → 收敛 HiveServer 告警"]
         M22["时间窗口压缩（5min 内同组件重复告警）"]
         M23["告警 ↔ 变更记录自动关联"]
         M24["🎯 目标：告警量压缩 70%+"]
     end
     subgraph P3["模块三：作业异常检测（Phase 1）"]
-        M31["Spark/Flink 运行时异常检测\n基于历史 P90 动态基线"]
+        M31["Spark/Flink 运行时异常检测</br>基于历史 P90 动态基线"]
         M32["Stage 长尾 / Shuffle 异常 / GC 预警 / OOM 预警"]
         M33["自动触发诊断报告（替代手工巡检）"]
     end
@@ -366,13 +326,13 @@ gantt
 
 ```mermaid
 flowchart TD
-    A([Foxeye 告警触发]) --> B["查询 SCMDB\n获取组件依赖关系"]
-    B --> C{是否有上游组件告警\n在 5min 窗口内？}
-    C -- "是" --> D["标记为下游衍生告警\n聚合到根告警事件"]
+    A([Foxeye 告警触发]) --> B["查询 SCMDB</br>获取组件依赖关系"]
+    B --> C{是否有上游组件告警</br>在 5min 窗口内？}
+    C -- "是" --> D["标记为下游衍生告警</br>聚合到根告警事件"]
     C -- "否" --> E["创建新根事件"]
-    D & E --> F["查询 Ambari 变更记录\nT-30min ~ T"]
+    D & E --> F["查询 Ambari 变更记录</br>T-30min ~ T"]
     F --> G{存在变更？}
-    G -- "是" --> H["注入「变更关联」标签\n自动展示变更详情"]
+    G -- "是" --> H["注入「变更关联」标签</br>自动展示变更详情"]
     G -- "否" --> I["正常推送告警"]
     H --> I
     I --> J([推送到值班群])
@@ -408,12 +368,12 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    A([告警触发]) --> B["组件状态快照\n采集故障前 30min 的指标/日志/变更"]
-    B --> C["异常传播溯源\n沿 SCMDB 依赖图从叶子向根溯源"]
-    C --> D["变更关联分析\nAmbari 变更按时间距离排序"]
-    D --> E["专家规则匹配\n从故障知识库检索相似模式"]
-    E --> F["输出 Top-3 根因候选\n+ 证据链 + 推荐处置方案"]
-    F --> G{接入 LLM？\nPhase 2}
+    A([告警触发]) --> B["组件状态快照</br>采集故障前 30min 的指标/日志/变更"]
+    B --> C["异常传播溯源</br>沿 SCMDB 依赖图从叶子向根溯源"]
+    C --> D["变更关联分析</br>Ambari 变更按时间距离排序"]
+    D --> E["专家规则匹配</br>从故障知识库检索相似模式"]
+    E --> F["输出 Top-3 根因候选</br>+ 证据链 + 推荐处置方案"]
+    F --> G{接入 LLM？</br>Phase 2}
     G -- "是" --> H["LLM 精排 + 生成自然语言报告"]
     G -- "否" --> I([结构化诊断报告推送])
     H --> I
@@ -427,10 +387,10 @@ flowchart TD
 
 ```mermaid
 flowchart LR
-    A["传统算法输出\nTop-3 候选 + 证据"] --> C
-    B["故障知识库 RAG 检索\n历史相似故障"] --> C
-    C["Prompt 构建\nCoT 约束推理路径"] --> D["内网 LLM\nDeepSeek / Qwen 私有化"]
-    D --> E["自然语言根因分析报告\n根因 · 传播路径 · 排查步骤 · 止损建议"]
+    A["传统算法输出</br>Top-3 候选 + 证据"] --> C
+    B["故障知识库 RAG 检索</br>历史相似故障"] --> C
+    C["Prompt 构建</br>CoT 约束推理路径"] --> D["内网 LLM</br>DeepSeek / Qwen 私有化"]
+    D --> E["自然语言根因分析报告</br>根因 · 传播路径 · 排查步骤 · 止损建议"]
 
     style D fill:#f3e8ff,stroke:#7c3aed
     style E fill:#dcfce7,stroke:#16a34a
