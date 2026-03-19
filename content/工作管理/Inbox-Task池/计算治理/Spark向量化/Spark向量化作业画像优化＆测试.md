@@ -5,7 +5,7 @@ priority: P0
 deadline: 2026-03-20
 domain: 计算治理
 lifecycle: engineering
-progress: "50"
+progress: "70"
 completed_date:
 started_date: 2026-03-12
 ---

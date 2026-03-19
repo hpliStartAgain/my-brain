@@ -6,6 +6,8 @@ deadline: 2026-03-13
 domain: 集群可观测建设
 lifecycle: engineering
 progress: "0"
+started_date:
+completed_date:
 ---
 
 ## 🎯 目标与验收标准

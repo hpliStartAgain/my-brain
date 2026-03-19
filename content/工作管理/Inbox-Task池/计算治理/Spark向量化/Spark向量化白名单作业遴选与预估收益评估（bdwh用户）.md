@@ -2,7 +2,7 @@
 type: task
 status: backlog
 priority: P0
-deadline: 2026-03-13
+deadline: 2026-03-27
 domain: 计算治理
 lifecycle: engineering
 progress: "0"

@@ -5,99 +5,68 @@ priority: P0
 deadline: 2026-04-10
 domain: 集群可观测建设
 lifecycle: engineering
-progress: "50"
+progress: "65"
 completed_date:
 started_date: 2026-03-13
 ---
 
+> **[2026-03-18 技术选型变更]** 采集 Agent 由 Promtail 切换为 **Grafana Alloy**（原 Grafana Agent Flow 模式演进版），Salt 模块已按新方案完成开发，代码位于 `salt-states/src/install_alloy/`。
+
 ## 🎯 目标与验收标准
 
-### 本周目标（3.16-3.20）
-- [ ] Salt 流水线 Promtail 部署模块完善：Salt State 模块可稳定下发 Promtail 配置，`salt '*' state.apply promtail` 在测试节点执行无报错
-- [ ] 选取 1-2 个测试节点（建议 NameNode standby）完成 Promtail 接入，日志成功写入 Loki
-- [ ] Loki 中可查到该节点的日志流（通过 `{hostname="<node>", component="namenode"}` LogQL 查询）
-- [ ] Label 验证：`cluster`、`component`、`hostname` 三个基础 Label 正确附加
+### 已完成（截至 3.18）
+- [x] 技术选型确认：Promtail → Alloy，基于 Flow 模式，配置模板化，支持多行合并
+- [x] Salt State 模块开发完成：`install_alloy.sls`、`start/stop/status_alloy.sls`、systemd unit 模板
+- [x] Pillar 分层架构设计：`install_alloy.sls`（全局）+ `host_jobs.sls`（主机差异化）
+- [x] `config.alloy.jinja` 模板完成：自动遍历 `default_jobs + extra_jobs + host_jobs[grains['id']]`，生成 local.file_match + loki.source.file + loki.process 组件链
+- [x] `host_jobs.sls` 初版生成：覆盖 H3离线、H3实时、H3冷存、H2冷存，包含 NN/RM/DN/NM/HS2/HMS/HBase/ZK 日志配置，60+ 台主机
+
+### 待完成（拆解为独立子任务）
+- [ ] 预部署四项验证 → 见 [[Alloy预部署验证：Minion-ID、日志路径与权限核查]]
+- [ ] 阶段一：全集群系统日志上线 → 见 [[Alloy阶段一：全集群系统日志上线]]
+- [ ] 阶段二：服务级日志按集群逐步接入 → 见 [[Alloy阶段二：服务级日志接入]]
 
 ### 整体验收标准（4月前）
-- [ ] NN/RM/HS2 三类核心组件日志 100% 接入 Loki，Pipeline Drop/Multiline 策略生效
-- [ ] 日志存储压缩率验证：对比接入前后同节点日志写入量，压缩率 ≥ 50%
+- [ ] NN/RM/HS2 三类核心组件日志 100% 接入 Loki，Multiline 策略生效
+- [ ] 日志存储压缩率验证：压缩率 ≥ 50%
 - [ ] 数据链路端到端可用：从 Foxeye 可触达 Loki 日志查询入口
 
-## ⚙️ 参考执行路径
+## ⚙️ 架构设计（已落地）
 
-### Step 1：Promtail 配置设计（3.16-3.17）
+### 组件架构
 
-NameNode 日志采集配置参考结构：
-
-```yaml
-# promtail-config-namenode.yaml
-server:
-  http_listen_port: 9080
-
-clients:
-  - url: http://<LOKI_HOST>:3100/loki/api/v1/push
-
-scrape_configs:
-  - job_name: namenode
-    static_configs:
-      - targets: [localhost]
-        labels:
-          cluster: "bigdata-prod"
-          component: "namenode"
-          hostname: "${HOSTNAME}"
-          __path__: /var/log/hadoop/hdfs/hadoop-hdfs-namenode-*.log
-
-    pipeline_stages:
-      # Stage 1: 丢弃 DEBUG 级别日志
-      - drop:
-          expression: '.*\bDEBUG\b.*'
-
-      # Stage 2: Java 堆栈多行聚合
-      - multiline:
-          firstline: '^\d{4}-\d{2}-\d{2}'
-          max_wait_time: 3s
-
-      # Stage 3: 提取日志级别 Label
-      - regex:
-          expression: '^(?P<timestamp>\S+ \S+)\s+(?P<level>\w+)\s+'
-      - labels:
-          level:
+```
+Panther CMDB
+   ↓ (salt state.apply install_alloy)
+Salt Master（Pillar 深度合并）
+   ├── install_alloy/install_alloy.sls    （全局：binary、Loki endpoint、default_jobs）
+   └── install_alloy/host_jobs.sls        （主机差异化：服务级日志）
+   ↓
+目标主机
+   ├── /usr/local/bin/alloy               （v1.5.0）
+   ├── /etc/alloy/config.alloy            （Jinja 渲染）
+   └── alloy.service                      （systemd，CPUQuota=50%，MemoryLimit=512M）
+   ↓
+Loki（write.grafana-loki.sohucs.com，tenant: e9e89be363f04160a0e572b08ae0f215）
 ```
 
-### Step 2：Salt State 模块（3.17-3.18）
+### Pillar 合并顺序
 
-```jinja
-# salt/states/promtail/init.sls
-promtail_installed:
-  file.managed:
-    - name: /usr/local/bin/promtail
-    - source: salt://promtail/files/promtail-linux-amd64
-    - mode: 755
-
-promtail_config:
-  file.managed:
-    - name: /etc/promtail/config.yaml
-    - source: salt://promtail/files/config-{{ grains['roles'][0] }}.yaml
-    - makedirs: True
-
-promtail_service:
-  service.running:
-    - name: promtail
-    - enable: True
-    - watch:
-      - file: promtail_config
+```
+default_jobs（系统日志 /var/log/messages）
+  + extra_jobs（全局追加，默认空）
+  + host_jobs[grains['id']]（服务级日志，按主机精确匹配）
 ```
 
-### Step 3：接入验证（3.18-3.20）
+### 标签体系
 
-```bash
-# 在 Loki 查询页验证日志写入
-# LogQL 查询：近 10 分钟 NameNode ERROR 日志
-{cluster="bigdata-prod", component="namenode"} |= "ERROR" | line_format "{{.level}}: {{.__line__}}"
-
-# 确认标签正确
-{cluster="bigdata-prod"} | json | label_format hostname=hostname
-```
+| Label | 含义 | 示例 |
+|---|---|---|
+| `instance` | 主机（grains['id']） | `dnn014023` |
+| `service_name` | 服务 | `hadoop-hdfs`、`hive-hs2` |
+| `cluster` | 集群 | `H3离线`、`H3实时` |
+| `role` | 角色 | `namenode`、`regionserver` |
+| `log_type` | 日志类型 | `service`、`gc` |
 
 ## ⚙️ 架构设计图
 
@@ -107,21 +76,23 @@ flowchart TD
         NN["NameNode\n/var/log/hadoop/hdfs/"]
         RM["ResourceManager\n/var/log/hadoop/yarn/"]
         HS2["HiveServer2\n/var/log/hive/"]
+        SYS["所有节点\n/var/log/messages"]
     end
 
-    subgraph Pipeline["Promtail Pipeline"]
-        D["Drop\nDEBUG + 高频 INFO"]
-        M["Multiline\nJava 堆栈聚合"]
-        L["Label 提取\ncluster/component/hostname"]
+    subgraph Alloy["Alloy Pipeline（Flow 模式）"]
+        FM["local.file_match\n文件匹配"]
+        SF["loki.source.file\n日志读取"]
+        PR["loki.process\n多行合并 + 静态标签"]
     end
 
-    LOKI[("Loki\n日志存储")]
+    LOKI[("Loki\nwrite.grafana-loki.sohucs.com")]
     FE["Foxeye\nLogQL 告警规则"]
 
-    NN & RM & HS2 -->|日志文件| D
-    D --> M --> L --> LOKI
+    NN & RM & HS2 & SYS -->|日志文件| FM
+    FM --> SF --> PR --> LOKI
     LOKI --> FE
 ```
 
 ## 🐛 踩坑日志 (Troubleshooting)
--
+- GC 日志使用年份前缀 `gc-2026*.log`，**每年需更新**，否则新年日志不采集
+- `host_jobs` 的 key 必须与 `grains['id']` **完全匹配**（大小写、连字符），否则静默失效

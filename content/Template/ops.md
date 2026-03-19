@@ -6,6 +6,8 @@ deadline: 2026-03-13
 domain: 集群日常运维
 lifecycle: routine
 progress: "0"
+started_date:
+completed_date:
 ---
 
 ## 🎯 目标与验收标准

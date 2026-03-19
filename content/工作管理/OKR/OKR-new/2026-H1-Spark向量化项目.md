@@ -8,21 +8,7 @@
 - **参数配置**：Gluten + Velox 对内存配置有特殊要求（强依赖 Off-Heap 内存，executor memory overhead 需相应调整），当前依赖人工经验静态配置，不同类型候选作业的参数需求差异未被系统化建模，存在因参数配置不当导致 OOM 或性能回退的风险
 - **可观测支撑**：Spark 作业级别的细粒度性能指标（向量化算子比例、Fallback 率、算子耗时分布、内存水位）在现有监控平台（Foxeye）中缺乏统一采集和展示，向量化效果验证依赖人工分析日志
 
-```mermaid
-graph LR
-    subgraph 当前状态
-        A[Spark 作业提交] --> B[静态参数配置</br>无向量化感知]
-        A --> C[行式执行引擎</br>Volcano Model]
-        B --> D[Gluten OOM 风险</br>参数配置不当]
-        C --> E[CPU 利用率低</br>向量化指令未使用]
-        D --> F[作业失败 / 性能抖动]
-        E --> F
-    end
-    subgraph 已建立能力
-        G[GSS 评分模型</br>作业画像代码] --> H[候选作业识别</br>尚未生产化]
-        I[Gluten + Velox PoC] --> J[TPC-DS 验证</br>尚未生产验证]
-    end
-```
+![[背景和现状.png]]
 
 # 2 问题分析
 
@@ -61,30 +47,7 @@ graph LR
 - **KR3**：建立基于作业画像的向量化参数自动适配能力，消除参数配置不当导致的 OOM 和性能回退风险。**预计 2026 年 5 月中旬**，覆盖宽表 Join、聚合、排序三类主要作业类型，自动推荐 Off-Heap 大小、executor memory overhead 等向量化关键参数，OOM 导致作业失败次数降低 ≥ 60%
 - **KR4**：在 Foxeye 平台建立向量化效果可观测体系，支持持续监控与异常回退告警。**预计 2026 年 6 月底**，向量化引擎细粒度指标（Fallback 率、向量化算子比例、Off-Heap 水位、算子耗时分布）纳入 Foxeye 统一监控，建立向量化前后性能对比基线大盘，支持 Fallback 率异常自动告警
 
-```mermaid
-graph TD
-    subgraph KR1 作业画像与白名单
-        G1[GSS 评分流水线上线] --> G2[白名单作业遴选]
-        G2 --> G3[Superset 收益看板]
-    end
-    subgraph KR2 向量化引擎落地
-        V1[算子覆盖率 & Fallback 策略] --> V2[回归测试 & 结果验证]
-        V2 --> V3[生产规模压测]
-        V3 --> V4[灰度上线 → 全量推广]
-    end
-    subgraph KR3 参数自动适配
-        P1[作业特征 → 参数推荐模型] --> P2[Off-Heap / overhead 自动适配]
-        P2 --> P3[参数效果验证]
-    end
-    subgraph KR4 可观测闭环
-        O1[向量化细粒度指标采集] --> O2[Foxeye 性能基线大盘]
-        O2 --> O3[Fallback 异常告警]
-    end
-    G3 --> V1
-    G3 --> P1
-    V4 --> O1
-    P3 --> O1
-```
+![[方案和目标.png]]
 
 ## 3.1 作业画像系统生产上线（KR1）
 
@@ -110,29 +73,7 @@ graph TD
 - **生产环境压测**：在隔离的测试队列中以生产规模数据集进行压测，采集 CPU 利用率、内存使用、GC 时间、作业耗时等核心指标，与基线对比量化收益
 - **灰度上线策略**：采用「队列级灰度」方式分批上线——先在低优先级离线队列启用，观察稳定性后逐步扩展到核心生产队列，每阶段设置回滚预案
 
-```mermaid
-graph LR
-    subgraph 准备阶段
-        A[算子覆盖率梳理] --> B[Fallback 策略制定]
-        B --> C[回归测试集构建]
-    end
-    subgraph 验证阶段
-        C --> D[结果一致性验证]
-        D --> E[生产规模压测]
-        E --> F[性能基准记录]
-    end
-    subgraph 上线阶段
-        F --> G[低优先级队列</br>灰度启用]
-        G --> H[核心生产队列</br>逐步扩展]
-        H --> I[全量上线]
-    end
-    subgraph 保障
-        J[回滚预案] -.-> G
-        J -.-> H
-        K[Foxeye 监控] -.-> G
-        K -.-> H
-    end
-```
+![[引擎落地阶段.png]]
 
 **验收指标**：CPU 利用率提升 ≥ 30%，核心查询 P50 耗时降低 ≥ 40%，Fallback 率 < 10%，回归测试通过率 100%。
 
@@ -167,28 +108,7 @@ graph LR
 - **Fallback 异常告警**：定义向量化健康度检测规则（Fallback 率超过 15%、Off-Heap OOM 事件发生、单作业向量化算子比例骤降 > 20%），通过 Foxeye 告警引擎触发通知
 - **参数适配效果回路**：将 KR3 参数推荐结果与实际执行指标关联展示，支持参数版本对比，推荐规则迭代有数据依据
 
-```mermaid
-graph TD
-    subgraph 采集层
-        A[Spark EventListener</br>+ Gluten Metrics] --> B[Prometheus Exporter]
-        B --> C[vmagent 抓取]
-        C --> D[VictoriaMetrics 集群]
-    end
-    subgraph 展示层
-        D --> E[Foxeye 向量化效果大盘</br>前后对比基线]
-        D --> F[Fallback 率趋势视图]
-        D --> G[Off-Heap 内存水位图]
-    end
-    subgraph 告警层
-        D --> H[向量化健康度检测规则]
-        H --> I[Foxeye 告警引擎]
-        I --> J[通知触达]
-    end
-    subgraph 优化回路
-        E --> K[KR3 参数推荐规则迭代]
-        F --> K
-    end
-```
+![[可观测闭环.png]]
 
 **验收指标**：向量化细粒度指标（Fallback 率、向量化算子比例、Off-Heap 水位、算子耗时对比）100% 纳入 Foxeye，性能对比基线大盘上线，Fallback 异常告警命中率 ≥ 90%，误报率 ≤ 5%。
 

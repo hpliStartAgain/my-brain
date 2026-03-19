@@ -2,7 +2,7 @@
 type: task
 status: backlog
 priority: P1
-deadline: 2026-03-27
+deadline: 2026-04-27
 domain: 集群日常运维
 lifecycle: routine
 progress: "0"
