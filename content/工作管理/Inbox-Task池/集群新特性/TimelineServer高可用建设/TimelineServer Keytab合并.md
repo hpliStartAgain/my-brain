@@ -20,12 +20,12 @@ completed_date: 2026-03-17
 ![[Pasted image 20260317151136.png]]
 ![[Pasted image 20260317151116.png]]
 
-| 配置项 | ha timeline 组值 |
-|--------|-----------------|
-| `yarn.timeline-service.principal` | `yarn/h3timeline.venus.sohurdc.com@VENUS.SOHURDC.COM` |
-| `yarn.timeline-service.keytab` | `/etc/security/keytabs/timeline.ha.keytab` |
+| 配置项                                                            | ha timeline 组值                                        |
+| -------------------------------------------------------------- | ----------------------------------------------------- |
+| `yarn.timeline-service.principal`                              | `yarn/h3timeline.venus.sohurdc.com@VENUS.SOHURDC.COM` |
+| `yarn.timeline-service.keytab`                                 | `/etc/security/keytabs/timeline.ha.keytab`            |
 | `yarn.timeline-service.http-authentication.kerberos.principal` | `HTTP/h3timeline.venus.sohurdc.com@VENUS.SOHURDC.COM` |
-| `yarn.timeline-service.http-authentication.kerberos.keytab` | `/etc/security/keytabs/timeline.spnego.keytab` |
+| `yarn.timeline-service.http-authentication.kerberos.keytab`    | `/etc/security/keytabs/timeline.spnego.keytab`        |
 
 Principal 与 Keytab 在配置组内完全自洽，不存在跨组 Principal/Keytab 不匹配的问题，keytab 合并的前提条件不成立。
 
