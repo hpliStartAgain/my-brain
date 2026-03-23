@@ -2,7 +2,7 @@
 type: task
 status: backlog
 priority: P0
-deadline: 2026-03-27
+deadline: 2026-04-30
 domain: 集群智能运维
 lifecycle: engineering
 progress: "0"
