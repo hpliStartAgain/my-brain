@@ -61,8 +61,7 @@ graph TD
     class Client client
     class SNN secondary
 ```
-![[Pasted image 20260323110737.png]]
-这张架构图揭示了 HDFS 工作的三条核心数据流：
+
 1. **元数据流**：Client ↔ NameNode（控制面，轻量级 RPC 通信）
 2. **数据流**：Client ↔ DataNode（数据面，大块 TCP 流式传输）
 3. **管理流**：DataNode → NameNode（心跳与 BlockReport，NameNode → DataNode 指令下发）
