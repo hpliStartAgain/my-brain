@@ -1,21 +1,21 @@
 ---
 type: task
-status: doing
+status: done
 priority: P0
 deadline: 2026-03-25
 domain: 计算治理
 lifecycle: engineering
-progress: "70"
-completed_date:
+progress: "100"
+completed_date: 2026-03-24
 started_date: 2026-03-12
 ---
 
 ## 🎯 目标与验收标准
 
 ### 本周目标（3.23-3.25）
-- [ ] 完成作业画像单元测试：14 个 SQL 级 UDF 全部有单测（覆盖 Parquet/ORC/CSV 格式识别、Hive UDF 检测、ColumnarToRow 计数），测试通过率 100%
-- [ ] 端到端冒烟测试：取近 7 天 bdwh 用户 EventLog（≥500 个作业），确认 GSS 评分无 NULL、无异常负值，运行耗时不超过原有 PantherSparkEventJob 的 20%
-- [ ] `physicalPlanDescription` 格式兼容性验证：`extractInputFormat` 和 `countFileScanNodes` 正确识别 Spark 3.2+ 的 `(N) Scan parquet` 格式，v1.2 修复确认覆盖全量 UDF
+- [x] 完成作业画像单元测试：14 个 SQL 级 UDF 全部有单测（覆盖 Parquet/ORC/CSV 格式识别、Hive UDF 检测、ColumnarToRow 计数），测试通过率 100% ✅ 2026-03-25
+- [x] 端到端冒烟测试：取近 7 天 bdwh 用户 EventLog（≥500 个作业），确认 GSS 评分无 NULL、无异常负值，运行耗时不超过原有 PantherSparkEventJob 的 20% ✅ 2026-03-25
+- [x] `physicalPlanDescription` 格式兼容性验证：`extractInputFormat` 和 `countFileScanNodes` 正确识别 Spark 3.2+ 的 `(N) Scan parquet` 格式，v1.2 修复确认覆盖全量 UDF ✅ 2026-03-25
 
 ### 历史完成
 - [x] 完成 GSS 评分模型代码开发与关键逻辑优化（3.16-3.20）

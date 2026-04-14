@@ -1,12 +1,12 @@
 ---
 type: task
-status: doing
+status: done
 priority: P0
 deadline: 2026-03-27
 domain: 集群可观测建设
 lifecycle: engineering
-progress: "0"
-completed_date:
+progress: "100"
+completed_date: 2026-03-26
 started_date: 2026-03-23
 ---
 
@@ -14,10 +14,10 @@ started_date: 2026-03-23
 
 Alloy 正式部署前的四项前置验证，消除 `host_jobs.sls` 中所有 TODO 标记，确保上线不踩坑。
 
-- [ ] `[TODO-MINION-ID]` 各集群所有目标主机的 `grains['id']` 已核实，与 `host_jobs.sls` 中的 key 完全一致
-- [ ] `[TODO-PATH]` 所有服务日志路径（HDFS/YARN/Hive/HBase/ZK）已在目标主机确认存在
-- [ ] `[TODO-GC]` GC 日志文件名格式已确认（`gc-2026*.log` 还是 `gc.log-2026*`），`host_jobs.sls` 中的 glob 已更新
-- [ ] `alloy` 用户对各服务日志目录有读权限（`su -s /bin/sh alloy -c "cat <log_path>"` 通过）
+- [x] `[TODO-MINION-ID]` 各集群所有目标主机的 `grains['id']` 已核实，与 `host_jobs.sls` 中的 key 完全一致 ✅ 2026-03-26
+- [x] `[TODO-PATH]` 所有服务日志路径（HDFS/YARN/Hive/HBase/ZK）已在目标主机确认存在 ✅ 2026-03-26
+- [x] `[TODO-GC]` GC 日志文件名格式已确认（`gc-2026*.log` 还是 `gc.log-2026*`），`host_jobs.sls` 中的 glob 已更新 ✅ 2026-03-26
+- [x] `alloy` 用户对各服务日志目录有读权限（`su -s /bin/sh alloy -c "cat <log_path>"` 通过） ✅ 2026-03-26
 
 ## ⚙️ 执行路径
 

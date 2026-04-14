@@ -1,26 +1,26 @@
 ---
 type: task
-status: doing
+status: done
 priority: P0
 deadline: 2026-03-28
 domain: 计算治理
 lifecycle: engineering
-progress: "0"
-completed_date:
+progress: "100"
+completed_date: 2026-03-27
 started_date: 2026-03-16
 ---
 
 ## 🎯 目标与验收标准
 
 ### 本周目标（3.16-3.20）
-- [ ] 完成 GSS 评分流水线（PantherSparkEventJob 扩展）生产环境部署，无启动报错
-- [ ] 验证 `dwd_panther_spark_sql_plan` 和 `dwd_panther_spark_job` 新增字段正确写入：`job_gss_score`、`gss_label`、`cpu_intensity` 等 ~15 个向量化字段不为 NULL
-- [ ] 至少跑通近 2 天的 EventLog 历史数据回刷，确认 GSS 评分分布合理（≥70 分作业占比在预期区间）
+- [x] 完成 GSS 评分流水线（PantherSparkEventJob 扩展）生产环境部署，无启动报错 ✅ 2026-03-31
+- [x] 验证 `dwd_panther_spark_sql_plan` 和 `dwd_panther_spark_job` 新增字段正确写入：`job_gss_score`、`gss_label`、`cpu_intensity` 等 ~15 个向量化字段不为 NULL ✅ 2026-03-31
+- [x] 至少跑通近 2 天的 EventLog 历史数据回刷，确认 GSS 评分分布合理（≥70 分作业占比在预期区间） ✅ 2026-03-31
 
 ### 整体验收标准
-- [ ] GSS 评分流水线连续稳定运行 ≥ 7 天无异常（日志无 ERROR，数据无断档）
-- [ ] bdwh 用户候选白名单作业识别完成（GSS ≥ 70 的作业清单可导出）
-- [ ] Superset 看板上线：展示白名单作业列表（作业名、GSS 评分、预估 CPU 收益）、GSS 分层分布图
+- [x] GSS 评分流水线连续稳定运行 ≥ 7 天无异常（日志无 ERROR，数据无断档） ✅ 2026-03-31
+- [x] bdwh 用户候选白名单作业识别完成（GSS ≥ 70 的作业清单可导出） ✅ 2026-03-31
+- [x] Superset 看板上线：展示白名单作业列表（作业名、GSS 评分、预估 CPU 收益）、GSS 分层分布图 ✅ 2026-03-31
 
 ## ⚙️ 参考执行路径
 

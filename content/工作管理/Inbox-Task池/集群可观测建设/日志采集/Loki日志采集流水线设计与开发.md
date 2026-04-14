@@ -1,12 +1,12 @@
 ---
 type: task
-status: doing
+status: done
 priority: P0
 deadline: 2026-04-10
 domain: 集群可观测建设
 lifecycle: engineering
-progress: "65"
-completed_date:
+progress: "100"
+completed_date: 2026-03-26
 started_date: 2026-03-13
 ---
 
@@ -22,14 +22,14 @@ started_date: 2026-03-13
 - [x] `host_jobs.sls` 初版生成：覆盖 H3离线、H3实时、H3冷存、H2冷存，包含 NN/RM/DN/NM/HS2/HMS/HBase/ZK 日志配置，60+ 台主机
 
 ### 待完成（拆解为独立子任务）
-- [ ] 预部署四项验证 → 见 [[Alloy预部署验证：Minion-ID、日志路径与权限核查]]
-- [ ] 阶段一：全集群系统日志上线 → 见 [[Alloy阶段一：全集群系统日志上线]]
-- [ ] 阶段二：服务级日志按集群逐步接入 → 见 [[Alloy阶段二：服务级日志接入]]
+- [x] 预部署四项验证 → 见 [[Alloy预部署验证：Minion-ID、日志路径与权限核查]] ✅ 2026-03-26
+- [x] 阶段一：全集群系统日志上线 → 见 [[Alloy阶段一：全集群系统日志上线]] ✅ 2026-03-26
+- [x] 阶段二：服务级日志按集群逐步接入 → 见 [[Alloy阶段二：服务级日志接入]] ✅ 2026-03-26
 
 ### 整体验收标准（4月前）
-- [ ] NN/RM/HS2 三类核心组件日志 100% 接入 Loki，Multiline 策略生效
-- [ ] 日志存储压缩率验证：压缩率 ≥ 50%
-- [ ] 数据链路端到端可用：从 Foxeye 可触达 Loki 日志查询入口
+- [x] NN/RM/HS2 三类核心组件日志 100% 接入 Loki，Multiline 策略生效 ✅ 2026-03-26
+- [x] 日志存储压缩率验证：压缩率 ≥ 50% ✅ 2026-03-26
+- [x] 数据链路端到端可用：从 Foxeye 可触达 Loki 日志查询入口 ✅ 2026-03-26
 
 ## ⚙️ 架构设计（已落地）
 

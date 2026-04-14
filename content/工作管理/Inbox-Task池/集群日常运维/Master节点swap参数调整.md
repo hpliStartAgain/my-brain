@@ -1,16 +1,18 @@
 ---
 type: task
-status: doing
+status: done
 priority: P1
 deadline: 2026-03-13
 domain: 集群日常运维
 lifecycle: routine
-progress: "0"
+progress: "100"
+started_date: 2026-03-11
+completed_date: 2026-03-13
 ---
 
 ## 🎯 目标与验收标准
-- [ ] 调整内存参数，观察 进程资源占用情况。
-- [ ] 确保期间无业务报错。
+- [x] 调整内存参数，观察 进程资源占用情况。 ✅ 2026-03-25
+- [x] 确保期间无业务报错。 ✅ 2026-03-25
 
 ## 📝 实施记录
 ```bash

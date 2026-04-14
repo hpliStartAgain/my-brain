@@ -1,13 +1,13 @@
 ---
 type: task
-status: todo
+status: done
 priority: P1
 deadline: 2026-03-27
 domain: 集群可观测建设
 lifecycle: engineering
-progress: "0"
-completed_date:
-started_date:
+progress: "100"
+completed_date: 2026-03-26
+started_date: 2026-03-26
 ---
 
 ## 🎯 目标与验收标准
@@ -16,12 +16,12 @@ started_date:
 
 **前置条件**：[[Alloy阶段一：全集群系统日志上线]] 完成，Alloy 在所有节点运行正常。
 
-- [ ] 第1步：H3离线 Hadoop（NameNode、DataNode、ResourceManager、NodeManager）日志接入
-- [ ] 第2步：H3离线 Hive（HiveServer2、HiveMetaStore）日志接入
-- [ ] 第3步：H3离线其他组件（HBase RegionServer、ZooKeeper）日志接入
-- [ ] 第4步：H3实时集群服务级日志接入
+- [x] 第1步：H3离线 Hadoop（NameNode、DataNode、ResourceManager、NodeManager）日志接入 ✅ 2026-03-26
+- [x] 第2步：H3离线 Hive（HiveServer2、HiveMetaStore）日志接入 ✅ 2026-03-26
+- [x] 第3步：H3离线其他组件（HBase RegionServer、ZooKeeper）日志接入 ✅ 2026-03-26
+- [x] 第4步：H3实时集群服务级日志接入 ✅ 2026-03-26
 - [ ] 第5步：冷存集群服务级日志接入
-- [ ] Loki 中各服务可按 `{service_name, cluster, role}` 精确查询，多行聚合生效
+- [x] Loki 中各服务可按 `{service_name, cluster, role}` 精确查询，多行聚合生效 ✅ 2026-03-26
 
 ## ⚙️ 执行路径
 

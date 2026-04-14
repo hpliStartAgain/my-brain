@@ -1,20 +1,20 @@
 ---
 type: task
-status: todo
+status: done
 priority: P1
 deadline: 2026-03-26
 domain: 集群新特性
 lifecycle: engineering
 progress: "0"
-completed_date:
-started_date:
+completed_date: 2026-03-26
+started_date: 2026-03-26
 ---
-ji
+
 ## 🎯 目标与验收标准
-- [ ] 通过 SCLB VIP 访问 Knox Admin UI / YARN UI / WebHDFS / Spark History UI 全部正常
-- [ ] 停止节点 1 Knox 服务，VIP 访问在 30 秒内自动切换到节点 2，无报错
-- [ ] 停止节点 2 Knox 服务，VIP 访问在 30 秒内自动切换到节点 1，无报错
-- [ ] 恢复节点后流量可正常回切
+- [x] 通过 SCLB VIP 访问 Knox Admin UI / YARN UI / WebHDFS / Spark History UI 全部正常 ✅ 2026-03-27
+- [x] 停止节点 1 Knox 服务，VIP 访问在 30 秒内自动切换到节点 2，无报错 ✅ 2026-03-27
+- [x] 停止节点 2 Knox 服务，VIP 访问在 30 秒内自动切换到节点 1，无报错 ✅ 2026-03-27
+- [x] 恢复节点后流量可正常回切 ✅ 2026-03-27
 
 ## ⚙️ 验证命令
 

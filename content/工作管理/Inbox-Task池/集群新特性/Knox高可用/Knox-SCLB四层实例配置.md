@@ -1,21 +1,20 @@
 ---
 type: task
-status: todo
+status: done
 priority: P1
 deadline: 2026-03-25
 domain: 集群新特性
 lifecycle: engineering
-progress: "0"
-completed_date:
-started_date:
+progress: "100"
+completed_date: 2026-03-25
+started_date: 2026-03-25
 ---
 
 ## 🎯 目标与验收标准
-- [ ] 在 SCLB 平台创建四层实例（标准型，IPv4）
-- [ ] 创建服务器组（IP 类型，TCP，加权轮询，TCP 健康检查/8443）
-- [ ] 添加两个后端 IP（dsrv014022 + node2，权重各 100）
-- [ ] 创建 TCP 监听，端口 8443
-- [ ] 记录 SCLB VIP 地址，通过 VIP 可访问 Knox 服务
+- [x] 复用已有 SCLB 实例 Knox-HA（g-dwyapkq4）✅ 2026-03-25
+- [x] 服务器组：TCP / 加权轮询 / TCP 健康检查（超时5s/间隔5s/阈值2次）✅ 2026-03-25
+- [x] 后端：10.18.14.22:8443 权重100 + 10.18.14.21:8443 权重100 ✅ 2026-03-25
+- [x] VIP：10.31.73.169（亦庄机房，运行中）✅ 2026-03-25
 
 ## ⚙️ 关键配置
 
@@ -30,4 +29,4 @@ started_date:
 | 监听端口 | 8443 |
 
 ## 🐛 踩坑日志
--
+- 复用已有实例，无需新建，配置参数与方案设计完全吻合

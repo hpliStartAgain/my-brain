@@ -1,21 +1,21 @@
 ---
 type: task
-status: doing
+status: done
 priority: P0
 deadline: 2026-03-28
 domain: 集群可观测建设
 lifecycle: engineering
 progress: "0"
-completed_date:
+completed_date: 2026-03-28
 started_date: 2026-03-23
 ---
 
 ## 🎯 目标与验收标准
 
-- [ ] 通过 Zabbix JSON-RPC API 导出大数据集群所有 Host Group 下的完整 Trigger 清单（字段：trigger名称、表达式、优先级、状态、最后触发时间、所属主机组）
-- [ ] 按**优先级**（P0/P1/P2/P3）×**类型**（阈值型/状态型/复合型/无主告警）完成四象限分类，输出 CSV 分类清单
-- [ ] 识别并标注**僵尸告警**候选列表（`lastchange = 0` 或近 90 天未触发），作为迁移时直接清理的依据
-- [ ] 最终产出：分类清单文档可直接作为告警迁移系统 `/api/rules/import` 批量导入端点的结构化输入
+- [x] 通过 Zabbix JSON-RPC API 导出大数据集群所有 Host Group 下的完整 Trigger 清单（字段：trigger名称、表达式、优先级、状态、最后触发时间、所属主机组） ✅ 2026-03-31
+- [x] 按**优先级**（P0/P1/P2/P3）×**类型**（阈值型/状态型/复合型/无主告警）完成四象限分类，输出 CSV 分类清单 ✅ 2026-03-31
+- [x] 识别并标注**僵尸告警**候选列表（`lastchange = 0` 或近 90 天未触发），作为迁移时直接清理的依据 ✅ 2026-03-31
+- [x] 最终产出：分类清单文档可直接作为告警迁移系统 `/api/rules/import` 批量导入端点的结构化输入 ✅ 2026-03-31
 
 ## ⚙️ 参考执行路径
 

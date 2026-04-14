@@ -1,6 +1,6 @@
 ---
 type: task
-status: backlog
+status: doing
 priority: P1
 deadline: 2026-04-27
 domain: 集群日常运维

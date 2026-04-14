@@ -2,7 +2,7 @@
 type: task
 status: backlog
 priority: P0
-deadline: 2026-03-13
+deadline: <% tp.date.now("YYYY-MM-DD", 7) %>
 domain: 集群可观测建设
 lifecycle: engineering
 progress: "0"
