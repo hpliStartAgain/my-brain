@@ -20,6 +20,11 @@ type FolderState = {
 }
 
 let currentExplorerState: Array<FolderState>
+let currentSlugForHydration: FullSlug = "" as FullSlug
+// Cache the built trie across SPA navigations — content index does not change
+// between client-side route transitions.
+let cachedTrie: FileTrieNode | null = null
+let cachedTrieKey: string = ""
 function toggleExplorer(this: HTMLElement) {
   const nearestExplorer = this.closest(".explorer") as HTMLElement
   if (!nearestExplorer) return
@@ -37,25 +42,19 @@ function toggleExplorer(this: HTMLElement) {
   }
 }
 
-function toggleFolder(evt: MouseEvent) {
+function toggleFolder(evt: Event) {
   evt.stopPropagation()
   const target = evt.target as MaybeHTMLElement
   if (!target) return
 
-  // Check if target was svg icon or button
-  const isSvg = target.nodeName === "svg"
-
-  // corresponding <ul> element relative to clicked button/folder
-  const folderContainer = (
-    isSvg
-      ? // svg -> div.folder-container
-        target.parentElement
-      : // button.folder-button -> div -> div.folder-container
-        target.parentElement?.parentElement
-  ) as MaybeHTMLElement
+  // Walk up to the folder-container regardless of click origin (svg, button, span).
+  const folderContainer = target.closest(".folder-container") as MaybeHTMLElement
   if (!folderContainer) return
   const childFolderContainer = folderContainer.nextElementSibling as MaybeHTMLElement
   if (!childFolderContainer) return
+
+  // 🌟 Lazy hydration: build descendant DOM the first time this folder opens.
+  hydrateFolderChildren(childFolderContainer as HTMLElement, currentSlugForHydration)
 
   childFolderContainer.classList.toggle("open")
 
@@ -95,10 +94,37 @@ function createFileNode(currentSlug: FullSlug, node: FileTrieNode): HTMLLIElemen
   return li
 }
 
+// WeakMap so a freshly built folder <li> can find its trie node again
+// when the user clicks to expand it (lazy hydration)
+const folderNodeMap = new WeakMap<HTMLElement, FileTrieNode>()
+const folderOptsMap = new WeakMap<HTMLElement, ParsedOptions>()
+const folderHydratedAttr = "data-hydrated"
+
+function hydrateFolderChildren(folderOuter: HTMLElement, currentSlug: FullSlug) {
+  if (folderOuter.getAttribute(folderHydratedAttr) === "true") return
+  const node = folderNodeMap.get(folderOuter)
+  const opts = folderOptsMap.get(folderOuter)
+  if (!node || !opts) return
+
+  const ul = folderOuter.querySelector("ul") as HTMLUListElement | null
+  if (!ul) return
+
+  const fragment = document.createDocumentFragment()
+  for (const child of node.children) {
+    const childEl = child.isFolder
+      ? createFolderNode(currentSlug, child, opts, /*lazy*/ true)
+      : createFileNode(currentSlug, child)
+    fragment.appendChild(childEl)
+  }
+  ul.appendChild(fragment)
+  folderOuter.setAttribute(folderHydratedAttr, "true")
+}
+
 function createFolderNode(
   currentSlug: FullSlug,
   node: FileTrieNode,
   opts: ParsedOptions,
+  lazy: boolean = false,
 ): HTMLLIElement {
   const template = document.getElementById("template-folder") as HTMLTemplateElement
   const clone = template.content.cloneNode(true) as DocumentFragment
@@ -140,15 +166,29 @@ function createFolderNode(
   const folderIsPrefixOfCurrentSlug =
     simpleFolderPath === currentSlug.slice(0, simpleFolderPath.length)
 
-  if (!isCollapsed || folderIsPrefixOfCurrentSlug) {
+  const shouldOpen = !isCollapsed || folderIsPrefixOfCurrentSlug
+  if (shouldOpen) {
     folderOuter.classList.add("open")
   }
 
-  for (const child of node.children) {
-    const childNode = child.isFolder
-      ? createFolderNode(currentSlug, child, opts)
-      : createFileNode(currentSlug, child)
-    ul.appendChild(childNode)
+  // 🌟 Lazy rendering: only build children DOM for top-level folders that are open
+  // (i.e. the ancestor chain of the current page). All other folders defer DOM
+  // creation until the user clicks to expand. With ~900 entries this slashes
+  // first-paint DOM work from O(N) to O(visible).
+  const shouldRenderChildrenNow = !lazy || shouldOpen
+  if (shouldRenderChildrenNow) {
+    for (const child of node.children) {
+      const childNode = child.isFolder
+        ? createFolderNode(currentSlug, child, opts, /*lazy*/ true)
+        : createFileNode(currentSlug, child)
+      ul.appendChild(childNode)
+    }
+    folderOuter.setAttribute(folderHydratedAttr, "true")
+  } else {
+    // Stash node + opts so we can hydrate on first expand
+    folderNodeMap.set(folderOuter, node)
+    folderOptsMap.set(folderOuter, opts)
+    folderOuter.setAttribute(folderHydratedAttr, "false")
   }
 
   return li
@@ -176,23 +216,38 @@ async function setupExplorer(currentSlug: FullSlug) {
       serializedExplorerState.map((entry: FolderState) => [entry.path, entry.collapsed]),
     )
 
-    const data = await fetchData
-    const entries = [...Object.entries(data)] as [FullSlug, ContentDetails][]
-    const trie = FileTrieNode.fromEntries(entries)
+    // 🌟 Reuse trie across SPA navigations. Building the trie + sort/filter
+    // walks all ~N entries; doing it once per session is sufficient.
+    const trieKey = JSON.stringify({
+      order: opts.order,
+      sortFn: explorer.dataset.dataFns,
+      folderDefault: opts.folderDefaultState,
+      behavior: opts.folderClickBehavior,
+    })
+    let trie: FileTrieNode
+    if (cachedTrie && cachedTrieKey === trieKey) {
+      trie = cachedTrie
+    } else {
+      const data = await fetchData
+      const entries = [...Object.entries(data)] as [FullSlug, ContentDetails][]
+      trie = FileTrieNode.fromEntries(entries)
 
-    // Apply functions in order
-    for (const fn of opts.order) {
-      switch (fn) {
-        case "filter":
-          if (opts.filterFn) trie.filter(opts.filterFn)
-          break
-        case "map":
-          if (opts.mapFn) trie.map(opts.mapFn)
-          break
-        case "sort":
-          if (opts.sortFn) trie.sort(opts.sortFn)
-          break
+      // Apply functions in order
+      for (const fn of opts.order) {
+        switch (fn) {
+          case "filter":
+            if (opts.filterFn) trie.filter(opts.filterFn)
+            break
+          case "map":
+            if (opts.mapFn) trie.map(opts.mapFn)
+            break
+          case "sort":
+            if (opts.sortFn) trie.sort(opts.sortFn)
+            break
+        }
       }
+      cachedTrie = trie
+      cachedTrieKey = trieKey
     }
 
     // Get folder paths for state management
@@ -205,20 +260,25 @@ async function setupExplorer(currentSlug: FullSlug) {
           previousState === undefined ? opts.folderDefaultState === "collapsed" : previousState,
       }
     })
+    currentSlugForHydration = currentSlug
 
-    const explorerUl = explorer.querySelector(".explorer-ul")
+    const explorerUl = explorer.querySelector(".explorer-ul") as HTMLElement | null
     if (!explorerUl) continue
 
-    // Create and insert new content
+    // Clear any previously rendered tree (SPA re-entry) so we don't pile up duplicates
+    explorerUl.replaceChildren()
+
+    // 🌟 Lazy first paint: top-level folders defer their descendant DOM until
+    // expanded. Only the ancestor chain of the current page gets fully built.
     const fragment = document.createDocumentFragment()
     for (const child of trie.children) {
       const node = child.isFolder
-        ? createFolderNode(currentSlug, child, opts)
+        ? createFolderNode(currentSlug, child, opts, /*lazy*/ true)
         : createFileNode(currentSlug, child)
 
       fragment.appendChild(node)
     }
-    explorerUl.insertBefore(fragment, explorerUl.firstChild)
+    explorerUl.appendChild(fragment)
 
     // restore explorer scrollTop position if it exists
     const scrollTop = sessionStorage.getItem("explorerScrollTop")
@@ -241,24 +301,22 @@ async function setupExplorer(currentSlug: FullSlug) {
       window.addCleanup(() => button.removeEventListener("click", toggleExplorer))
     }
 
-    // Set up folder click handlers
-    if (opts.folderClickBehavior === "collapse") {
-      const folderButtons = explorer.getElementsByClassName(
-        "folder-button",
-      ) as HTMLCollectionOf<HTMLElement>
-      for (const button of folderButtons) {
-        button.addEventListener("click", toggleFolder)
-        window.addCleanup(() => button.removeEventListener("click", toggleFolder))
+    // 🌟 Event delegation: a single listener on the explorer root catches clicks
+    // from any folder-button / folder-icon, including ones lazily inserted later.
+    const delegated = (evt: Event) => {
+      const target = evt.target as MaybeHTMLElement
+      if (!target) return
+      const onIcon = target.closest(".folder-icon") as MaybeHTMLElement
+      const onButton =
+        opts.folderClickBehavior === "collapse"
+          ? (target.closest(".folder-button") as MaybeHTMLElement)
+          : undefined
+      if (onIcon || onButton) {
+        toggleFolder(evt)
       }
     }
-
-    const folderIcons = explorer.getElementsByClassName(
-      "folder-icon",
-    ) as HTMLCollectionOf<HTMLElement>
-    for (const icon of folderIcons) {
-      icon.addEventListener("click", toggleFolder)
-      window.addCleanup(() => icon.removeEventListener("click", toggleFolder))
-    }
+    explorerUl.addEventListener("click", delegated)
+    window.addCleanup(() => explorerUl.removeEventListener("click", delegated))
   }
 }
 

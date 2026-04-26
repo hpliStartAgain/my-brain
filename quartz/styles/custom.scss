@@ -1,11 +1,50 @@
 @use "./base.scss";
 
 // ============================================================
-// Custom Theme — Extreme Minimalism
+// Custom Theme — Organic / Natural (wabi-sabi, earth-drawn)
+// ----------------------------------------------------------
+// Visual DNA:
+//   * Earth palette (moss, terracotta, rice paper, dried grass)
+//   * Soft, asymmetric organic radii — no sharp 90° corners
+//   * Paper-grain noise overlay + ambient blob washes
+//   * Fraunces serif headings, Nunito rounded body
+//   * Soft, color-tinted shadows (never pure black)
 // ============================================================
 
 // ----------------------------------------------------------
-// 1. Global typography & body
+// 0. Local design tokens (radii / shadows / accents)
+// ----------------------------------------------------------
+:root {
+  // Radii
+  --radius-sm: 0.75rem;
+  --radius-md: 1rem;
+  --radius-lg: 1.5rem;
+  --radius-xl: 2rem;
+  --radius-pill: 999px;
+
+  // Asymmetric "blob" radii — each component picks one of these for an
+  // organically eroded silhouette
+  --blob-1: 60% 40% 30% 70% / 60% 30% 70% 40%;
+  --blob-2: 30% 70% 70% 30% / 30% 30% 70% 70%;
+  --blob-3: 50% 50% 30% 70% / 40% 70% 30% 60%;
+
+  // Soft, color-tinted shadows (moss / clay)
+  --shadow-soft: 0 4px 20px -2px rgba(93, 112, 82, 0.15);
+  --shadow-float: 0 10px 40px -10px rgba(193, 140, 93, 0.20);
+  --shadow-deep: 0 20px 40px -10px rgba(93, 112, 82, 0.18);
+
+  // Border in raw timber tone (matches palette --lightgray)
+  --border-soft: 1px solid color-mix(in srgb, var(--lightgray) 70%, transparent);
+}
+
+[saved-theme="dark"] {
+  --shadow-soft: 0 4px 20px -2px rgba(168, 193, 149, 0.10);
+  --shadow-float: 0 10px 40px -10px rgba(224, 160, 111, 0.14);
+  --shadow-deep: 0 20px 40px -10px rgba(168, 193, 149, 0.14);
+}
+
+// ----------------------------------------------------------
+// 1. Global base — paper background, body type, grain overlay
 // ----------------------------------------------------------
 html {
   font-size: 16px;
@@ -15,46 +54,117 @@ html {
 }
 
 body {
-  line-height: 1.8;
-  letter-spacing: 0.01em;
+  line-height: 1.75;
+  letter-spacing: 0.005em;
   background-color: var(--light);
   color: var(--darkgray);
+  font-feature-settings: "ss01", "calt", "kern";
+  position: relative;
+}
+
+// Paper-grain noise overlay (single fixed pseudo-element on body).
+// Inline base64 SVG fractalNoise so it ships with no extra request.
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.045;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240' viewBox='0 0 240 240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.17 0 0 0 0 0.17 0 0 0 0 0.14 0 0 0 0.6 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  background-repeat: repeat;
+}
+
+[saved-theme="dark"] body::before {
+  opacity: 0.07;
+  mix-blend-mode: screen;
+}
+
+// Make actual content sit above the grain
+.page,
+header,
+footer,
+#quartz-root {
+  position: relative;
+  z-index: 1;
+}
+
+// Ambient blob washes behind the page — purely decorative, soft & blurred.
+// Anchored to the viewport so they wash the whole experience.
+body::after {
+  content: "";
+  position: fixed;
+  z-index: 0;
+  pointer-events: none;
+  top: -10vh;
+  right: -15vw;
+  width: 55vw;
+  height: 55vw;
+  max-width: 800px;
+  max-height: 800px;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--secondary) 28%, transparent), transparent 70%);
+  border-radius: var(--blob-1);
+  filter: blur(80px);
+  opacity: 0.55;
+}
+
+.page::before {
+  content: "";
+  position: fixed;
+  z-index: 0;
+  pointer-events: none;
+  bottom: -15vh;
+  left: -10vw;
+  width: 50vw;
+  height: 50vw;
+  max-width: 700px;
+  max-height: 700px;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--tertiary) 25%, transparent), transparent 70%);
+  border-radius: var(--blob-2);
+  filter: blur(80px);
+  opacity: 0.45;
 }
 
 // ----------------------------------------------------------
-// 2. Article content — generous spacing, zero decorative clutter
+// 2. Article content — generous, calm, hand-crafted typography
 // ----------------------------------------------------------
 article {
   p {
     margin-top: 0;
-    margin-bottom: 2rem;
-    line-height: 1.8;
-    letter-spacing: 0.01em;
+    margin-bottom: 1.6rem;
+    line-height: 1.85;
+    letter-spacing: 0.005em;
   }
 
   ul,
   ol {
-    margin-top: 1rem;
-    margin-bottom: 2rem;
+    margin-top: 0.8rem;
+    margin-bottom: 1.6rem;
     padding-left: 1.5rem;
 
     li {
-      margin-bottom: 0.5rem;
-      line-height: 1.8;
+      margin-bottom: 0.4rem;
+      line-height: 1.85;
+    }
+
+    li::marker {
+      color: var(--secondary);
     }
   }
 
+  // Quietly clay-tinted blockquotes; left bar is a soft moss line
   blockquote {
     margin: 2rem 0;
-    padding: 0 0 0 1.5rem;
-    border-left: 1px solid var(--lightgray);
-    background: transparent;
-    border-radius: 0;
-    color: var(--gray);
-    font-style: normal;
+    padding: 1rem 1.4rem;
+    border-left: 3px solid var(--secondary);
+    background: color-mix(in srgb, var(--lightgray) 35%, transparent);
+    border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+    color: var(--darkgray);
+    font-style: italic;
 
     p {
-      margin-bottom: 0.8rem;
+      margin-bottom: 0.6rem;
 
       &:last-child {
         margin-bottom: 0;
@@ -63,23 +173,35 @@ article {
   }
 
   img {
-    border-radius: 0;
-    box-shadow: none !important;
-    border: 1px solid var(--lightgray);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-soft);
+    border: 4px solid var(--light);
     margin: 2rem 0;
+    transition: transform 700ms ease, box-shadow 500ms ease;
+
+    &:hover {
+      transform: scale(1.01) rotate(-0.4deg);
+      box-shadow: var(--shadow-float);
+    }
   }
 
   hr {
     margin: 4rem auto;
     border: none;
     height: 1px;
-    background: var(--lightgray);
-    width: 30%;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      var(--lightgray) 30%,
+      var(--lightgray) 70%,
+      transparent
+    );
+    width: 50%;
   }
 }
 
 // ----------------------------------------------------------
-// 3. Headings — elegant weight & spacing
+// 3. Headings — Fraunces serif, soft & varied
 // ----------------------------------------------------------
 h1,
 h2,
@@ -87,110 +209,145 @@ h3,
 h4,
 h5,
 h6 {
-  font-weight: 600;
-  letter-spacing: -0.02em;
+  font-family: var(--headerFont);
+  font-weight: 700;
+  letter-spacing: -0.015em;
   color: var(--dark);
+  // Fraunces variable axes: SOFT (rounding) + opsz (optical size)
+  font-variation-settings: "SOFT" 80, "WONK" 0;
 }
 
 h1 {
-  font-size: 2.2rem;
+  font-size: 2.4rem;
   margin-top: 4rem;
-  margin-bottom: 2rem;
-  line-height: 1.2;
+  margin-bottom: 1.6rem;
+  line-height: 1.18;
+  font-weight: 800;
 }
 
 h2 {
-  font-size: 1.5rem;
+  font-size: 1.7rem;
   margin-top: 3.5rem;
-  margin-bottom: 1.5rem;
-  line-height: 1.3;
+  margin-bottom: 1.2rem;
+  line-height: 1.28;
   padding-bottom: 0;
   border-bottom: none;
+  font-weight: 700;
 }
 
 h3 {
-  font-size: 1.25rem;
-  margin-top: 2.2rem;
-  margin-bottom: 0.8rem;
+  font-size: 1.32rem;
+  margin-top: 2.4rem;
+  margin-bottom: 0.7rem;
   line-height: 1.4;
+  font-weight: 700;
 }
 
 h4,
 h5,
 h6 {
-  font-size: 1.05rem;
+  font-size: 1.08rem;
   margin-top: 1.8rem;
-  margin-bottom: 0.6rem;
+  margin-bottom: 0.5rem;
   line-height: 1.45;
+  font-weight: 600;
 }
 
 // ----------------------------------------------------------
-// 4. Code blocks — minimalist framing
+// 4. Code — soft beige inline, framed block with moss accent
 // ----------------------------------------------------------
 code {
-  font-size: 0.85em;
-  padding: 0.15rem 0.35rem;
-  border-radius: 2px;
-  background: var(--lightgray);
+  font-size: 0.86em;
+  padding: 0.18em 0.45em;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--lightgray) 55%, transparent);
   color: var(--dark);
   font-feature-settings: "liga" 1, "calt" 1;
+  border: 1px solid color-mix(in srgb, var(--lightgray) 80%, transparent);
 }
 
 pre {
-  border-radius: 0;
-  border: 1px solid var(--lightgray);
-  box-shadow: none !important;
-  background: transparent !important;
+  border-radius: var(--radius-lg);
+  border: var(--border-soft);
+  box-shadow: var(--shadow-soft);
+  background: color-mix(in srgb, var(--light) 92%, var(--lightgray)) !important;
   margin: 2rem 0;
+  padding: 1rem 1.2rem;
+  position: relative;
 
-  &>code {
-    font-size: 0.82rem;
-    line-height: 1.65;
+  &::before {
+    // Hand-drawn corner accent dot
+    content: "";
+    position: absolute;
+    top: 0.7rem;
+    left: 0.9rem;
+    width: 0.45rem;
+    height: 0.45rem;
+    border-radius: 50%;
+    background: var(--secondary);
+    opacity: 0.7;
+  }
+
+  & > code {
+    font-size: 0.84rem;
+    line-height: 1.7;
     background: transparent;
+    border: none;
+    padding: 0;
   }
 }
 
 // ----------------------------------------------------------
-// 5. Links — quiet interaction
+// 5. Links — moss underline that grows on hover
 // ----------------------------------------------------------
 a {
-  transition: color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
-  color: var(--dark);
+  transition: color 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
+  color: var(--secondary);
   text-decoration: none;
 
   &.internal {
     background-color: transparent;
     border-radius: 0;
-    padding: 0;
-    border-bottom: 1px solid var(--lightgray);
+    padding: 0 1px;
+    border-bottom: 1px solid color-mix(in srgb, var(--secondary) 35%, transparent);
+    color: var(--secondary);
 
     &:hover {
-      background-color: transparent;
-      border-bottom: 1px solid var(--dark);
+      background-color: color-mix(in srgb, var(--secondary) 10%, transparent);
+      border-bottom-color: var(--secondary);
       color: var(--dark);
+      border-radius: var(--radius-sm);
     }
   }
 }
 
 // ----------------------------------------------------------
-// Custom Components overides (Minimalism)
+// 6. Popovers / Search — soft cards with organic radii
 // ----------------------------------------------------------
 .popover {
-  border-radius: 0 !important;
-  box-shadow: none !important;
-  border: 1px solid var(--lightgray) !important;
-  background-color: var(--light) !important;
+  border-radius: var(--radius-xl) !important;
+  box-shadow: var(--shadow-float) !important;
+  border: var(--border-soft) !important;
+  background-color: color-mix(in srgb, var(--light) 96%, white) !important;
+  backdrop-filter: blur(8px);
 }
 
 button.search-button {
-  background: transparent !important;
-  border-radius: 0 !important;
-  border: 1px solid var(--lightgray) !important;
-  box-shadow: none !important;
-  transition: border-color 0.2s ease;
-  
+  background: color-mix(in srgb, var(--light) 70%, transparent) !important;
+  border-radius: var(--radius-pill) !important;
+  border: 1.5px solid var(--lightgray) !important;
+  box-shadow: var(--shadow-soft) !important;
+  transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+  padding: 0.6rem 1.2rem !important;
+
   &:hover {
-    border-color: var(--dark) !important;
+    transform: scale(1.03);
+    border-color: var(--secondary) !important;
+    box-shadow: var(--shadow-float) !important;
+  }
+
+  &:active {
+    transform: scale(0.97);
   }
 }
 
@@ -198,130 +355,173 @@ button.search-button {
   & > #search-container {
     & > #search-space {
       & > #search-layout {
-        border-radius: 0;
-        box-shadow: none !important;
-        border: 1px solid var(--lightgray);
-        background: var(--light) !important;
+        border-radius: var(--radius-xl);
+        box-shadow: var(--shadow-deep) !important;
+        border: var(--border-soft);
+        background: color-mix(in srgb, var(--light) 96%, white) !important;
+        backdrop-filter: blur(10px);
       }
     }
   }
 }
 
 // ----------------------------------------------------------
-// 6. Left sidebar — Explorer refinement
+// 7. Page title (top-left logo / brand)
 // ----------------------------------------------------------
 .page-title {
-  font-size: 1.5rem;
-  font-weight: 700;
-  letter-spacing: -0.02em;
+  font-family: var(--headerFont);
+  font-size: 1.6rem;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  font-variation-settings: "SOFT" 100;
 
   a {
     color: var(--dark);
-    font-weight: 700;
+    border-bottom: none;
 
     &:hover {
       color: var(--secondary);
+      background: transparent;
     }
   }
 }
 
+// ----------------------------------------------------------
+// 8. Left sidebar — Explorer (organic, hand-crafted nav)
+// ----------------------------------------------------------
 .explorer {
   h2 {
-    font-size: 0.85rem;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--gray);
-    font-weight: 600;
+    font-family: var(--headerFont);
+    font-size: 0.95rem;
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--dark);
+    font-weight: 700;
+    font-variation-settings: "SOFT" 100;
   }
 }
 
 .explorer-content {
   ul {
     li {
-      line-height: 1.7;
-      margin-bottom: 1px;
+      line-height: 1.65;
+      margin-bottom: 2px;
 
-      &>a {
-        font-size: 0.88rem;
-        padding: 0.2rem 0;
+      & > a {
+        font-size: 0.9rem;
+        padding: 0.25rem 0.7rem;
         display: inline-block;
-        transition: color 0.15s ease, opacity 0.15s ease;
-        opacity: 0.7;
+        border-radius: var(--radius-pill);
+        transition: background-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
+        opacity: 0.78;
+        border-bottom: none;
 
         &:hover {
           opacity: 1;
           color: var(--secondary);
+          background: color-mix(in srgb, var(--secondary) 10%, transparent);
+          transform: translateX(2px);
         }
 
         &.active {
           opacity: 1;
-          font-weight: 600;
+          font-weight: 700;
+          color: var(--light);
+          background: var(--secondary);
         }
       }
     }
   }
 
   .folder-container {
+    margin-top: 0.15rem;
 
-    div>button span,
-    div>a {
-      font-size: 0.9rem;
-      font-weight: 600;
+    div > button span,
+    div > a {
+      font-family: var(--headerFont);
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--dark);
+      font-variation-settings: "SOFT" 80;
+    }
+
+    div > a {
+      border-bottom: none;
+
+      &:hover {
+        color: var(--secondary);
+        background: transparent;
+      }
     }
   }
 
-  .folder-outer>ul {
+  .folder-icon {
+    color: var(--tertiary);
+  }
+
+  .folder-outer > ul {
     margin-left: 0;
-    padding-left: 1rem;
-    border-left: 1px solid var(--lightgray);
+    padding-left: 0.9rem;
+    border-left: 1.5px dashed color-mix(in srgb, var(--tertiary) 45%, transparent);
   }
 }
 
 // ----------------------------------------------------------
-// 7. Right sidebar — TOC (On this page)
+// 9. Right sidebar — TOC (On this page)
 // ----------------------------------------------------------
 .toc {
   position: relative;
-  
+
   &::before {
     content: "";
     position: absolute;
     left: -1rem;
-    top: 0;
-    bottom: 0;
-    width: 1px;
-    background-color: var(--lightgray);
+    top: 0.5rem;
+    bottom: 0.5rem;
+    width: 1.5px;
+    background: linear-gradient(
+      to bottom,
+      transparent,
+      color-mix(in srgb, var(--tertiary) 50%, transparent) 20%,
+      color-mix(in srgb, var(--secondary) 50%, transparent) 80%,
+      transparent
+    );
+    border-radius: 1px;
   }
 
   button.toc-header h3 {
-    font-size: 0.75rem;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: var(--gray);
-    font-weight: 500;
+    font-family: var(--headerFont);
+    font-size: 0.85rem;
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--dark);
+    font-weight: 700;
+    font-variation-settings: "SOFT" 100;
   }
 }
 
 ul.toc-content.overflow {
-  &>li {
+  & > li {
     margin-bottom: 4px;
 
-    &>a {
-      font-size: 0.82rem;
+    & > a {
+      font-size: 0.84rem;
       line-height: 1.6;
-      padding: 0;
+      padding: 0.15rem 0.5rem;
       color: var(--gray);
-      transition: color 0.1s ease;
+      transition: color 0.15s ease, background-color 0.2s ease;
       border-bottom: none;
+      border-radius: var(--radius-sm);
 
       &:hover {
-        color: var(--dark);
+        color: var(--secondary);
+        background: color-mix(in srgb, var(--secondary) 8%, transparent);
         border-bottom: none;
       }
 
       &.in-view {
         color: var(--dark);
-        font-weight: 500;
+        font-weight: 700;
       }
     }
   }
@@ -334,137 +534,187 @@ ul.toc-content.overflow {
 }
 
 // ----------------------------------------------------------
-// 8. Backlinks section
+// 10. Backlinks
 // ----------------------------------------------------------
 .backlinks {
-  border-top: 1px solid var(--lightgray);
+  border-top: var(--border-soft);
   padding-top: 2rem;
   margin-top: 4rem;
 
   h3 {
-    font-size: 0.75rem;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: var(--gray);
-    font-weight: 500;
+    font-family: var(--headerFont);
+    font-size: 0.85rem;
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--dark);
+    font-weight: 700;
+    font-variation-settings: "SOFT" 100;
+  }
+
+  ul li a {
+    display: inline-block;
+    padding: 0.2rem 0.7rem;
+    background: color-mix(in srgb, var(--lightgray) 50%, transparent);
+    border-radius: var(--radius-pill);
+    margin: 0.15rem 0.2rem 0.15rem 0;
+    border-bottom: none;
+    font-size: 0.85rem;
+    transition: all 0.2s ease;
+
+    &:hover {
+      background: var(--secondary);
+      color: var(--light);
+      transform: translateY(-1px);
+    }
   }
 }
 
 // ----------------------------------------------------------
-// 9. Buttons and Inputs minimalism
+// 11. Inputs — pill-shaped, semi-transparent
 // ----------------------------------------------------------
-input[type="text"], input[type="search"] {
-  border-radius: 0;
-  border: 1px solid var(--lightgray);
-  background: transparent;
-  
+input[type="text"],
+input[type="search"] {
+  border-radius: var(--radius-pill);
+  border: 1.5px solid var(--lightgray);
+  background: color-mix(in srgb, var(--light) 60%, transparent);
+  padding: 0.65rem 1rem;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+
   &:focus {
     outline: none;
-    border-color: var(--dark);
+    border-color: var(--secondary);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--secondary) 22%, transparent);
   }
 }
 
 .graph {
-  border: 1px solid var(--lightgray) !important;
-  border-radius: 0 !important;
-  box-shadow: none !important;
-  background: var(--light) !important;
+  border: var(--border-soft) !important;
+  border-radius: var(--radius-xl) !important;
+  box-shadow: var(--shadow-soft) !important;
+  background: color-mix(in srgb, var(--light) 96%, white) !important;
 }
 
 // ----------------------------------------------------------
-// 9. Breadcrumbs — subtle and clean
+// 12. Breadcrumbs
 // ----------------------------------------------------------
 .breadcrumb-container {
   font-size: 0.85rem;
-  opacity: 0.65;
-  margin-bottom: 0.5rem;
+  opacity: 0.7;
+  margin-bottom: 0.8rem;
 
   a {
-    font-weight: 400;
+    font-weight: 500;
+    color: var(--gray);
+    border-bottom: none;
+
+    &:hover {
+      color: var(--secondary);
+    }
   }
 }
 
 // ----------------------------------------------------------
-// 10. Article title & meta
+// 13. Article title & meta
 // ----------------------------------------------------------
-.page>#quartz-body .page-header {
-
-  article>h1,
+.page > #quartz-body .page-header {
+  article > h1,
   & h1 {
-    font-size: 2.2rem;
-    line-height: 1.25;
+    font-size: 2.6rem;
+    line-height: 1.18;
     letter-spacing: -0.02em;
-    margin-bottom: 0.3rem;
+    margin-bottom: 0.4rem;
+    font-weight: 800;
+    font-variation-settings: "SOFT" 100;
   }
 }
 
 .article-title {
-  font-size: 2.2rem;
-  line-height: 1.25;
+  font-family: var(--headerFont);
+  font-size: 2.6rem;
+  line-height: 1.18;
   letter-spacing: -0.02em;
-  font-weight: 700;
+  font-weight: 800;
+  font-variation-settings: "SOFT" 100;
 }
 
 .content-meta {
   font-size: 0.88rem;
   color: var(--gray);
-  margin-top: 0.3rem;
-  margin-bottom: 1.5rem;
+  margin-top: 0.4rem;
+  margin-bottom: 1.8rem;
+  font-style: italic;
 }
 
 // ----------------------------------------------------------
-// 11. Tags
+// 14. Tags — clay pills
 // ----------------------------------------------------------
 .tag-link {
   font-size: 0.82rem;
+  background: color-mix(in srgb, var(--tertiary) 18%, transparent);
+  color: var(--tertiary);
+  padding: 0.2rem 0.7rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid color-mix(in srgb, var(--tertiary) 35%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--tertiary) 35%, transparent);
+  transition: all 0.2s ease;
+  margin: 0 0.2rem 0.2rem 0;
+  display: inline-block;
+
+  &::before {
+    content: "#";
+    margin-right: 0.05em;
+    opacity: 0.7;
+  }
+
+  &:hover {
+    background: var(--tertiary);
+    color: var(--light);
+    transform: translateY(-1px);
+    border-bottom-color: var(--tertiary);
+  }
 }
 
 // ----------------------------------------------------------
-// 12. Table styling
+// 15. Tables — soft framed
 // ----------------------------------------------------------
-.table-container>table {
-  border-radius: 8px;
+.table-container > table {
+  border-radius: var(--radius-lg);
   overflow: hidden;
-  border: 1px solid var(--lightgray);
+  border: var(--border-soft);
+  box-shadow: var(--shadow-soft);
 
   th {
-    background: color-mix(in srgb, var(--lightgray) 40%, transparent);
-    font-weight: 600;
-    font-size: 0.9rem;
+    background: color-mix(in srgb, var(--lightgray) 50%, transparent);
+    font-family: var(--headerFont);
+    font-weight: 700;
+    font-size: 0.92rem;
+    color: var(--dark);
   }
 
   td {
-    font-size: 0.9rem;
+    font-size: 0.92rem;
+  }
+
+  tr:hover td {
+    background: color-mix(in srgb, var(--secondary) 5%, transparent);
   }
 }
 
 // ----------------------------------------------------------
-// 13. Search button
-// ----------------------------------------------------------
-.search>.search-button {
-  border-radius: 8px;
-  border: 1px solid var(--lightgray);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
-
-  &:hover {
-    border-color: var(--gray);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
-  }
-}
-
-// ----------------------------------------------------------
-// 14. Footer
+// 16. Footer
 // ----------------------------------------------------------
 footer {
-  font-size: 0.85rem;
-  border-top: 1px solid var(--lightgray);
+  font-size: 0.86rem;
+  border-top: var(--border-soft);
   padding-top: 2rem;
+  margin-top: 4rem;
+  color: var(--gray);
 }
 
 // ----------------------------------------------------------
-// 15. Sidebar spacing polish
+// 17. Sidebar spacing
 // ----------------------------------------------------------
-.page>#quartz-body {
+.page > #quartz-body {
   & .sidebar {
     padding-top: 4rem;
   }
@@ -479,11 +729,11 @@ footer {
 }
 
 // ----------------------------------------------------------
-// 16. Scrollbar styling (Webkit)
+// 18. Scrollbar — moss thumb
 // ----------------------------------------------------------
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
@@ -491,32 +741,81 @@ footer {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--lightgray);
-  border-radius: 3px;
+  background: color-mix(in srgb, var(--secondary) 30%, transparent);
+  border-radius: var(--radius-pill);
+  border: 2px solid transparent;
+  background-clip: padding-box;
 
   &:hover {
-    background: var(--gray);
+    background: color-mix(in srgb, var(--secondary) 60%, transparent);
+    background-clip: padding-box;
   }
 }
 
 // ----------------------------------------------------------
-// 17. Selection color
+// 19. Selection — terracotta wash
 // ----------------------------------------------------------
 ::selection {
-  background: color-mix(in srgb, var(--secondary) 25%, transparent);
+  background: color-mix(in srgb, var(--tertiary) 35%, transparent);
   color: var(--dark);
 }
 
 // ----------------------------------------------------------
-// 18. Callout refinement
+// 20. Callouts — softer asymmetric radii
 // ----------------------------------------------------------
 .callout {
-  border-radius: 8px;
+  border-radius: var(--radius-xl);
   margin: 1.5rem 0;
+  box-shadow: var(--shadow-soft);
+  border-top-right-radius: 3rem; // organic asymmetry
 }
 
 // ----------------------------------------------------------
-// 19. Full-width layout — 仅在桌面端铺满屏幕，正文宽度固定
+// 21. Article cards / list items (PageList, RecentNotes etc.)
+// ----------------------------------------------------------
+.page-listing,
+ul.section-ul {
+  & > li {
+    border-radius: var(--radius-lg);
+    padding: 0.8rem 1rem;
+    transition: background-color 0.25s ease, transform 0.25s ease;
+    border-bottom: none;
+    list-style: none;
+
+    &:hover {
+      background: color-mix(in srgb, var(--lightgray) 40%, transparent);
+      transform: translateX(2px);
+    }
+  }
+}
+
+// ----------------------------------------------------------
+// 22. Dark mode toggle / Reader mode buttons
+// ----------------------------------------------------------
+.darkmode,
+.readermode {
+  & button {
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--light) 70%, transparent);
+    border: 1.5px solid var(--lightgray);
+    transition: all 0.2s ease;
+    width: 2.5rem;
+    height: 2.5rem;
+
+    &:hover {
+      transform: scale(1.08);
+      border-color: var(--secondary);
+      box-shadow: var(--shadow-soft);
+    }
+
+    &:active {
+      transform: scale(0.94);
+    }
+  }
+}
+
+// ----------------------------------------------------------
+// 23. Full-width layout — desktop fills screen, content max 800px
 // ----------------------------------------------------------
 @media (min-width: 1200px) {
   .page {
@@ -524,25 +823,33 @@ footer {
     padding: 0;
     box-sizing: border-box;
 
-    &>#quartz-body {
+    & > #quartz-body {
       width: 100%;
-      // 两侧 sidebar 均分剩余空间，正文区域固定最大 800px
-      grid-template-columns: 1fr min(800px, 100%) 1fr;
-      column-gap: 2rem;
+      grid-template-columns: 1fr min(820px, 100%) 1fr;
+      column-gap: 2.5rem;
       padding: 0 2rem;
       box-sizing: border-box;
     }
 
-    // 左侧 sidebar：内容靠右侧对齐（贴近正文区）
-    &>#quartz-body>.sidebar.left {
+    & > #quartz-body > .sidebar.left {
       padding-right: 1rem;
       padding-left: 0;
     }
 
-    // 右侧 sidebar：内容靠左侧对齐（贴近正文区）
-    &>#quartz-body>.sidebar.right {
+    & > #quartz-body > .sidebar.right {
       padding-left: 1rem;
       padding-right: 0;
     }
+  }
+}
+
+// ----------------------------------------------------------
+// 24. Mobile — gentle the blob washes so they don't bleed
+// ----------------------------------------------------------
+@media (max-width: 800px) {
+  body::after,
+  .page::before {
+    opacity: 0.3;
+    filter: blur(60px);
   }
 }
