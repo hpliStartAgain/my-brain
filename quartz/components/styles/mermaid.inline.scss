@@ -2,25 +2,32 @@
   position: absolute;
   display: flex;
   float: right;
-  padding: 0.4rem;
-  margin: 0.3rem;
+  padding: 0.45rem;
+  margin: 0.4rem;
   right: 0; // NOTE: right will be set in mermaid.inline.ts
   color: var(--gray);
-  border-color: var(--dark);
-  background-color: var(--light);
-  border: 1px solid;
-  border-radius: 5px;
+  background-color: color-mix(in srgb, var(--light) 80%, transparent);
+  border: 1.5px solid var(--lightgray);
+  border-radius: 999px;
+  box-shadow: var(--shadow-soft);
+  backdrop-filter: blur(6px);
   opacity: 0;
-  transition: 0.2s;
+  transition: all 0.25s ease;
 
   & > svg {
-    fill: var(--light);
-    filter: contrast(0.3);
+    fill: var(--secondary);
+    filter: none;
   }
 
   &:hover {
     cursor: pointer;
     border-color: var(--secondary);
+    transform: scale(1.05);
+    box-shadow: var(--shadow-float);
+  }
+
+  &:active {
+    transform: scale(0.95);
   }
 
   &:focus {
@@ -55,7 +62,8 @@ pre {
   & > #mermaid-space {
     border: 1px solid var(--lightgray);
     background-color: var(--light);
-    border-radius: 5px;
+    border-radius: 1.5rem;
+    box-shadow: var(--shadow-deep);
     position: fixed;
     top: 50%;
     left: 50%;
@@ -85,46 +93,52 @@ pre {
 
     & > .mermaid-controls {
       position: absolute;
-      bottom: 20px;
-      right: 20px;
+      bottom: 24px;
+      right: 24px;
       display: flex;
-      gap: 8px;
-      padding: 8px;
-      background: var(--light);
-      border: 1px solid var(--lightgray);
-      border-radius: 6px;
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      gap: 10px;
+      padding: 10px;
+      background: color-mix(in srgb, var(--light) 80%, transparent);
+      border: 1.5px solid var(--lightgray);
+      border-radius: 999px;
+      box-shadow: var(--shadow-float);
+      backdrop-filter: blur(8px);
       z-index: 2;
 
       .mermaid-control-button {
         display: flex;
         align-items: center;
         justify-content: center;
-        width: 32px;
-        height: 32px;
+        width: 36px;
+        height: 36px;
         padding: 0;
-        border: 1px solid var(--lightgray);
+        border: 1.5px solid var(--lightgray);
         background: var(--light);
         color: var(--dark);
-        border-radius: 4px;
+        border-radius: 50%;
         cursor: pointer;
         font-size: 16px;
         font-family: var(--bodyFont);
+        font-weight: 700;
         transition: all 0.2s ease;
 
         &:hover {
-          background: var(--lightgray);
+          background: var(--secondary);
+          color: var(--light);
+          border-color: var(--secondary);
+          transform: scale(1.06);
         }
 
         &:active {
-          transform: translateY(1px);
+          transform: scale(0.94);
         }
 
-        // Style the reset button differently
+        // Reset button is wider pill
         &:nth-child(2) {
           width: auto;
-          padding: 0 12px;
-          font-size: 14px;
+          padding: 0 14px;
+          font-size: 13px;
+          border-radius: 999px;
         }
       }
     }

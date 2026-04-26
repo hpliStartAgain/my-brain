@@ -44,6 +44,66 @@
 }
 
 // ----------------------------------------------------------
+// 0b. Mermaid organic palette (consumed by mermaid.inline.ts).
+// These tokens flip with theme and feed mermaid's themeVariables so all
+// diagrams (flowchart / sequence / state / ER / git / pie / gantt) stay
+// visually unified with the rest of the site.
+// ----------------------------------------------------------
+:root {
+  --mm-bg: #FDFCF8;
+  --mm-node-bg: #F5F1E6;
+  --mm-node-border: #5D7052;
+  --mm-text: #2C2C24;
+  --mm-line: #78786C;
+  --mm-cluster-bg: #EFEEE6;
+  --mm-cluster-border: #A8B5A0;
+  --mm-note-bg: #F2E5D5;
+  --mm-note-border: #C18C5D;
+  --mm-actor-bg: #DCE2D5;
+  --mm-actor-border: #5D7052;
+  --mm-active-bg: #B5C2A8;
+  --mm-active-border: #5D7052;
+  --mm-edge-label-bg: #FDFCF8;
+  --mm-fill-0: #DCE2D5; // moss tint
+  --mm-fill-1: #F2E5D5; // clay tint
+  --mm-fill-2: #EFEEE6; // sand tint
+  --mm-fill-3: #E5E0D0;
+  --mm-fill-4: #D6CFB6;
+  --mm-fill-5: #BFC9B5;
+  --mm-fill-6: #E0C9A8;
+  --mm-fill-7: #C9C2A8;
+  --mm-error-bg: #F2D7D2;
+  --mm-error-text: #A85448;
+}
+
+[saved-theme="dark"] {
+  --mm-bg: #1F1E1A;
+  --mm-node-bg: #2A2924;
+  --mm-node-border: #A8C195;
+  --mm-text: #F3F1E9;
+  --mm-line: #9B9787;
+  --mm-cluster-bg: #2C2B26;
+  --mm-cluster-border: #4D5A45;
+  --mm-note-bg: #3A3128;
+  --mm-note-border: #E0A06F;
+  --mm-actor-bg: #2F3A2A;
+  --mm-actor-border: #A8C195;
+  --mm-active-bg: #4D5A45;
+  --mm-active-border: #A8C195;
+  --mm-edge-label-bg: #1F1E1A;
+  --mm-fill-0: #2F3A2A;
+  --mm-fill-1: #3A3128;
+  --mm-fill-2: #2C2B26;
+  --mm-fill-3: #353329;
+  --mm-fill-4: #423E32;
+  --mm-fill-5: #3D4A35;
+  --mm-fill-6: #483A2C;
+  --mm-fill-7: #3F3D2A;
+  --mm-error-bg: #3F2622;
+  --mm-error-text: #E0876E;
+}
+
+// ----------------------------------------------------------
 // 1. Global base — paper background, body type, grain overlay
 // ----------------------------------------------------------
 html {

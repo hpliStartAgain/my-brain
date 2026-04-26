@@ -172,7 +172,11 @@ class DiagramPanZoom {
   }
 }
 
+// Read all the CSS variables that drive mermaid's organic look-and-feel.
+// Base palette + derived `--mm-*` tokens (defined in custom.scss for both
+// light & dark themes) keep every mermaid diagram on-brand.
 const cssVars = [
+  // Base palette
   "--secondary",
   "--tertiary",
   "--gray",
@@ -181,7 +185,33 @@ const cssVars = [
   "--highlight",
   "--dark",
   "--darkgray",
+  "--bodyFont",
   "--codeFont",
+  // Mermaid-specific organic tokens
+  "--mm-bg",
+  "--mm-node-bg",
+  "--mm-node-border",
+  "--mm-text",
+  "--mm-line",
+  "--mm-cluster-bg",
+  "--mm-cluster-border",
+  "--mm-note-bg",
+  "--mm-note-border",
+  "--mm-actor-bg",
+  "--mm-actor-border",
+  "--mm-active-bg",
+  "--mm-active-border",
+  "--mm-edge-label-bg",
+  "--mm-fill-0",
+  "--mm-fill-1",
+  "--mm-fill-2",
+  "--mm-fill-3",
+  "--mm-fill-4",
+  "--mm-fill-5",
+  "--mm-fill-6",
+  "--mm-fill-7",
+  "--mm-error-bg",
+  "--mm-error-text",
 ] as const
 
 let mermaidImport = undefined
@@ -219,21 +249,146 @@ document.addEventListener("nav", async () => {
       {} as Record<(typeof cssVars)[number], string>,
     )
 
-    const darkMode = document.documentElement.getAttribute("saved-theme") === "dark"
+    // Note: dark/light is handled entirely via CSS vars (--mm-* flip on
+    // [saved-theme="dark"]). The "themechange" listener re-runs this function
+    // so themeVariables always reflect the current palette.
+    const m = computedStyleMap
     mermaid.initialize({
       startOnLoad: false,
       securityLevel: "loose",
-      theme: darkMode ? "dark" : "base",
+      // `base` lets themeVariables fully take over; we feed it our organic palette
+      theme: "base",
+      // Softer, more organic edge curves for flowcharts
+      flowchart: { curve: "basis", htmlLabels: true, useMaxWidth: true },
+      sequence: { useMaxWidth: true, mirrorActors: false },
       themeVariables: {
-        fontFamily: computedStyleMap["--codeFont"],
-        primaryColor: computedStyleMap["--light"],
-        primaryTextColor: computedStyleMap["--darkgray"],
-        primaryBorderColor: computedStyleMap["--tertiary"],
-        lineColor: computedStyleMap["--darkgray"],
-        secondaryColor: computedStyleMap["--secondary"],
-        tertiaryColor: computedStyleMap["--tertiary"],
-        clusterBkg: computedStyleMap["--light"],
-        edgeLabelBackground: computedStyleMap["--highlight"],
+        // Typography — body sans-serif gives nodes a softer, less terminal feel
+        fontFamily: m["--bodyFont"] || m["--codeFont"],
+        fontSize: "14px",
+
+        // Background / canvas
+        background: m["--mm-bg"],
+        mainBkg: m["--mm-node-bg"],
+        secondBkg: m["--mm-fill-1"],
+        tertiaryColor: m["--mm-fill-2"],
+
+        // Primary node (default flowchart node)
+        primaryColor: m["--mm-node-bg"],
+        primaryTextColor: m["--mm-text"],
+        primaryBorderColor: m["--mm-node-border"],
+
+        // Secondary / tertiary node tiers
+        secondaryColor: m["--mm-fill-1"],
+        secondaryTextColor: m["--mm-text"],
+        secondaryBorderColor: m["--mm-note-border"],
+        tertiaryTextColor: m["--mm-text"],
+        tertiaryBorderColor: m["--mm-cluster-border"],
+
+        // Lines / edges / labels
+        lineColor: m["--mm-line"],
+        textColor: m["--mm-text"],
+        titleColor: m["--mm-text"],
+        edgeLabelBackground: m["--mm-edge-label-bg"],
+        labelTextColor: m["--mm-text"],
+
+        // Cluster (subgraph) styling
+        clusterBkg: m["--mm-cluster-bg"],
+        clusterBorder: m["--mm-cluster-border"],
+
+        // Note styling (used in flowchart + sequence + class)
+        noteBkgColor: m["--mm-note-bg"],
+        noteBorderColor: m["--mm-note-border"],
+        noteTextColor: m["--mm-text"],
+
+        // Sequence diagram — actors, signals, activations
+        actorBkg: m["--mm-actor-bg"],
+        actorBorder: m["--mm-actor-border"],
+        actorTextColor: m["--mm-text"],
+        actorLineColor: m["--mm-line"],
+        signalColor: m["--mm-text"],
+        signalTextColor: m["--mm-text"],
+        labelBoxBkgColor: m["--mm-fill-1"],
+        labelBoxBorderColor: m["--mm-note-border"],
+        loopTextColor: m["--mm-text"],
+        activationBkgColor: m["--mm-active-bg"],
+        activationBorderColor: m["--mm-active-border"],
+        sequenceNumberColor: m["--mm-bg"],
+
+        // Gantt
+        sectionBkgColor: m["--mm-fill-0"],
+        altSectionBkgColor: m["--mm-fill-2"],
+        sectionBkgColor2: m["--mm-fill-3"],
+        gridColor: m["--mm-cluster-border"],
+        taskBkgColor: m["--mm-actor-bg"],
+        taskBorderColor: m["--mm-actor-border"],
+        taskTextColor: m["--mm-text"],
+        taskTextLightColor: m["--mm-bg"],
+        taskTextOutsideColor: m["--mm-text"],
+        taskTextDarkColor: m["--mm-text"],
+        activeTaskBkgColor: m["--mm-active-bg"],
+        activeTaskBorderColor: m["--mm-active-border"],
+        doneTaskBkgColor: m["--mm-cluster-bg"],
+        doneTaskBorderColor: m["--mm-cluster-border"],
+        critBkgColor: m["--mm-error-bg"],
+        critBorderColor: m["--mm-error-text"],
+        todayLineColor: m["--tertiary"],
+
+        // State diagram
+        labelColor: m["--mm-text"],
+        errorBkgColor: m["--mm-error-bg"],
+        errorTextColor: m["--mm-error-text"],
+
+        // Flowchart cluster fill rotation (used when nodes lack explicit class)
+        fillType0: m["--mm-fill-0"],
+        fillType1: m["--mm-fill-1"],
+        fillType2: m["--mm-fill-2"],
+        fillType3: m["--mm-fill-3"],
+        fillType4: m["--mm-fill-4"],
+        fillType5: m["--mm-fill-5"],
+        fillType6: m["--mm-fill-6"],
+        fillType7: m["--mm-fill-7"],
+
+        // Pie chart palette
+        pie1: m["--secondary"],
+        pie2: m["--tertiary"],
+        pie3: m["--mm-fill-3"],
+        pie4: m["--mm-fill-5"],
+        pie5: m["--mm-fill-6"],
+        pie6: m["--mm-fill-4"],
+        pie7: m["--mm-fill-7"],
+        pie8: m["--mm-fill-0"],
+        pie9: m["--mm-fill-1"],
+        pie10: m["--mm-fill-2"],
+        pie11: m["--gray"],
+        pie12: m["--darkgray"],
+        pieTitleTextColor: m["--mm-text"],
+        pieSectionTextColor: m["--mm-text"],
+        pieLegendTextColor: m["--mm-text"],
+        pieStrokeColor: m["--mm-bg"],
+        pieOuterStrokeColor: m["--mm-line"],
+
+        // Git graph branch colors
+        git0: m["--secondary"],
+        git1: m["--tertiary"],
+        git2: m["--mm-fill-5"],
+        git3: m["--mm-fill-6"],
+        git4: m["--mm-fill-3"],
+        git5: m["--mm-fill-4"],
+        git6: m["--mm-fill-7"],
+        git7: m["--gray"],
+        gitBranchLabel0: m["--mm-bg"],
+        gitBranchLabel1: m["--mm-bg"],
+        gitBranchLabel2: m["--mm-text"],
+        gitBranchLabel3: m["--mm-text"],
+        gitBranchLabel4: m["--mm-text"],
+        gitBranchLabel5: m["--mm-text"],
+        gitBranchLabel6: m["--mm-text"],
+        gitBranchLabel7: m["--mm-text"],
+        commitLabelColor: m["--mm-text"],
+        commitLabelBackground: m["--mm-edge-label-bg"],
+        tagLabelColor: m["--mm-text"],
+        tagLabelBackground: m["--mm-fill-1"],
+        tagLabelBorder: m["--mm-note-border"],
       },
     })
 
