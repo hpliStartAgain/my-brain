@@ -214,6 +214,125 @@ const cssVars = [
   "--mm-error-text",
 ] as const
 
+// SVG-scoped CSS that overrides any in-document mermaid color directives
+// (style/classDef/linkStyle) and keeps every diagram on the organic palette.
+// Injected once per rendered <svg> via `unifyMermaidColors`.
+const ORGANIC_OVERRIDE_CSS = `
+  /* Node shapes — strip user fills, restore organic palette */
+  .node > rect,
+  .node > polygon,
+  .node > circle,
+  .node > ellipse,
+  .node > path,
+  .node .basic.label-container {
+    fill: var(--mm-node-bg) !important;
+    stroke: var(--mm-node-border) !important;
+    stroke-width: 1.5px !important;
+  }
+
+  /* Subgraph clusters — softer dashed border */
+  .cluster > rect,
+  .cluster > polygon,
+  .cluster > path {
+    fill: var(--mm-cluster-bg) !important;
+    stroke: var(--mm-cluster-border) !important;
+    stroke-width: 1.5px !important;
+    stroke-dasharray: 4 3 !important;
+  }
+
+  /* Notes (flowchart + sequence + class diagrams) */
+  g.note > rect,
+  g.note > polygon,
+  rect.note,
+  .note {
+    fill: var(--mm-note-bg) !important;
+    stroke: var(--mm-note-border) !important;
+  }
+
+  /* Sequence diagram actors */
+  rect.actor,
+  .actor {
+    fill: var(--mm-actor-bg) !important;
+    stroke: var(--mm-actor-border) !important;
+  }
+  line.actor-line { stroke: var(--mm-line) !important; }
+  .activation0, .activation1, .activation2 {
+    fill: var(--mm-active-bg) !important;
+    stroke: var(--mm-active-border) !important;
+  }
+
+  /* All text — force readable contrast on the unified palette */
+  text,
+  .nodeLabel,
+  .edgeLabel,
+  .label,
+  .messageText,
+  .actor-text,
+  .actor > tspan,
+  .loopText,
+  .loopText > tspan,
+  .labelText,
+  .labelText > tspan,
+  .cluster .nodeLabel,
+  .cluster-label .nodeLabel,
+  span.nodeLabel,
+  foreignObject div,
+  foreignObject span,
+  foreignObject p {
+    color: var(--mm-text) !important;
+    fill: var(--mm-text) !important;
+  }
+
+  /* Edge labels — pill-like background that matches page paper */
+  .edgeLabel {
+    background-color: var(--mm-edge-label-bg) !important;
+  }
+  .edgeLabel rect,
+  .edgeLabel foreignObject {
+    fill: var(--mm-edge-label-bg) !important;
+  }
+
+  /* Edge / link paths and arrowheads */
+  .edgePath > path.path,
+  .edgePath path,
+  .flowchart-link,
+  path.relation {
+    stroke: var(--mm-line) !important;
+    fill: none !important;
+  }
+  marker path,
+  .edgePath marker path,
+  .marker {
+    fill: var(--mm-line) !important;
+    stroke: var(--mm-line) !important;
+  }
+
+  /* Pie chart slices keep mermaid's themeVariables (pie1..12), but enforce
+     readable label color */
+  .pieTitleText, .slice, .legend text { fill: var(--mm-text) !important; }
+`
+
+function unifyMermaidColors(node: HTMLElement) {
+  const svg = node.querySelector("svg")
+  if (!svg) return
+  // Idempotent — avoid stacking <style> on theme re-render
+  const existing = svg.querySelector("style[data-organic-override]")
+  if (existing) existing.remove()
+
+  const style = document.createElementNS("http://www.w3.org/2000/svg", "style")
+  style.setAttribute("data-organic-override", "true")
+  style.textContent = ORGANIC_OVERRIDE_CSS
+  // Insert at end of <defs> if present so it sits after mermaid's own
+  // <style> block and wins selector specificity ties (we also use
+  // !important so order is mostly insurance).
+  const defs = svg.querySelector("defs")
+  if (defs) {
+    defs.appendChild(style)
+  } else {
+    svg.insertBefore(style, svg.firstChild)
+  }
+}
+
 let mermaidImport = undefined
 document.addEventListener("nav", async () => {
   const center = document.querySelector(".center") as HTMLElement
@@ -393,6 +512,17 @@ document.addEventListener("nav", async () => {
     })
 
     await mermaid.run({ nodes })
+
+    // 🌟 Unify in-document mermaid colors WITHOUT touching markdown source.
+    // User-written `style A fill:#xxx`, `classDef ... fill:#xxx`, or
+    // `linkStyle 0 stroke:#xxx` directives produce inline `style="..."` on
+    // SVG elements, or scoped CSS in <defs><style>, which override our
+    // themeVariables. We inject a per-SVG <style> with `!important` rules
+    // so every diagram lands on the same organic palette and text stays
+    // readable regardless of what the author originally hard-coded.
+    for (const node of nodes) {
+      unifyMermaidColors(node)
+    }
   }
 
   await renderMermaid()
