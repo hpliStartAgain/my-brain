@@ -312,25 +312,89 @@ const ORGANIC_OVERRIDE_CSS = `
   .pieTitleText, .slice, .legend text { fill: var(--mm-text) !important; }
 `
 
+// Mermaid's classDef directives compile into SVG-scoped CSS like
+//   #mermaid-xxxxx .myClass > rect { fill:#ff7eb6 !important; ... }
+// The `#id` selector beats our `.node` rules on specificity, so an external
+// !important alone can't win. We have to physically strip the colour
+// declarations from mermaid's own injected <style> blocks AND from inline
+// presentation attributes/styles on the SVG nodes. After that, our
+// `data-organic-override` <style> can paint everything cleanly.
+const COLOR_DECL_RE =
+  /(?:^|[\s;{])\s*(?:fill|stroke|color|background-color|background)\s*:\s*[^;}]+;?/gi
+
+function stripMermaidColorRules(svg: SVGElement) {
+  const styleNodes = svg.querySelectorAll("style:not([data-organic-override])")
+  styleNodes.forEach((styleEl) => {
+    const css = styleEl.textContent || ""
+    if (!css) return
+    const cleaned = css.replace(COLOR_DECL_RE, (match) => {
+      // preserve the leading separator char so we don't merge tokens
+      const lead = /^[\s;{]/.test(match) ? match[0] : ""
+      return lead
+    })
+    if (cleaned !== css) styleEl.textContent = cleaned
+  })
+}
+
+function stripInlineColors(svg: SVGElement) {
+  // Shapes whose fill/stroke we want to control via override CSS
+  const shapeSelectors = [
+    ".node rect",
+    ".node polygon",
+    ".node circle",
+    ".node ellipse",
+    ".node path",
+    ".cluster rect",
+    ".cluster polygon",
+    ".cluster path",
+    "g.note rect",
+    "g.note polygon",
+    "rect.note",
+    "rect.actor",
+    ".actor",
+    "line.actor-line",
+    ".activation0",
+    ".activation1",
+    ".activation2",
+  ].join(",")
+
+  svg.querySelectorAll<SVGElement>(shapeSelectors).forEach((el) => {
+    el.removeAttribute("fill")
+    el.removeAttribute("stroke")
+    el.style.removeProperty("fill")
+    el.style.removeProperty("stroke")
+  })
+
+  // Text — clear hard-coded colour so override CSS can paint readable text
+  svg
+    .querySelectorAll<SVGElement | HTMLElement>(
+      "text, tspan, .nodeLabel, .label, .messageText, .actor-text, " +
+        ".loopText, .labelText, foreignObject div, foreignObject span, foreignObject p",
+    )
+    .forEach((el) => {
+      el.removeAttribute("fill")
+      ;(el as HTMLElement).style?.removeProperty?.("fill")
+      ;(el as HTMLElement).style?.removeProperty?.("color")
+    })
+}
+
 function unifyMermaidColors(node: HTMLElement) {
-  const svg = node.querySelector("svg")
+  const svg = node.querySelector("svg") as SVGElement | null
   if (!svg) return
-  // Idempotent — avoid stacking <style> on theme re-render
+
+  // 1. Remove colour declarations from mermaid's own <style> (classDef etc.)
+  stripMermaidColorRules(svg)
+  // 2. Remove inline fill/stroke from each shape & text node
+  stripInlineColors(svg)
+
+  // 3. Inject (or refresh) our organic override <style>
   const existing = svg.querySelector("style[data-organic-override]")
   if (existing) existing.remove()
-
   const style = document.createElementNS("http://www.w3.org/2000/svg", "style")
   style.setAttribute("data-organic-override", "true")
   style.textContent = ORGANIC_OVERRIDE_CSS
-  // Insert at end of <defs> if present so it sits after mermaid's own
-  // <style> block and wins selector specificity ties (we also use
-  // !important so order is mostly insurance).
-  const defs = svg.querySelector("defs")
-  if (defs) {
-    defs.appendChild(style)
-  } else {
-    svg.insertBefore(style, svg.firstChild)
-  }
+  // Append at the end of the SVG so it's the last rule in document order
+  svg.appendChild(style)
 }
 
 let mermaidImport = undefined
