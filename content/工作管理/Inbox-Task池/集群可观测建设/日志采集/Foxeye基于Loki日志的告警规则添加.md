@@ -2,7 +2,7 @@
 type: task
 status: backlog
 priority: P0
-deadline: 2026-04-15
+deadline: 2026-05-15
 domain: 集群可观测建设
 lifecycle: engineering
 progress: "0"

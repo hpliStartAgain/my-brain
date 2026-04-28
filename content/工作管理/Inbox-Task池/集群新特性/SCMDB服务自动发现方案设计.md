@@ -1,12 +1,12 @@
 ---
 type: task
-status: doing
+status: done
 priority: P2
 deadline: 2026-04-17
 domain: 集群新特性
 lifecycle: research
-progress: "30"
-completed_date:
+progress: "100"
+completed_date: 2026-04-21
 started_date: 2026-04-10
 ---
 

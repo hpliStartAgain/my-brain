@@ -1,0 +1,23 @@
+{
+  "id": "conv-1776249708469-kst9s9na9",
+  "providerId": "claude",
+  "title": "你可以联网执行任务吗",
+  "titleGenerationStatus": "failed",
+  "createdAt": 1776249708470,
+  "updatedAt": 1776409720207,
+  "lastResponseAt": 1776409720207,
+  "sessionId": "92f1b95f-cac7-4728-8f33-5d3d93ab8fc0",
+  "providerState": {
+    "providerSessionId": "92f1b95f-cac7-4728-8f33-5d3d93ab8fc0"
+  },
+  "usage": {
+    "model": "sonnet",
+    "inputTokens": 23994,
+    "cacheCreationInputTokens": 0,
+    "cacheReadInputTokens": 0,
+    "contextWindow": 200000,
+    "contextTokens": 23994,
+    "percentage": 12,
+    "contextWindowIsAuthoritative": true
+  }
+}

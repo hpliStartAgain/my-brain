@@ -1,0 +1,23 @@
+{
+  "id": "conv-1776232870687-n89umf6pz",
+  "providerId": "claude",
+  "title": "开始工作",
+  "titleGenerationStatus": "success",
+  "createdAt": 1776232870693,
+  "updatedAt": 1776239219097,
+  "lastResponseAt": 1776239219097,
+  "sessionId": "85623b99-bf25-4dd0-ac56-eb8acdb1eb0c",
+  "providerState": {
+    "providerSessionId": "85623b99-bf25-4dd0-ac56-eb8acdb1eb0c"
+  },
+  "usage": {
+    "model": "opus",
+    "inputTokens": 0,
+    "cacheCreationInputTokens": 0,
+    "cacheReadInputTokens": 0,
+    "contextWindow": 200000,
+    "contextTokens": 0,
+    "percentage": 0,
+    "contextWindowIsAuthoritative": true
+  }
+}
