@@ -429,8 +429,6 @@ static void __put_unused_fd(struct files_struct *files, unsigned int fd)
 
 下一节让我们来看看Linux如何针对不同的文件类型,挂载不同的文件操作函数`file_operations`.
 
-# 第1章 文件I/O
-
 ## 1.4.3 自定义 files_operations
 
 不失一般性,这里也选择 socket 文件系统作为示例,来说明 Linux 如何挂载文件系统指定的文件操作函数 `files_operations`.
@@ -1541,8 +1539,6 @@ int ftruncate(int fd, off_t length);
 ```
 
 两者之间的唯一区别在于,`truncate` 截断的是路径 `“截断”给人的感觉是将文件变短,即将文件大小缩短至 `length` 长度.实际上,`length` 可以大于文件本身的大小,这时文件长度将变为 `length` 的大小,扩充的内容均被填充为 0.需要注意的是,尽管 `ftruncate` 使用的是文件描述符,但是其并不会更新当前文件的偏移.
-
-# 第1章 文件I/O
 
 ## 1.12.2 文件截断的内核实现
 

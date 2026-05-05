@@ -491,7 +491,6 @@ Exception in thread "main" java.lang.OutOfMemoryError: unable to create native t
 
 [1] 关于虚拟机线程实现方面的内容可以参考本书第12章。
 
-# 02 第2章 Java内存区域与内存溢出异常
 
 ## 2.4.3 方法区和运行时常量池溢出
 

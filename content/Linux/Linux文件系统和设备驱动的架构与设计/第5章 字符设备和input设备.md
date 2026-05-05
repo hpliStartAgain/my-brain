@@ -321,7 +321,8 @@ int kobj_map(struct kobj_map *domain, dev_t dev, unsigned long range,
     
     /* 为p赋值 */
 
-# 第5章 字符设备和input设备
+```
+
 
 ## 5.3.2 匹配input管理的设备和驱动
 
