@@ -9,12 +9,22 @@ import { write } from "./helpers"
 import { i18n } from "../../i18n"
 
 export type ContentIndexMap = Map<FullSlug, ContentDetails>
-export type ContentDetails = {
+export type NavContentDetails = {
   slug: FullSlug
   filePath: FilePath
   title: string
   links: SimpleSlug[]
   tags: string[]
+}
+
+export type SearchContentDetails = {
+  slug: FullSlug
+  title: string
+  tags: string[]
+  content: string
+}
+
+export type ContentDetails = NavContentDetails & {
   content: string
   richContent?: string
   date?: Date
@@ -28,6 +38,7 @@ interface Options {
   rssFullHtml: boolean
   rssSlug: string
   includeEmptyFiles: boolean
+  searchContentLength?: number
 }
 
 const defaultOptions: Options = {
@@ -37,6 +48,15 @@ const defaultOptions: Options = {
   rssFullHtml: false,
   rssSlug: "index",
   includeEmptyFiles: true,
+  searchContentLength: undefined,
+}
+
+function maybeTruncateContent(content: string, maxLength?: number): string {
+  if (maxLength === undefined || maxLength <= 0 || content.length <= maxLength) {
+    return content
+  }
+
+  return content.slice(0, maxLength)
 }
 
 function generateSiteMap(cfg: GlobalConfiguration, idx: ContentIndexMap): string {
@@ -137,22 +157,42 @@ export const ContentIndex: QuartzEmitterPlugin<Partial<Options>> = (opts) => {
         })
       }
 
-      const fp = joinSegments("static", "contentIndex") as FullSlug
-      const simplifiedIndex = Object.fromEntries(
-        Array.from(linkIndex).map(([slug, content]) => {
-          // remove description and from content index as nothing downstream
-          // actually uses it. we only keep it in the index as we need it
-          // for the RSS feed
-          delete content.description
-          delete content.date
-          return [slug, content]
-        }),
+      const navigationIndex = Object.fromEntries(
+        Array.from(linkIndex).map(([slug, content]) => [
+          slug,
+          {
+            slug: content.slug,
+            filePath: content.filePath,
+            title: content.title,
+            links: content.links,
+            tags: content.tags,
+          } satisfies NavContentDetails,
+        ]),
+      )
+
+      const searchIndex = Object.fromEntries(
+        Array.from(linkIndex).map(([slug, content]) => [
+          slug,
+          {
+            slug: content.slug,
+            title: content.title,
+            tags: content.tags,
+            content: maybeTruncateContent(content.content, opts?.searchContentLength),
+          } satisfies SearchContentDetails,
+        ]),
       )
 
       yield write({
         ctx,
-        content: JSON.stringify(simplifiedIndex),
-        slug: fp,
+        content: JSON.stringify(navigationIndex),
+        slug: joinSegments("static", "navigationIndex") as FullSlug,
+        ext: ".json",
+      })
+
+      yield write({
+        ctx,
+        content: JSON.stringify(searchIndex),
+        slug: joinSegments("static", "searchIndex") as FullSlug,
         ext: ".json",
       })
     },

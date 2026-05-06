@@ -13,5 +13,12 @@ export declare global {
   interface Window {
     spaNavigate(url: URL, isBack: boolean = false)
     addCleanup(fn: (...args: any[]) => void)
+    getNavData?: () => Promise<NavigationIndex>
+    getSearchData?: () => Promise<SearchIndex>
+    __quartzData?: {
+      cache?: Record<string, Promise<unknown>>
+      urls?: Record<string, string>
+      fetchJson?: <T>(cacheKey: string, resourceUrl: string) => Promise<T>
+    }
   }
 }

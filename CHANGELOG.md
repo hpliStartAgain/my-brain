@@ -1,5 +1,28 @@
 # CHANGELOG
 
+## 2026-05-06
+
+- 更新 `quartz/plugins/emitters/contentIndex.tsx`，将原单一全文索引拆分为 `navigationIndex.json` 与 `searchIndex.json`，并为搜索正文增加长度裁剪能力。
+- 更新 `quartz/components/renderPage.tsx`、`index.d.ts` 与 `globals.d.ts`，将页面级数据加载从 eager fetch 改为全局 memoized 的按需加载 helper。
+- 更新 `quartz/components/scripts/search.inline.ts`，改为首次打开搜索时再加载搜索索引并构建 FlexSearch，降低非搜索访客的固定流量成本。
+- 更新 `quartz/components/scripts/explorer.inline.ts`，改为使用轻量导航索引，并补充本地状态解析兜底、`checkVisibility()` 兼容处理与初始化异常保护，修复 Explorer 偶发不加载问题。
+- 更新 `quartz/components/scripts/graph.inline.ts`，同步切换到轻量导航索引接口。
+- 更新 `quartz.config.ts`，将搜索索引正文裁剪长度配置为 4000 字符。
+- 更新 `quartz/plugins/emitters/tagPage.tsx`，为所有 tags 页面注入 `robots=noindex,follow`，减少大标签列表页被搜索引擎和低价值爬虫持续抓取。
+- 验证结果：当前首屏仅加载 `navigationIndex.json`，冷访问固定传输约 0.17MB；首次实际使用搜索时，会额外加载约 2.96MB gzip 的 `searchIndex.json`。
+
+## 2026-04-30
+
+- 新增 `content/Linux/性能优化/12 Row Buffer 命中与 Bank 冲突——内存延迟抖动的硬件根因.md`，系统解释 Row Buffer Hit / Miss / Conflict、Bank 冲突与 Linux 内存延迟抖动之间的因果链。
+- 新增 `content/Linux/性能优化/13 DDR 频率、时序与带宽——CAS、tRCD、tRP 到真实性能.md`，打通 DDR 频率、CL、tRCD、tRP、理论带宽与真实 workload 表现之间的关系。
+- 新增 `content/Linux/性能优化/14 Linux 如何感知内存硬件——SMBIOS、EDAC、numactl 与 perf 观测链路.md`，梳理 SMBIOS、NUMA、EDAC / RAS 与 `perf` 的内存硬件观测链路。
+- 新增 `content/Linux/性能优化/15 从内存硬件到调优策略——交错、绑定、页大小与压测方法.md`，将内存硬件认知映射到交错、绑定、页大小选择与压测验证方法。
+
+## 2026-04-29
+
+- 更新 `content/Linux/性能优化/00 专栏导览.md`，新增“内存硬件认知篇（规划中）”补强路线，规划 11-15 篇围绕 DIMM、Channel、Rank、Bank、Row Buffer、DDR 时序、Linux 硬件观测与调优落地的扩展文章。
+- 新增 `content/Linux/性能优化/11 内存硬件全景——DIMM、Channel、Rank、Bank 与寻址层级.md`，系统讲解内存控制器、Channel、DIMM、Rank、Bank、Row Buffer 与 Linux 性能分析之间的关系，作为“内存硬件认知篇”的首篇正文。
+
 ## 2026-04-15
 
 - 新增 `content/工作管理/Outbox-产出池/集群新特性/Dproxy迁移至七层网关（Apisix）/Dproxy迁移至七层网关（Apisix）落地方案.md`，输出 Dproxy 迁移至 SCLB 七层网关（APISIX）的完整落地方案。

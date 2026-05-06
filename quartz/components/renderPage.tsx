@@ -27,8 +27,35 @@ export function pageResources(
   baseDir: FullSlug | RelativeURL,
   staticResources: StaticResources,
 ): StaticResources {
-  const contentIndexPath = joinSegments(baseDir, "static/contentIndex.json")
-  const contentIndexScript = `const fetchData = fetch("${contentIndexPath}").then(data => data.json())`
+  const navigationIndexPath = joinSegments(baseDir, "static/navigationIndex.json")
+  const searchIndexPath = joinSegments(baseDir, "static/searchIndex.json")
+  const dataLoaderScript = `
+    window.__quartzData = window.__quartzData || {};
+    const quartzData = window.__quartzData;
+    quartzData.cache = quartzData.cache || {};
+    quartzData.urls = quartzData.urls || {};
+    quartzData.urls.navigationIndex = new URL("${navigationIndexPath}", document.baseURI).toString();
+    quartzData.urls.searchIndex = new URL("${searchIndexPath}", document.baseURI).toString();
+
+    quartzData.fetchJson = quartzData.fetchJson || ((cacheKey, resourceUrl) => {
+      if (quartzData.cache[cacheKey]) {
+        return quartzData.cache[cacheKey];
+      }
+
+      quartzData.cache[cacheKey] = fetch(resourceUrl).then((response) => {
+        if (!response.ok) {
+          throw new Error('Failed to fetch ' + cacheKey + ': ' + response.status + ' ' + response.statusText);
+        }
+
+        return response.json();
+      });
+
+      return quartzData.cache[cacheKey];
+    });
+
+    window.getNavData = () => quartzData.fetchJson("navigationIndex", quartzData.urls.navigationIndex);
+    window.getSearchData = () => quartzData.fetchJson("searchIndex", quartzData.urls.searchIndex);
+  `
 
   const resources: StaticResources = {
     css: [
@@ -47,7 +74,7 @@ export function pageResources(
         loadTime: "beforeDOMReady",
         contentType: "inline",
         spaPreserve: true,
-        script: contentIndexScript,
+        script: dataLoaderScript,
       },
       ...staticResources.js,
     ],

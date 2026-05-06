@@ -95,9 +95,106 @@ Dataview 插件依赖这些字段驱动日记中的进行中任务表和每日�
 
 ---
 
-## 当前主要任务域（上下文参考）
+## SRE 基础设施现状（2026-05 更新）
 
-- **大数据集群基础设施**（HDFS、YARN、HiveServer、Spark、Flink、Kafka），使用 Ambari 管理，Kerberos 认证
-- **可观测体系**：Prometheus + 自研 Exporter + Loki（Promtail 采集）+ Foxeye（告警平台）
-- **AiOps 方向**：适配大数据集群场景的根因分析与智能告警（非微服务 Trace 模型）
-- **工具开发语言**：Go（如 ACAA 审计日志守护进程）
+### 集群拓扑
+
+| 集群 | 用途 | 规模 |
+|---|---|---|
+| H3 离线 | 主力离线计算集群（HDFS + YARN + Hive + HBase） | 主力集群，60+ 工作节点 |
+| H3 实时 | 实时流处理（Flink + Spark Streaming） | - |
+| H3 冷存 | 冷数据归档（独立 RM 节点） | - |
+| H2 冷存 | 历史冷存 | - |
+| CVM 集群 | 虚拟机集群 | Loki 接入中 |
+| 中间件集群 | Kafka / Redis / MySQL / ES / Druid | Loki 接入中 |
+
+所有集群由 **Ambari** 统一管理，**Kerberos（KDC）** 认证；访问网关层使用 **Knox**（双节点 + SCLB 四层负载，HA 已上线）。
+
+---
+
+### 可观测技术栈（当前状态）
+
+#### 指标链路
+- **采集**：自研 Go Exporter（Hadoop/HBase/HiveServer2/KDC），采集目标 Prometheus 协议 + Categraf procstat
+- **存储**：VictoriaMetrics（指标时序数据库）
+- **告警/大盘**：Foxeye（基于夜莺 n9e v7+），正在从 Zabbix 全量迁移（545条规则，已复核 296条，迁移率 ~61%）
+- **遗留系统**：Zabbix（存量主力，迁移完成前双平台并行）
+
+#### 日志链路
+- **采集器**：**Grafana Alloy**（已替代 Promtail，3.18 技术选型确定），通过 **SaltStack** 批量部署
+- **存储**：Loki（多租户，`X-Scope-OrgID` 鉴权）
+- **采集状态**：
+  - ✅ H3离线/实时/冷存 + H2冷存：系统日志 + 服务级日志（NN/DN/RM/NM/HS2/HBase/ZK）已接入
+  - 🔄 CVM 集群 + 中间件集群：接入进行中（P0，DDL 2026-04-30，当前 20%）
+  - ⏳ Spark Driver/Executor 作业级日志：待启动
+
+#### Label 规范约定
+```
+# 日志 Label 体系
+cluster = h3-offline / h3-realtime / h3-cold / cvm / middleware
+service_name = namenode / datanode / resourcemanager / ...
+role = master / worker
+host = <hostname>
+```
+
+---
+
+### SRE Copilot 平台（AiOps）
+
+**定位**：面向大数据集群运维场景的智能运维平台（非微服务 Trace 模型），告警迁移系统是其核心子功能之一。
+
+**技术栈**：
+- 后端：Go + Gin + [eino](https://github.com/cloudwego/eino) Multi-Agent 框架
+- LLM：DeepSeek-V3（Master/Matcher Agent）+ DeepSeek-R1（Converter Agent，CoT 语义转换）
+- 存储：Apache Doris（`doris-fe.venus.sohurdc.com:9030`，schema `alert_shadow`）
+- 前端：Vue 3 + Ant Design + ECharts
+- MCP Server：端口 8081，动态映射全部 eino Agent 工具
+
+**已上线核心模块**（截至 2026-04-09，历经 16 次迭代）：
+- ✅ Multi-Agent 告警迁移流水线（指标类 PromQL + 日志类 LogQL 两分法）
+- ✅ SSH 对话式安全排障（连接池 + 黑白名单规则引擎 + 人工审批流）
+- ✅ Skill 热重载 + Git 同步（6 个内置运维技能，零停机更新）
+- ✅ 声明式集群巡检（`inspection_plans` / `inspection_reports` 双表）
+- ✅ Loki 日志联查（`query_logs` Tool，暗色终端前端页面）
+- ✅ AI 根因分析（Zabbix/Ambari/Foxeye 三套独立 prompt）
+- ✅ 服务维度分类体系（`service_mapping` 统一来源，Zabbix 32 个服务模板）
+- ✅ MCP Server 协议封装（兼容 Cursor / Claude Desktop）
+
+**关键待推进**：
+- 🔄 Zabbix → Foxeye 双跑验证（`event_poll_job` 双侧采集）尚未正式启动
+- ⏳ SCMDB（组件依赖关系图）：架构设计完成，工程实施未启动，是拓扑聚合降噪的阻塞点
+- 🔄 Foxeye 指标元数据 API 对接（评估中，目标替代平台内部维护的 `metric_definitions`）
+
+---
+
+### 集群新特性进展
+
+| 项目 | 状态 | 说明 |
+|---|---|---|
+| Knox HA | ✅ 已上线 | 双节点 + SCLB 四层（TCP/8443 加权轮询），故障切换验证通过 |
+| TimelineServer HA | 🔄 设计完成/待实施 | Keepalived VIP 漂移 + STONITH，RPO≈5min，RTO<60s |
+| Dproxy → SCLB 七层网关 | ✅ 已上线 | 实例已创建 |
+| NodeManager 容器化 | ⏳ 待办 | - |
+| 冷存集群 CA 方案 | ⏳ 待办 | - |
+
+---
+
+### 计算治理进展
+
+| 项目 | 状态 | 说明 |
+|---|---|---|
+| Spark 向量化（Gluten）作业画像 | ✅ 已上线 | 作业画像系统已上线，支持收益可视化 |
+| Spark 向量化 bdwh 灰度实验 | 🔄 白名单遴选进行中 | 基于画像数据筛选 bdwh 高收益作业 |
+| 计算治理统一可视化平台 | 🔄 进行中（40%） | React + Spring Boot + Doris；MVP 后端完成，前端样式重构中 |
+
+---
+
+### 开发语言与工具栈
+
+- **Go**：SRE Copilot 平台后端、自研 Exporter（Hadoop/HBase/HS2）、AI Agent 工具链
+- **Java (Spring Boot 17)**：计算治理可视化平台后端
+- **React (TypeScript)**：计算治理可视化平台前端
+- **Vue 3**：SRE Copilot 前端
+- **Python**：脚本工具（Zabbix API 导出、Ambari 配置检查）
+- **SaltStack**：集群配置管理与批量部署（Alloy 部署流水线）
+- **eino**：CloudWego AI Agent 框架（Multi-Agent 编排核心）

@@ -74,6 +74,10 @@ async function processTagPage(
   const [tree, file] = tagContent
   const cfg = ctx.cfg.configuration
   const externalResources = pageResources(pathToRoot(slug), resources)
+  externalResources.additionalHead = [
+    ...externalResources.additionalHead,
+    <meta name="robots" content="noindex,follow" />,
+  ]
   const componentData: QuartzComponentProps = {
     ctx,
     fileData: file.data,

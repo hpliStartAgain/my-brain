@@ -3,7 +3,6 @@ declare module "*.scss" {
   export = content
 }
 
-// dom custom event
 interface CustomEventMap {
   prenav: CustomEvent<{}>
   nav: CustomEvent<{ url: FullSlug }>
@@ -11,5 +10,14 @@ interface CustomEventMap {
   readermodechange: CustomEvent<{ mode: "on" | "off" }>
 }
 
-type ContentIndex = Record<FullSlug, ContentDetails>
-declare const fetchData: Promise<ContentIndex>
+type NavigationIndex = Record<
+  FullSlug,
+  import("./quartz/plugins/emitters/contentIndex").NavContentDetails
+>
+type SearchIndex = Record<
+  FullSlug,
+  import("./quartz/plugins/emitters/contentIndex").SearchContentDetails
+>
+
+declare const getNavData: () => Promise<NavigationIndex>
+declare const getSearchData: () => Promise<SearchIndex>

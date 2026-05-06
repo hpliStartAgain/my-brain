@@ -1,6 +1,6 @@
 import { FileTrieNode } from "../../util/fileTrie"
 import { FullSlug, resolveRelative, simplifySlug } from "../../util/path"
-import { ContentDetails } from "../../plugins/emitters/contentIndex"
+import { NavContentDetails } from "../../plugins/emitters/contentIndex"
 
 type MaybeHTMLElement = HTMLElement | undefined
 
@@ -8,9 +8,9 @@ interface ParsedOptions {
   folderClickBehavior: "collapse" | "link"
   folderDefaultState: "collapsed" | "open"
   useSavedState: boolean
-  sortFn: (a: FileTrieNode, b: FileTrieNode) => number
-  filterFn: (node: FileTrieNode) => boolean
-  mapFn: (node: FileTrieNode) => void
+  sortFn: (a: FileTrieNode<NavContentDetails>, b: FileTrieNode<NavContentDetails>) => number
+  filterFn: (node: FileTrieNode<NavContentDetails>) => boolean
+  mapFn: (node: FileTrieNode<NavContentDetails>) => void
   order: "sort" | "filter" | "map"[]
 }
 
@@ -19,12 +19,38 @@ type FolderState = {
   collapsed: boolean
 }
 
-let currentExplorerState: Array<FolderState>
+let currentExplorerState: Array<FolderState> = []
 let currentSlugForHydration: FullSlug = "" as FullSlug
 // Cache the built trie across SPA navigations — content index does not change
 // between client-side route transitions.
-let cachedTrie: FileTrieNode | null = null
+let cachedTrie: FileTrieNode<NavContentDetails> | null = null
 let cachedTrieKey: string = ""
+
+function isElementVisible(element: MaybeHTMLElement) {
+  if (!element) return false
+
+  if (typeof element.checkVisibility === "function") {
+    return element.checkVisibility()
+  }
+
+  return !!(element.offsetWidth || element.offsetHeight || element.getClientRects().length)
+}
+
+function parseStoredExplorerState(useSavedState: boolean): FolderState[] {
+  if (!useSavedState) return []
+
+  const storageTree = localStorage.getItem("fileTree")
+  if (!storageTree) return []
+
+  try {
+    return JSON.parse(storageTree) as FolderState[]
+  } catch (error) {
+    console.warn("Failed to parse stored explorer state.", error)
+    localStorage.removeItem("fileTree")
+    return []
+  }
+}
+
 function toggleExplorer(this: HTMLElement) {
   const nearestExplorer = this.closest(".explorer") as HTMLElement
   if (!nearestExplorer) return
@@ -78,7 +104,10 @@ function toggleFolder(evt: Event) {
   localStorage.setItem("fileTree", stringifiedFileTree)
 }
 
-function createFileNode(currentSlug: FullSlug, node: FileTrieNode): HTMLLIElement {
+function createFileNode(
+  currentSlug: FullSlug,
+  node: FileTrieNode<NavContentDetails>,
+): HTMLLIElement {
   const template = document.getElementById("template-file") as HTMLTemplateElement
   const clone = template.content.cloneNode(true) as DocumentFragment
   const li = clone.querySelector("li") as HTMLLIElement
@@ -96,7 +125,7 @@ function createFileNode(currentSlug: FullSlug, node: FileTrieNode): HTMLLIElemen
 
 // WeakMap so a freshly built folder <li> can find its trie node again
 // when the user clicks to expand it (lazy hydration)
-const folderNodeMap = new WeakMap<HTMLElement, FileTrieNode>()
+const folderNodeMap = new WeakMap<HTMLElement, FileTrieNode<NavContentDetails>>()
 const folderOptsMap = new WeakMap<HTMLElement, ParsedOptions>()
 const folderHydratedAttr = "data-hydrated"
 
@@ -122,7 +151,7 @@ function hydrateFolderChildren(folderOuter: HTMLElement, currentSlug: FullSlug) 
 
 function createFolderNode(
   currentSlug: FullSlug,
-  node: FileTrieNode,
+  node: FileTrieNode<NavContentDetails>,
   opts: ParsedOptions,
   lazy: boolean = false,
 ): HTMLLIElement {
@@ -210,8 +239,7 @@ async function setupExplorer(currentSlug: FullSlug) {
     }
 
     // Get folder state from local storage
-    const storageTree = localStorage.getItem("fileTree")
-    const serializedExplorerState = storageTree && opts.useSavedState ? JSON.parse(storageTree) : []
+    const serializedExplorerState = parseStoredExplorerState(opts.useSavedState)
     const oldIndex = new Map<string, boolean>(
       serializedExplorerState.map((entry: FolderState) => [entry.path, entry.collapsed]),
     )
@@ -224,12 +252,12 @@ async function setupExplorer(currentSlug: FullSlug) {
       folderDefault: opts.folderDefaultState,
       behavior: opts.folderClickBehavior,
     })
-    let trie: FileTrieNode
+    let trie: FileTrieNode<NavContentDetails>
     if (cachedTrie && cachedTrieKey === trieKey) {
       trie = cachedTrie
     } else {
-      const data = await fetchData
-      const entries = [...Object.entries(data)] as [FullSlug, ContentDetails][]
+      const data = await getNavData()
+      const entries = [...Object.entries(data)] as [FullSlug, NavContentDetails][]
       trie = FileTrieNode.fromEntries(entries)
 
       // Apply functions in order
@@ -329,22 +357,26 @@ document.addEventListener("prenav", async () => {
 
 document.addEventListener("nav", async (e: CustomEventMap["nav"]) => {
   const currentSlug = e.detail.url
-  await setupExplorer(currentSlug)
+  try {
+    await setupExplorer(currentSlug)
+  } catch (error) {
+    console.error("Explorer setup failed.", error)
+  } finally {
+    // if mobile hamburger is visible, collapse by default
+    for (const explorer of document.getElementsByClassName("explorer")) {
+      const mobileExplorer = explorer.querySelector(".mobile-explorer") as MaybeHTMLElement
+      if (!mobileExplorer) continue
 
-  // if mobile hamburger is visible, collapse by default
-  for (const explorer of document.getElementsByClassName("explorer")) {
-    const mobileExplorer = explorer.querySelector(".mobile-explorer")
-    if (!mobileExplorer) return
+      if (isElementVisible(mobileExplorer)) {
+        explorer.classList.add("collapsed")
+        explorer.setAttribute("aria-expanded", "false")
 
-    if (mobileExplorer.checkVisibility()) {
-      explorer.classList.add("collapsed")
-      explorer.setAttribute("aria-expanded", "false")
+        // Allow <html> to be scrollable when mobile explorer is collapsed
+        document.documentElement.classList.remove("mobile-no-scroll")
+      }
 
-      // Allow <html> to be scrollable when mobile explorer is collapsed
-      document.documentElement.classList.remove("mobile-no-scroll")
+      mobileExplorer.classList.remove("hide-until-loaded")
     }
-
-    mobileExplorer.classList.remove("hide-until-loaded")
   }
 })
 

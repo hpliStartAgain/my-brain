@@ -1,5 +1,33 @@
 # 极简前端改造 (Minimalism UI Refactor)
 
+## 2026-05-06 Quartz 带宽优化与 Explorer 稳定性修复
+
+### 需求理解
+
+- [x] 当前站点部署在 Vercel 免费额度，Fast Data Transfer 已达到 75%，需要从根因上降低静态文本传输量。
+- [x] 已确认当前瓶颈不是 Explorer 的折叠策略，而是页面级预埋的全站全文索引加载；同时 Explorer 存在“偶发加载不出来”的稳定性问题。
+- [x] 本次改造目标包括：降低非搜索访客的固定流量成本、保留站内搜索能力、并提升 Explorer 初始化稳定性。
+
+### 设计方案
+
+- [x] 将当前单一 `contentIndex.json` 拆分为“轻量导航索引 + 搜索索引”，让 Explorer/Graph 不再依赖全文正文。
+- [x] 将页面级 `fetchData` 改为全局 memoized 的按需加载函数，避免所有页面首屏立即拉取大索引。
+- [x] 将 Search 改为首次打开时再拉取搜索索引并构建 FlexSearch，而不是在每次 `nav` 事件时预热。
+- [x] 对 Explorer 增加浏览器兼容与异常兜底，修复 `checkVisibility()` 导致的潜在初始化失败。
+
+### 任务拆解
+
+- [x] 修改 `quartz/plugins/emitters/contentIndex.tsx`，输出导航索引与搜索索引。
+- [x] 修改 `quartz/components/renderPage.tsx`，注入按需加载数据的全局 helper，而不是 eager fetch。
+- [x] 修改 `quartz/components/scripts/search.inline.ts`，改为首次打开时加载搜索索引并建索引。
+- [x] 修改 `quartz/components/scripts/explorer.inline.ts`，切换到导航索引并增强失败兜底。
+- [x] 调整 `quartz/components/scripts/graph.inline.ts` / `globals.d.ts` / `index.d.ts` 以适配新的数据获取接口。
+- [x] 在 `quartz.config.ts` 中为搜索索引增加正文长度裁剪，当前设为 4000 字符。
+- [x] 运行构建与浏览器验证，确认首屏仅加载导航索引，搜索首次打开才加载搜索索引，Explorer 可正常懒展开。
+- [x] 为 `tags` 页面注入 `robots: noindex,follow`，降低大标签页被搜索引擎与低价值爬虫反复抓取的概率。
+- [x] 运行仓库级 `npm run check`，确认无新增 TypeScript 错误；当前仍有仓库既有的 Prettier 警告未在本次范围内处理。
+- [x] 更新 `CHANGELOG.md` 记录本次交付。
+
 ## 任务拆解与设计方案
 
 ### 阶段一：重构系统级色彩与Typography基准 (`quartz.config.ts`) (✅ 已完成)
