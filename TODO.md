@@ -1,5 +1,35 @@
 # 极简前端改造 (Minimalism UI Refactor)
 
+## 2026-05-06 Quartz 反爬硬化与异常流量收敛
+
+### 需求理解
+
+- [x] 最近 30 天 Vercel Outgoing 已达到 77.29GB，且多日存在 10GB~15GB 的突刺，已明显超出正常人类访问模式。
+- [x] 现有带宽优化虽然降低了首屏固定传输，但仍不足以约束恶意抓取和 AI 训练型爬虫的持续请求。
+- [x] 本轮目标是在不破坏正常用户访问和搜索引擎索引的前提下，提高站点对低价值爬虫与已知 AI 抓取 UA 的阻断能力。
+
+### 设计方案
+
+- [x] 在 `vercel.json` 中补充基于 `routes + mitigate.deny` 的边缘阻断规则，直接拒绝一批已知 AI / scraper `User-Agent`。
+- [x] 在 `vercel.json` 中为高成本资源增加 `X-Robots-Tag`，减少守规矩爬虫对标签页、索引文件和 RSS 的重复抓取。
+- [x] 新增 `robots.txt`，对守规矩爬虫声明禁止抓取 `tags`、搜索索引、导航索引与站点索引 XML。
+- [x] 给 folder list pages 注入 `robots=noindex,follow`，降低目录聚合页被低价值爬虫反复命中的概率。
+- [x] 使用 Vercel rewrite 将根路径 `/robots.txt` 映射到 Quartz static emitter 产出的 `/static/robots.txt`，绕过 Quartz 默认只能复制到 `/static` 的限制。
+
+### 任务拆解
+
+- [x] 修改 `vercel.json`，新增 `$schema`、`headers`、`rewrites` 与 `routes` 反爬规则。
+- [x] 修改 `quartz/plugins/emitters/folderPage.tsx`，为 folder list pages 注入 `<meta name="robots" content="noindex,follow" />`。
+- [x] 新增 `quartz/static/robots.txt`，声明全站 robots 规则与针对典型 AI bots 的 `Disallow: /`。
+- [x] 运行构建，确认 `public/static/robots.txt` 已生成，folder/tag 页面产物包含 `noindex,follow`。
+- [x] 复查重点高成本资源体积：当前 `public/static/searchIndex.json` 约 8366.5KB 原始体积、2964.9KB gzip；`public/tags.html` 约 5819.2KB 原始体积、600.9KB gzip。
+- [x] 更新 `CHANGELOG.md` 记录本次交付。
+
+### 平台侧待执行
+
+- [ ] 进入 Vercel Dashboard -> Firewall -> Bot Management，手动开启 Attack Challenge Mode，作为代码规则之外的即时止血措施。
+- [ ] 上线后观察 Firewall / Traffic 面板 24~48 小时，确认被 deny/challenge 的 UA 是否与预期一致，再决定是否继续扩展 UA 黑名单。
+
 ## 2026-05-06 Quartz 带宽优化与 Explorer 稳定性修复
 
 ### 需求理解

@@ -39,6 +39,10 @@ async function* processFolderInfo(
     const [tree, file] = folderContent
     const cfg = ctx.cfg.configuration
     const externalResources = pageResources(pathToRoot(slug), resources)
+    externalResources.additionalHead = [
+      ...externalResources.additionalHead,
+      <meta name="robots" content="noindex,follow" />,
+    ]
     const componentData: QuartzComponentProps = {
       ctx,
       fileData: file.data,

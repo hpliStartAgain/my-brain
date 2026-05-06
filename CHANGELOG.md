@@ -2,6 +2,9 @@
 
 ## 2026-05-06
 
+- 更新 `vercel.json`，新增 `headers`、`rewrites` 与 `routes` 反爬配置：为 `tags`、`navigationIndex.json`、`searchIndex.json`、`index.xml` 增加 `X-Robots-Tag`，并在边缘直接拒绝一批已知 AI / scraper `User-Agent`。
+- 更新 `quartz/plugins/emitters/folderPage.tsx`，为所有 folder list pages 注入 `robots=noindex,follow`，降低目录聚合页被低价值爬虫持续抓取的概率。
+- 新增 `quartz/static/robots.txt`，并通过 Vercel rewrite 将根路径 `/robots.txt` 映射到静态产物，补齐守规矩爬虫的抓取约束入口。
 - 更新 `quartz/plugins/emitters/contentIndex.tsx`，将原单一全文索引拆分为 `navigationIndex.json` 与 `searchIndex.json`，并为搜索正文增加长度裁剪能力。
 - 更新 `quartz/components/renderPage.tsx`、`index.d.ts` 与 `globals.d.ts`，将页面级数据加载从 eager fetch 改为全局 memoized 的按需加载 helper。
 - 更新 `quartz/components/scripts/search.inline.ts`，改为首次打开搜索时再加载搜索索引并构建 FlexSearch，降低非搜索访客的固定流量成本。
