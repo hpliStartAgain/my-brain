@@ -87,14 +87,30 @@ return _M
 
 > 所有 Timeline 回源路由都挂此插件，确保 ATS 不拒绝无身份请求
 
+> [!WARNING] **v8.2 修复**：`ngx.req.set_uri_args()` 的修改在 SCLB proxy_pass 用 `$upstream_uri` 代理时不会自动拼接。
+> 须在本插件（优先级 100）内手动将 query string 追加到 `ctx.var.upstream_uri`（由 strip-prefix 于优先级 110 写入，仅含路径）。
+
 ```lua
 local _M = {}
 
 function _M.rewrite(conf, ctx)
+    -- 步骤1：确保 args 中有 user.name=yarn（兼容不走 upstream_uri 的场景）
     local args = ngx.req.get_uri_args()
     if args["user.name"] == nil or args["user.name"] == "" then
         args["user.name"] = "yarn"
         ngx.req.set_uri_args(args)
+    end
+
+    -- 步骤2：将完整 query string 追加到 upstream_uri
+    -- SCLB 的 proxy_pass 使用 $upstream_uri，不自动拼接 $args
+    -- strip-prefix（优先级 110）已先于本插件（100）写入 upstream_uri（纯路径，无 query）
+    local upstream_uri = ctx.var.upstream_uri
+    if upstream_uri and upstream_uri ~= "" then
+        -- 用 get_uri_args() 而非 ngx.var.args，确保读到 set_uri_args() 的最新修改
+        local new_args = ngx.encode_args(ngx.req.get_uri_args())
+        if new_args and new_args ~= "" then
+            ctx.var.upstream_uri = upstream_uri .. "?" .. new_args
+        end
     end
 end
 
@@ -160,15 +176,17 @@ end
 return _M
 ```
 
-### 3.6 `plg-sub-filter-timeline-body`
+### 3.6 `plg-sub-filter-8090-body`
 
 执行阶段：`body_filter`
 
-> 将响应体中的裸 Timeline 地址替换为 SCLB 路径入口，防止浏览器被重定向到内网 IP
+> 修复 ATS 响应 HTML 中两类路径问题，防止浏览器跳转到无法访问的内网地址：
+> 1. **根相对路径**：`src="/"` / `href="/"` → 补全 `/timeline/` 前缀
+> 2. **dproxy:8090 绝对 URL**：容器日志链接中含旧端口号，重写为不带端口的新路径
+
+> **注意**：SCLB 平台不支持 Lua 插件代码中的非 ASCII 字符（含中文注释），否则会报「插件加载超时」。所有注释必须使用 ASCII 英文。
 
 ```lua
-local _M = {}
-
 function _M.body_filter(conf, ctx)
     local chunk = ngx.arg[1]
     local eof = ngx.arg[2]
@@ -182,9 +200,14 @@ function _M.body_filter(conf, ctx)
 
     if eof then
         local body = ctx.resp_buffer
-        -- 将原始 timeline 地址替换为 SCLB /timeline 路径（域名不变，端口取消）
-        body = string.gsub(body, "h3timeline%.venus%.sohurdc%.com:8188",
-                           "dproxy.venus.sohurdc.com/timeline")
+        -- fix root-relative src/href paths
+        body = body:gsub('(src=")/', '%1/timeline/')
+        body = body:gsub('(href=")/', '%1/timeline/')
+        -- fix dproxy:8090 absolute URLs
+        body = body:gsub(
+            'dproxy%.venus%.sohurdc%.com:8090/applicationhistory/',
+            'dproxy.venus.sohurdc.com/timeline/applicationhistory/'
+        )
         ngx.arg[1] = body
     end
 end
@@ -386,7 +409,9 @@ return _M
 | 插件（含绑定优先级） | `plg-knox-strip-ingress-prefix`（rewrite/110）<br>`plg-append-user-name-yarn`（rewrite/100）<br>`plg-block-limit-11-origin`（access/110）<br>`plg-sub-filter-8090-header`（header_filter/100）<br>`plg-sub-filter-8090-body`（body_filter/100） |
 | 关闭路径改写 | 是 |
 
-> ⚠️ **已创建路由需修复**：`r-timeline-ws-guard` 当前 `plg-knox-strip-ingress-prefix` 绑定优先级为 100，需改为 **110**。
+> ✅ **已修复（部署核查结果）**：`r-timeline-ws-guard` 的 `plg-knox-strip-ingress-prefix` 实际绑定优先级已为 **110**，无需再次修改。
+
+> ⚠️ **v8.2 待修复**：`plg-append-user-name-yarn` 插件代码需更新（见 §3.2）——当前实现通过 `ngx.req.set_uri_args()` 修改 args，但 SCLB proxy_pass 以 `$upstream_uri` 代理时不自动拼接 `$args`，导致 ATS 收不到 `user.name=yarn` 而返回 401。更新插件后所有 Timeline 路由（online + offline）一次性修复。
 
 #### 3-B `r-timeline-pass`
 
@@ -676,15 +701,16 @@ curl -sSI -H 'Host: dproxy.venus.sohurdc.com' \
 ### 8.2 Timeline
 
 ```bash
-# r-timeline-pass：应正常回源，响应中不含 h3timeline:8188
+# r-timeline-pass：应正常回源，响应中 src/href 应含 /timeline/ 前缀
 curl -sS -H 'Host: dproxy.venus.sohurdc.com' \
-  'http://10.18.102.127/timeline/applicationhistory/app/application_1761215995979_19024038?user.name=yarn' | \
-  grep -o 'h3timeline[^"]*' | head -5
-# 期望：无输出（sub_filter 已替换）
+  'http://10.18.102.127/timeline/applicationhistory/apps' | \
+  grep -c 'src="/timeline/' 
+# 期望：> 0（body_filter 已替换 src="/ 为 src="/timeline/）
 
-# user.name 补全验证（不带 user.name 参数，ATS 应正常返回而非 403）
-curl -sSI -H 'Host: dproxy.venus.sohurdc.com' \
-  'http://10.18.102.127/timeline/applicationhistory/app/application_1761215995979_19024038'
+# user.name 补全验证（不带 user.name 参数，ATS 应正常返回 200）
+curl -sSo /dev/null -w "%{http_code}" -H 'Host: dproxy.venus.sohurdc.com' \
+  'http://10.18.102.127/timeline/applicationhistory/apps'
+# 期望：200
 ```
 
 ### 8.3 JHS（新增验证）
@@ -754,7 +780,8 @@ curl -sSI -H 'Host: dproxy.venus.sohurdc.com' \
 |---|---|---|
 | `404 Not Found` from `APISIX/3.13.0` | 路由未命中；路径只写了 `/xxx` 没写 `/xxx/*` | 补充通配路径 `/xxx/*` |
 | `302` 跳到 `...gateway/homepage/knox/gateway/...` | `/knox` 前缀没剥掉，Knox 收到了 `/knox/gateway/...` | 检查 `plg-strip-ingress-prefix` 是否挂载，且 Lua 用的是 `ctx.var.upstream_uri` |
-| Timeline 响应中仍含 `h3timeline:8188` | `plg-sub-filter-timeline-body` 未挂载，或响应被 gzip 压缩 | 检查 `Accept-Encoding: identity` 请求头是否已配置 |
+| Timeline 响应中 src/href 仍是根相对路径（`/static/...`） | `plg-sub-filter-8090-body` 插件代码包含中文注释，APISIX 加载超时 | 确保插件代码只用 ASCII 英文注释，重新 update-plugin → resave-route |
+| 修改插件代码后 APISIX 行为不变 | SCLB `update-plugin`（publish）只更新 SCLB DB，不自动推到 APISIX | 插件更新后必须执行 `PUT /api/sclb/v1/gateway/route/edit`（resave-route），才会触发 APISIX 同步 |
 | `user.name` 参数丢失，ATS 返回 401/403 | `plg-append-user-name-yarn` 未挂载或执行阶段错误 | 确认阶段为 `rewrite`（在 proxy 前执行） |
 | `/jhs/...` 返回 JHS 404，URL 含 `/jhs/` 字样 | `plg-strip-ingress-prefix` 映射中 `/jhs` 未添加，或插件未挂载 | 更新 Lua mappings，重新部署插件 |
 | Knox block 路由未生效，返回 200 | 路由优先级设置有误，或 block 路由优先级低于 pass 路由 | 将 block 路由优先级调为 1000，pass 路由调为 100 |
