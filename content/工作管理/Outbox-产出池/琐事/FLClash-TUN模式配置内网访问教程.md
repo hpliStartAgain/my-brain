@@ -23,16 +23,18 @@ FLClash TUN 模式下有两层问题叠加：
 
 确认以下规则已存在（如没有则添加）。**顺序很重要，IP-CIDR 规则必须在最前面**：
 
-| 规则                                    | 说明                                |
-| ------------------------------------- | --------------------------------- |
-| `IP-CIDR,10.0.0.0/8,DIRECT`          | ⚠️ **新增（放最顶部）**：所有内网 10.x.x.x 直连，确保 DNS 查询走物理网卡 |
-| `IP-CIDR,172.16.0.0/12,DIRECT`       | ⚠️ **新增**：172.16-31.x.x 私网直连 |
-| `IP-CIDR,192.168.0.0/16,DIRECT`      | ⚠️ **新增**：192.168.x.x 私网直连 |
-| `DOMAIN,myfamily.sohu-inc.com,DIRECT` | 具体域名 DIRECT                       |
-| `DOMAIN,code.sohuno.com,DIRECT`       | 具体域名 DIRECT                       |
-| `DOMAIN-SUFFIX,sohuno.com,DIRECT`     | sohuno.com 所有子域 DIRECT            |
-| `DOMAIN-SUFFIX,sohu-inc.com,DIRECT`   | sohu-inc.com 所有子域 DIRECT          |
-| `DOMAIN-SUFFIX,sohurdc.com,DIRECT`    | ⚠️ **新增**：sohurdc.com 所有子域 DIRECT |
+| 规则                                    | 说明                                                  |
+| ------------------------------------- | --------------------------------------------------- |
+| `IP-CIDR,10.0.0.0/8,DIRECT`           | ⚠️ **新增（放最顶部）**：所有内网 10.x.x.x 直连，确保 DNS 查询走物理网卡     |
+| `IP-CIDR,172.16.0.0/12,DIRECT`        | ⚠️ **新增**：172.16-31.x.x 私网直连                        |
+| `IP-CIDR,192.168.0.0/16,DIRECT`       | ⚠️ **新增**：192.168.x.x 私网直连                          |
+| `DOMAIN,login.live.com,DIRECT`        | ⚠️ **新增**：微软登录入口精确直连，规避部分代理出口对 TLS 握手的异常中断          |
+| `DOMAIN,onedrive.live.com,DIRECT`     | ⚠️ **新增**：OneDrive Web 入口精确直连，规避部分代理出口对 TLS 握手的异常中断 |
+| `DOMAIN,myfamily.sohu-inc.com,DIRECT` | 具体域名 DIRECT                                         |
+| `DOMAIN,code.sohuno.com,DIRECT`       | 具体域名 DIRECT                                         |
+| `DOMAIN-SUFFIX,sohuno.com,DIRECT`     | sohuno.com 所有子域 DIRECT                              |
+| `DOMAIN-SUFFIX,sohu-inc.com,DIRECT`   | sohu-inc.com 所有子域 DIRECT                            |
+| `DOMAIN-SUFFIX,sohurdc.com,DIRECT`    | ⚠️ **新增**：sohurdc.com 所有子域 DIRECT                   |
 
 > IP-CIDR 规则放最前面，精确域名规则放在 SUFFIX 规则之前
 
@@ -57,12 +59,16 @@ FLClash TUN 模式下有两层问题叠加：
 点击「Fakeip过滤」字段，添加以下条目（每行一条）：
 
 ```
+login.live.com
+onedrive.live.com
 +.sohuno.com
 +.sohu-inc.com
 +.sohurdc.com
 ```
 
 > 作用：这些域名不分配假 IP，由系统/内网 DNS 直接解析真实 IP，避免 DIRECT 路由时找不到真实 IP
+
+> 补充说明：`login.live.com` 与 `onedrive.live.com` 在部分代理出口下会出现 **CONNECT 已建立，但 TLS ClientHello 后被对端直接断开** 的现象。此时优先用**精确域名 DIRECT + Fakeip过滤**处理，不要先怀疑内网 DNS 配置。
 
 ### 2.3 默认域名服务器
 
@@ -117,9 +123,10 @@ FLClash TUN 模式下有两层问题叠加：
 
 | 页面 | 修改项 | 变更 |
 |------|--------|------|
+| 附加规则 | 新增 `DOMAIN,login.live.com,DIRECT` / `DOMAIN,onedrive.live.com,DIRECT` | 新增 |
 | 附加规则 | 新增 `DOMAIN-SUFFIX,sohurdc.com,DIRECT` | 新增 |
 | DNS | 遵守规则 | 关 → **开** |
-| DNS | Fakeip过滤 | 空 → 加3条内网域名 |
+| DNS | Fakeip过滤 | 空 → 加 2 条微软精确域名 + 3 条内网域名 |
 | DNS | 默认域名服务器 | 空 → 114.114.114.114 / 223.5.5.5 |
 | DNS | 域名服务器策略 | 空 → 加3条内网域名→内网DNS映射 |
 | 网络 | 系统代理 | 开 → 关（可选） |
@@ -137,8 +144,12 @@ curl -I https://myfamily.sohu-inc.com
 curl -I https://panther.sohurdc.com
 
 # 验证 panther.sohurdc.com 是否走 DIRECT（在 FLClash 连接日志中查看）
+
+# 验证微软站点精确直连是否生效
+curl -I --proxy http://127.0.0.1:7897 https://login.live.com
+curl -I --proxy http://127.0.0.1:7897 https://onedrive.live.com
 ```
 
 ---
 
-*最后更新：2026-04-30*
+*最后更新：2026-05-08*

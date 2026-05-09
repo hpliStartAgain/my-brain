@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 2026-05-08
+
+- 更新 `content/工作管理/Outbox-产出池/琐事/FLClash-TUN模式配置内网访问教程.md`，补充 `login.live.com` 与 `onedrive.live.com` 在 TUN 模式下的精确直连规则、Fake-IP 过滤项、故障现象说明与验证命令。
+
 ## 2026-05-06
 
 - 更新 `vercel.json`，新增 `headers`、`rewrites` 与 `routes` 反爬配置：为 `tags`、`navigationIndex.json`、`searchIndex.json`、`index.xml` 增加 `X-Robots-Tag`，并在边缘直接拒绝一批已知 AI / scraper `User-Agent`。
