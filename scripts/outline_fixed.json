@@ -1,0 +1,3879 @@
+{
+  "title": "Systems Performance: Enterprise and the Cloud",
+  "path": "C://Users//19682//Documents//my-brain//content//鐢靛瓙涔/Brendan Gregg - Systems Performance_ Enterprise and the Cloud (2020, Pearson) - libgen.li.pdf",
+  "page_count": 929,
+  "toc": [
+    [
+      1,
+      "Cover",
+      1
+    ],
+    [
+      1,
+      "Half Title Page",
+      2
+    ],
+    [
+      1,
+      "Title Page",
+      4
+    ],
+    [
+      1,
+      "Copyright Page",
+      5
+    ],
+    [
+      1,
+      "Contents at a Glance",
+      8
+    ],
+    [
+      1,
+      "Contents",
+      10
+    ],
+    [
+      1,
+      "Preface",
+      30
+    ],
+    [
+      1,
+      "Acknowledgments",
+      36
+    ],
+    [
+      1,
+      "About the Author",
+      38
+    ],
+    [
+      1,
+      "1 Introduction",
+      40
+    ],
+    [
+      2,
+      "1.1 Systems Performance",
+      40
+    ],
+    [
+      2,
+      "1.2 Roles",
+      41
+    ],
+    [
+      2,
+      "1.3 Activities",
+      42
+    ],
+    [
+      2,
+      "1.4 Perspectives",
+      43
+    ],
+    [
+      2,
+      "1.5 Performance Is Challenging",
+      44
+    ],
+    [
+      3,
+      "1.5.1 Subjectivity",
+      44
+    ],
+    [
+      3,
+      "1.5.2 Complexity",
+      44
+    ],
+    [
+      3,
+      "1.5.3 Multiple Causes",
+      45
+    ],
+    [
+      3,
+      "1.5.4 Multiple Performance Issues",
+      45
+    ],
+    [
+      2,
+      "1.6 Latency",
+      45
+    ],
+    [
+      2,
+      "1.7 Observability",
+      46
+    ],
+    [
+      3,
+      "1.7.1 Counters, Statistics, and Metrics",
+      47
+    ],
+    [
+      3,
+      "1.7.2 Profiling",
+      49
+    ],
+    [
+      3,
+      "1.7.3 Tracing",
+      50
+    ],
+    [
+      2,
+      "1.8 Experimentation",
+      52
+    ],
+    [
+      2,
+      "1.9 Cloud Computing",
+      53
+    ],
+    [
+      2,
+      "1.10 Methodologies",
+      54
+    ],
+    [
+      3,
+      "1.10.1 Linux Perf Analysis in 60 Seconds",
+      54
+    ],
+    [
+      2,
+      "1.11 Case Studies",
+      55
+    ],
+    [
+      3,
+      "1.11.1 Slow Disks",
+      55
+    ],
+    [
+      3,
+      "1.11.2 Software Change",
+      57
+    ],
+    [
+      3,
+      "1.11.3 More Reading",
+      58
+    ],
+    [
+      2,
+      "1.12 References",
+      58
+    ],
+    [
+      1,
+      "2 Methodologies",
+      60
+    ],
+    [
+      2,
+      "2.1 Terminology",
+      61
+    ],
+    [
+      2,
+      "2.2 Models",
+      62
+    ],
+    [
+      3,
+      "2.2.1 System Under Test",
+      62
+    ],
+    [
+      3,
+      "2.2.2 Queueing System",
+      62
+    ],
+    [
+      2,
+      "2.3 Concepts",
+      63
+    ],
+    [
+      3,
+      "2.3.1 Latency",
+      63
+    ],
+    [
+      3,
+      "2.3.2 Time Scales",
+      64
+    ],
+    [
+      3,
+      "2.3.3 Trade-Offs",
+      65
+    ],
+    [
+      3,
+      "2.3.4 Tuning Efforts",
+      66
+    ],
+    [
+      3,
+      "2.3.5 Level of Appropriateness",
+      67
+    ],
+    [
+      3,
+      "2.3.6 When to Stop Analysis",
+      68
+    ],
+    [
+      3,
+      "2.3.7 Point-in-Time Recommendations",
+      68
+    ],
+    [
+      3,
+      "2.3.8 Load vs. Architecture",
+      69
+    ],
+    [
+      3,
+      "2.3.9 Scalability",
+      70
+    ],
+    [
+      3,
+      "2.3.10 Metrics",
+      71
+    ],
+    [
+      3,
+      "2.3.11 Utilization",
+      72
+    ],
+    [
+      3,
+      "2.3.12 Saturation",
+      73
+    ],
+    [
+      3,
+      "2.3.13 Profiling",
+      74
+    ],
+    [
+      3,
+      "2.3.14 Caching",
+      74
+    ],
+    [
+      3,
+      "2.3.15 Known-Unknowns",
+      76
+    ],
+    [
+      2,
+      "2.4 Perspectives",
+      76
+    ],
+    [
+      3,
+      "2.4.1 Resource Analysis",
+      77
+    ],
+    [
+      3,
+      "2.4.2 Workload Analysis",
+      78
+    ],
+    [
+      2,
+      "2.5 Methodology",
+      79
+    ],
+    [
+      3,
+      "2.5.1 Streetlight Anti-Method",
+      81
+    ],
+    [
+      3,
+      "2.5.2 Random Change Anti-Method",
+      81
+    ],
+    [
+      3,
+      "2.5.3 Blame-Someone-Else Anti-Method",
+      82
+    ],
+    [
+      3,
+      "2.5.4 Ad Hoc Checklist Method",
+      82
+    ],
+    [
+      3,
+      "2.5.5 Problem Statement",
+      83
+    ],
+    [
+      3,
+      "2.5.6 Scientific Method",
+      83
+    ],
+    [
+      3,
+      "2.5.7 Diagnosis Cycle",
+      85
+    ],
+    [
+      3,
+      "2.5.8 Tools Method",
+      85
+    ],
+    [
+      3,
+      "2.5.9 The USE Method",
+      86
+    ],
+    [
+      3,
+      "2.5.10 The RED Method",
+      92
+    ],
+    [
+      3,
+      "2.5.11 Workload Characterization",
+      93
+    ],
+    [
+      3,
+      "2.5.12 Drill-Down Analysis",
+      94
+    ],
+    [
+      3,
+      "2.5.13 Latency Analysis",
+      95
+    ],
+    [
+      3,
+      "2.5.14 Method R",
+      96
+    ],
+    [
+      3,
+      "2.5.15 Event Tracing",
+      96
+    ],
+    [
+      3,
+      "2.5.16 Baseline Statistics",
+      98
+    ],
+    [
+      3,
+      "2.5.17 Static Performance Tuning",
+      98
+    ],
+    [
+      3,
+      "2.5.18 Cache Tuning",
+      99
+    ],
+    [
+      3,
+      "2.5.19 Micro-Benchmarking",
+      99
+    ],
+    [
+      3,
+      "2.5.20 Performance Mantras",
+      100
+    ],
+    [
+      2,
+      "2.6 Modeling",
+      101
+    ],
+    [
+      3,
+      "2.6.1 Enterprise vs. Cloud",
+      101
+    ],
+    [
+      3,
+      "2.6.2 Visual Identification",
+      101
+    ],
+    [
+      3,
+      "2.6.3 Amdahl鈥檚 Law of Scalability",
+      103
+    ],
+    [
+      3,
+      "2.6.4 Universal Scalability Law",
+      104
+    ],
+    [
+      3,
+      "2.6.5 Queueing Theory",
+      105
+    ],
+    [
+      2,
+      "2.7 Capacity Planning",
+      108
+    ],
+    [
+      3,
+      "2.7.1 Resource Limits",
+      109
+    ],
+    [
+      3,
+      "2.7.2 Factor Analysis",
+      110
+    ],
+    [
+      3,
+      "2.7.3 Scaling Solutions",
+      111
+    ],
+    [
+      2,
+      "2.8 Statistics",
+      112
+    ],
+    [
+      3,
+      "2.8.1 Quantifying Performance Gains",
+      112
+    ],
+    [
+      3,
+      "2.8.2 Averages",
+      113
+    ],
+    [
+      3,
+      "2.8.3 Standard Deviation, Percentiles, Median",
+      114
+    ],
+    [
+      3,
+      "2.8.4 Coefficient of Variation",
+      115
+    ],
+    [
+      3,
+      "2.8.5 Multimodal Distributions",
+      115
+    ],
+    [
+      3,
+      "2.8.6 Outliers",
+      116
+    ],
+    [
+      2,
+      "2.9 Monitoring",
+      116
+    ],
+    [
+      3,
+      "2.9.1 Time-Based Patterns",
+      116
+    ],
+    [
+      3,
+      "2.9.2 Monitoring Products",
+      118
+    ],
+    [
+      3,
+      "2.9.3 Summary-Since-Boot",
+      118
+    ],
+    [
+      2,
+      "2.10 Visualizations",
+      118
+    ],
+    [
+      3,
+      "2.10.1 Line Chart",
+      119
+    ],
+    [
+      3,
+      "2.10.2 Scatter Plots",
+      120
+    ],
+    [
+      3,
+      "2.10.3 Heat Maps",
+      121
+    ],
+    [
+      3,
+      "2.10.4 Timeline Charts",
+      122
+    ],
+    [
+      3,
+      "2.10.5 Surface Plot",
+      123
+    ],
+    [
+      3,
+      "2.10.6 Visualization Tools",
+      124
+    ],
+    [
+      2,
+      "2.11 Exercises",
+      124
+    ],
+    [
+      2,
+      "2.12 References",
+      125
+    ],
+    [
+      1,
+      "3 Operating Systems",
+      128
+    ],
+    [
+      2,
+      "3.1 Terminology",
+      129
+    ],
+    [
+      2,
+      "3.2 Background",
+      130
+    ],
+    [
+      3,
+      "3.2.1 Kernel",
+      130
+    ],
+    [
+      3,
+      "3.2.2 Kernel and User Modes",
+      132
+    ],
+    [
+      3,
+      "3.2.3 System Calls",
+      133
+    ],
+    [
+      3,
+      "3.2.4 Interrupts",
+      135
+    ],
+    [
+      3,
+      "3.2.5 Clock and Idle",
+      138
+    ],
+    [
+      3,
+      "3.2.6 Processes",
+      138
+    ],
+    [
+      3,
+      "3.2.7 Stacks",
+      141
+    ],
+    [
+      3,
+      "3.2.8 Virtual Memory",
+      143
+    ],
+    [
+      3,
+      "3.2.9 Schedulers",
+      144
+    ],
+    [
+      3,
+      "3.2.10 File Systems",
+      145
+    ],
+    [
+      3,
+      "3.2.11 Caching",
+      147
+    ],
+    [
+      3,
+      "3.2.12 Networking",
+      148
+    ],
+    [
+      3,
+      "3.2.13 Device Drivers",
+      148
+    ],
+    [
+      3,
+      "3.2.14 Multiprocessor",
+      149
+    ],
+    [
+      3,
+      "3.2.15 Preemption",
+      149
+    ],
+    [
+      3,
+      "3.2.16 Resource Management",
+      149
+    ],
+    [
+      3,
+      "3.2.17 Observability",
+      150
+    ],
+    [
+      2,
+      "3.3 Kernels",
+      150
+    ],
+    [
+      3,
+      "3.3.1 Unix",
+      151
+    ],
+    [
+      3,
+      "3.3.2 BSD",
+      152
+    ],
+    [
+      3,
+      "3.3.3 Solaris",
+      153
+    ],
+    [
+      2,
+      "3.4 Linux",
+      153
+    ],
+    [
+      3,
+      "3.4.1 Linux Kernel Developments",
+      154
+    ],
+    [
+      3,
+      "3.4.2 systemd",
+      159
+    ],
+    [
+      3,
+      "3.4.3 KPTI (Meltdown)",
+      160
+    ],
+    [
+      3,
+      "3.4.4 Extended BPF",
+      160
+    ],
+    [
+      2,
+      "3.5 Other Topics",
+      161
+    ],
+    [
+      3,
+      "3.5.1 PGO Kernels",
+      161
+    ],
+    [
+      3,
+      "3.5.2 Unikernels",
+      162
+    ],
+    [
+      3,
+      "3.5.3 Microkernels and Hybrid Kernels",
+      162
+    ],
+    [
+      3,
+      "3.5.4 Distributed Operating Systems",
+      162
+    ],
+    [
+      2,
+      "3.6 Kernel Comparisons",
+      163
+    ],
+    [
+      2,
+      "3.7 Exercises",
+      163
+    ],
+    [
+      2,
+      "3.8 References",
+      164
+    ],
+    [
+      3,
+      "3.8.1 Additional Reading",
+      166
+    ],
+    [
+      1,
+      "4 Observability Tools",
+      168
+    ],
+    [
+      2,
+      "4.1 Tool Coverage",
+      169
+    ],
+    [
+      3,
+      "4.1.1 Static Performance Tools",
+      169
+    ],
+    [
+      3,
+      "4.1.2 Crisis Tools",
+      170
+    ],
+    [
+      2,
+      "4.2 Tool Types",
+      172
+    ],
+    [
+      3,
+      "4.2.1 Fixed Counters",
+      172
+    ],
+    [
+      3,
+      "4.2.2 Profiling",
+      174
+    ],
+    [
+      3,
+      "4.2.3 Tracing",
+      175
+    ],
+    [
+      3,
+      "4.2.4 Monitoring",
+      176
+    ],
+    [
+      2,
+      "4.3 Observability Sources",
+      177
+    ],
+    [
+      3,
+      "4.3.1 /proc",
+      179
+    ],
+    [
+      3,
+      "4.3.2 /sys",
+      182
+    ],
+    [
+      3,
+      "4.3.3 Delay Accounting",
+      184
+    ],
+    [
+      3,
+      "4.3.4 netlink",
+      184
+    ],
+    [
+      3,
+      "4.3.5 Tracepoints",
+      185
+    ],
+    [
+      3,
+      "4.3.6 kprobes",
+      190
+    ],
+    [
+      3,
+      "4.3.7 uprobes",
+      192
+    ],
+    [
+      3,
+      "4.3.8 USDT",
+      194
+    ],
+    [
+      3,
+      "4.3.9 Hardware Counters (PMCs)",
+      195
+    ],
+    [
+      3,
+      "4.3.10 Other Observability Sources",
+      198
+    ],
+    [
+      2,
+      "4.4 sar",
+      199
+    ],
+    [
+      3,
+      "4.4.1 sar(1) Coverage",
+      200
+    ],
+    [
+      3,
+      "4.4.2 sar(1) Monitoring",
+      200
+    ],
+    [
+      3,
+      "4.4.3 sar(1) Live",
+      204
+    ],
+    [
+      3,
+      "4.4.4 sar(1) Documentation",
+      204
+    ],
+    [
+      2,
+      "4.5 Tracing Tools",
+      205
+    ],
+    [
+      2,
+      "4.6 Observing Observability",
+      206
+    ],
+    [
+      2,
+      "4.7 Exercises",
+      207
+    ],
+    [
+      2,
+      "4.8 References",
+      207
+    ],
+    [
+      1,
+      "5 Applications",
+      210
+    ],
+    [
+      2,
+      "5.1 Application Basics",
+      211
+    ],
+    [
+      3,
+      "5.1.1 Objectives",
+      212
+    ],
+    [
+      3,
+      "5.1.2 Optimize the Common Case",
+      213
+    ],
+    [
+      3,
+      "5.1.3 Observability",
+      213
+    ],
+    [
+      3,
+      "5.1.4 Big O Notation",
+      214
+    ],
+    [
+      2,
+      "5.2 Application Performance Techniques",
+      215
+    ],
+    [
+      3,
+      "5.2.1 Selecting an I/O Size",
+      215
+    ],
+    [
+      3,
+      "5.2.2 Caching",
+      215
+    ],
+    [
+      3,
+      "5.2.3 Buffering",
+      216
+    ],
+    [
+      3,
+      "5.2.4 Polling",
+      216
+    ],
+    [
+      3,
+      "5.2.5 Concurrency and Parallelism",
+      216
+    ],
+    [
+      3,
+      "5.2.6 Non-Blocking I/O",
+      220
+    ],
+    [
+      3,
+      "5.2.7 Processor Binding",
+      220
+    ],
+    [
+      3,
+      "5.2.8 Performance Mantras",
+      221
+    ],
+    [
+      2,
+      "5.3 Programming Languages",
+      221
+    ],
+    [
+      3,
+      "5.3.1 Compiled Languages",
+      222
+    ],
+    [
+      3,
+      "5.3.2 Interpreted Languages",
+      223
+    ],
+    [
+      3,
+      "5.3.3 Virtual Machines",
+      224
+    ],
+    [
+      3,
+      "5.3.4 Garbage Collection",
+      224
+    ],
+    [
+      2,
+      "5.4 Methodology",
+      225
+    ],
+    [
+      3,
+      "5.4.1 CPU Profiling",
+      226
+    ],
+    [
+      3,
+      "5.4.2 Off-CPU Analysis",
+      228
+    ],
+    [
+      3,
+      "5.4.3 Syscall Analysis",
+      231
+    ],
+    [
+      3,
+      "5.4.4 USE Method",
+      232
+    ],
+    [
+      3,
+      "5.4.5 Thread State Analysis",
+      232
+    ],
+    [
+      3,
+      "5.4.6 Lock Analysis",
+      237
+    ],
+    [
+      3,
+      "5.4.7 Static Performance Tuning",
+      237
+    ],
+    [
+      3,
+      "5.4.8 Distributed Tracing",
+      238
+    ],
+    [
+      2,
+      "5.5 Observability Tools",
+      238
+    ],
+    [
+      3,
+      "5.5.1 perf",
+      239
+    ],
+    [
+      3,
+      "5.5.2 profile",
+      242
+    ],
+    [
+      3,
+      "5.5.3 offcputime",
+      243
+    ],
+    [
+      3,
+      "5.5.4 strace",
+      244
+    ],
+    [
+      3,
+      "5.5.5 execsnoop",
+      246
+    ],
+    [
+      3,
+      "5.5.6 syscount",
+      247
+    ],
+    [
+      3,
+      "5.5.7 bpftrace",
+      248
+    ],
+    [
+      2,
+      "5.6 Gotchas",
+      252
+    ],
+    [
+      3,
+      "5.6.1 Missing Symbols",
+      253
+    ],
+    [
+      3,
+      "5.6.2 Missing Stacks",
+      254
+    ],
+    [
+      2,
+      "5.7 Exercises",
+      255
+    ],
+    [
+      2,
+      "5.8 References",
+      256
+    ],
+    [
+      1,
+      "6 CPUs",
+      258
+    ],
+    [
+      2,
+      "6.1 Terminology",
+      259
+    ],
+    [
+      2,
+      "6.2 Models",
+      260
+    ],
+    [
+      3,
+      "6.2.1 CPU Architecture",
+      260
+    ],
+    [
+      3,
+      "6.2.2 CPU Memory Caches",
+      260
+    ],
+    [
+      3,
+      "6.2.3 CPU Run Queues",
+      261
+    ],
+    [
+      2,
+      "6.3 Concepts",
+      262
+    ],
+    [
+      3,
+      "6.3.1 Clock Rate",
+      262
+    ],
+    [
+      3,
+      "6.3.2 Instructions",
+      262
+    ],
+    [
+      3,
+      "6.3.3 Instruction Pipeline",
+      263
+    ],
+    [
+      3,
+      "6.3.4 Instruction Width",
+      263
+    ],
+    [
+      3,
+      "6.3.5 Instruction Size",
+      263
+    ],
+    [
+      3,
+      "6.3.6 SMT",
+      264
+    ],
+    [
+      3,
+      "6.3.7 IPC, CPI",
+      264
+    ],
+    [
+      3,
+      "6.3.8 Utilization",
+      265
+    ],
+    [
+      3,
+      "6.3.9 User Time/Kernel Time",
+      265
+    ],
+    [
+      3,
+      "6.3.10 Saturation",
+      265
+    ],
+    [
+      3,
+      "6.3.11 Preemption",
+      266
+    ],
+    [
+      3,
+      "6.3.12 Priority Inversion",
+      266
+    ],
+    [
+      3,
+      "6.3.13 Multiprocess, Multithreading",
+      266
+    ],
+    [
+      3,
+      "6.3.14 Word Size",
+      268
+    ],
+    [
+      3,
+      "6.3.15 Compiler Optimization",
+      268
+    ],
+    [
+      2,
+      "6.4 Architecture",
+      268
+    ],
+    [
+      3,
+      "6.4.1 Hardware",
+      269
+    ],
+    [
+      3,
+      "6.4.2 Software",
+      280
+    ],
+    [
+      2,
+      "6.5 Methodology",
+      283
+    ],
+    [
+      3,
+      "6.5.1 Tools Method",
+      284
+    ],
+    [
+      3,
+      "6.5.2 USE Method",
+      284
+    ],
+    [
+      3,
+      "6.5.3 Workload Characterization",
+      285
+    ],
+    [
+      3,
+      "6.5.4 Profiling",
+      286
+    ],
+    [
+      3,
+      "6.5.5 Cycle Analysis",
+      290
+    ],
+    [
+      3,
+      "6.5.6 Performance Monitoring",
+      290
+    ],
+    [
+      3,
+      "6.5.7 Static Performance Tuning",
+      291
+    ],
+    [
+      3,
+      "6.5.8 Priority Tuning",
+      291
+    ],
+    [
+      3,
+      "6.5.9 Resource Controls",
+      292
+    ],
+    [
+      3,
+      "6.5.10 CPU Binding",
+      292
+    ],
+    [
+      3,
+      "6.5.11 Micro-Benchmarking",
+      292
+    ],
+    [
+      2,
+      "6.6 Observability Tools",
+      293
+    ],
+    [
+      3,
+      "6.6.1 uptime",
+      294
+    ],
+    [
+      3,
+      "6.6.2 vmstat",
+      297
+    ],
+    [
+      3,
+      "6.6.3 mpstat",
+      298
+    ],
+    [
+      3,
+      "6.6.4 sar",
+      299
+    ],
+    [
+      3,
+      "6.6.5 ps",
+      299
+    ],
+    [
+      3,
+      "6.6.6 top",
+      300
+    ],
+    [
+      3,
+      "6.6.7 pidstat",
+      301
+    ],
+    [
+      3,
+      "6.6.8 time, ptime",
+      302
+    ],
+    [
+      3,
+      "6.6.9 turbostat",
+      303
+    ],
+    [
+      3,
+      "6.6.10 showboost",
+      304
+    ],
+    [
+      3,
+      "6.6.11 pmcarch",
+      304
+    ],
+    [
+      3,
+      "6.6.12 tlbstat",
+      305
+    ],
+    [
+      3,
+      "6.6.13 perf",
+      306
+    ],
+    [
+      3,
+      "6.6.14 profile",
+      316
+    ],
+    [
+      3,
+      "6.6.15 cpudist",
+      317
+    ],
+    [
+      3,
+      "6.6.16 runqlat",
+      318
+    ],
+    [
+      3,
+      "6.6.17 runqlen",
+      319
+    ],
+    [
+      3,
+      "6.6.18 softirqs",
+      320
+    ],
+    [
+      3,
+      "6.6.19 hardirqs",
+      321
+    ],
+    [
+      3,
+      "6.6.20 bpftrace",
+      321
+    ],
+    [
+      3,
+      "6.6.21 Other Tools",
+      324
+    ],
+    [
+      2,
+      "6.7 Visualizations",
+      327
+    ],
+    [
+      3,
+      "6.7.1 Utilization Heat Map",
+      327
+    ],
+    [
+      3,
+      "6.7.2 Subsecond-Offset Heat Map",
+      328
+    ],
+    [
+      3,
+      "6.7.3 Flame Graphs",
+      328
+    ],
+    [
+      3,
+      "6.7.4 FlameScope",
+      331
+    ],
+    [
+      2,
+      "6.8 Experimentation",
+      332
+    ],
+    [
+      3,
+      "6.8.1 Ad Hoc",
+      332
+    ],
+    [
+      3,
+      "6.8.2 SysBench",
+      333
+    ],
+    [
+      2,
+      "6.9 Tuning",
+      333
+    ],
+    [
+      3,
+      "6.9.1 Compiler Options",
+      334
+    ],
+    [
+      3,
+      "6.9.2 Scheduling Priority and Class",
+      334
+    ],
+    [
+      3,
+      "6.9.3 Scheduler Options",
+      334
+    ],
+    [
+      3,
+      "6.9.4 Scaling Governors",
+      336
+    ],
+    [
+      3,
+      "6.9.5 Power States",
+      336
+    ],
+    [
+      3,
+      "6.9.6 CPU Binding",
+      336
+    ],
+    [
+      3,
+      "6.9.7 Exclusive CPU Sets",
+      337
+    ],
+    [
+      3,
+      "6.9.8 Resource Controls",
+      337
+    ],
+    [
+      3,
+      "6.9.9 Security Boot Options",
+      337
+    ],
+    [
+      3,
+      "6.9.10 Processor Options (BIOS Tuning)",
+      338
+    ],
+    [
+      2,
+      "6.10 Exercises",
+      338
+    ],
+    [
+      2,
+      "6.11 References",
+      339
+    ],
+    [
+      1,
+      "7 Memory",
+      342
+    ],
+    [
+      2,
+      "7.1 Terminology",
+      343
+    ],
+    [
+      2,
+      "7.2 Concepts",
+      344
+    ],
+    [
+      3,
+      "7.2.1 Virtual Memory",
+      344
+    ],
+    [
+      3,
+      "7.2.2 Paging",
+      345
+    ],
+    [
+      3,
+      "7.2.3 Demand Paging",
+      346
+    ],
+    [
+      3,
+      "7.2.4 Overcommit",
+      347
+    ],
+    [
+      3,
+      "7.2.5 Process Swapping",
+      347
+    ],
+    [
+      3,
+      "7.2.6 File System Cache Usage",
+      348
+    ],
+    [
+      3,
+      "7.2.7 Utilization and Saturation",
+      348
+    ],
+    [
+      3,
+      "7.2.8 Allocators",
+      348
+    ],
+    [
+      3,
+      "7.2.9 Shared Memory",
+      349
+    ],
+    [
+      3,
+      "7.2.10 Working Set Size",
+      349
+    ],
+    [
+      3,
+      "7.2.11 Word Size",
+      349
+    ],
+    [
+      2,
+      "7.3 Architecture",
+      350
+    ],
+    [
+      3,
+      "7.3.1 Hardware",
+      350
+    ],
+    [
+      3,
+      "7.3.2 Software",
+      354
+    ],
+    [
+      3,
+      "7.3.3 Process Virtual Address Space",
+      358
+    ],
+    [
+      2,
+      "7.4 Methodology",
+      362
+    ],
+    [
+      3,
+      "7.4.1 Tools Method",
+      362
+    ],
+    [
+      3,
+      "7.4.2 USE Method",
+      363
+    ],
+    [
+      3,
+      "7.4.3 Characterizing Usage",
+      364
+    ],
+    [
+      3,
+      "7.4.4 Cycle Analysis",
+      365
+    ],
+    [
+      3,
+      "7.4.5 Performance Monitoring",
+      365
+    ],
+    [
+      3,
+      "7.4.6 Leak Detection",
+      365
+    ],
+    [
+      3,
+      "7.4.7 Static Performance Tuning",
+      366
+    ],
+    [
+      3,
+      "7.4.8 Resource Controls",
+      367
+    ],
+    [
+      3,
+      "7.4.9 Micro-Benchmarking",
+      367
+    ],
+    [
+      3,
+      "7.4.10 Memory Shrinking",
+      367
+    ],
+    [
+      2,
+      "7.5 Observability Tools",
+      367
+    ],
+    [
+      3,
+      "7.5.1 vmstat",
+      368
+    ],
+    [
+      3,
+      "7.5.2 PSI",
+      369
+    ],
+    [
+      3,
+      "7.5.3 swapon",
+      370
+    ],
+    [
+      3,
+      "7.5.4 sar",
+      370
+    ],
+    [
+      3,
+      "7.5.5 slabtop",
+      372
+    ],
+    [
+      3,
+      "7.5.6 numastat",
+      373
+    ],
+    [
+      3,
+      "7.5.7 ps",
+      374
+    ],
+    [
+      3,
+      "7.5.8 top",
+      375
+    ],
+    [
+      3,
+      "7.5.9 pmap",
+      376
+    ],
+    [
+      3,
+      "7.5.10 perf",
+      377
+    ],
+    [
+      3,
+      "7.5.11 drsnoop",
+      381
+    ],
+    [
+      3,
+      "7.5.12 wss",
+      381
+    ],
+    [
+      3,
+      "7.5.13 bpftrace",
+      382
+    ],
+    [
+      3,
+      "7.5.14 Other Tools",
+      386
+    ],
+    [
+      2,
+      "7.6 Tuning",
+      389
+    ],
+    [
+      3,
+      "7.6.1 Tunable Parameters",
+      389
+    ],
+    [
+      3,
+      "7.6.2 Multiple Page Sizes",
+      391
+    ],
+    [
+      3,
+      "7.6.3 Allocators",
+      392
+    ],
+    [
+      3,
+      "7.6.4 NUMA Binding",
+      392
+    ],
+    [
+      3,
+      "7.6.5 Resource Controls",
+      392
+    ],
+    [
+      2,
+      "7.7 Exercises",
+      393
+    ],
+    [
+      2,
+      "7.8 References",
+      394
+    ],
+    [
+      1,
+      "8 File Systems",
+      398
+    ],
+    [
+      2,
+      "8.1 Terminology",
+      399
+    ],
+    [
+      2,
+      "8.2 Models",
+      400
+    ],
+    [
+      3,
+      "8.2.1 File System Interfaces",
+      400
+    ],
+    [
+      3,
+      "8.2.2 File System Cache",
+      400
+    ],
+    [
+      3,
+      "8.2.3 Second-Level Cache",
+      401
+    ],
+    [
+      2,
+      "8.3 Concepts",
+      401
+    ],
+    [
+      3,
+      "8.3.1 File System Latency",
+      401
+    ],
+    [
+      3,
+      "8.3.2 Caching",
+      402
+    ],
+    [
+      3,
+      "8.3.3 Random vs. Sequential I/O",
+      402
+    ],
+    [
+      3,
+      "8.3.4 Prefetch",
+      403
+    ],
+    [
+      3,
+      "8.3.5 Read-Ahead",
+      404
+    ],
+    [
+      3,
+      "8.3.6 Write-Back Caching",
+      404
+    ],
+    [
+      3,
+      "8.3.7 Synchronous Writes",
+      405
+    ],
+    [
+      3,
+      "8.3.8 Raw and Direct I/O",
+      405
+    ],
+    [
+      3,
+      "8.3.9 Non-Blocking I/O",
+      405
+    ],
+    [
+      3,
+      "8.3.10 Memory-Mapped Files",
+      406
+    ],
+    [
+      3,
+      "8.3.11 Metadata",
+      406
+    ],
+    [
+      3,
+      "8.3.12 Logical vs. Physical I/O",
+      407
+    ],
+    [
+      3,
+      "8.3.13 Operations Are Not Equal",
+      409
+    ],
+    [
+      3,
+      "8.3.14 Special File Systems",
+      410
+    ],
+    [
+      3,
+      "8.3.15 Access Timestamps",
+      410
+    ],
+    [
+      3,
+      "8.3.16 Capacity",
+      410
+    ],
+    [
+      2,
+      "8.4 Architecture",
+      411
+    ],
+    [
+      3,
+      "8.4.1 File System I/O Stack",
+      411
+    ],
+    [
+      3,
+      "8.4.2 VFS",
+      412
+    ],
+    [
+      3,
+      "8.4.3 File System Caches",
+      412
+    ],
+    [
+      3,
+      "8.4.4 File System Features",
+      414
+    ],
+    [
+      3,
+      "8.4.5 File System Types",
+      416
+    ],
+    [
+      3,
+      "8.4.6 Volumes and Pools",
+      421
+    ],
+    [
+      2,
+      "8.5 Methodology",
+      422
+    ],
+    [
+      3,
+      "8.5.1 Disk Analysis",
+      423
+    ],
+    [
+      3,
+      "8.5.2 Latency Analysis",
+      423
+    ],
+    [
+      3,
+      "8.5.3 Workload Characterization",
+      425
+    ],
+    [
+      3,
+      "8.5.4 Performance Monitoring",
+      427
+    ],
+    [
+      3,
+      "8.5.5 Static Performance Tuning",
+      428
+    ],
+    [
+      3,
+      "8.5.6 Cache Tuning",
+      428
+    ],
+    [
+      3,
+      "8.5.7 Workload Separation",
+      428
+    ],
+    [
+      3,
+      "8.5.8 Micro-Benchmarking",
+      429
+    ],
+    [
+      2,
+      "8.6 Observability Tools",
+      430
+    ],
+    [
+      3,
+      "8.6.1 mount",
+      431
+    ],
+    [
+      3,
+      "8.6.2 free",
+      431
+    ],
+    [
+      3,
+      "8.6.3 top",
+      432
+    ],
+    [
+      3,
+      "8.6.4 vmstat",
+      432
+    ],
+    [
+      3,
+      "8.6.5 sar",
+      432
+    ],
+    [
+      3,
+      "8.6.6 slabtop",
+      433
+    ],
+    [
+      3,
+      "8.6.7 strace",
+      434
+    ],
+    [
+      3,
+      "8.6.8 fatrace",
+      434
+    ],
+    [
+      3,
+      "8.6.9 LatencyTOP",
+      435
+    ],
+    [
+      3,
+      "8.6.10 opensnoop",
+      436
+    ],
+    [
+      3,
+      "8.6.11 filetop",
+      437
+    ],
+    [
+      3,
+      "8.6.12 cachestat",
+      438
+    ],
+    [
+      3,
+      "8.6.13 ext4dist (xfs, zfs, btrfs, nfs)",
+      438
+    ],
+    [
+      3,
+      "8.6.14 ext4slower (xfs, zfs, btrfs, nfs)",
+      440
+    ],
+    [
+      3,
+      "8.6.15 bpftrace",
+      441
+    ],
+    [
+      3,
+      "8.6.17 Other Tools",
+      448
+    ],
+    [
+      3,
+      "8.6.18 Visualizations",
+      449
+    ],
+    [
+      2,
+      "8.7 Experimentation",
+      450
+    ],
+    [
+      3,
+      "8.7.1 Ad Hoc",
+      450
+    ],
+    [
+      3,
+      "8.7.2 Micro-Benchmark Tools",
+      451
+    ],
+    [
+      3,
+      "8.7.3 Cache Flushing",
+      453
+    ],
+    [
+      2,
+      "8.8 Tuning",
+      453
+    ],
+    [
+      3,
+      "8.8.1 Application Calls",
+      454
+    ],
+    [
+      3,
+      "8.8.2 ext4",
+      455
+    ],
+    [
+      3,
+      "8.8.3 ZFS",
+      457
+    ],
+    [
+      2,
+      "8.9 Exercises",
+      458
+    ],
+    [
+      2,
+      "8.10 References",
+      459
+    ],
+    [
+      1,
+      "9 Disks",
+      462
+    ],
+    [
+      2,
+      "9.1 Terminology",
+      463
+    ],
+    [
+      2,
+      "9.2 Models",
+      464
+    ],
+    [
+      3,
+      "9.2.1 Simple Disk",
+      464
+    ],
+    [
+      3,
+      "9.2.2 Caching Disk",
+      464
+    ],
+    [
+      3,
+      "9.2.3 Controller",
+      465
+    ],
+    [
+      2,
+      "9.3 Concepts",
+      466
+    ],
+    [
+      3,
+      "9.3.1 Measuring Time",
+      466
+    ],
+    [
+      3,
+      "9.3.2 Time Scales",
+      468
+    ],
+    [
+      3,
+      "9.3.3 Caching",
+      469
+    ],
+    [
+      3,
+      "9.3.4 Random vs. Sequential I/O",
+      469
+    ],
+    [
+      3,
+      "9.3.5 Read/Write Ratio",
+      470
+    ],
+    [
+      3,
+      "9.3.6 I/O Size",
+      471
+    ],
+    [
+      3,
+      "9.3.7 IOPS Are Not Equal",
+      471
+    ],
+    [
+      3,
+      "9.3.8 Non-Data-Transfer Disk Commands",
+      471
+    ],
+    [
+      3,
+      "9.3.9 Utilization",
+      472
+    ],
+    [
+      3,
+      "9.3.10 Saturation",
+      473
+    ],
+    [
+      3,
+      "9.3.11 I/O Wait",
+      473
+    ],
+    [
+      3,
+      "9.3.12 Synchronous vs. Asynchronous",
+      473
+    ],
+    [
+      3,
+      "9.3.13 Disk vs. Application I/O",
+      474
+    ],
+    [
+      2,
+      "9.4 Architecture",
+      474
+    ],
+    [
+      3,
+      "9.4.1 Disk Types",
+      474
+    ],
+    [
+      3,
+      "9.4.2 Interfaces",
+      481
+    ],
+    [
+      3,
+      "9.4.3 Storage Types",
+      482
+    ],
+    [
+      3,
+      "9.4.4 Operating System Disk I/O Stack",
+      485
+    ],
+    [
+      2,
+      "9.5 Methodology",
+      488
+    ],
+    [
+      3,
+      "9.5.1 Tools Method",
+      489
+    ],
+    [
+      3,
+      "9.5.2 USE Method",
+      489
+    ],
+    [
+      3,
+      "9.5.3 Performance Monitoring",
+      491
+    ],
+    [
+      3,
+      "9.5.4 Workload Characterization",
+      491
+    ],
+    [
+      3,
+      "9.5.5 Latency Analysis",
+      493
+    ],
+    [
+      3,
+      "9.5.6 Static Performance Tuning",
+      494
+    ],
+    [
+      3,
+      "9.5.7 Cache Tuning",
+      495
+    ],
+    [
+      3,
+      "9.5.8 Resource Controls",
+      495
+    ],
+    [
+      3,
+      "9.5.9 Micro-Benchmarking",
+      495
+    ],
+    [
+      3,
+      "9.5.10 Scaling",
+      496
+    ],
+    [
+      2,
+      "9.6 Observability Tools",
+      497
+    ],
+    [
+      3,
+      "9.6.1 iostat",
+      498
+    ],
+    [
+      3,
+      "9.6.2 sar",
+      502
+    ],
+    [
+      3,
+      "9.6.3 PSI",
+      503
+    ],
+    [
+      3,
+      "9.6.4 pidstat",
+      503
+    ],
+    [
+      3,
+      "9.6.5 perf",
+      504
+    ],
+    [
+      3,
+      "9.6.6 biolatency",
+      507
+    ],
+    [
+      3,
+      "9.6.7 biosnoop",
+      509
+    ],
+    [
+      3,
+      "9.6.8 iotop, biotop",
+      511
+    ],
+    [
+      3,
+      "9.6.9 biostacks",
+      513
+    ],
+    [
+      3,
+      "9.6.10 blktrace",
+      514
+    ],
+    [
+      3,
+      "9.6.11 bpftrace",
+      518
+    ],
+    [
+      3,
+      "9.6.12 MegaCli",
+      523
+    ],
+    [
+      3,
+      "9.6.13 smartctl",
+      523
+    ],
+    [
+      3,
+      "9.6.14 SCSI Logging",
+      525
+    ],
+    [
+      3,
+      "9.6.15 Other Tools",
+      526
+    ],
+    [
+      2,
+      "9.7 Visualizations",
+      526
+    ],
+    [
+      3,
+      "9.7.1 Line Graphs",
+      526
+    ],
+    [
+      3,
+      "9.7.2 Latency Scatter Plots",
+      527
+    ],
+    [
+      3,
+      "9.7.3 Latency Heat Maps",
+      527
+    ],
+    [
+      3,
+      "9.7.4 Offset Heat Maps",
+      528
+    ],
+    [
+      3,
+      "9.7.5 Utilization Heat Maps",
+      529
+    ],
+    [
+      2,
+      "9.8 Experimentation",
+      529
+    ],
+    [
+      3,
+      "9.8.1 Ad Hoc",
+      529
+    ],
+    [
+      3,
+      "9.8.2 Custom Load Generators",
+      530
+    ],
+    [
+      3,
+      "9.8.3 Micro-Benchmark Tools",
+      530
+    ],
+    [
+      3,
+      "9.8.4 Random Read Example",
+      530
+    ],
+    [
+      3,
+      "9.8.5 ioping",
+      531
+    ],
+    [
+      3,
+      "9.8.6 fio",
+      532
+    ],
+    [
+      3,
+      "9.8.7 blkreplay",
+      532
+    ],
+    [
+      2,
+      "9.9 Tuning",
+      532
+    ],
+    [
+      3,
+      "9.9.1 Operating System Tunables",
+      532
+    ],
+    [
+      3,
+      "9.9.2 Disk Device Tunables",
+      533
+    ],
+    [
+      3,
+      "9.9.3 Disk Controller Tunables",
+      533
+    ],
+    [
+      2,
+      "9.10 Exercises",
+      534
+    ],
+    [
+      2,
+      "9.11 References",
+      535
+    ],
+    [
+      1,
+      "10 Network",
+      538
+    ],
+    [
+      2,
+      "10.1 Terminology",
+      539
+    ],
+    [
+      2,
+      "10.2 Models",
+      540
+    ],
+    [
+      3,
+      "10.2.1 Network Interface",
+      540
+    ],
+    [
+      3,
+      "10.2.2 Controller",
+      540
+    ],
+    [
+      3,
+      "10.2.3 Protocol Stack",
+      541
+    ],
+    [
+      2,
+      "10.3 Concepts",
+      542
+    ],
+    [
+      3,
+      "10.3.1 Networks and Routing",
+      542
+    ],
+    [
+      3,
+      "10.3.2 Protocols",
+      543
+    ],
+    [
+      3,
+      "10.3.3 Encapsulation",
+      543
+    ],
+    [
+      3,
+      "10.3.4 Packet Size",
+      543
+    ],
+    [
+      3,
+      "10.3.5 Latency",
+      544
+    ],
+    [
+      3,
+      "10.3.6 Buffering",
+      546
+    ],
+    [
+      3,
+      "10.3.7 Connection Backlog",
+      546
+    ],
+    [
+      3,
+      "10.3.8 Interface Negotiation",
+      547
+    ],
+    [
+      3,
+      "10.3.9 Congestion Avoidance",
+      547
+    ],
+    [
+      3,
+      "10.3.10 Utilization",
+      547
+    ],
+    [
+      3,
+      "10.3.11 Local Connections",
+      548
+    ],
+    [
+      2,
+      "10.4 Architecture",
+      548
+    ],
+    [
+      3,
+      "10.4.1 Protocols",
+      548
+    ],
+    [
+      3,
+      "10.4.2 Hardware",
+      554
+    ],
+    [
+      3,
+      "10.4.3 Software",
+      556
+    ],
+    [
+      2,
+      "10.5 Methodology",
+      563
+    ],
+    [
+      3,
+      "10.5.1 Tools Method",
+      564
+    ],
+    [
+      3,
+      "10.5.2 USE Method",
+      565
+    ],
+    [
+      3,
+      "10.5.3 Workload Characterization",
+      566
+    ],
+    [
+      3,
+      "10.5.4 Latency Analysis",
+      567
+    ],
+    [
+      3,
+      "10.5.5 Performance Monitoring",
+      568
+    ],
+    [
+      3,
+      "10.5.6 Packet Sniffing",
+      569
+    ],
+    [
+      3,
+      "10.5.7 TCP Analysis",
+      570
+    ],
+    [
+      3,
+      "10.5.8 Static Performance Tuning",
+      570
+    ],
+    [
+      3,
+      "10.5.9 Resource Controls",
+      571
+    ],
+    [
+      3,
+      "10.5.10 Micro-Benchmarking",
+      572
+    ],
+    [
+      2,
+      "10.6 Observability Tools",
+      572
+    ],
+    [
+      3,
+      "10.6.1 ss",
+      573
+    ],
+    [
+      3,
+      "10.6.2 ip",
+      575
+    ],
+    [
+      3,
+      "10.6.3 ifconfig",
+      576
+    ],
+    [
+      3,
+      "10.6.4 nstat",
+      577
+    ],
+    [
+      3,
+      "10.6.5 netstat",
+      578
+    ],
+    [
+      3,
+      "10.6.6 sar",
+      582
+    ],
+    [
+      3,
+      "10.6.7 nicstat",
+      584
+    ],
+    [
+      3,
+      "10.6.8 ethtool",
+      585
+    ],
+    [
+      3,
+      "10.6.9 tcplife",
+      587
+    ],
+    [
+      3,
+      "10.6.10 tcptop",
+      588
+    ],
+    [
+      3,
+      "10.6.11 tcpretrans",
+      588
+    ],
+    [
+      3,
+      "10.6.12 bpftrace",
+      589
+    ],
+    [
+      3,
+      "10.6.13 tcpdump",
+      597
+    ],
+    [
+      3,
+      "10.6.14 Wireshark",
+      599
+    ],
+    [
+      3,
+      "10.6.15 Other Tools",
+      599
+    ],
+    [
+      2,
+      "10.7 Experimentation",
+      601
+    ],
+    [
+      3,
+      "10.7.1 ping",
+      601
+    ],
+    [
+      3,
+      "10.7.2 traceroute",
+      602
+    ],
+    [
+      3,
+      "10.7.3 pathchar",
+      603
+    ],
+    [
+      3,
+      "10.7.4 iperf",
+      603
+    ],
+    [
+      3,
+      "10.7.5 netperf",
+      604
+    ],
+    [
+      3,
+      "10.7.6 tc",
+      605
+    ],
+    [
+      3,
+      "10.7.7 Other Tools",
+      606
+    ],
+    [
+      2,
+      "10.8 Tuning",
+      606
+    ],
+    [
+      3,
+      "10.8.1 System-Wide",
+      606
+    ],
+    [
+      3,
+      "10.8.2 Socket Options",
+      612
+    ],
+    [
+      3,
+      "10.8.3 Configuration",
+      613
+    ],
+    [
+      2,
+      "10.9 Exercises",
+      613
+    ],
+    [
+      2,
+      "10.10 References",
+      614
+    ],
+    [
+      1,
+      "11 Cloud Computing",
+      618
+    ],
+    [
+      2,
+      "11.1 Background",
+      619
+    ],
+    [
+      3,
+      "11.1.1 Instance Types",
+      620
+    ],
+    [
+      3,
+      "11.1.2 Scalable Architecture",
+      620
+    ],
+    [
+      3,
+      "11.1.3 Capacity Planning",
+      621
+    ],
+    [
+      3,
+      "11.1.4 Storage",
+      623
+    ],
+    [
+      3,
+      "11.1.5 Multitenancy",
+      624
+    ],
+    [
+      3,
+      "11.1.6 Orchestration (Kubernetes)",
+      625
+    ],
+    [
+      2,
+      "11.2 Hardware Virtualization",
+      626
+    ],
+    [
+      3,
+      "11.2.1 Implementation",
+      627
+    ],
+    [
+      3,
+      "11.2.2 Overhead",
+      628
+    ],
+    [
+      3,
+      "11.2.3 Resource Controls",
+      634
+    ],
+    [
+      3,
+      "11.2.4 Observability",
+      636
+    ],
+    [
+      2,
+      "11.3 OS Virtualization",
+      644
+    ],
+    [
+      3,
+      "11.3.1 Implementation",
+      646
+    ],
+    [
+      3,
+      "11.3.2 Overhead",
+      649
+    ],
+    [
+      3,
+      "11.3.3 Resource Controls",
+      652
+    ],
+    [
+      3,
+      "11.3.4 Observability",
+      656
+    ],
+    [
+      2,
+      "11.4 Lightweight Virtualization",
+      669
+    ],
+    [
+      3,
+      "11.4.1 Implementation",
+      670
+    ],
+    [
+      3,
+      "11.4.2 Overhead",
+      671
+    ],
+    [
+      3,
+      "11.4.3 Resource Controls",
+      671
+    ],
+    [
+      3,
+      "11.4.4 Observability",
+      671
+    ],
+    [
+      2,
+      "11.5 Other Types",
+      673
+    ],
+    [
+      2,
+      "11.6 Comparisons",
+      673
+    ],
+    [
+      2,
+      "11.7 Exercises",
+      675
+    ],
+    [
+      2,
+      "11.8 References",
+      676
+    ],
+    [
+      1,
+      "12 Benchmarking",
+      680
+    ],
+    [
+      2,
+      "12.1 Background",
+      681
+    ],
+    [
+      3,
+      "12.1.1 Reasons",
+      681
+    ],
+    [
+      3,
+      "12.1.2 Effective Benchmarking",
+      682
+    ],
+    [
+      3,
+      "12.1.3 Benchmarking Failures",
+      684
+    ],
+    [
+      2,
+      "12.2 Benchmarking Types",
+      690
+    ],
+    [
+      3,
+      "12.2.1 Micro-Benchmarking",
+      690
+    ],
+    [
+      3,
+      "12.2.2 Simulation",
+      692
+    ],
+    [
+      3,
+      "12.2.3 Replay",
+      693
+    ],
+    [
+      3,
+      "12.2.4 Industry Standards",
+      693
+    ],
+    [
+      2,
+      "12.3 Methodology",
+      695
+    ],
+    [
+      3,
+      "12.3.1 Passive Benchmarking",
+      695
+    ],
+    [
+      3,
+      "12.3.2 Active Benchmarking",
+      696
+    ],
+    [
+      3,
+      "12.3.3 CPU Profiling",
+      699
+    ],
+    [
+      3,
+      "12.3.4 USE Method",
+      700
+    ],
+    [
+      3,
+      "12.3.5 Workload Characterization",
+      701
+    ],
+    [
+      3,
+      "12.3.6 Custom Benchmarks",
+      701
+    ],
+    [
+      3,
+      "12.3.7 Ramping Load",
+      701
+    ],
+    [
+      3,
+      "12.3.8 Sanity Check",
+      703
+    ],
+    [
+      3,
+      "12.3.9 Statistical Analysis",
+      704
+    ],
+    [
+      3,
+      "12.3.10 Benchmarking Checklist",
+      705
+    ],
+    [
+      2,
+      "12.4 Benchmark Questions",
+      706
+    ],
+    [
+      2,
+      "12.5 Exercises",
+      707
+    ],
+    [
+      2,
+      "12.6 References",
+      708
+    ],
+    [
+      1,
+      "13 perf",
+      710
+    ],
+    [
+      2,
+      "13.1 Subcommands Overview",
+      711
+    ],
+    [
+      2,
+      "13.2 One-Liners",
+      713
+    ],
+    [
+      2,
+      "13.3 perf Events",
+      718
+    ],
+    [
+      2,
+      "13.4 Hardware Events",
+      720
+    ],
+    [
+      3,
+      "13.4.1 Frequency Sampling",
+      721
+    ],
+    [
+      2,
+      "13.5 Software Events",
+      722
+    ],
+    [
+      2,
+      "13.6 Tracepoint Events",
+      723
+    ],
+    [
+      2,
+      "13.7 Probe Events",
+      724
+    ],
+    [
+      3,
+      "13.7.1 kprobes",
+      724
+    ],
+    [
+      3,
+      "13.7.2 uprobes",
+      726
+    ],
+    [
+      3,
+      "13.7.3 USDT",
+      729
+    ],
+    [
+      2,
+      "13.8 perf stat",
+      730
+    ],
+    [
+      3,
+      "13.8.1 Options",
+      731
+    ],
+    [
+      3,
+      "13.8.2 Interval Statistics",
+      732
+    ],
+    [
+      3,
+      "13.8.3 Per-CPU Balance",
+      732
+    ],
+    [
+      3,
+      "13.8.4 Event Filters",
+      732
+    ],
+    [
+      3,
+      "13.8.5 Shadow Statistics",
+      733
+    ],
+    [
+      2,
+      "13.9 perf record",
+      733
+    ],
+    [
+      3,
+      "13.9.1 Options",
+      734
+    ],
+    [
+      3,
+      "13.9.2 CPU Profiling",
+      734
+    ],
+    [
+      3,
+      "13.9.3 Stack Walking",
+      735
+    ],
+    [
+      2,
+      "13.10 perf report",
+      735
+    ],
+    [
+      3,
+      "13.10.1 TUI",
+      736
+    ],
+    [
+      3,
+      "13.10.2 STDIO",
+      736
+    ],
+    [
+      3,
+      "13.11 perf script",
+      737
+    ],
+    [
+      4,
+      "13.11.1 Flame Graphs",
+      739
+    ],
+    [
+      4,
+      "13.11.2 Trace Scripts",
+      739
+    ],
+    [
+      3,
+      "13.12 perf trace",
+      740
+    ],
+    [
+      4,
+      "13.12.1 Kernel Versions",
+      741
+    ],
+    [
+      3,
+      "13.13 Other Commands",
+      741
+    ],
+    [
+      3,
+      "13.14 perf Documentation",
+      742
+    ],
+    [
+      3,
+      "13.15 References",
+      742
+    ],
+    [
+      1,
+      "14 Ftrace",
+      744
+    ],
+    [
+      2,
+      "14.1 Capabilities Overview",
+      745
+    ],
+    [
+      2,
+      "14.2 tracefs (/sys)",
+      747
+    ],
+    [
+      3,
+      "14.2.1 tracefs Contents",
+      748
+    ],
+    [
+      2,
+      "14.3 Ftrace Function Profiler",
+      750
+    ],
+    [
+      2,
+      "14.4 Ftrace Function Tracing",
+      752
+    ],
+    [
+      3,
+      "14.4.1 Using trace",
+      752
+    ],
+    [
+      3,
+      "14.4.2 Using trace_pipe",
+      754
+    ],
+    [
+      3,
+      "14.4.3 Options",
+      755
+    ],
+    [
+      2,
+      "14.5 Tracepoints",
+      756
+    ],
+    [
+      3,
+      "14.5.1 Filter",
+      756
+    ],
+    [
+      3,
+      "14.5.2 Trigger",
+      757
+    ],
+    [
+      2,
+      "14.6 kprobes",
+      758
+    ],
+    [
+      3,
+      "14.6.1 Event Tracing",
+      758
+    ],
+    [
+      3,
+      "14.6.2 Arguments",
+      759
+    ],
+    [
+      3,
+      "14.6.3 Return Values",
+      760
+    ],
+    [
+      3,
+      "14.6.4 Filters and Triggers",
+      760
+    ],
+    [
+      3,
+      "14.6.5 kprobe Profiling",
+      761
+    ],
+    [
+      2,
+      "14.7 uprobes",
+      761
+    ],
+    [
+      3,
+      "14.7.1 Event Tracing",
+      761
+    ],
+    [
+      3,
+      "14.7.2 Arguments and Return Values",
+      762
+    ],
+    [
+      3,
+      "14.7.3 Filters and Triggers",
+      762
+    ],
+    [
+      3,
+      "14.7.4 uprobe Profiling",
+      762
+    ],
+    [
+      2,
+      "14.8 Ftrace function_graph",
+      763
+    ],
+    [
+      3,
+      "14.8.1 Graph Tracing",
+      763
+    ],
+    [
+      4,
+      "14.8.2 Options",
+      764
+    ],
+    [
+      2,
+      "14.9 Ftrace hwlat",
+      765
+    ],
+    [
+      2,
+      "14.10 Ftrace Hist Triggers",
+      766
+    ],
+    [
+      3,
+      "14.10.1 Single Keys",
+      766
+    ],
+    [
+      3,
+      "14.10.2 Fields",
+      767
+    ],
+    [
+      3,
+      "14.10.3 Modifiers",
+      768
+    ],
+    [
+      3,
+      "14.10.4 PID Filters",
+      768
+    ],
+    [
+      3,
+      "14.10.5 Multiple Keys",
+      769
+    ],
+    [
+      3,
+      "14.10.6 Stack Trace Keys",
+      769
+    ],
+    [
+      3,
+      "14.10.7 Synthetic Events",
+      770
+    ],
+    [
+      2,
+      "14.11 trace-cmd",
+      773
+    ],
+    [
+      3,
+      "14.11.1 Subcommands Overview",
+      773
+    ],
+    [
+      3,
+      "14.11.2 trace-cmd One-Liners",
+      775
+    ],
+    [
+      3,
+      "14.11.3 trace-cmd vs. perf(1)",
+      777
+    ],
+    [
+      3,
+      "14.11.4 trace-cmd function_graph",
+      778
+    ],
+    [
+      3,
+      "14.11.5 KernelShark",
+      778
+    ],
+    [
+      3,
+      "14.11.6 trace-cmd Documentation",
+      779
+    ],
+    [
+      2,
+      "14.12 perf ftrace",
+      780
+    ],
+    [
+      2,
+      "14.13 perf-tools",
+      780
+    ],
+    [
+      3,
+      "14.13.1 Tool Coverage",
+      781
+    ],
+    [
+      3,
+      "14.13.2 Single-Purpose Tools",
+      782
+    ],
+    [
+      3,
+      "14.13.3 Multi-Purpose Tools",
+      783
+    ],
+    [
+      3,
+      "14.13.4 perf-tools One-Liners",
+      784
+    ],
+    [
+      3,
+      "14.13.5 Example",
+      786
+    ],
+    [
+      3,
+      "14.13.6 perf-tools vs. BCC/BPF",
+      786
+    ],
+    [
+      3,
+      "14.13.7 Documentation",
+      787
+    ],
+    [
+      2,
+      "14.14 Ftrace Documentation",
+      787
+    ],
+    [
+      2,
+      "14.15 References",
+      788
+    ],
+    [
+      1,
+      "15 BPF",
+      790
+    ],
+    [
+      2,
+      "15.1 BCC",
+      792
+    ],
+    [
+      3,
+      "15.1.1 Installation",
+      793
+    ],
+    [
+      3,
+      "15.1.2 Tool Coverage",
+      793
+    ],
+    [
+      3,
+      "15.1.3 Single-Purpose Tools",
+      794
+    ],
+    [
+      3,
+      "15.1.4 Multi-Purpose Tools",
+      796
+    ],
+    [
+      3,
+      "15.1.5 One-Liners",
+      796
+    ],
+    [
+      3,
+      "15.1.6 Multi-Tool Example",
+      798
+    ],
+    [
+      3,
+      "15.1.7 BCC vs. bpftrace",
+      799
+    ],
+    [
+      3,
+      "15.1.8 Documentation",
+      799
+    ],
+    [
+      2,
+      "15.2 bpftrace",
+      800
+    ],
+    [
+      3,
+      "15.2.1 Installation",
+      801
+    ],
+    [
+      3,
+      "15.2.2 Tools",
+      801
+    ],
+    [
+      3,
+      "15.2.3 One-Liners",
+      802
+    ],
+    [
+      3,
+      "15.2.4 Programming",
+      805
+    ],
+    [
+      3,
+      "15.2.5 Reference",
+      813
+    ],
+    [
+      3,
+      "15.2.6 Documentation",
+      820
+    ],
+    [
+      2,
+      "15.3 References",
+      821
+    ],
+    [
+      1,
+      "16 Case Study",
+      822
+    ],
+    [
+      2,
+      "16.1 An Unexplained Win",
+      822
+    ],
+    [
+      3,
+      "16.1.1 Problem Statement",
+      822
+    ],
+    [
+      3,
+      "16.1.2 Analysis Strategy",
+      823
+    ],
+    [
+      3,
+      "16.1.3 Statistics",
+      823
+    ],
+    [
+      3,
+      "16.1.4 Configuration",
+      825
+    ],
+    [
+      3,
+      "16.1.5 PMCs",
+      827
+    ],
+    [
+      3,
+      "16.1.6 Software Events",
+      828
+    ],
+    [
+      3,
+      "16.1.7 Tracing",
+      829
+    ],
+    [
+      3,
+      "16.1.8 Conclusion",
+      831
+    ],
+    [
+      2,
+      "16.2 Additional Information",
+      831
+    ],
+    [
+      2,
+      "16.3 References",
+      832
+    ],
+    [
+      1,
+      "Appendix A: USE Method: Linux",
+      834
+    ],
+    [
+      1,
+      "Appendix B: sar Summary",
+      840
+    ],
+    [
+      1,
+      "Appendix C: bpftrace One-Liners",
+      842
+    ],
+    [
+      1,
+      "Appendix D: Solutions to Selected Exercises",
+      848
+    ],
+    [
+      1,
+      "Appendix E: Systems Performance Who鈥檚 Who",
+      850
+    ],
+    [
+      1,
+      "Glossary",
+      854
+    ],
+    [
+      2,
+      "A",
+      854
+    ],
+    [
+      2,
+      "B",
+      855
+    ],
+    [
+      2,
+      "C",
+      855
+    ],
+    [
+      2,
+      "D",
+      856
+    ],
+    [
+      2,
+      "E",
+      856
+    ],
+    [
+      2,
+      "F",
+      856
+    ],
+    [
+      2,
+      "G",
+      857
+    ],
+    [
+      2,
+      "H",
+      857
+    ],
+    [
+      2,
+      "I",
+      857
+    ],
+    [
+      2,
+      "K",
+      857
+    ],
+    [
+      2,
+      "L",
+      858
+    ],
+    [
+      2,
+      "M",
+      858
+    ],
+    [
+      2,
+      "N",
+      858
+    ],
+    [
+      2,
+      "O",
+      858
+    ],
+    [
+      2,
+      "P",
+      859
+    ],
+    [
+      2,
+      "R",
+      860
+    ],
+    [
+      2,
+      "S",
+      860
+    ],
+    [
+      2,
+      "T",
+      861
+    ],
+    [
+      2,
+      "U",
+      862
+    ],
+    [
+      2,
+      "V",
+      862
+    ],
+    [
+      2,
+      "W",
+      862
+    ],
+    [
+      2,
+      "X",
+      862
+    ],
+    [
+      2,
+      "Z",
+      862
+    ],
+    [
+      1,
+      "Index",
+      864
+    ],
+    [
+      2,
+      "A",
+      864
+    ],
+    [
+      2,
+      "B",
+      866
+    ],
+    [
+      2,
+      "C",
+      870
+    ],
+    [
+      2,
+      "D",
+      876
+    ],
+    [
+      2,
+      "E",
+      879
+    ],
+    [
+      2,
+      "F",
+      881
+    ],
+    [
+      2,
+      "G",
+      884
+    ],
+    [
+      2,
+      "H",
+      885
+    ],
+    [
+      2,
+      "I",
+      886
+    ],
+    [
+      2,
+      "J",
+      889
+    ],
+    [
+      2,
+      "K",
+      889
+    ],
+    [
+      2,
+      "L",
+      891
+    ],
+    [
+      2,
+      "M",
+      893
+    ],
+    [
+      2,
+      "N",
+      898
+    ],
+    [
+      2,
+      "O",
+      900
+    ],
+    [
+      2,
+      "P",
+      903
+    ],
+    [
+      2,
+      "Q",
+      907
+    ],
+    [
+      2,
+      "R",
+      908
+    ],
+    [
+      2,
+      "S",
+      910
+    ],
+    [
+      2,
+      "T",
+      917
+    ],
+    [
+      2,
+      "U",
+      921
+    ],
+    [
+      2,
+      "V",
+      923
+    ],
+    [
+      2,
+      "W",
+      924
+    ],
+    [
+      2,
+      "X",
+      925
+    ],
+    [
+      2,
+      "Y",
+      925
+    ],
+    [
+      2,
+      "Z",
+      925
+    ]
+  ],
+  "has_toc": true,
+  "sample_text": "--- Page 2 ---/nSystems /nPerformance/nSecond Edition/n/n--- Page 3 ---/nThis page intentionally left blank/n/n--- Page 4 ---/nSystems /nPerformance/nEnterprise and the Cloud/nSecond Edition/nBrendan Gregg/nBoston 鈥?Columbus 鈥?New York 鈥?San Francisco 鈥?Amsterdam 鈥?Cape Town/nDubai 鈥?London 鈥?Madrid 鈥?Milan 鈥?Munich 鈥?Paris 鈥?Montreal 鈥?Toronto 鈥?Delhi 鈥?Mexico City/nS茫o Paulo 鈥?Sydney 鈥?Hong Kong 鈥?Seoul 鈥?Singapore 鈥?Taipei 鈥?Tokyo/n/n--- Page 5 ---/nMany of the designations used by manufacturers and sellers to distinguish their products /nare claimed as trademarks. Where those designations appear in this book, and the /npublisher was aware of a trademark claim, the designations have been printed with initial /ncapital letters or in all capitals./nThe author and publisher have taken care in the preparation of this book, but make no /nexpressed or implied warranty of any kind and assume no responsibility for errors or /n omissions. No liability is assumed for incidental or consequential damages in connection /nwith or arising out of the use of the information or programs contained herein./nFor information about buying this title in bulk quantities, or for special sales opportunities /n(which may include electronic versions; custom cover designs; and content particular to /nyour business, training goals, marketing focus, or branding interests), please contact our /ncorporate sales department at corpsales@pearsoned.com or (800) 382-3419./nFor government sales inquiries, please contact governmentsales@pearsoned.com. /nFor questions about sales outside the U.S., please contact intlcs@pearson.com. /nVisit us on the Web: informit.com/aw/nLibrary of Congress Control Number: 2020944455/nCopyright 漏 2021 Pearson Education, Inc./nAll rights reserved. This publication is protected by copyright, and permission must be /nobtained from the publisher prior to any prohibited reproduction, storage in a retrieval /nsystem, or transmission in any form or by any means, electronic, mechanical, photocopy-/ning, recording, or likewise. For information regarding permissions, request forms and /nthe appropriate contacts within the Pearson Education Global Rights & Permissions /nDepartment, please visit www.pearson.com/permissions./nCover images by Brendan Gregg/nPage 9, Figure 1.5: Screenshot of System metrics GUI (Grafana) 漏 2020 Grafana Labs/nPage 84, Figure 2.32: Screenshot of Firefox timeline chart 漏 Netflix/nPage 164, Figure 4.7: Screenshot of sar(1) sadf(1) SVG output 漏 2010 W3C/nPage 560, Figure 10.12: Screenshot of Wireshark screenshot 漏 Wireshark/nPage 740, Figure 14.3: Screenshot of KernelShark 漏 KernelShark/nISBN-13: 978-0-13-682015-4/nISBN-10: 0-13-682015-8/nScoutAutomatedPrintCode/nPublisher/nMark L. Taub/nExecutive Editor/nGreg Doench/nManaging Producer/nSandra Schroeder/nSr. Content /nProducer/nJulie B. Nahil/nProject Manager/nRachel Paul/nCopy Editor/nKim Wimpsett/nIndexer/nTed Laux/nProofreader/nRachel Paul/nCompositor/nThe CIP Group"
+}

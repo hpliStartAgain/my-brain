@@ -1,0 +1,1379 @@
+{
+  "title": "JVM Performance Engineering",
+  "path": "C:\\Users\\19682\\Documents\\my-brain\\content\\鐢靛瓙涔\JVM Performance Engineering (Monica Beckwith) (z-library.sk, 1lib.sk, z-lib.sk).pdf",
+  "page_count": 394,
+  "toc": [
+    [
+      1,
+      "Cover",
+      1
+    ],
+    [
+      1,
+      "Half Title",
+      1
+    ],
+    [
+      1,
+      "Title Page",
+      1
+    ],
+    [
+      1,
+      "Copyright Page",
+      2
+    ],
+    [
+      1,
+      "Contents",
+      5
+    ],
+    [
+      1,
+      "Preface",
+      13
+    ],
+    [
+      1,
+      "Acknowledgments",
+      21
+    ],
+    [
+      1,
+      "About the Author",
+      25
+    ],
+    [
+      1,
+      "1 The Performance Evolution of Java: The Language and the Virtual Machine",
+      27
+    ],
+    [
+      2,
+      "A New Ecosystem Is Born",
+      28
+    ],
+    [
+      2,
+      "A Few Pages from History",
+      28
+    ],
+    [
+      2,
+      "Understanding Java HotSpot VM and Its Compilation Strategies",
+      29
+    ],
+    [
+      3,
+      "The Evolution of the HotSpot Execution Engine",
+      29
+    ],
+    [
+      3,
+      "Interpreter and JIT Compilation",
+      31
+    ],
+    [
+      3,
+      "Print Compilation",
+      31
+    ],
+    [
+      3,
+      "Tiered Compilation",
+      32
+    ],
+    [
+      3,
+      "Client and Server Compilers",
+      33
+    ],
+    [
+      3,
+      "Segmented Code Cache",
+      33
+    ],
+    [
+      3,
+      "Adaptive Optimization and Deoptimization",
+      35
+    ],
+    [
+      2,
+      "HotSpot Garbage Collector: Memory Management Unit",
+      39
+    ],
+    [
+      3,
+      "Generational Garbage Collection, Stop-the-World, and Concurrent Algorithms",
+      39
+    ],
+    [
+      3,
+      "Young Collections and Weak Generational Hypothesis",
+      40
+    ],
+    [
+      3,
+      "Old-Generation Collection and Reclamation Triggers",
+      42
+    ],
+    [
+      3,
+      "Parallel GC Threads, Concurrent GC Threads, and Their Configuration",
+      42
+    ],
+    [
+      2,
+      "The Evolution of the Java Programming Language and Its Ecosystem: A Closer Look",
+      44
+    ],
+    [
+      3,
+      "Java 1.1 to Java 1.4.2 (J2SE 1.4.2)",
+      44
+    ],
+    [
+      3,
+      "Java 5 (J2SE 5.0)",
+      45
+    ],
+    [
+      3,
+      "Java 6 (Java SE 6)",
+      49
+    ],
+    [
+      3,
+      "Java 7 (Java SE 7)",
+      51
+    ],
+    [
+      3,
+      "Java 8 (Java SE 8)",
+      56
+    ],
+    [
+      3,
+      "Java 9 (Java SE 9) to Java 16 (Java SE 16)",
+      58
+    ],
+    [
+      3,
+      "Java 17 (Java SE 17)",
+      66
+    ],
+    [
+      2,
+      "Embracing Evolution for Enhanced Performance",
+      68
+    ],
+    [
+      1,
+      "2 Performance Implications of Java鈥檚 Type System Evolution",
+      69
+    ],
+    [
+      2,
+      "Java鈥檚 Primitive Types and Literals Prior to J2SE 5.0",
+      70
+    ],
+    [
+      2,
+      "Java鈥檚 Reference Types Prior to J2SE 5.0",
+      71
+    ],
+    [
+      3,
+      "Java Interface Types",
+      71
+    ],
+    [
+      3,
+      "Java Class Types",
+      73
+    ],
+    [
+      3,
+      "Java Array Types",
+      74
+    ],
+    [
+      2,
+      "Java鈥檚 Type System Evolution from J2SE 5.0 until Java SE 8",
+      75
+    ],
+    [
+      3,
+      "Enumerations",
+      75
+    ],
+    [
+      3,
+      "Annotations",
+      76
+    ],
+    [
+      3,
+      "Other Noteworthy Enhancements (Java SE 8)",
+      77
+    ],
+    [
+      2,
+      "Java鈥檚 Type System Evolution: Java 9 and Java 10",
+      78
+    ],
+    [
+      3,
+      "Variable Handle Typed Reference",
+      78
+    ],
+    [
+      2,
+      "Java鈥檚 Type System Evolution: Java 11 to Java 17",
+      81
+    ],
+    [
+      3,
+      "Switch Expressions",
+      81
+    ],
+    [
+      3,
+      "Sealed Classes",
+      82
+    ],
+    [
+      3,
+      "Records",
+      83
+    ],
+    [
+      2,
+      "Beyond Java 17: Project Valhalla",
+      84
+    ],
+    [
+      3,
+      "Performance Implications of the Current Type System",
+      84
+    ],
+    [
+      3,
+      "The Emergence of Value Classes: Implications for Memory Management",
+      89
+    ],
+    [
+      3,
+      "Redefining Generics with Primitive Support",
+      90
+    ],
+    [
+      3,
+      "Exploring the Current State of Project Valhalla",
+      91
+    ],
+    [
+      3,
+      "Early Access Release: Advancing Project Valhalla鈥檚 Concepts",
+      92
+    ],
+    [
+      3,
+      "Use Case Scenarios: Bringing Theory to Practice",
+      93
+    ],
+    [
+      3,
+      "A Comparative Glance at Other Languages",
+      93
+    ],
+    [
+      2,
+      "Conclusion",
+      94
+    ],
+    [
+      1,
+      "3 From Monolithic to Modular Java: A Retrospective and Ongoing Evolution",
+      95
+    ],
+    [
+      2,
+      "Introduction",
+      95
+    ],
+    [
+      2,
+      "Understanding the Java Platform Module System",
+      96
+    ],
+    [
+      3,
+      "Demystifying Modules",
+      96
+    ],
+    [
+      3,
+      "Modules Example",
+      97
+    ],
+    [
+      3,
+      "Compilation and Run Details",
+      98
+    ],
+    [
+      3,
+      "Introducing a New Module",
+      99
+    ],
+    [
+      2,
+      "From Monolithic to Modular: The Evolution of the JDK",
+      104
+    ],
+    [
+      2,
+      "Continuing the Evolution: Modular JDK in JDK 11 and Beyond",
+      104
+    ],
+    [
+      2,
+      "Implementing Modular Services with JDK 17",
+      104
+    ],
+    [
+      3,
+      "Service Provider",
+      105
+    ],
+    [
+      3,
+      "Service Consumer",
+      105
+    ],
+    [
+      3,
+      "A Working Example",
+      106
+    ],
+    [
+      3,
+      "Implementation Details",
+      107
+    ],
+    [
+      2,
+      "JAR Hell Versioning Problem and Jigsaw Layers",
+      109
+    ],
+    [
+      3,
+      "Working Example: JAR Hell",
+      111
+    ],
+    [
+      3,
+      "Implementation Details",
+      112
+    ],
+    [
+      2,
+      "Open Services Gateway Initiative",
+      117
+    ],
+    [
+      3,
+      "OSGi Overview",
+      117
+    ],
+    [
+      3,
+      "Similarities",
+      117
+    ],
+    [
+      3,
+      "Differences",
+      118
+    ],
+    [
+      2,
+      "Introduction to Jdeps, Jlink, Jdeprscan, and Jmod",
+      119
+    ],
+    [
+      3,
+      "Jdeps",
+      119
+    ],
+    [
+      3,
+      "Jdeprscan",
+      120
+    ],
+    [
+      3,
+      "Jmod",
+      121
+    ],
+    [
+      3,
+      "Jlink",
+      122
+    ],
+    [
+      2,
+      "Conclusion",
+      122
+    ],
+    [
+      3,
+      "Performance Implications",
+      123
+    ],
+    [
+      3,
+      "Tools and Future Developments",
+      123
+    ],
+    [
+      3,
+      "Embracing the Modular Programming Paradigm",
+      123
+    ],
+    [
+      1,
+      "4 The Unified Java Virtual Machine Logging Interface",
+      125
+    ],
+    [
+      2,
+      "The Need for Unified Logging",
+      125
+    ],
+    [
+      2,
+      "Unification and Infrastructure",
+      126
+    ],
+    [
+      3,
+      "Performance Metrics",
+      127
+    ],
+    [
+      2,
+      "Tags in the Unified Logging System",
+      127
+    ],
+    [
+      3,
+      "Log Tags",
+      127
+    ],
+    [
+      3,
+      "Specific Tags",
+      128
+    ],
+    [
+      3,
+      "Identifying Missing Information",
+      128
+    ],
+    [
+      2,
+      "Diving into Levels, Outputs, and Decorators",
+      129
+    ],
+    [
+      3,
+      "Levels",
+      129
+    ],
+    [
+      3,
+      "Decorators",
+      130
+    ],
+    [
+      3,
+      "Outputs",
+      131
+    ],
+    [
+      2,
+      "Practical Examples of Using the Unified Logging System",
+      133
+    ],
+    [
+      3,
+      "Benchmarking and Performance Testing",
+      134
+    ],
+    [
+      3,
+      "Tools and Techniques",
+      134
+    ],
+    [
+      2,
+      "Optimizing and Managing the Unified Logging System",
+      135
+    ],
+    [
+      2,
+      "Asynchronous Logging and the Unified Logging System",
+      136
+    ],
+    [
+      3,
+      "Benefits of Asynchronous Logging",
+      136
+    ],
+    [
+      3,
+      "Implementing Asynchronous Logging in Java",
+      136
+    ],
+    [
+      3,
+      "Best Practices and Considerations",
+      137
+    ],
+    [
+      2,
+      "Understanding the Enhancements in JDK 11 and JDK 17",
+      139
+    ],
+    [
+      3,
+      "JDK 11",
+      139
+    ],
+    [
+      3,
+      "JDK 17",
+      139
+    ],
+    [
+      2,
+      "Conclusion",
+      139
+    ],
+    [
+      1,
+      "5 End-to-End Java Performance Optimization: Engineering Techniques and Micro-benchmarking with JMH",
+      141
+    ],
+    [
+      2,
+      "Introduction",
+      141
+    ],
+    [
+      2,
+      "Performance Engineering: A Central Pillar of Software Engineering",
+      142
+    ],
+    [
+      3,
+      "Decoding the Layers of Software Engineering",
+      142
+    ],
+    [
+      3,
+      "Performance: A Key Quality Attribute",
+      143
+    ],
+    [
+      3,
+      "Understanding and Evaluating Performance",
+      143
+    ],
+    [
+      3,
+      "Defining Quality of Service",
+      143
+    ],
+    [
+      3,
+      "Success Criteria for Performance Requirements",
+      144
+    ],
+    [
+      2,
+      "Metrics for Measuring Java Performance",
+      144
+    ],
+    [
+      3,
+      "Footprint",
+      145
+    ],
+    [
+      3,
+      "Responsiveness",
+      149
+    ],
+    [
+      3,
+      "Throughput",
+      149
+    ],
+    [
+      3,
+      "Availability",
+      150
+    ],
+    [
+      3,
+      "Digging Deeper into Response Time and Availability",
+      151
+    ],
+    [
+      3,
+      "The Mechanics of Response Time with an Application Timeline",
+      152
+    ],
+    [
+      2,
+      "The Role of Hardware in Performance",
+      154
+    ],
+    [
+      3,
+      "Decoding Hardware鈥揝oftware Dynamics",
+      155
+    ],
+    [
+      3,
+      "Performance Symphony: Languages, Processors, and Memory Models",
+      157
+    ],
+    [
+      3,
+      "Enhancing Performance: Optimizing the Harmony",
+      158
+    ],
+    [
+      3,
+      "Memory Models: Deciphering Thread Dynamics and Performance Impacts",
+      159
+    ],
+    [
+      3,
+      "Concurrent Hardware: Navigating the Labyrinth",
+      162
+    ],
+    [
+      3,
+      "Order Mechanisms in Concurrent Computing: Barriers, Fences, and Volatiles",
+      164
+    ],
+    [
+      3,
+      "Atomicity in Depth: Java Memory Model and Happens-Before Relationship",
+      165
+    ],
+    [
+      3,
+      "Concurrent Memory Access and Coherency in Multiprocessor Systems",
+      167
+    ],
+    [
+      3,
+      "NUMA Deep Dive: My Experiences at AMD, Sun Microsystems, and Arm",
+      167
+    ],
+    [
+      3,
+      "Bridging Theory and Practice: Concurrency, Libraries, and Advanced Tooling",
+      171
+    ],
+    [
+      2,
+      "Performance Engineering Methodology: A Dynamic and Detailed Approach",
+      171
+    ],
+    [
+      3,
+      "Experimental Design",
+      172
+    ],
+    [
+      3,
+      "Bottom-Up Methodology",
+      172
+    ],
+    [
+      3,
+      "Top-Down Methodology",
+      174
+    ],
+    [
+      3,
+      "Building a Statement of Work",
+      175
+    ],
+    [
+      3,
+      "The Performance Engineering Process: A Top-Down Approach",
+      176
+    ],
+    [
+      3,
+      "Building on the Statement of Work: Subsystems Under Investigation",
+      177
+    ],
+    [
+      3,
+      "Key Takeaways",
+      184
+    ],
+    [
+      2,
+      "The Importance of Performance Benchmarking",
+      184
+    ],
+    [
+      3,
+      "Key Performance Metrics",
+      185
+    ],
+    [
+      3,
+      "The Performance Benchmark Regime: From Planning to Analysis",
+      185
+    ],
+    [
+      3,
+      "Benchmarking JVM Memory Management: A Comprehensive Guide",
+      187
+    ],
+    [
+      3,
+      "Why Do We Need a Benchmarking Harness?",
+      190
+    ],
+    [
+      3,
+      "The Role of the Java Micro-Benchmark Suite in Performance Optimization",
+      191
+    ],
+    [
+      3,
+      "Getting Started with Maven",
+      192
+    ],
+    [
+      3,
+      "Writing, Building, and Running Your First Micro-benchmark in JMH",
+      192
+    ],
+    [
+      3,
+      "Benchmark Phases: Warm-Up and Measurement",
+      194
+    ],
+    [
+      3,
+      "Loop Optimizations and @OperationsPerInvocation",
+      195
+    ],
+    [
+      3,
+      "Benchmarking Modes in JMH",
+      196
+    ],
+    [
+      3,
+      "Understanding the Profilers in JMH",
+      196
+    ],
+    [
+      3,
+      "Key Annotations in JMH",
+      197
+    ],
+    [
+      3,
+      "JVM Benchmarking with JMH",
+      198
+    ],
+    [
+      3,
+      "Profiling JMH Benchmarks with perfasm",
+      200
+    ],
+    [
+      2,
+      "Conclusion",
+      201
+    ],
+    [
+      1,
+      "6 Advanced Memory Management and Garbage Collection in OpenJDK",
+      203
+    ],
+    [
+      2,
+      "Introduction",
+      203
+    ],
+    [
+      2,
+      "Overview of Garbage Collection in Java",
+      204
+    ],
+    [
+      2,
+      "Thread-Local Allocation Buffers and Promotion-Local Allocation Buffers",
+      205
+    ],
+    [
+      2,
+      "Optimizing Memory Access with NUMA-Aware Garbage Collection",
+      207
+    ],
+    [
+      2,
+      "Exploring Garbage Collection Improvements",
+      209
+    ],
+    [
+      3,
+      "G1 Garbage Collector: A Deep Dive into Advanced Heap Management",
+      210
+    ],
+    [
+      3,
+      "Advantages of the Regionalized Heap",
+      212
+    ],
+    [
+      3,
+      "Optimizing G1 Parameters for Peak Performance",
+      214
+    ],
+    [
+      3,
+      "Z Garbage Collector: A Scalable, Low-Latency GC for Multi-terabyte Heaps",
+      223
+    ],
+    [
+      2,
+      "Future Trends in Garbage Collection",
+      236
+    ],
+    [
+      2,
+      "Practical Tips for Evaluating GC Performance",
+      238
+    ],
+    [
+      2,
+      "Evaluating GC Performance in Various Workloads",
+      240
+    ],
+    [
+      3,
+      "Types of Transactional Workloads",
+      240
+    ],
+    [
+      3,
+      "Synthesis",
+      241
+    ],
+    [
+      2,
+      "Live Data Set Pressure",
+      242
+    ],
+    [
+      3,
+      "Understanding Data Lifespan Patterns",
+      242
+    ],
+    [
+      3,
+      "Impact on Different GC Algorithms",
+      243
+    ],
+    [
+      3,
+      "Optimizing Memory Management",
+      243
+    ],
+    [
+      1,
+      "7 Runtime Performance Optimizations: A Focus on Strings, Locks, and Beyond",
+      245
+    ],
+    [
+      2,
+      "Introduction",
+      245
+    ],
+    [
+      2,
+      "String Optimizations",
+      246
+    ],
+    [
+      3,
+      "Literal and Interned String Optimization in HotSpot VM",
+      247
+    ],
+    [
+      3,
+      "String Deduplication Optimization and G1 GC",
+      249
+    ],
+    [
+      3,
+      "Reducing Strings鈥?Footprint",
+      250
+    ],
+    [
+      2,
+      "Enhanced Multithreading Performance: Java Thread Synchronization",
+      262
+    ],
+    [
+      3,
+      "The Role of Monitor Locks",
+      264
+    ],
+    [
+      3,
+      "Lock Types in OpenJDK HotSpot VM",
+      264
+    ],
+    [
+      3,
+      "Code Example and Analysis",
+      265
+    ],
+    [
+      3,
+      "Advancements in Java鈥檚 Locking Mechanisms",
+      267
+    ],
+    [
+      3,
+      "Optimizing Contention: Enhancements since Java 9",
+      269
+    ],
+    [
+      3,
+      "Visualizing Contended Lock Optimization: A Performance Engineering Exercise",
+      271
+    ],
+    [
+      3,
+      "Synthesizing Contended Lock Optimization: A Reflection",
+      282
+    ],
+    [
+      3,
+      "Spin-Wait Hints: An Indirect Locking Improvement",
+      283
+    ],
+    [
+      2,
+      "Transitioning from the Thread-per-Task Model to More Scalable Models",
+      285
+    ],
+    [
+      3,
+      "Traditional One-to-One Thread Mapping",
+      286
+    ],
+    [
+      3,
+      "Increasing Scalability with the Thread-per-Request Model",
+      287
+    ],
+    [
+      3,
+      "Reimagining Concurrency with Virtual Threads",
+      291
+    ],
+    [
+      2,
+      "Conclusion",
+      296
+    ],
+    [
+      1,
+      "8 Accelerating Time to Steady State with OpenJDK HotSpot VM",
+      299
+    ],
+    [
+      2,
+      "Introduction",
+      299
+    ],
+    [
+      2,
+      "JVM Start-up and Warm-up Optimization Techniques",
+      300
+    ],
+    [
+      2,
+      "Decoding Time to Steady State in Java Applications",
+      300
+    ],
+    [
+      3,
+      "Ready, Set, Start up!",
+      300
+    ],
+    [
+      3,
+      "Phases of JVM Start-up",
+      301
+    ],
+    [
+      3,
+      "Reaching the Application鈥檚 Steady State",
+      302
+    ],
+    [
+      3,
+      "An Application鈥檚 Life Cycle",
+      304
+    ],
+    [
+      2,
+      "Managing State at Start-up and Ramp-up",
+      304
+    ],
+    [
+      3,
+      "State During Start-up",
+      304
+    ],
+    [
+      3,
+      "Transition to Ramp-up and Steady State",
+      307
+    ],
+    [
+      3,
+      "Benefits of Efficient State Management",
+      307
+    ],
+    [
+      3,
+      "Class Data Sharing",
+      308
+    ],
+    [
+      3,
+      "Ahead-of-Time Compilation",
+      309
+    ],
+    [
+      2,
+      "GraalVM: Revolutionizing Java鈥檚 Time to Steady State",
+      316
+    ],
+    [
+      2,
+      "Emerging Technologies: CRIU and Project CRaC for Checkpoint/Restore Functionality",
+      318
+    ],
+    [
+      2,
+      "Start-up and Ramp-up Optimization in Serverless and Other Environments",
+      321
+    ],
+    [
+      3,
+      "Serverless Computing and JVM Optimization",
+      322
+    ],
+    [
+      3,
+      "Containerized Environments: Ensuring Swift Start-ups and Efficient Scaling",
+      323
+    ],
+    [
+      3,
+      "GraalVM鈥檚 Present-Day Contributions",
+      324
+    ],
+    [
+      3,
+      "Key Takeaways",
+      324
+    ],
+    [
+      2,
+      "Boosting Warm-up Performance with OpenJDK HotSpot VM",
+      326
+    ],
+    [
+      3,
+      "Compiler Enhancements",
+      326
+    ],
+    [
+      3,
+      "Segmented Code Cache and Project Leyden Enhancements",
+      329
+    ],
+    [
+      3,
+      "The Evolution from PermGen to Metaspace: A Leap Forward Toward Peak Performance",
+      330
+    ],
+    [
+      2,
+      "Conclusion",
+      332
+    ],
+    [
+      1,
+      "9 Harnessing Exotic Hardware: The Future of JVM Performance Engineering",
+      333
+    ],
+    [
+      2,
+      "Introduction to Exotic Hardware and the JVM",
+      333
+    ],
+    [
+      2,
+      "Exotic Hardware in the Cloud",
+      335
+    ],
+    [
+      3,
+      "Hardware Heterogeneity",
+      336
+    ],
+    [
+      3,
+      "API Compatibility and Hypervisor Constraints",
+      336
+    ],
+    [
+      3,
+      "Performance Trade-offs",
+      337
+    ],
+    [
+      3,
+      "Resource Contention",
+      337
+    ],
+    [
+      3,
+      "Cloud-Specific Limitations",
+      337
+    ],
+    [
+      2,
+      "The Role of Language Design and Toolchains",
+      338
+    ],
+    [
+      2,
+      "Case Studies",
+      339
+    ],
+    [
+      3,
+      "LWJGL: A Baseline Example",
+      340
+    ],
+    [
+      3,
+      "Aparapi: Bridging Java and OpenCL",
+      343
+    ],
+    [
+      3,
+      "Project Sumatra: A Significant Effort",
+      347
+    ],
+    [
+      3,
+      "TornadoVM: A Specialized JVM for Hardware Accelerators",
+      350
+    ],
+    [
+      3,
+      "Project Panama: A New Horizon",
+      353
+    ],
+    [
+      2,
+      "Envisioning the Future of JVM and Project Panama",
+      359
+    ],
+    [
+      3,
+      "High-Level JVM-Language APIs and Native Libraries",
+      359
+    ],
+    [
+      3,
+      "Vector API and Vectorized Data Processing Systems",
+      360
+    ],
+    [
+      3,
+      "Accelerator Descriptors for Data Access, Caching, and Formatting",
+      361
+    ],
+    [
+      3,
+      "The Future Is Already Knocking at the Door!",
+      361
+    ],
+    [
+      2,
+      "Concluding Thoughts: The Future of JVM Performance Engineering",
+      362
+    ],
+    [
+      1,
+      "Index",
+      363
+    ],
+    [
+      2,
+      "A",
+      363
+    ],
+    [
+      2,
+      "B",
+      365
+    ],
+    [
+      2,
+      "C",
+      365
+    ],
+    [
+      2,
+      "D",
+      367
+    ],
+    [
+      2,
+      "E",
+      367
+    ],
+    [
+      2,
+      "F",
+      368
+    ],
+    [
+      2,
+      "G",
+      368
+    ],
+    [
+      2,
+      "H",
+      369
+    ],
+    [
+      2,
+      "I",
+      371
+    ],
+    [
+      2,
+      "J",
+      372
+    ],
+    [
+      2,
+      "K",
+      376
+    ],
+    [
+      2,
+      "L",
+      376
+    ],
+    [
+      2,
+      "M",
+      377
+    ],
+    [
+      2,
+      "N",
+      379
+    ],
+    [
+      2,
+      "O",
+      380
+    ],
+    [
+      2,
+      "P",
+      380
+    ],
+    [
+      2,
+      "Q",
+      384
+    ],
+    [
+      2,
+      "R",
+      384
+    ],
+    [
+      2,
+      "S",
+      385
+    ],
+    [
+      2,
+      "T",
+      386
+    ],
+    [
+      2,
+      "U",
+      387
+    ],
+    [
+      2,
+      "V",
+      388
+    ],
+    [
+      2,
+      "X",
+      388
+    ],
+    [
+      2,
+      "Y",
+      388
+    ],
+    [
+      2,
+      "Z",
+      388
+    ]
+  ],
+  "has_toc": true,
+  "sample_text": "--- Page 2 ---\nCover image: Amiak / Shutterstock\nFigures 7.8鈥?.18, 7.22鈥?.29: The Apache Software Foundation\nMany of the designations used by manufacturers and sellers to distinguish their prod-\nucts are claimed as trademarks. Where those designations appear in this book, and the \npublisher was aware of a trademark claim, the designations have been printed with initial \ncapital letters or in all capitals.\nThe author and publisher have taken care in the preparation of this book, but make no \nexpressed or implied warranty of any kind and assume no responsibility for errors or  \nomissions. No liability is assumed for incidental or consequential damages in connection \nwith or arising out of the use of the information or programs contained herein.\nThe views expressed in this book are those of the author and do not necessarily reflect \nthe views of Oracle.\nOracle America Inc. does not make any representations or warranties as to the accuracy, \nadequacy or completeness of any information contained in this work, and is not responsi-\nble for any errors or omissions.\nFor information about buying this title in bulk quantities, or for special sales opportunities \n(which may include electronic versions; custom cover designs; and content particular to \nyour business, training goals, marketing focus, or branding interests), please contact our \ncorporate sales department at聽corpsales@pearsoned.com聽or聽(800) 382-3419.\nFor government sales inquiries, please contact聽governmentsales@pearsoned.com.聽\nFor questions about sales outside the U.S., please contact聽intlcs@pearson.com.聽\nVisit us on the Web: informit.com/aw\nLibrary of Congress Control Number: 2024930211 \nCopyright 漏 2024 Pearson Education, Inc.\nAll rights reserved. This publication is protected by copyright, and permission must be \nobtained from the publisher prior to any prohibited reproduction, storage in a retrieval \nsystem, or transmission in any form or by any means, electronic, mechanical, photo-\ncopying, recording, or likewise. For information regarding permissions, request forms \nand the appropriate contacts within the Pearson Education Global Rights & Permissions \nDepartment, please visit www.pearson.com/permissions.\nISBN-13: 978-0-13-465987-9 \nISBN-10: 0-13-465987-2\n$PrintCode\n\n--- Page 3 ---\nTo my cherished companions, who have provided endless \ninspiration and comfort throughout the journey of  \nwriting this book:\nIn loving memory of Perl, Sherekhan, Cami, Mr. Spots, and \nRuby. Their memories continue to guide and brighten my days \nwith their lasting legacy of love and warmth.\nAnd to Delphi, Calypso, Ivy, Selene, and little Bash, who \ncontinue to fill my life with joy, curiosity, and playful \nadventures. Their presence brings daily reminders of the beauty \nand wonder in the world around us.\nThis book is a tribute to all of them鈥攖hose who have passed and \nthose who are still by my side鈥攃elebrating the unconditional \nlove and irreplaceable companionship they have graciously \nshared with me.\n\n--- Page 4 ---\nThis page intentionally left blank\n\n--- Page 5 ---\nContents\nPreface鈥?xv\nAcknowledgments鈥?xxiii\nAbout the Author鈥?xxvii\n1\t The Performance Evolution of Java: The Language and the Virtual \nMachine鈥?1\nA New Ecosystem Is Born鈥?2\nA Few Pages from History鈥?2\nUnderstanding Java HotSpot VM and Its Compilation Strategies鈥?3\nThe Evolution of the HotSpot Execution Engine鈥?3\nInterpreter and JIT Compilation鈥?5\nPrint Compilation鈥?5\nTiered Compilation鈥?6\nClient and Server Compilers鈥?7\nSegmented Code Cache鈥?7\nAdaptive Optimization and Deoptimization鈥?9\nHotSpot Garbage Collector: Memory Management Unit鈥?13\nGenerational Garbage Collection, Stop-the-World, and Concurrent \nAlgorithms鈥?13\nYoung Collections and Weak Generational Hypothesis鈥?14\nOld-Generation Collection and Reclamation Triggers鈥?16\nParallel GC Threads, Concurrent GC Threads, and Their \nConfiguration鈥?16\nThe Evolution of the Java Programming Language and Its Ecosystem: A \nCloser Look鈥?18\nJava 1.1 to Java 1.4.2 (J2SE 1.4.2)鈥?18\nJava 5 (J2SE 5.0)鈥?19\nJava 6 (Java SE 6)鈥?23\nJava 7 (Java SE 7)鈥?25\nJava 8 (Java SE 8)鈥?30\nJava 9 (Java SE 9) to Java 16 (Java SE 16)鈥?32\nJava 17 (Java SE 17)鈥?40\nEmbracing Evolution for Enhanced Performance鈥?42"
+}

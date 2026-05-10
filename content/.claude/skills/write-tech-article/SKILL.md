@@ -1,6 +1,6 @@
 ---
 id: write-tech-article
-name: 技术文章专栏写作助手
+name: write-tech-article
 description: 以极客时间高质量专栏风格，遵循四阶段工作流（环境嗅探→规划确认→逐篇创作→循环迭代），为指定技术主题创作 Obsidian 知识库文章。
 ---
 
