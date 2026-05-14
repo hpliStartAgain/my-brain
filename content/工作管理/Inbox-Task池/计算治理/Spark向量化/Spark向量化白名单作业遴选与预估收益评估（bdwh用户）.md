@@ -1,13 +1,16 @@
 ---
 type: task
-status: backlog
+status: todo
 priority: P0
-deadline: 2026-04-30
+deadline: 2026-05-19
 domain: 计算治理
 lifecycle: engineering
 progress: "0"
 completed_date:
-started_date:
+started_date: 2026-05-11
+tags: [计算治理, Spark向量化, Gluten, 候选筛选]
+okr: 2026-H1-集群计算资源治理OKR
+okr_kr: KR3
 ---
 
 ## 🎯 目标与验收标准

@@ -249,6 +249,19 @@ export function transformLink(src: FullSlug, target: string, opts: TransformOpti
         const targetSlug = matchingFileNames[0]
         return (resolveRelative(src, targetSlug) + targetAnchor) as RelativeURL
       }
+
+      // 对于含路径分隔符的多段相对路径（如 images/chapter-003/file.jpeg），
+      // 尝试后缀匹配：在所有 slug 中找到以该路径结尾的唯一匹配。
+      // 这修复了标准 markdown 相对图片路径（非 wikilink）在 "shortest" 策略下被
+      // 错误解析为绝对 vault 路径的问题。
+      if (targetCanonical.includes("/")) {
+        const suffixMatches = opts.allSlugs.filter(
+          (slug) => slug === targetCanonical || slug.endsWith("/" + targetCanonical),
+        )
+        if (suffixMatches.length === 1) {
+          return (resolveRelative(src, suffixMatches[0] as FullSlug) + targetAnchor) as RelativeURL
+        }
+      }
     }
 
     // if it's not unique, then it's the absolute path from the vault root

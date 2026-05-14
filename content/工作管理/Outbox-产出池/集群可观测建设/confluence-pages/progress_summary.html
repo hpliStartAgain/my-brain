@@ -1,0 +1,135 @@
+<h2>Zabbix → Foxeye 告警规则迁移进度概要</h2>
+
+<ac:structured-macro ac:name="info">
+  <ac:parameter ac:name="title">📊 总体进度（截至 2026-05-12）</ac:parameter>
+  <ac:rich-text-body>
+    <table>
+      <tr><th>维度</th><th>数量</th><th>备注</th></tr>
+      <tr><td>CSV 规则清单总条数</td><td>435 条</td><td>21 个服务</td></tr>
+      <tr><td>已完成深度分析服务</td><td>14 个 / 296 条</td><td>见下方各服务详情表</td></tr>
+      <tr><td>平台已匹配规则（matched）</td><td>159 条</td><td>Foxeye 中已有对应规则</td></tr>
+      <tr><td>跳过服务（暂不处理）</td><td>7 个 / 139 条</td><td>zabbix_infra / spark / storm / docker_k8s / mapreduce / hardware / misc</td></tr>
+    </table>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<h3>一、已完成深度分析服务（14 个）</h3>
+<table>
+  <tr>
+    <th>服务</th><th>规则总数</th><th>matched（平台已有）</th><th>Categraf/exporter 可覆盖</th>
+    <th>需开发 exporter</th><th>建议 Retire</th><th>分析页面</th>
+  </tr>
+  <tr>
+    <td>HDFS</td><td>44</td><td>43</td><td>0</td><td>1（ZKFC 进程）</td><td>0</td>
+    <td><ac:link><ri:page ri:content-title="HDFS 告警规则迁移明细"/></ac:link></td>
+  </tr>
+  <tr>
+    <td>YARN</td><td>33</td><td>30</td><td>0</td><td>3（LevelDB 磁盘）</td><td>0</td>
+    <td><ac:link><ri:page ri:content-title="YARN 告警规则迁移明细"/></ac:link></td>
+  </tr>
+  <tr>
+    <td>HBase</td><td>20</td><td>18</td><td>0</td><td>2</td><td>0</td>
+    <td><ac:link><ri:page ri:content-title="HBase 告警规则迁移明细"/></ac:link></td>
+  </tr>
+  <tr>
+    <td>Hive</td><td>25</td><td>15</td><td>4（Loki+procstat）</td><td>0</td><td>6</td>
+    <td><ac:link><ri:page ri:content-title="Hive 告警规则迁移明细"/></ac:link></td>
+  </tr>
+  <tr>
+    <td>Elasticsearch</td><td>43</td><td>20</td><td>3（建规则）</td><td>0</td><td>20（per-IP 探测废弃）</td>
+    <td><ac:link><ri:page ri:content-title="Elasticsearch 告警规则迁移明细"/></ac:link></td>
+  </tr>
+  <tr>
+    <td>Druid</td><td>10</td><td>5</td><td>3</td><td>0</td><td>2</td>
+    <td><ac:link><ri:page ri:content-title="Druid 告警规则迁移明细"/></ac:link></td>
+  </tr>
+  <tr>
+    <td>infra_basic</td><td>80</td><td>32（matched+mixed）</td><td>24（Categraf OS）</td>
+    <td>14（nginx-exporter）</td><td>10（Zabbix特有+评估）</td>
+    <td><ac:link><ri:page ri:content-title="infra_basic 告警规则迁移明细"/></ac:link></td>
+  </tr>
+  <tr>
+    <td>Kafka</td><td>16</td><td>5（平台已有 kafka_controller_*）</td><td>3（Categraf）</td>
+    <td>8（ISR/RequestTotalTimeMs 需补充 jmx_exporter）</td><td>0</td>
+    <td><ac:link><ri:page ri:content-title="Kafka 告警规则迁移明细"/></ac:link></td>
+  </tr>
+  <tr>
+    <td>ZooKeeper</td><td>9</td><td>0</td><td>9（Categraf ZK 插件）</td><td>0</td><td>0</td>
+    <td><ac:link><ri:page ri:content-title="ZooKeeper 告警规则迁移明细"/></ac:link></td>
+  </tr>
+  <tr>
+    <td>java_jvm</td><td>7</td><td>0</td><td>5（jmx_exporter 通用）</td><td>0</td><td>2（JIT/VM类型）</td>
+    <td><ac:link><ri:page ri:content-title="java_jvm 告警规则迁移明细"/></ac:link></td>
+  </tr>
+  <tr>
+    <td>Ambari</td><td>3</td><td>0</td><td>3（Categraf）</td><td>0</td><td>0</td>
+    <td><ac:link><ri:page ri:content-title="Ambari 告警规则迁移明细"/></ac:link></td>
+  </tr>
+  <tr>
+    <td>Kyuubi</td><td>2</td><td>0</td><td>2（Categraf）</td><td>0</td><td>0</td>
+    <td><ac:link><ri:page ri:content-title="Kyuubi 告警规则迁移明细"/></ac:link></td>
+  </tr>
+  <tr>
+    <td>Ranger</td><td>2</td><td>0</td><td>2（Categraf）</td><td>0</td><td>0</td>
+    <td><ac:link><ri:page ri:content-title="Ranger 告警规则迁移明细"/></ac:link></td>
+  </tr>
+  <tr>
+    <td>Trino</td><td>2</td><td>1</td><td>1（平台有指标直接建规则）</td><td>0</td><td>0</td>
+    <td><ac:link><ri:page ri:content-title="Trino 告警规则迁移明细"/></ac:link></td>
+  </tr>
+  <tr>
+    <td><strong>合计</strong></td><td><strong>296</strong></td><td><strong>169</strong></td>
+    <td><strong>56</strong></td><td><strong>28</strong></td><td><strong>40</strong></td><td>—</td>
+  </tr>
+</table>
+
+<h3>二、跳过服务（7 个，暂不处理）</h3>
+<table>
+  <tr><th>服务</th><th>规则数</th><th>跳过原因</th></tr>
+  <tr><td>zabbix_infra</td><td>78</td><td>Zabbix 自身监控，迁移后无需保留</td></tr>
+  <tr><td>misc</td><td>46</td><td>已重分类到各服务，单独归档</td></tr>
+  <tr><td>spark</td><td>5</td><td>H2 规划，暂不处理</td></tr>
+  <tr><td>storm</td><td>3</td><td>Storm 集群已基本退役</td></tr>
+  <tr><td>docker_k8s</td><td>4</td><td>K8s 体系独立监控，不纳入本次迁移</td></tr>
+  <tr><td>mapreduce</td><td>2</td><td>MapReduce 作业监控已被 YARN 覆盖</td></tr>
+  <tr><td>hardware</td><td>1</td><td>硬件监控由 IPMI/BMC 独立负责</td></tr>
+</table>
+
+<h3>三、关键阻塞项（Blocker）汇总</h3>
+<table>
+  <tr><th>阻塞项</th><th>影响规则数</th><th>涉及服务</th><th>解决方案</th></tr>
+  <tr>
+    <td>nginx-exporter 未部署</td><td>14</td><td>infra_basic</td>
+    <td>部署 nginx-prometheus-exporter，通过 stub_status 暴露指标</td>
+  </tr>
+  <tr>
+    <td>Kafka jmx_exporter 配置不完整</td><td>8</td><td>Kafka</td>
+    <td>补充 ISR / RequestTotalTimeMs / OfflineLogDirectory MBean 采集配置</td>
+  </tr>
+  <tr>
+    <td>ZooKeeper 指标未接入</td><td>9</td><td>ZooKeeper</td>
+    <td>在 ZK 节点启用 Categraf zookeeper 插件（mntr 命令）</td>
+  </tr>
+  <tr>
+    <td>OS 基础指标体系不完整</td><td>24</td><td>infra_basic</td>
+    <td>补充 Categraf system/mem/kernel/cgroup 插件配置</td>
+  </tr>
+  <tr>
+    <td>ZKFC 进程监控缺指标</td><td>1</td><td>HDFS</td>
+    <td>Categraf procstat 监控 DFSZKFailoverController 进程</td>
+  </tr>
+  <tr>
+    <td>Timelineserver LevelDB 磁盘大小</td><td>3</td><td>YARN</td>
+    <td>node-exporter filesystem 指标监控 LevelDB 数据目录</td>
+  </tr>
+</table>
+
+<h3>四、后续行动建议</h3>
+<ol>
+  <li><strong>P0（立即）</strong>：确认平台 matched 的 169 条规则中 Foxeye 规则已全部启用，逐服务验证告警阈值与 Zabbix 一致</li>
+  <li><strong>P1（本周）</strong>：补充 Categraf 采集配置（ZK插件 / OS指标 / Kafka ISR）；为已有平台指标的 56 条规则批量建 Foxeye 规则</li>
+  <li><strong>P2（本月）</strong>：部署 nginx-exporter，覆盖 infra_basic 14 条 Nginx 告警；解决 Kafka jmx_exporter 缺失 MBean</li>
+  <li><strong>P3（归档）</strong>：将建议 retire 的约 40 条规则在 Zabbix 中标记禁用并存档</li>
+</ol>
+
+<p><em>最后更新：2026-05-12 | 数据源：alert_rule_groups_20260512_105823.csv</em></p>

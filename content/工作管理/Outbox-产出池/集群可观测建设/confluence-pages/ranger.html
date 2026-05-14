@@ -1,0 +1,29 @@
+<h2>Ranger — 迁移深度分析 v2</h2>
+
+<ac:structured-macro ac:name="info">
+  <ac:parameter ac:name="title">📊 规则总览（2 条）</ac:parameter>
+  <ac:rich-text-body>
+    <table>
+      <tr><th>分类</th><th>数量</th><th>迁移路径</th></tr>
+      <tr><td>🔧 Categraf 可覆盖</td><td>2</td><td>net_response 端口探活 + procstat 进程检测</td></tr>
+    </table>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<p>Ranger 仅有 2 条告警规则，均针对 Ranger Admin 服务的存活性检测，可直接通过 Categraf 覆盖。</p>
+
+<table>
+  <tr><th>规则名称</th><th>Categraf 方案</th><th>建议告警条件</th></tr>
+  <tr>
+    <td>Hadoop3 Port 6080 of Ranger Admin is DOWN</td>
+    <td>Categraf net_response 插件</td>
+    <td>探活 Ranger Admin HTTP 端口 6080；net_response_result_code != 0</td>
+  </tr>
+  <tr>
+    <td>Hadoop3 Process of Ranger Admin is DEAD</td>
+    <td>Categraf procstat 插件</td>
+    <td>检测 EmbeddedServer 或 ranger 进程；procstat_running == 0</td>
+  </tr>
+</table>
+
+<p><em>v2 深度分析 - 2026-05-12 更新</em></p>

@@ -2,7 +2,7 @@
 type: task
 status: todo
 priority: P1
-deadline: 2026-04-30
+deadline: 2026-06-15
 domain: 集群新特性
 lifecycle: research
 progress: "0"

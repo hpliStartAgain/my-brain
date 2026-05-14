@@ -2,7 +2,10 @@
 type: task
 status: doing
 priority: P0
-deadline: 2026-04-30
+deadline: 2026-06-18
+okr: 2026-H1-集群可观测建设OKR
+okr_kr: KR2
+note: 已纳入 [[Alloy全集群部署推广]] 统一追踪
 domain: 集群可观测建设
 lifecycle: engineering
 progress: "20"

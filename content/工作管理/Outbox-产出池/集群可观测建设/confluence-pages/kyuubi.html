@@ -1,0 +1,41 @@
+<h2>Kyuubi — 迁移深度分析 v2</h2>
+
+<ac:structured-macro ac:name="info">
+  <ac:parameter ac:name="title">📊 规则总览（2 条）</ac:parameter>
+  <ac:rich-text-body>
+    <table>
+      <tr><th>分类</th><th>数量</th><th>迁移路径</th></tr>
+      <tr><td>🔧 Categraf 可覆盖</td><td>2</td><td>net_response 端口探活 + procstat 进程检测</td></tr>
+    </table>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<p>Kyuubi 仅有 2 条告警规则，均为基础存活性检测，可直接通过 Categraf 覆盖，无需 exporter 开发。</p>
+
+<table>
+  <tr><th>规则名称</th><th>Categraf 方案</th><th>建议告警条件</th></tr>
+  <tr>
+    <td>Kyuubi Port is Down</td>
+    <td>Categraf net_response 插件</td>
+    <td>探活 Kyuubi 服务端口（默认 10009 ThriftBinary / 10010 ThriftHTTP）；net_response_result_code != 0</td>
+  </tr>
+  <tr>
+    <td>Kyuubi Process is DEAD</td>
+    <td>Categraf procstat 插件</td>
+    <td>检测 org.apache.kyuubi.server.KyuubiServer 进程；procstat_running == 0</td>
+  </tr>
+</table>
+
+<ac:structured-macro ac:name="info">
+  <ac:parameter ac:name="title">Kyuubi 深度监控扩展建议</ac:parameter>
+  <ac:rich-text-body>
+    <p>Kyuubi 原生支持 Prometheus 指标暴露（无需 jmx_exporter），可接入 Categraf prometheus 插件：</p>
+    <ul>
+      <li>活跃会话数：kyuubi_backend_service_open_session_count</li>
+      <li>作业提交失败率：kyuubi_operation_*_failed_count</li>
+      <li>引擎初始化延迟：kyuubi_engine_*_init_latency</li>
+    </ul>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<p><em>v2 深度分析 - 2026-05-12 更新</em></p>

@@ -1,0 +1,407 @@
+{
+  "source_pdf": "content/电子书/Mastering Kubernetes (Gigi Sayfan) (Z-Library).pdf",
+  "total_words": 179776,
+  "target_dir": "content/Kubernetes/Mastering-Kubernetes/",
+  "chapters": [
+    {
+      "num": 0,
+      "title_en": "Preface",
+      "title_zh": "前言",
+      "lines": [
+        1208,
+        1494
+      ],
+      "word_count": 2499,
+      "figure_count": 0,
+      "table_count": 0,
+      "image_count": 0,
+      "image_prefix": "preface",
+      "status": "completed",
+      "output_file": "00-前言.md",
+      "arbitration": {
+        "passed": false,
+        "score": 0,
+        "issues": []
+      }
+    },
+    {
+      "num": 1,
+      "title_en": "Understanding Kubernetes Architecture",
+      "title_zh": "理解Kubernetes架构",
+      "lines": [
+        1495,
+        2743
+      ],
+      "word_count": 7501,
+      "figure_count": 3,
+      "table_count": 0,
+      "image_count": 3,
+      "image_prefix": "ch01",
+      "status": "completed",
+      "output_file": "01-理解Kubernetes架构.md",
+      "arbitration": {
+        "passed": false,
+        "score": 0,
+        "issues": []
+      }
+    },
+    {
+      "num": 2,
+      "title_en": "Creating Kubernetes Clusters",
+      "title_zh": "创建Kubernetes集群",
+      "lines": [
+        2744,
+        5207
+      ],
+      "word_count": 9900,
+      "figure_count": 6,
+      "table_count": 0,
+      "image_count": 6,
+      "image_prefix": "ch02",
+      "status": "completed",
+      "output_file": "02-创建Kubernetes集群.md",
+      "arbitration": {
+        "passed": false,
+        "score": 0,
+        "issues": []
+      }
+    },
+    {
+      "num": 3,
+      "title_en": "High Availability and Reliability",
+      "title_zh": "高可用性与可靠性",
+      "lines": [
+        5208,
+        6574
+      ],
+      "word_count": 11216,
+      "figure_count": 9,
+      "table_count": 0,
+      "image_count": 9,
+      "image_prefix": "ch03",
+      "status": "completed",
+      "output_file": "03-高可用性与可靠性.md",
+      "arbitration": {
+        "passed": false,
+        "score": 0,
+        "issues": []
+      }
+    },
+    {
+      "num": 4,
+      "title_en": "Securing Kubernetes",
+      "title_zh": "保护Kubernetes安全",
+      "lines": [
+        6575,
+        8751
+      ],
+      "word_count": 11069,
+      "figure_count": 3,
+      "table_count": 0,
+      "image_count": 5,
+      "image_prefix": "ch04",
+      "status": "completed",
+      "output_file": "04-保护Kubernetes安全.md",
+      "arbitration": {
+        "passed": false,
+        "score": 0,
+        "issues": []
+      }
+    },
+    {
+      "num": 5,
+      "title_en": "Using Kubernetes Resources in Practice",
+      "title_zh": "实战中使用Kubernetes资源",
+      "lines": [
+        8752,
+        12021
+      ],
+      "word_count": 12302,
+      "figure_count": 0,
+      "table_count": 0,
+      "image_count": 0,
+      "image_prefix": "ch05",
+      "status": "completed",
+      "output_file": "05-实战中使用Kubernetes资源.md",
+      "arbitration": {
+        "passed": false,
+        "score": 0,
+        "issues": []
+      }
+    },
+    {
+      "num": 6,
+      "title_en": "Managing Storage",
+      "title_zh": "管理存储",
+      "lines": [
+        12022,
+        14536
+      ],
+      "word_count": 10292,
+      "figure_count": 5,
+      "table_count": 0,
+      "image_count": 5,
+      "image_prefix": "ch06",
+      "status": "completed",
+      "output_file": "06-管理存储.md",
+      "arbitration": {
+        "passed": false,
+        "score": 0,
+        "issues": []
+      }
+    },
+    {
+      "num": 7,
+      "title_en": "Running Stateful Applications with Kubernetes",
+      "title_zh": "在Kubernetes上运行有状态应用",
+      "lines": [
+        14537,
+        15873
+      ],
+      "word_count": 6093,
+      "figure_count": 1,
+      "table_count": 0,
+      "image_count": 2,
+      "image_prefix": "ch07",
+      "status": "completed",
+      "output_file": "07-在Kubernetes上运行有状态应用.md",
+      "arbitration": {
+        "passed": false,
+        "score": 0,
+        "issues": []
+      }
+    },
+    {
+      "num": 8,
+      "title_en": "Deploying and Updating Applications",
+      "title_zh": "部署与更新应用",
+      "lines": [
+        15874,
+        17938
+      ],
+      "word_count": 8851,
+      "figure_count": 8,
+      "table_count": 0,
+      "image_count": 6,
+      "image_prefix": "ch08",
+      "status": "completed",
+      "output_file": "08-部署与更新应用.md",
+      "arbitration": {
+        "passed": false,
+        "score": 0,
+        "issues": []
+      }
+    },
+    {
+      "num": 9,
+      "title_en": "Packaging Applications",
+      "title_zh": "打包应用",
+      "lines": [
+        17939,
+        19881
+      ],
+      "word_count": 7452,
+      "figure_count": 0,
+      "table_count": 0,
+      "image_count": 3,
+      "image_prefix": "ch09",
+      "status": "completed",
+      "output_file": "09-打包应用.md",
+      "arbitration": {
+        "passed": false,
+        "score": 0,
+        "issues": []
+      }
+    },
+    {
+      "num": 10,
+      "title_en": "Exploring Kubernetes Networking",
+      "title_zh": "探索Kubernetes网络",
+      "lines": [
+        19882,
+        22230
+      ],
+      "word_count": 11333,
+      "figure_count": 11,
+      "table_count": 0,
+      "image_count": 11,
+      "image_prefix": "ch10",
+      "status": "completed",
+      "output_file": "10-探索Kubernetes网络.md",
+      "arbitration": {
+        "passed": false,
+        "score": 0,
+        "issues": []
+      }
+    },
+    {
+      "num": 11,
+      "title_en": "Running Kubernetes on Multiple Clusters",
+      "title_zh": "在多集群上运行Kubernetes",
+      "lines": [
+        22231,
+        23608
+      ],
+      "word_count": 6734,
+      "figure_count": 14,
+      "table_count": 0,
+      "image_count": 12,
+      "image_prefix": "ch11",
+      "status": "completed",
+      "output_file": "11-在多集群上运行Kubernetes.md",
+      "arbitration": {
+        "passed": false,
+        "score": 0,
+        "issues": []
+      }
+    },
+    {
+      "num": 12,
+      "title_en": "Serverless Computing on Kubernetes",
+      "title_zh": "Kubernetes上的无服务器计算",
+      "lines": [
+        23609,
+        25753
+      ],
+      "word_count": 7800,
+      "figure_count": 17,
+      "table_count": 0,
+      "image_count": 16,
+      "image_prefix": "ch12",
+      "status": "completed",
+      "output_file": "12-Kubernetes上的无服务器计算.md",
+      "arbitration": {
+        "passed": false,
+        "score": 0,
+        "issues": []
+      }
+    },
+    {
+      "num": 13,
+      "title_en": "Monitoring Kubernetes Clusters",
+      "title_zh": "监控Kubernetes集群",
+      "lines": [
+        25754,
+        27668
+      ],
+      "word_count": 8752,
+      "figure_count": 13,
+      "table_count": 0,
+      "image_count": 15,
+      "image_prefix": "ch13",
+      "status": "completed",
+      "output_file": "13-监控Kubernetes集群.md",
+      "arbitration": {
+        "passed": false,
+        "score": 0,
+        "issues": []
+      }
+    },
+    {
+      "num": 14,
+      "title_en": "Utilizing Service Meshes",
+      "title_zh": "使用服务网格",
+      "lines": [
+        27669,
+        29162
+      ],
+      "word_count": 6652,
+      "figure_count": 15,
+      "table_count": 0,
+      "image_count": 13,
+      "image_prefix": "ch14",
+      "status": "completed",
+      "output_file": "14-使用服务网格.md",
+      "arbitration": {
+        "passed": false,
+        "score": 0,
+        "issues": []
+      }
+    },
+    {
+      "num": 15,
+      "title_en": "Extending Kubernetes",
+      "title_zh": "扩展Kubernetes",
+      "lines": [
+        29163,
+        31750
+      ],
+      "word_count": 12326,
+      "figure_count": 6,
+      "table_count": 0,
+      "image_count": 10,
+      "image_prefix": "ch15",
+      "status": "completed",
+      "output_file": "15-扩展Kubernetes.md",
+      "arbitration": {
+        "passed": false,
+        "score": 0,
+        "issues": []
+      }
+    },
+    {
+      "num": 16,
+      "title_en": "Governing Kubernetes",
+      "title_zh": "治理Kubernetes",
+      "lines": [
+        31751,
+        34296
+      ],
+      "word_count": 11115,
+      "figure_count": 9,
+      "table_count": 0,
+      "image_count": 7,
+      "image_prefix": "ch16",
+      "status": "completed",
+      "output_file": "16-治理Kubernetes.md",
+      "arbitration": {
+        "passed": false,
+        "score": 0,
+        "issues": []
+      }
+    },
+    {
+      "num": 17,
+      "title_en": "Running Kubernetes in Production",
+      "title_zh": "在生产环境中运行Kubernetes",
+      "lines": [
+        34297,
+        36871
+      ],
+      "word_count": 18201,
+      "figure_count": 1,
+      "table_count": 0,
+      "image_count": 4,
+      "image_prefix": "ch17",
+      "status": "completed",
+      "output_file": "17-在生产环境中运行Kubernetes.md",
+      "arbitration": {
+        "passed": false,
+        "score": 0,
+        "issues": []
+      }
+    },
+    {
+      "num": 18,
+      "title_en": "The Future of Kubernetes",
+      "title_zh": "Kubernetes的未来",
+      "lines": [
+        36872,
+        39516
+      ],
+      "word_count": 9688,
+      "figure_count": 3,
+      "table_count": 0,
+      "image_count": 7,
+      "image_prefix": "ch18",
+      "status": "completed",
+      "output_file": "18-Kubernetes的未来.md",
+      "arbitration": {
+        "passed": false,
+        "score": 0,
+        "issues": []
+      }
+    }
+  ],
+  "status": "completed"
+}

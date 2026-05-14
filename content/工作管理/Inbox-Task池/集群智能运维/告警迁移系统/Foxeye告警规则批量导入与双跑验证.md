@@ -2,7 +2,9 @@
 type: task
 status: todo
 priority: P0
-deadline: 2026-05-15
+deadline: 2026-06-18
+okr: 2026-H1-告警迁移OKR
+okr_kr: KR2
 domain: 集群智能运维
 lifecycle: engineering
 progress: "0"

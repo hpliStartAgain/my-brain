@@ -1,0 +1,103 @@
+<h2>ZooKeeper — 迁移深度分析 v2</h2>
+
+<ac:structured-macro ac:name="info">
+  <ac:parameter ac:name="title">📊 规则总览（9 条）</ac:parameter>
+  <ac:rich-text-body>
+    <table>
+      <tr><th>分类</th><th>数量</th><th>迁移路径</th></tr>
+      <tr><td>✅ 已匹配</td><td>0</td><td>—</td></tr>
+      <tr><td>🔧 Categraf ZooKeeper 插件可覆盖（指标类）</td><td>7</td><td>Categraf 内置 zookeeper 插件，通过 mntr 命令采集所有关键指标</td></tr>
+      <tr><td>🔧 Categraf procstat/net_response（存活类）</td><td>2</td><td>进程 + 端口探活</td></tr>
+    </table>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<ac:structured-macro ac:name="warning">
+  <ac:parameter ac:name="title">⚠ 平台当前无 ZooKeeper 指标——需部署 Categraf ZooKeeper 插件</ac:parameter>
+  <ac:rich-text-body>
+    <p>查询告警迁移平台，ZooKeeper 服务指标数量为 0（平台只有 categraf 自身的 treecache_zookeeper_failures_total，与 ZK 服务本身无关）。</p>
+    <p><strong>迁移前提</strong>：在各 ZooKeeper 节点（或统一采集节点）部署 Categraf 并启用内置 zookeeper 插件，配置 ZK 地址列表即可采集全量 mntr 指标，无需额外开发。</p>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<h3>🔧 第一组：Categraf ZooKeeper 插件覆盖（7 条指标类告警）</h3>
+<p>Categraf 内置 <code>zookeeper</code> 插件通过向 ZK 节点发送 <code>mntr</code> 四字命令采集运行状态，覆盖以下所有规则：</p>
+
+<table>
+  <tr><th>规则名称（Zabbix）</th><th>对应 Categraf 指标</th><th>建议告警条件</th></tr>
+  <tr>
+    <td>Zookeeper: Too many queued requests</td>
+    <td><code>zookeeper_outstanding_requests</code></td>
+    <td><code>zookeeper_outstanding_requests &gt; 10</code>（队列积压超过阈值说明 ZK 处理能力不足）</td>
+  </tr>
+  <tr>
+    <td>Zookeeper: zookeeper.max_latency &gt; 100</td>
+    <td><code>zookeeper_max_latency</code></td>
+    <td><code>zookeeper_max_latency &gt; 100</code>（单位 ms）</td>
+  </tr>
+  <tr>
+    <td>Zookeeper: znode_count &gt; 200000</td>
+    <td><code>zookeeper_znode_count</code></td>
+    <td><code>zookeeper_znode_count &gt; 200000</code></td>
+  </tr>
+  <tr>
+    <td>Zookeeper: Too many file descriptors used</td>
+    <td><code>zookeeper_open_file_descriptor_count</code> / <code>zookeeper_max_file_descriptor_count</code></td>
+    <td><code>zookeeper_open_file_descriptor_count / zookeeper_max_file_descriptor_count &gt; 0.85</code></td>
+  </tr>
+  <tr>
+    <td>Zookeeper: Too many file descriptors used &gt; 1000</td>
+    <td><code>zookeeper_open_file_descriptor_count</code></td>
+    <td><code>zookeeper_open_file_descriptor_count &gt; 1000</code>（绝对值告警，与上条互补）</td>
+  </tr>
+  <tr>
+    <td>Zookeeper: Server mode has changed</td>
+    <td><code>zookeeper_server_state</code>（string label）</td>
+    <td>Categraf zookeeper 插件将 server_state（leader/follower/standalone）作为 label 输出；通过 <code>changes(zookeeper_server_state[5m]) &gt; 0</code> 或 Loki 日志关键词 "New election" 检测选举事件</td>
+  </tr>
+  <tr>
+    <td>Zookeeper: Version has changed</td>
+    <td>Loki 日志告警</td>
+    <td>ZK 版本变更极少发生，建议用 Loki Pattern Alert 检测 ZK 启动日志中的版本字符串变化，而非指标告警</td>
+  </tr>
+</table>
+
+<h3>🔧 第二组：Categraf procstat/net_response（2 条存活类告警）</h3>
+<table>
+  <tr><th>规则名称</th><th>Categraf 方案</th><th>建议告警条件</th></tr>
+  <tr>
+    <td>Port 2181 of Zookeeper is DOWN</td>
+    <td>Categraf <code>net_response</code> 插件</td>
+    <td>探活 ZK 客户端端口 2181；<code>net_response_result_code != 0</code></td>
+  </tr>
+  <tr>
+    <td>Processes of Zookeeper are DEAD</td>
+    <td>Categraf <code>procstat</code> 插件</td>
+    <td>检测 <code>org.apache.zookeeper.server.quorum.QuorumPeerMain</code> 进程；<code>procstat_running == 0</code></td>
+  </tr>
+</table>
+
+<ac:structured-macro ac:name="info">
+  <ac:parameter ac:name="title">💡 Categraf ZooKeeper 插件配置参考</ac:parameter>
+  <ac:rich-text-body>
+    <p>在各 Categraf 实例的配置目录下新增 <code>conf.d/input.zookeeper/zookeeper.toml</code>：</p>
+    <pre>
+[[instances]]
+  servers = ["zk-node1:2181", "zk-node2:2181", "zk-node3:2181"]
+  timeout = 5
+    </pre>
+    <p>启动后将采集 zk_avg_latency、zk_max_latency、zk_outstanding_requests、zk_znode_count、zk_open_file_descriptor_count、zk_server_state 等全部 mntr 输出指标。</p>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<h3>📋 行动优先级</h3>
+<table>
+  <tr><th>优先级</th><th>行动</th><th>影响规则数</th></tr>
+  <tr><td>P0（立即）</td><td>在 ZooKeeper 节点部署 Categraf 并启用 zookeeper 插件，接入 VictoriaMetrics</td><td>7</td></tr>
+  <tr><td>P0（立即）</td><td>补充 procstat/net_response 配置，建 ZK 存活告警规则</td><td>2</td></tr>
+  <tr><td>P1（本周）</td><td>指标接入后，在 Foxeye 建立 outstanding_requests / max_latency / znode_count / FD 使用率等告警规则</td><td>5</td></tr>
+  <tr><td>P2（本月）</td><td>Server mode 变更告警（结合 Loki 日志告警补充选举检测）</td><td>1</td></tr>
+  <tr><td>P3</td><td>Version changed 规则通过 Loki Pattern Alert 或变更管控替代</td><td>1</td></tr>
+</table>
+
+<p><em>v2 深度分析 - 2026-05-12 更新</em></p>

@@ -1,0 +1,109 @@
+<h1>Elasticsearch 告警规则迁移明细</h1>
+<p><strong>数据来源：</strong>Zabbix 告警迁移系统（导出时间：2026-05-12）</p>
+
+<ac:structured-macro ac:name="info">
+<ac:parameter ac:name="title">迁移方案概述</ac:parameter>
+<ac:rich-text-body>
+<p>ES 共 43 条规则，已匹配 20 条，未匹配 23 条。</p>
+<p><strong>未匹配规则分析：</strong></p>
+<ul>
+<li><strong>Coordinator HTTP API 探测（20 条，blocked_exporter）</strong>：原 Zabbix 对 10 个协调节点逐一做 HTTP 可达性 + 响应时间探测。迁移方案：Categraf <code>http_response</code> 插件，每个节点一条配置（address = "http://es-nodeXX:9200/_cluster/health"），避免逐节点建 Foxeye 规则，可用单条规则 + label 覆盖所有节点。</li>
+<li><strong>JVM GC 频繁（1 条）</strong>：需 ES JMX Exporter 指标，已有 ELK JMX 模板痕迹，需确认 JMX exporter 是否已接入。</li>
+<li><strong>节点数变更（1 条）</strong>：ES Prometheus exporter 已覆盖 <code>elasticsearch_cluster_health_number_of_nodes</code>，可直接建规则。</li>
+</ul>
+</ac:rich-text-body>
+</ac:structured-macro>
+
+<h2>📊 汇总统计</h2>
+<table><thead><tr><th>汇总项</th><th>数量</th></tr></thead><tbody>
+<tr><td>规则组总数</td><td><strong>43</strong></td></tr>
+<tr><td>✅ 已匹配</td><td><strong style="color:#00875A">20</strong></td></tr>
+<tr><td>⬜ 未匹配</td><td><strong style="color:#BF2600">23</strong></td></tr>
+<tr><td>未匹配-blocked_exporter（HTTP探测）</td><td>21</td></tr>
+<tr><td>未匹配-triage（需分析）</td><td>3</td></tr>
+</tbody></table>
+
+<h3>按规则类型分布</h3>
+<table><thead><tr><th>规则分组</th><th>总计</th><th>已匹配</th><th>未匹配</th><th>迁移路径</th></tr></thead><tbody>
+<tr><td>🏥 集群健康（Cluster Health）</td><td>12</td><td>10</td><td>2</td><td>ES Prometheus Exporter</td></tr>
+<tr><td>👑 Master 状态（Leader / Cluster State）</td><td>5</td><td>5</td><td>0</td><td>已覆盖</td></tr>
+<tr><td>📝 写入队列（Write Queue）</td><td>2</td><td>2</td><td>0</td><td>已覆盖</td></tr>
+<tr><td>🔄 节点变更（Node Change）</td><td>1</td><td>1</td><td>0</td><td>ES Prometheus Exporter（elasticsearch_cluster_health_number_of_nodes）</td></tr>
+<tr><td>📡 HTTP 探测（coordinator API）</td><td>20</td><td>0</td><td>20</td><td>Categraf http_response（per node target）</td></tr>
+<tr><td>♻️ JVM GC</td><td>1</td><td>0</td><td>1</td><td>ES JMX Exporter（待确认接入状态）</td></tr>
+<tr><td>📁 JVM/OS（文件描述符）</td><td>1</td><td>1</td><td>0</td><td>已覆盖</td></tr>
+<tr><td>💻 基础资源（CPU/Load）</td><td>1</td><td>1</td><td>0</td><td>已覆盖</td></tr>
+</tbody></table><hr/>
+<h2>🏥 集群健康（Cluster Health）（12 条，已匹配 10，未匹配 2）</h2>
+<table><thead><tr><th>#</th><th>规则名称</th><th>Trigger ID</th><th>状态</th><th>Foxeye 链接</th><th>可行性</th></tr></thead><tbody>
+<tr style="background-color:#E3FCEF"><td>1</td><td>ElasticSearch Cluster Status is Yellow</td><td>338364</td><td><span style="color:#00875A">✅ 已匹配</span></td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/75164">75164</a></td><td>ready</td></tr>
+<tr style="background-color:#E3FCEF"><td>2</td><td>ElasticSearch Cluster Status is Red</td><td>108323</td><td><span style="color:#00875A">✅ 已匹配</span></td><td>—</td><td>ready</td></tr>
+<tr style="background-color:#E3FCEF"><td>3</td><td>ElasticSearch Cluster Status is Yellow</td><td>108325</td><td><span style="color:#00875A">✅ 已匹配</span></td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/75164">75164</a></td><td>ready</td></tr>
+<tr style="background-color:#E3FCEF"><td>4</td><td>Unassigned Shards</td><td>108327</td><td><span style="color:#00875A">✅ 已匹配</span></td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/75164">75164</a></td><td>ready</td></tr>
+<tr><td>5</td><td>Elasticsearch Node is changed</td><td>108372</td><td><span style="color:#BF2600">⬜ 未匹配</span></td><td>—</td><td>triage</td></tr>
+<tr style="background-color:#E3FCEF"><td>6</td><td>ElasticSearch Cluster Status is Red</td><td>22686</td><td><span style="color:#00875A">✅ 已匹配</span></td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/75106">75106</a></td><td>ready</td></tr>
+<tr style="background-color:#E3FCEF"><td>7</td><td>ElasticSearch Cluster Status is Yellow</td><td>22687</td><td><span style="color:#00875A">✅ 已匹配</span></td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/75164">75164</a></td><td>ready</td></tr>
+<tr style="background-color:#E3FCEF"><td>8</td><td>Unassigned Shards</td><td>22688</td><td><span style="color:#00875A">✅ 已匹配</span></td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/75164">75164</a></td><td>ready</td></tr>
+<tr style="background-color:#E3FCEF"><td>9</td><td>Elasticsearch Node is changed</td><td>22786</td><td><span style="color:#00875A">✅ 已匹配</span></td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/75161">75161</a></td><td>ready</td></tr>
+<tr style="background-color:#E3FCEF"><td>10</td><td>ElasticSearch Cluster Status is Red</td><td>263878</td><td><span style="color:#00875A">✅ 已匹配</span></td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/75158">75158</a></td><td>ready</td></tr>
+<tr style="background-color:#FFFAE6"><td>11</td><td>Unassigned Shards</td><td>263884</td><td><span style="color:#BF2600">⬜ 未匹配</span></td><td>—</td><td>blocked_exporter</td></tr>
+<tr style="background-color:#E3FCEF"><td>12</td><td>ElasticSearch Cluster Status is Red</td><td>338363</td><td><span style="color:#00875A">✅ 已匹配</span></td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/75107">75107</a></td><td>ready</td></tr>
+</tbody></table>
+<h2>👑 Master 状态（Leader / Cluster State）（5 条，已匹配 5，未匹配 0）</h2>
+<table><thead><tr><th>#</th><th>规则名称</th><th>Trigger ID</th><th>状态</th><th>Foxeye 链接</th><th>可行性</th></tr></thead><tbody>
+<tr style="background-color:#E3FCEF"><td>1</td><td>bd_es_online_published_state_timeout(may be cluster will stuck)</td><td>1332024</td><td><span style="color:#00875A">✅ 已匹配</span></td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/75162">75162</a></td><td>ready</td></tr>
+<tr style="background-color:#E3FCEF"><td>2</td><td>bd_es_online_master_error_and_failed（出现error failed日志）</td><td>1519175</td><td><span style="color:#00875A">✅ 已匹配</span></td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/75111">75111</a></td><td>ready</td></tr>
+<tr style="background-color:#E3FCEF"><td>3</td><td>bd_log_es_published_state_timeout(may be cluster will stuck)</td><td>1720526</td><td><span style="color:#00875A">✅ 已匹配</span></td><td>—</td><td>ready</td></tr>
+<tr style="background-color:#E3FCEF"><td>4</td><td>bd_log_es_master_leader_change</td><td>1746894</td><td><span style="color:#00875A">✅ 已匹配</span></td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/75111">75111</a></td><td>ready</td></tr>
+<tr style="background-color:#E3FCEF"><td>5</td><td>bd_log_es_node-left_or_node-join</td><td>1748693</td><td><span style="color:#00875A">✅ 已匹配</span></td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/75161">75161</a></td><td>ready</td></tr>
+</tbody></table>
+<h2>📝 写入队列（Write Queue）（2 条，已匹配 2，未匹配 0）</h2>
+<table><thead><tr><th>#</th><th>规则名称</th><th>Trigger ID</th><th>状态</th><th>Foxeye 链接</th><th>可行性</th></tr></thead><tbody>
+<tr style="background-color:#E3FCEF"><td>1</td><td>bd-es-online write queue 大于1000 节点</td><td>1293004</td><td><span style="color:#00875A">✅ 已匹配</span></td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/75122">75122</a></td><td>ready</td></tr>
+<tr style="background-color:#E3FCEF"><td>2</td><td>bd-logs-es 发现write-queue 大于12000 节点</td><td>1723495</td><td><span style="color:#00875A">✅ 已匹配</span></td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/75122">75122</a></td><td>ready</td></tr>
+</tbody></table>
+<h2>🔄 节点变更（Node Change）（1 条，已匹配 1，未匹配 0）</h2>
+<table><thead><tr><th>#</th><th>规则名称</th><th>Trigger ID</th><th>状态</th><th>Foxeye 链接</th><th>可行性</th></tr></thead><tbody>
+<tr style="background-color:#E3FCEF"><td>1</td><td>Elasticsearch Node is changed</td><td>338365</td><td><span style="color:#00875A">✅ 已匹配</span></td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/75161">75161</a></td><td>ready</td></tr>
+</tbody></table>
+<h2>📡 HTTP 探测（coordinator API）（20 条，已匹配 0，未匹配 20）</h2>
+<table><thead><tr><th>#</th><th>规则名称</th><th>Trigger ID</th><th>状态</th><th>Foxeye 链接</th><th>可行性</th></tr></thead><tbody>
+<tr style="background-color:#FFFAE6"><td>1</td><td>ES bd-es-online 107 coordinator http api test timeout</td><td>1331878</td><td><span style="color:#BF2600">⬜ 未匹配</span></td><td>—</td><td>blocked_exporter</td></tr>
+<tr style="background-color:#FFFAE6"><td>2</td><td>ES bd-es-online 117 coordinator http api test timeout</td><td>1331882</td><td><span style="color:#BF2600">⬜ 未匹配</span></td><td>—</td><td>blocked_exporter</td></tr>
+<tr style="background-color:#FFFAE6"><td>3</td><td>ES bd-es-online 118 coordinator http api test timeout</td><td>1331884</td><td><span style="color:#BF2600">⬜ 未匹配</span></td><td>—</td><td>blocked_exporter</td></tr>
+<tr style="background-color:#FFFAE6"><td>4</td><td>ES bd-es-online 119 coordinator http api test timeout</td><td>1331886</td><td><span style="color:#BF2600">⬜ 未匹配</span></td><td>—</td><td>blocked_exporter</td></tr>
+<tr style="background-color:#FFFAE6"><td>5</td><td>ES bd-es-online 120 coordinator http api test timeout</td><td>1331888</td><td><span style="color:#BF2600">⬜ 未匹配</span></td><td>—</td><td>blocked_exporter</td></tr>
+<tr style="background-color:#FFFAE6"><td>6</td><td>ES bd-es-online 121 coordinator http api test timeout</td><td>1331890</td><td><span style="color:#BF2600">⬜ 未匹配</span></td><td>—</td><td>blocked_exporter</td></tr>
+<tr style="background-color:#FFFAE6"><td>7</td><td>ES bd-es-online 122 coordinator http api test timeout</td><td>1331892</td><td><span style="color:#BF2600">⬜ 未匹配</span></td><td>—</td><td>blocked_exporter</td></tr>
+<tr style="background-color:#FFFAE6"><td>8</td><td>ES bd-es-online 124 coordinator http api test timeout</td><td>1331894</td><td><span style="color:#BF2600">⬜ 未匹配</span></td><td>—</td><td>blocked_exporter</td></tr>
+<tr style="background-color:#FFFAE6"><td>9</td><td>ES bd-es-online 99 coordinator http api test timeout</td><td>1331898</td><td><span style="color:#BF2600">⬜ 未匹配</span></td><td>—</td><td>blocked_exporter</td></tr>
+<tr style="background-color:#FFFAE6"><td>10</td><td>ES bd-es-online 102 coordinator http api timeout great than 4s</td><td>1331900</td><td><span style="color:#BF2600">⬜ 未匹配</span></td><td>—</td><td>blocked_exporter</td></tr>
+<tr style="background-color:#FFFAE6"><td>11</td><td>ES bd-es-online 99 coordinator http api timeout great than 4s</td><td>1331902</td><td><span style="color:#BF2600">⬜ 未匹配</span></td><td>—</td><td>blocked_exporter</td></tr>
+<tr style="background-color:#FFFAE6"><td>12</td><td>ES bd-es-online 107 coordinator http api timeout great than 4s</td><td>1331966</td><td><span style="color:#BF2600">⬜ 未匹配</span></td><td>—</td><td>blocked_exporter</td></tr>
+<tr style="background-color:#FFFAE6"><td>13</td><td>ES bd-es-online 117 coordinator http api timeout great than 4s</td><td>1331968</td><td><span style="color:#BF2600">⬜ 未匹配</span></td><td>—</td><td>blocked_exporter</td></tr>
+<tr style="background-color:#FFFAE6"><td>14</td><td>ES bd-es-online 118 coordinator http api timeout great than 4s</td><td>1331970</td><td><span style="color:#BF2600">⬜ 未匹配</span></td><td>—</td><td>blocked_exporter</td></tr>
+<tr style="background-color:#FFFAE6"><td>15</td><td>ES bd-es-online 119 coordinator http api timeout great than 4s</td><td>1331972</td><td><span style="color:#BF2600">⬜ 未匹配</span></td><td>—</td><td>blocked_exporter</td></tr>
+<tr style="background-color:#FFFAE6"><td>16</td><td>ES bd-es-online 120 coordinator http api timeout great than 4s</td><td>1331974</td><td><span style="color:#BF2600">⬜ 未匹配</span></td><td>—</td><td>blocked_exporter</td></tr>
+<tr style="background-color:#FFFAE6"><td>17</td><td>ES bd-es-online 121 coordinator http api timeout great than 4s</td><td>1331976</td><td><span style="color:#BF2600">⬜ 未匹配</span></td><td>—</td><td>blocked_exporter</td></tr>
+<tr style="background-color:#FFFAE6"><td>18</td><td>ES bd-es-online 122 coordinator http api timeout great than 4s</td><td>1331978</td><td><span style="color:#BF2600">⬜ 未匹配</span></td><td>—</td><td>blocked_exporter</td></tr>
+<tr style="background-color:#FFFAE6"><td>19</td><td>ES bd-es-online 124 coordinator http api timeout great than 4s</td><td>1331980</td><td><span style="color:#BF2600">⬜ 未匹配</span></td><td>—</td><td>blocked_exporter</td></tr>
+<tr style="background-color:#FFFAE6"><td>20</td><td>ES bd-es-online 102 coordinator http api test timeout</td><td>1510274</td><td><span style="color:#BF2600">⬜ 未匹配</span></td><td>—</td><td>blocked_exporter</td></tr>
+</tbody></table>
+<h2>♻️ JVM GC（1 条，已匹配 0，未匹配 1）</h2>
+<table><thead><tr><th>#</th><th>规则名称</th><th>Trigger ID</th><th>状态</th><th>Foxeye 链接</th><th>可行性</th></tr></thead><tbody>
+<tr><td>1</td><td>full gc frequenctly</td><td>108314</td><td><span style="color:#BF2600">⬜ 未匹配</span></td><td>—</td><td>triage</td></tr>
+</tbody></table>
+<h2>📁 JVM/OS（文件描述符）（1 条，已匹配 1，未匹配 0）</h2>
+<table><thead><tr><th>#</th><th>规则名称</th><th>Trigger ID</th><th>状态</th><th>Foxeye 链接</th><th>可行性</th></tr></thead><tbody>
+<tr style="background-color:#E3FCEF"><td>1</td><td>too many open files</td><td>107656</td><td><span style="color:#00875A">✅ 已匹配</span></td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/75167">75167</a></td><td>triage</td></tr>
+</tbody></table>
+<h2>💻 基础资源（CPU/Load）（1 条，已匹配 1，未匹配 0）</h2>
+<table><thead><tr><th>#</th><th>规则名称</th><th>Trigger ID</th><th>状态</th><th>Foxeye 链接</th><th>可行性</th></tr></thead><tbody>
+<tr style="background-color:#E3FCEF"><td>1</td><td>ES 负载高 Processor load is too high on</td><td>1329803</td><td><span style="color:#00875A">✅ 已匹配</span></td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/75120">75120</a></td><td>ready</td></tr>
+</tbody></table>
+<h2>📋 后续行动项</h2>
+<table><thead><tr><th>优先级</th><th>行动</th><th>工作量</th></tr></thead><tbody>
+<tr style="background-color:#FFFAE6"><td>P2</td><td>Categraf http_response：为 bd-es-online 10 个协调节点配置 HTTP 探测（9200 端口 /_cluster/health），替换 20 条 Zabbix web.test 规则</td><td>低（配置）</td></tr>
+<tr style="background-color:#FFFAE6"><td>P2</td><td>确认 ES JMX Exporter 接入状态（模板"ELK jmx"是否仍有效），补充 GC 频繁告警规则</td><td>中（需排查）</td></tr>
+<tr style="background-color:#E3FCEF"><td>P2</td><td>节点数变更：基于现有 ES Prometheus Exporter 指标直接建 Foxeye 规则（无需 exporter 开发）</td><td>低（Foxeye 配置）</td></tr>
+</tbody></table>

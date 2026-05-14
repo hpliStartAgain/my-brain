@@ -1,13 +1,15 @@
 ---
 type: task
-status: todo
-priority: P1
-deadline: 2026-06-30
+status: deprecated
+priority: P2
+deadline:
 domain: 集群智能运维
 lifecycle: research
 progress: "0"
 completed_date:
 started_date:
+tags: [deprecated, Hermes]
+okr_note: 已废弃。2026-05-11 决策终止自建 SRE Copilot 平台，转向 Hermes Agent。此任务涉及的自建平台增强需求不再执行
 ---
 
 # SRE Copilot 工程增强需求分析说明书

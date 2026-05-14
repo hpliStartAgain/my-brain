@@ -125,8 +125,8 @@ Dataview 插件依赖这些字段驱动日记中的进行中任务表和每日�
 - **存储**：Loki（多租户，`X-Scope-OrgID` 鉴权）
 - **采集状态**：
   - ✅ H3离线/实时/冷存 + H2冷存：系统日志 + 服务级日志（NN/DN/RM/NM/HS2/HBase/ZK）已接入
-  - 🔄 CVM 集群 + 中间件集群：接入进行中（P0，DDL 2026-04-30，当前 20%）
-  - ⏳ Spark Driver/Executor 作业级日志：待启动
+  - 🔄 CVM 集群 + 中间件集群：接入进行中（P0，DDL 2026-06-30），详见 [[Alloy全集群部署推广]]
+  - ⏳ Spark Driver/Executor 作业级日志：不接入 Alloy（作业日志已聚合到 HDFS）
 
 #### Label 规范约定
 ```
@@ -139,43 +139,32 @@ host = <hostname>
 
 ---
 
-### SRE Copilot 平台（AiOps）
+### AiOps：Hermes Agent + Skill 生态
 
-**定位**：面向大数据集群运维场景的智能运维平台（非微服务 Trace 模型），告警迁移系统是其核心子功能之一。
+**2026-05-11 重大决策**：终止自研 SRE Copilot 平台（Go + Vue 3 + eino Multi-Agent），全量转向 **Hermes Agent**。旧平台作为 PoC 已验证核心能力可行性，即日起停止新功能开发，所有运维能力重写为 Hermes 原生 Skill + 独立 MCP Server，旧平台在能力等价迁移后正式下线（端口 8080/8081 停服）。详见 [[2026-H1-集群智能运维OKR]]。
 
-**技术栈**：
-- 后端：Go + Gin + [eino](https://github.com/cloudwego/eino) Multi-Agent 框架
-- LLM：DeepSeek-V3（Master/Matcher Agent）+ DeepSeek-R1（Converter Agent，CoT 语义转换）
-- 存储：Apache Doris（`doris-fe.venus.sohurdc.com:9030`，schema `alert_shadow`）
-- 前端：Vue 3 + Ant Design + ECharts
-- MCP Server：端口 8081，动态映射全部 eino Agent 工具
-
-**已上线核心模块**（截至 2026-04-09，历经 16 次迭代）：
-- ✅ Multi-Agent 告警迁移流水线（指标类 PromQL + 日志类 LogQL 两分法）
-- ✅ SSH 对话式安全排障（连接池 + 黑白名单规则引擎 + 人工审批流）
-- ✅ Skill 热重载 + Git 同步（6 个内置运维技能，零停机更新）
-- ✅ 声明式集群巡检（`inspection_plans` / `inspection_reports` 双表）
-- ✅ Loki 日志联查（`query_logs` Tool，暗色终端前端页面）
-- ✅ AI 根因分析（Zabbix/Ambari/Foxeye 三套独立 prompt）
-- ✅ 服务维度分类体系（`service_mapping` 统一来源，Zabbix 32 个服务模板）
-- ✅ MCP Server 协议封装（兼容 Cursor / Claude Desktop）
+**能力迁移方向**：
+- 21 个 MCP 工具 → 拆分为独立 MCP Server（Doris/Loki/VM/Zabbix/Foxeye/SSH）
+- 19 个 Skills → 重写为 Hermes/agentskills.io 格式
+- Doris 18 张表 → 数据保留，独立 MCP Server 通过 MySQL 协议直连
 
 **关键待推进**：
-- 🔄 Zabbix → Foxeye 双跑验证（`event_poll_job` 双侧采集）尚未正式启动
-- ⏳ SCMDB（组件依赖关系图）：架构设计完成，工程实施未启动，是拓扑聚合降噪的阻塞点
-- 🔄 Foxeye 指标元数据 API 对接（评估中，目标替代平台内部维护的 `metric_definitions`）
+- 🔄 Hermes 部署 + 独立 MCP Server 搭建（P0，DDL 05-31）
+- 🔄 核心 Skill Hermes 重写 ≥5 个（DDL 06-15）
+- 🔄 飞书/企微 ChatOps 上线（DDL 06-30）
+- 🔄 告警迁移 IM 驱动 + 旧平台正式下线（DDL 07-15）
 
 ---
 
 ### 集群新特性进展
 
+> 详见 [[2026-H1-集群组件高可用架构建设OKR]]（`OKR/OKR-new/`），覆盖 Knox HA / ATS HA / Dproxy→SCLB 三大项目。
+
 | 项目 | 状态 | 说明 |
 |---|---|---|
-| Knox HA | ✅ 已上线 | 双节点 + SCLB 四层（TCP/8443 加权轮询），故障切换验证通过 |
-| TimelineServer HA | 🔄 设计完成/待实施 | Keepalived VIP 漂移 + STONITH，RPO≈5min，RTO<60s |
-| Dproxy → SCLB 七层网关 | ✅ 已上线 | 实例已创建 |
-| NodeManager 容器化 | ⏳ 待办 | - |
-| 冷存集群 CA 方案 | ⏳ 待办 | - |
+| 集群组件高可用架构建设 | 🔄 进行中 | Knox HA ✅ / ATS HA 60% / Dproxy→SCLB 30%，详见 OKR |
+| NodeManager 容器化 | ⏳ 待办 | H2 规划 |
+| 冷存集群 CA 方案 | ⏳ 待办 | H2 规划 |
 
 ---
 

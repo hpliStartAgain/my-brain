@@ -1,0 +1,40 @@
+<h2>Trino — 迁移深度分析 v2</h2>
+
+<ac:structured-macro ac:name="info">
+  <ac:parameter ac:name="title">📊 规则总览（2 条）</ac:parameter>
+  <ac:rich-text-body>
+    <table>
+      <tr><th>分类</th><th>数量</th><th>迁移路径</th></tr>
+      <tr><td>✅ 已匹配（平台已建规则）</td><td>1</td><td>Foxeye 中已有对应规则</td></tr>
+      <tr><td>✅ 平台有指标（可直接建规则）</td><td>1</td><td>trino_memory_MemoryPool_* 指标已接入平台</td></tr>
+    </table>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<table>
+  <tr><th>规则名称</th><th>状态</th><th>迁移方案</th></tr>
+  <tr>
+    <td>Trino web 信息获取失败</td>
+    <td>matched</td>
+    <td>平台已建 Foxeye 对应规则（HTTP 探活 Trino REST API）</td>
+  </tr>
+  <tr>
+    <td>Trino 角色内存使用 Over 90%</td>
+    <td>unmatched 可建规则</td>
+    <td>平台已有：trino_memory_MemoryPool_ReservedBytes / trino_memory_MemoryPool_MaxBytes * 100 > 90；或集群级：trino_memory_ClusterMemoryPool_ReservedDistributedBytes / TotalDistributedBytes > 90%</td>
+  </tr>
+</table>
+
+<ac:structured-macro ac:name="info">
+  <ac:parameter ac:name="title">Trino 深度监控补充建议</ac:parameter>
+  <ac:rich-text-body>
+    <p>平台已有更多 Trino 指标可直接建规则：</p>
+    <ul>
+      <li>OOM 查询 Kill：increase(trino_memory_ClusterMemoryManager_QueriesKilledDueToOutOfMemory[5m]) > 0</li>
+      <li>内存 Blocked 节点：trino_memory_ClusterMemoryPool_BlockedNodes > 0</li>
+      <li>内存泄漏检测：trino_memory_ClusterMemoryManager_NumberOfLeakedQueries > 0</li>
+    </ul>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<p><em>v2 深度分析 - 2026-05-12 更新</em></p>

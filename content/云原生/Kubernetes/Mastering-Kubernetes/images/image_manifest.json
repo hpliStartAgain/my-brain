@@ -1,0 +1,248 @@
+{
+  "0": {
+    "count": 0,
+    "prefix": "preface",
+    "images": []
+  },
+  "1": {
+    "count": 3,
+    "prefix": "ch01",
+    "images": [
+      "ch01-fig01",
+      "ch01-fig02",
+      "ch01-fig03"
+    ]
+  },
+  "2": {
+    "count": 6,
+    "prefix": "ch02",
+    "images": [
+      "ch02-fig01",
+      "ch02-fig02",
+      "ch02-fig03",
+      "ch02-fig04",
+      "ch02-fig05",
+      "ch02-fig06"
+    ]
+  },
+  "3": {
+    "count": 9,
+    "prefix": "ch03",
+    "images": [
+      "ch03-fig01",
+      "ch03-fig02",
+      "ch03-fig03",
+      "ch03-fig04",
+      "ch03-fig05",
+      "ch03-fig06",
+      "ch03-fig07",
+      "ch03-fig08",
+      "ch03-fig09"
+    ]
+  },
+  "4": {
+    "count": 5,
+    "prefix": "ch04",
+    "images": [
+      "ch04-fig01",
+      "ch04-fig02",
+      "ch04-fig03",
+      "ch04-fig04",
+      "ch04-fig05"
+    ]
+  },
+  "5": {
+    "count": 0,
+    "prefix": "ch05",
+    "images": []
+  },
+  "6": {
+    "count": 5,
+    "prefix": "ch06",
+    "images": [
+      "ch06-fig01",
+      "ch06-fig02",
+      "ch06-fig03",
+      "ch06-fig04",
+      "ch06-fig05"
+    ]
+  },
+  "7": {
+    "count": 2,
+    "prefix": "ch07",
+    "images": [
+      "ch07-fig01",
+      "ch07-fig02"
+    ]
+  },
+  "8": {
+    "count": 6,
+    "prefix": "ch08",
+    "images": [
+      "ch08-fig01",
+      "ch08-fig02",
+      "ch08-fig03",
+      "ch08-fig04",
+      "ch08-fig05",
+      "ch08-fig06"
+    ]
+  },
+  "9": {
+    "count": 3,
+    "prefix": "ch09",
+    "images": [
+      "ch09-fig01",
+      "ch09-fig02",
+      "ch09-fig03"
+    ]
+  },
+  "10": {
+    "count": 11,
+    "prefix": "ch10",
+    "images": [
+      "ch10-fig01",
+      "ch10-fig02",
+      "ch10-fig03",
+      "ch10-fig04",
+      "ch10-fig05",
+      "ch10-fig06",
+      "ch10-fig07",
+      "ch10-fig08",
+      "ch10-fig09",
+      "ch10-fig10",
+      "ch10-fig11"
+    ]
+  },
+  "11": {
+    "count": 12,
+    "prefix": "ch11",
+    "images": [
+      "ch11-fig01",
+      "ch11-fig02",
+      "ch11-fig03",
+      "ch11-fig04",
+      "ch11-fig05",
+      "ch11-fig06",
+      "ch11-fig07",
+      "ch11-fig08",
+      "ch11-fig09",
+      "ch11-fig10",
+      "ch11-fig11",
+      "ch11-fig12"
+    ]
+  },
+  "12": {
+    "count": 16,
+    "prefix": "ch12",
+    "images": [
+      "ch12-fig01",
+      "ch12-fig02",
+      "ch12-fig03",
+      "ch12-fig04",
+      "ch12-fig05",
+      "ch12-fig06",
+      "ch12-fig07",
+      "ch12-fig08",
+      "ch12-fig09",
+      "ch12-fig10",
+      "ch12-fig11",
+      "ch12-fig12",
+      "ch12-fig13",
+      "ch12-fig14",
+      "ch12-fig15",
+      "ch12-fig16"
+    ]
+  },
+  "13": {
+    "count": 15,
+    "prefix": "ch13",
+    "images": [
+      "ch13-fig01",
+      "ch13-fig02",
+      "ch13-fig03",
+      "ch13-fig04",
+      "ch13-fig05",
+      "ch13-fig06",
+      "ch13-fig07",
+      "ch13-fig08",
+      "ch13-fig09",
+      "ch13-fig10",
+      "ch13-fig11",
+      "ch13-fig12",
+      "ch13-fig13",
+      "ch13-fig14",
+      "ch13-fig15"
+    ]
+  },
+  "14": {
+    "count": 13,
+    "prefix": "ch14",
+    "images": [
+      "ch14-fig01",
+      "ch14-fig02",
+      "ch14-fig03",
+      "ch14-fig04",
+      "ch14-fig05",
+      "ch14-fig06",
+      "ch14-fig07",
+      "ch14-fig08",
+      "ch14-fig09",
+      "ch14-fig10",
+      "ch14-fig11",
+      "ch14-fig12",
+      "ch14-fig13"
+    ]
+  },
+  "15": {
+    "count": 10,
+    "prefix": "ch15",
+    "images": [
+      "ch15-fig01",
+      "ch15-fig02",
+      "ch15-fig03",
+      "ch15-fig04",
+      "ch15-fig05",
+      "ch15-fig06",
+      "ch15-fig07",
+      "ch15-fig08",
+      "ch15-fig09",
+      "ch15-fig10"
+    ]
+  },
+  "16": {
+    "count": 7,
+    "prefix": "ch16",
+    "images": [
+      "ch16-fig01",
+      "ch16-fig02",
+      "ch16-fig03",
+      "ch16-fig04",
+      "ch16-fig05",
+      "ch16-fig06",
+      "ch16-fig07"
+    ]
+  },
+  "17": {
+    "count": 4,
+    "prefix": "ch17",
+    "images": [
+      "ch17-fig01",
+      "ch17-fig02",
+      "ch17-fig03",
+      "ch17-fig04"
+    ]
+  },
+  "18": {
+    "count": 7,
+    "prefix": "ch18",
+    "images": [
+      "ch18-fig01",
+      "ch18-fig02",
+      "ch18-fig03",
+      "ch18-fig04",
+      "ch18-fig05",
+      "ch18-fig06",
+      "ch18-fig07"
+    ]
+  }
+}

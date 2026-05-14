@@ -1,5 +1,19 @@
 # CHANGELOG
 
+## 2026-05-13
+
+- **新增** `content/Kubernetes/Mastering-Kubernetes/`：英文原版《Mastering Kubernetes》Fourth Edition (Gigi Sayfan, 2023 Packt) 完整中文翻译版，19 个 Obsidian MD 文件 + 全书索引 `_index.md` + 134 张提取图片，总计 51MB
+- **增强** `pdf-to-obsidian` Skill：支持 PDF 图片提取模式 — 使用 `pdfimages -all` 提取原图，按章节重命名到 `images/` 目录，翻译时使用 Obsidian 相对路径 `![[images/chXX-figXX.png]]` 引用
+- **翻译原则**：全书 180K 英文词完整翻译，逐段一一对应；134 张 PDF 原图提取后按 19 个章节分配合并引用；图片全部使用相对路径（非绝对路径）
+
+## 2026-05-12
+
+- **新增** `content/Java/JVM-Performance-Engineering/`：英文原版《JVM Performance Engineering》(Monica Beckwith, 2024 Pearson) 完整中文翻译版，10 个 Obsidian MD 文件 + 全书索引 `_index.md`，总计 9,336 行 / 705KB
+- **新增** `.claude/skills/pdf-to-obsidian.md`：通用 PDF → Obsidian Markdown 翻译转换 Skill，四阶段流水线（嗅探提取 → 逐章翻译 → 仲裁校验 → 索引整合），附带"只增不减"硬约束、Mermaid 图表生成、五维仲裁标准
+- **翻译原则**：全书 115K 英文词完整翻译，逐段一一对应，无省略/概括/压缩；145 个原文图表转换为 Mermaid/表格；五维仲裁全部通过（平均 96.7/100 分）
+- **新增** `.claude/skills/` 目录：项目级 Skill 存放位置
+- 更新 `TODO.md`：记录翻译任务里程碑
+
 ## 2026-05-08
 
 - 更新 `content/工作管理/Outbox-产出池/琐事/FLClash-TUN模式配置内网访问教程.md`，补充 `login.live.com` 与 `onedrive.live.com` 在 TUN 模式下的精确直连规则、Fake-IP 过滤项、故障现象说明与验证命令。
@@ -63,3 +77,17 @@
 - 新增 `content/工作管理/Outbox-产出池/集群新特性/TimelineServer高可用建设/ATS可用性影响与HA落地收益阶段性评估.md`，沉淀本轮关于 ATS 不可用真实影响、Tez 风险边界与 ATS HA 取舍的阶段性研究结论。
 - 细化上述 2 个 ATS 研究任务的实验步骤、判定口径与实施记录模板，便于后续按 canary 方式逐步验证。
 - 继续细化上述 2 个 ATS 研究任务，补充 MR / Tez / Spark / Flink 的命令草案、RM / NM 观测命令与结果回填建议。
+- 完成第 5 章《端到端 Java 性能优化》的全文翻译，涵盖硬件交互、内存模型、性能工程方法论及 JMH 实战
+- 开始第 6 章《OpenJDK 中的高级内存管理与垃圾回收》的翻译，已完成引言、GC 概述及 TLAB/PLAB 章节
+- 完成第6章《OpenJDK 中的高级内存管理与垃圾回收》的全文翻译。
+    - 涵盖 TLAB/PLAB 调优与 NUMA 感知。
+    - 详解 G1 区域化堆、吞吐量/停顿优化。
+    - 详解 ZGC 染色指针、线程本地握手及自适应触发机制。
+- 开始第7章《运行时性能优化：字符串、锁与并发》的翻译。
+    - 完成字符串池、G1去重、紧凑字符串等优化的翻译。
+    - 修复了第5、6章的图表显示问题，统一使用 Mermaid 渲染。
+- 完成第7章《运行时性能优化：字符串、锁与并发》的全文翻译。
+    - 详解字符串优化（字面量池、G1去重、紧凑字符串、Indy拼接）。
+    - 详解锁优化（锁升级、自旋提示、适应性自旋）。
+    - 引入现代并发模型与虚拟线程（Project Loom）。
+- 完成第 7 章《运行时性能优化：字符串、锁与并发》的高保真重修，深度覆盖了 String Deduplication, JEP 143 锁重构及虚拟线程 (Project Loom) 技术细节。
