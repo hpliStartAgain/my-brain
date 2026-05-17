@@ -1,0 +1,1302 @@
+--- Page 182 ---
+CHAPTER 7
+         Capacity Planning
+
+
+
+
+Introduction
+
+Capacity planning is the process of determining the
+resources required to meet the current and future demands
+of an organization’s IT infrastructure. In the context of site
+reliability engineering (SRE), capacity planning is critical
+to ensuring that applications and services can meet their
+performance and availability requirements while maintaining
+a reasonable cost structure.
+
+Capacity planning involves analyzing historical usage data,
+forecasting future usage patterns, and determining the
+resource requirements for each application or service. This
+information is used to conduct a capacity analysis, which
+helps SRE teams understand the trade-offs between
+performance, availability, and cost. Based on this analysis,
+SRE teams can develop scaling strategies to ensure that the
+required resources are available to meet demand.
+
+Effective capacity planning requires a deep understanding of
+the resources required by each application or service, and
+the ability to monitor and analyze usage patterns in real
+time. With the increasing adoption of cloud computing and
+
+--- Page 183 ---
+distributed architectures, capacity planning has become
+even more complex, as organizations must optimize resource
+utilization across multiple environments and services.
+
+In this chapter, we will explore the key concepts and
+techniques involved in capacity planning for SRE. We will
+cover topics such as understanding resource requirements,
+conducting a capacity analysis, developing scaling
+strategies, monitoring, alerting, capacity planning in the
+cloud, and capacity planning for disaster recovery. By the
+end of this chapter, you will have a solid understanding of
+how capacity planning fits into the broader SRE context, as
+well as the tools and techniques required to ensure that your
+applications and services are able to meet their performance
+and availability requirements while maintaining a reasonable
+cost structure.
+
+Structure
+
+In this chapter, we will cover the following topics:
+
+    Importance of capacity planning in SRE
+
+       Principles of capacity management
+
+    Understanding resource requirements
+
+       Identifying key resources
+
+       Analyzing historical usage data
+
+       Forecasting future usage patterns
+
+     Capacity analysis
+
+       Capacity analysis to determine workload resources
+
+       Trade-offs between performance,  availability, and
+       cost
+
+     Scaling strategies
+
+--- Page 184 ---
+Choosing  the  right  scaling  strategy  for  each
+       application/service
+
+       Considerations for auto-scaling and load balancing
+
+    Monitoring and alerting
+
+       Setting up monitoring tools
+
+       Defining alerting thresholds for key metrics
+
+       Strategies for proactive capacity planning
+
+     Capacity planning in the cloud
+
+      Understanding cloud resource allocation models
+
+      Leveraging cloud provider tools
+
+     Capacity planning for disaster recovery
+
+       Disaster recovery capacity needs
+
+      Developing disaster recovery capacity plans
+
+       Disaster recovery plans and capacity
+
+Objectives
+
+In this chapter, our goals are to comprehend and effectively
+implement strategies to ensure that system resources satisfy
+current and future demands. We intend to investigate
+approaches for anticipating traffic patterns and resource
+utilization, allowing for proactive modifications. The chapter
+will concentrate on combining business objectives with
+technical needs, as well as ensuring that capacity planning
+corresponds with organizational development and user
+expectations. We will also examine automation's role in
+dynamic resource allocation and scaling. By the end of this
+chapter, readers should be able to optimize resource
+utilization, balance cost with performance, and maintain high
+service reliability in their SRE practices.
+
+--- Page 185 ---
+Importance of capacity planning
+
+Estimating the resources needed for a system or application
+to function at its best is known as capacity planning, a
+crucial component of SRE. Capacity planning is figuring out
+how much capacity an application or system needs to meet
+its needs. This ensures that the resources are used efficiently
+and that the application or system meets the performance
+requirements.
+
+Organizations can prepare for potential increases in demand,
+avoid resource waste, and ensure optimal system
+performance by using capacity planning, which is crucial in
+SRE. Capacity planning enables SRE teams to forecast
+growth patterns and anticipate the resources needed to
+meet expected demand. It enables them to predict the
+volume of traffic and usage patterns that an application or
+system will experience, ensuring that the infrastructure is
+scalable and can handle the expected load. By making sure
+that resources are used effectively, capacity planning aids in
+cost optimization. It helps organizations avoid
+overprovisioning resources, which can be expensive and
+wasteful, and under-provisioning resources, which can lead
+to poor system performance and downtime at a later stage.
+Capacity planning is crucial in maintaining system reliability.
+It ensures the system has enough resources to handle the
+expected load, reducing the chance of system overload,
+subpar performance, or even crashes. Capacity planning
+helps organizations to maintain a high level of service
+reliability and availability.
+
+Capacity planning enables organizations to make the most
+efficient use of resources. It aids in the identification and
+elimination of underused resources and makes sure that all
+resources are used in the best possible way to meet the
+needs of the system. Capacity planning ensures users have a
+smooth time using the system or application. It ensures that
+
+--- Page 186 ---
+the system is always available, performs optimally, and can
+handle sudden surges in demand.
+
+Principles of capacity management
+
+Successful capacity management requires allocating
+resources from two complex points of view: resource
+provisioning, which provides the initial capacity to run the
+service now, and capacity planning, which ensures the
+reliability of the service in the future.
+
+Capacity management is based on three basic rules that
+must be followed for a service to be scalable, usable, and
+manageable. The rules are as follows:
+
+     Services must make good use of the resources they
+     have. Large services that require many resources cost
+    a lot to set up and keep running.
+
+     Services must always work. Limiting resource capacity
+     to make a service more efficient can cause the service
+     to break down or go down for users. Service efficiency
+    and reliability are not always the same thing.
+
+     Service growth  needs  to be  planned  for. Adding
+     resources to a service can take a long time and  is
+     limited in how it can be deployed in the real world. This
+     could mean buying and setting up new hardware or
+    data centers. It may also be necessary to increase the
+     capacity of other software systems and infrastructure
+     the service depends on.
+
+Understanding resource requirements
+
+SRE capacity planning must account for resource
+requirements. It involves identifying the resources required
+to support a given workload, such as CPU, memory, storage,
+
+--- Page 187 ---
+network bandwidth, and other hardware and software
+resources.
+
+Identifying key resources
+
+Understanding resource requirements entails several steps,
+as follows:
+
+1. Defining the workload: Before identifying the resource
+   requirements, it is essential to understand the nature of
+   the workload. This means knowing the kind and number
+   of requests, how often they come in, and how long  it
+   should take to respond.
+
+2. Identifying  the  resource  demands  of  each
+  component: Once the workload is defined, it is essential
+   to identify the resource demands of each component
+   that makes up the system or application. This includes
+   figuring  out  what  the  application  server,  database
+   server, load balancer, network devices, and other parts
+  need regarding resources.
+
+3. Measuring resource utilization: Once the resource
+  demands of each component are identified, it is essential
+   to measure the current resource utilization levels. This
+   gives  a  starting  point  for  figuring  out how many
+   resources are needed.
+
+4. Estimating future resource needs:  It is possible to
+   estimate future resource needs based on the workload,
+  component  resource demands, and  current  resource
+   utilization   levels.  This  involves  forecasting  future
+   workload volumes and predicting how the system or
+   application will perform under different demand levels.
+
+5. Determining the best way to use resources: Once
+   the future resource needs have been estimated,  it  is
+   important to figure out the best way to meet them. This
+
+--- Page 188 ---
+includes figuring out how many servers, storage spaces,
+  and  network  bandwidth  are needed  to  handle  the
+   workload and how to distribute the resources among the
+   various parts.
+
+Monitoring and adjusting resource allocation regularly is
+crucial. This involves periodically reviewing resource
+requirements and adjusting resource allocation to ensure the
+best possible performance and efficiency.
+
+Analyzing historical usage data
+
+A crucial part of capacity planning in SRE is analyzing past
+usage data. It involves examining past usage patterns and
+trends to forecast future demand and resource requirements
+accurately.
+
+The following are several steps to analyzing usage data from
+the past:
+
+1. Gathering usage data: The  first step  is to gather
+  usage data from various sources, such as application
+   logs, system logs, and monitoring tools. This data should
+   include  information  on  resource  utilization,  request
+   volume, response times, and other pertinent metrics.
+
+2. Identifying patterns and trends: Once the data  is
+   collected, it is essential to identify patterns and trends in
+   usage. This means looking for patterns in the number of
+   requests, how resources are used, and how long it takes
+   to respond. For example, if there is a regular increase in
+  demand during certain times of the year, such as the
+   holiday season, this pattern should be identified and
+   considered in capacity planning.
+
+3. Forecasting  future  demand:   It   is  possible  to
+   accurately predict future demand by looking at historical
+  usage data. This entails using statistical methods like
+
+--- Page 189 ---
+time-series  analysis and  regression  analysis  to  find
+   trends and forecast future usage patterns.
+
+4. Estimating  resource  requirements:  Once  future
+  demand is predicted, the resource requirements needed
+   to meet that demand can be calculated. To determine
+   the resources needed to meet future demand, capacity
+   models, extrapolation, simulation, and benchmarking are
+   used.
+
+5. Planning   for   capacity:   Once   the   resource
+   requirements have been estimated, it is possible to plan
+   for   capacity  by   allocating   resources,   changing
+   configurations, and planning for additional infrastructure
+   as needed.
+
+6. Monitoring and adjusting: Finally,  it  is essential to
+   continuously monitor usage patterns and adjust resource
+   allocation and capacity planning processes as needed to
+   ensure optimal system performance and reliability.
+
+Forecasting future usage patterns
+
+Forecasting future usage patterns is an important aspect of
+capacity planning in site reliability engineering. It involves
+using historical data to predict future usage patterns
+accurately, enabling organizations to plan for future demand
+and allocate resources accordingly.
+
+There are several ways to predict how people will use
+something in the future, as follows:
+    Time series analysis: Time series analysis involves
+     analyzing  past usage  data  to  identify  trends and
+     patterns over time. Using techniques such as moving
+     averages, exponential smoothing, and trend analysis,
+     this data can be used to predict how it will be used in
+     the future.
+
+--- Page 190 ---
+Regression  analysis:  Regression  analysis  involves
+     analyzing past usage data to identify the relationships
+    between different variables, such as request volume
+    and time  of day. This information can be used to
+     forecast future usage patterns by predicting the value
+     of one variable based on the value of another.
+
+    Simulation: Simulation involves creating a model of
+     the system or application and simulating future usage
+     patterns based on various scenarios. This information
+    can be used to estimate future resource requirements
+    and plan for capacity accordingly.
+
+    Extrapolation:  Extrapolation  involves  using  past
+    usage  data  to  predict  future  usage  patterns  by
+    extending current trends into the future. This method
+      is useful for short-term forecasting but may not be as
+     accurate for long-term forecasting.
+
+    Benchmarking: Benchmarking  involves  comparing
+    usage patterns to similar systems or applications to
+     identify potential areas for improvement. This data can
+    be used  to  plan  for  future demand and  optimize
+    resource utilization.
+
+Once future usage patterns are forecasted, it is possible to
+estimate the resource requirements needed to support that
+demand. To determine the resources needed to meet future
+demand, capacity models, extrapolation, simulation, and
+benchmarking are used. To ensure the best possible system
+performance and dependability, it is crucial to continuously
+monitor usage patterns and make necessary adjustments to
+the resource allocation and capacity planning processes.
+
+Capacity analysis
+
+The goal of capacity analysis is to find potential performance
+bottlenecks before they happen and plan for capacity needs
+
+--- Page 191 ---
+to ensure a system is reliable and available. SREs often use
+tools and methods such as load testing, benchmarking, and
+forecasting to collect data and make decisions about
+capacity planning based on solid information.
+
+By doing capacity analysis and planning for resource needs
+on a regular basis, SREs can make sure their systems can
+keep up with growing demand and keep the high level of
+reliability that users and businesses expect.
+
+For SREs to be able to do capacity analysis, they need to
+know a lot about the system’s architecture and parts,
+including how they work together and with the infrastructure
+underneath. When figuring out what resources are needed,
+they must also think about things such as traffic patterns,
+user behavior, and business needs.
+
+Capacity analysis to determine workload
+resources
+
+For any system to successfully manage the anticipated load,
+a thorough capacity analysis must first be performed. To
+begin a capacity analysis, it is necessary to establish what
+the system’s anticipated workload will be. Gathering input
+from stakeholders like business owners and product
+managers is an important part of this process, as is
+analyzing past usage data and predicting expected usage
+patterns based on trends or business projections. Once the
+anticipated workload has been established, the necessary
+resources can be planned. Identifying bottlenecks or
+constraints that may limit the system’s ability to handle the
+workload requires analyzing the architecture of the system,
+including the hardware and software components.
+
+To learn how a system responds to various loads, SREs can
+use tools such as load testing, benchmarking, and
+performance monitoring. Potential performance bottlenecks,
+
+--- Page 192 ---
+such as CPU or memory limits, network congestion, or I/O
+constraints, can be pinpointed with this information. SREs
+can calculate the necessary capacity for a workload by
+analyzing historical data. To do so, hardware resources in the
+system may need to be expanded (by adding more servers)
+or reduced (by shutting down some). Sometimes, this means
+changing the software that runs the system, like storing
+recently used data in a cache or tweaking database queries
+to boost performance.
+
+The purpose of a capacity study is to guarantee that the
+system will function optimally under the anticipated load.
+SREs can guarantee that their systems can continue to serve
+users and the company even during times of high demand
+by anticipating resource requirements and eliminating
+potential bottlenecks.
+
+Trade-offs between performance, availability,
+and cost
+
+When doing a capacity analysis, SREs need to know how
+performance, availability, and cost affect each other. These
+three factors are interconnected, and optimizing one can
+often come at the expense of the others.
+
+Performance is about how quickly and well the system works.
+To get a high level of performance, SREs may need to add
+resources such as CPU, memory, or storage. But these extra
+resources cost money, both in terms of hardware and
+running costs.
+
+Availability refers to the ability of the system to remain
+operational and accessible to users. SREs may need to add
+failover or redundancy mechanisms, such as clustering or
+load balancing, to get high availability. But these
+mechanisms also have a cost in terms of hardware and the
+amount of work they take to run.
+
+--- Page 193 ---
+Cost refers to the overall cost of the system, including both
+hardware and operating expenses. To minimize costs, SREs
+may need to make trade-offs regarding performance and
+availability. For example, reducing hardware resources or
+eliminating redundancy mechanisms can reduce costs but
+may also lead to reduced performance or availability.
+
+When doing capacity analysis, SREs must understand these
+trade-offs to make good decisions. They must figure out how
+to balance the needs of the business and the users with the
+costs of the hardware and running the business. For
+example, if the system is very important to the business, it
+might be worth spending money on extra hardware or
+backup systems to ensure it is always available. On the
+contrary, if the system is less important or cost is a big
+concern, SREs may have to optimize for cost over
+performance or availability.
+
+In the end, the goal of capacity analysis is to find the best
+balance between performance, availability, and cost while
+ensuring that the system can meet the needs of the business
+and users. By understanding these trade-offs and making
+informed decisions, SREs can ensure that their systems are
+reliable and cost-effective.
+
+Scaling strategies
+
+Scaling strategies are the ways that you can make a system
+bigger so that it can handle more work. These strategies are
+a key part of the capacity analysis because they help make
+sure that the system can keep working well even as the
+workload increases.
+
+During a capacity analysis, SREs may use some of the
+following scaling strategies, as follows:
+    Horizontal scaling  is when a system’s capacity  is
+     increased by adding more servers or instances. This
+
+--- Page 194 ---
+could mean adding more real servers to a data center
+or virtual machines to a cloud-based infrastructure.
+Horizontal  scaling   is  more  flexible  and  scalable
+because it lets the system handle a growing amount of
+work by spreading it across multiple instances.
+
+Vertical scaling is when more resources are added to
+a single server or instance to make it bigger. This could
+be done by giving a server more memory, CPU, or
+storage space. Vertical scaling is a quick and easy way
+to add more capacity, but it can only go so far because
+the server hardware has its limits.
+
+Auto  Scaling  adds  or  takes  away  instances
+automatically based on how much work is being done.
+Auto-scaling and horizontal scaling can be used to
+ensure that the system always has enough capacity to
+handle the load.
+
+Sharding  is  dividing a system’s data or workload
+between several servers or instances. This method is
+often used in databases and Web apps where data or
+work can be broken  into  smaller,  easier-to-handle
+pieces. Sharding can help spread the  load across
+multiple servers and increase the system’s capacity.
+
+Caching is storing frequently used data or calculations
+so that the system can do less work. By storing data in
+memory or on a  disc, the system can respond  to
+requests faster and put less stress on the infrastructure
+that makes it all work.
+
+Hybrid scaling is when you use more than one scaling
+strategy to reach the level of capacity you want. For
+example,  a  system  could  use  both  vertical  and
+horizontal scaling, as well as caching and sharding, to
+make sure it can keep up with the growing amount of
+work.
+
+--- Page 195 ---
+By using these scaling strategies during capacity analysis,
+SREs can make sure that the system has the capacity it
+needs to handle current and future workload demands while
+keeping high levels of performance, availability, and cost
+efficiency.
+
+Choosing the right scaling strategy
+
+Several things must be thought about carefully in order to
+choose the right scaling strategy for each application or
+service. The following are some important things to think
+about when choosing a strategy for scaling. Take a look at
+the following figure:
+
+
+
+
+
+             Figure 7.1: Scaling strategy for capacity planning
+
+--- Page 196 ---
+Considering the preceding figure, it is important to
+understand the following terms for scaling strategy:
+    Type of workload: The best scaling strategy can be
+     affected a lot by the type of work that the application
+     or service does. For example, an application that gets
+    many read requests might benefit from caching to
+    reduce the load on the infrastructure. In contrast, an
+     application that gets many write requests might benefit
+    from sharding  to spread  the  load  across  multiple
+     instances.
+
+    Resource needs: The needs  of the application or
+     service in terms of resources will also play a role in
+    choosing the right scaling strategy. For example, an
+    app that needs a lot of memory might benefit more
+    from vertical scaling, whereas an app that needs to be
+     available  all  the  time  might  benefit  more  from
+     horizontal scaling, which spreads the workload across
+     multiple instances.
+
+    Performance: When choosing a scaling strategy, you
+    should also think about the level of performance you
+    want from the application or service. For example, an
+     application that needs low latency may benefit from
+    caching or sharding to reduce the load on the system
+    and improve performance.
+
+    Cost: When choosing a scaling strategy, you should
+     also think about how much  it will cost to make the
+     application or service bigger. For example, horizontal
+     scaling may be more  cost-effective  for  large-scale
+     applications that need high availability than vertical
+     scaling for small-scale applications.
+
+    Infrastructure constraints: When choosing a scaling
+     strategy, you should also think about the limitations of
+     the underlying infrastructure, such as the hardware or
+     the cloud service provider.
+
+--- Page 197 ---
+Considerations for auto-scaling and load
+balancing
+
+In SRE, capacity planning is the process of figuring out what
+resources are needed to meet current and future demand for
+a service, app, or system. Auto-scaling and load balancing
+are important parts of capacity planning because they make
+sure that a service is always available, works well, and can
+handle different amounts of traffic.
+
+Auto-scaling is the ability to automatically change the
+number of resources, like servers or containers, that are
+given to a service based on how much demand there is at
+the moment. This makes sure that the service can handle
+sudden spikes in traffic without getting too busy. It also helps
+save money by reducing the number of resources when
+demand is low.
+
+Load balancing is another important part of planning for
+capacity. This is the process of spreading incoming traffic
+across multiple instances of a service or application so that
+no single instance gets too busy. Load balancing can be done
+in different ways, such as with round-robin, IP hashing, or the
+fewest connections. It helps make sure that the service is
+always available and running at its best.
+
+When putting auto-scaling and load balancing into place,
+there are a few things to think about, such as:
+    Metrics: Set the metrics that will be used to trigger
+     auto-scaling, such as CPU usage, memory usage, or
+    network traffic. Depending on the service or app being
+     used, these metrics will be different.
+
+    Scaling policies: Set the  policies  for auto-scaling,
+    such  as  the minimum  and maximum number  of
+     instances,  the  scaling  increments,  and  the  time
+
+--- Page 198 ---
+between scaling events. These rules will help make
+    sure the service can grow or shrink in the right way.
+
+    Load-balancing  algorithms:  Choose  the   right
+     algorithm based on the service’s characteristics, such
+     as the type of traffic, the number of instances, and the
+    way the network is set up. This will help make sure
+     that all instances get the same amount of traffic.
+
+    Health checks: Ensure that only healthy instances are
+    added to the load balancer pool by setting up health
+     checks. This will help keep traffic from being sent to
+     instances that cannot handle it.
+
+    Costs: Consider how auto-scaling and load balancing
+      will affect your costs since adding more instances may
+    make the service more expensive. It is important to
+    balance  the  cost  of  resources and  the need  for
+     availability and performance.
+
+Overall, auto-scaling and load balancing are two of the most
+important things to think about when planning capacity for
+SRE. They help ensure that a service can handle different
+amounts of traffic while still being highly available and
+performing well. By using these strategies well, SRE teams
+can make sure that their services are always available, even
+when demand is high.
+
+Monitoring and alerting
+
+Monitoring and alerting are critical links in SRE capacity
+planning. They provide real-time visibility into a service’s or
+application’s performance, enable effective auto-scaling and
+load balancing, and inform capacity planning decisions by
+providing data on usage patterns and trends. SRE teams can
+ensure that their services are always available, perform
+optimally, and can handle varying levels of traffic by
+implementing robust monitoring and alerting strategies.
+
+--- Page 199 ---
+Setting up monitoring tools
+
+Setting up monitoring tools to track resource utilization and
+performance metrics is a critical aspect of capacity planning
+in SRE. By tracking key metrics and setting up alerts, SRE
+teams can identify potential capacity issues and take action
+to address them before they impact users, ensuring that the
+service or application remains available and performs
+optimally.
+
+SRE teams usually take the following steps to set up
+monitoring tools for resource usage and performance
+metrics:
+
+1. Find key metrics: The  first step  is to find the key
+   metrics that need to be tracked to monitor how well
+   resources  are  being  used and how  well  they  are
+   performing.  Depending  on  the  type  of  service  or
+   application being monitored, these metrics may include
+  CPU usage, memory usage, disk I/O, network traffic, and
+   response time.
+
+2. Choose a monitoring tool: Once the key metrics have
+  been chosen, the next step is to choose a monitoring
+   tool  that  can  track  these  metrics.  Prometheus,
+  Grafana, Nagios, and Zabbix are popular monitoring
+   tools for SRE. Each tool has its own pros and cons, so it is
+   important to pick the one that  fits the organization’s
+  needs the best.
+
+3. Install and set up the monitoring tool: After deciding
+  on a monitoring tool, the next step is to install and set it
+  up so that it can track the metrics that were chosen. This
+   usually means  installing agents or exporters on the
+   servers that run the service or application and setting up
+   the monitoring tool to collect and store the metrics.
+
+--- Page 200 ---
+4. Set up alerts: Once the monitoring tool has been set up
+   to track the desired metrics, the next step is to set up
+   alerts that will tell SRE teams when certain thresholds
+   are exceeded. For example, an alert could be set up to
+    tell the team when CPU usage goes over a certain
+   percentage or when response time goes over a certain
+   threshold.
+
+Defining alerting thresholds for key metrics
+
+Capacity planning in SRE relies heavily on clearly defining
+alerting thresholds for critical metrics. When a metric goes
+above or below an alerting threshold, an alert will be
+generated. SRE teams can proactively monitor the
+performance of a service or application and take measures
+to prevent potential capacity issues that could lead to
+downtime or degraded performance by setting alerting
+thresholds for key metrics.
+
+In order to define warning levels for critical metrics used in
+capacity planning, one can follow the following steps:
+
+1. The first step is to determine which metrics are most
+   important for measuring the health of the service or
+   application.  CPU   utilization,  memory  consumption,
+   network traffic, response time, and error rates are  all
+  examples of key metrics.
+
+2. As soon as the critical metrics have been recognized, the
+   next step is to establish acceptable ranges for each. As
+   part of this process, the optimal operating range for the
+  system should be determined, including upper and lower
+   limits for each metric. This range is not set in stone and
+   can change based on the nature of the service or the
+  needs of the application.
+
+--- Page 201 ---
+3. After deciding what values are acceptable  for each
+   metric, SRE teams can decide what values should trigger
+  an alert. When a certain threshold is reached in terms of
+  CPU utilization or service response time, for instance, an
+   alert may be generated.
+
+4. Once alerting thresholds have been determined, SRE
+  teams must set up  alerting systems to  notify them
+  whenever  a  threshold   is  exceeded.  E-mail,  Short
+  Message Service (SMS), and specialized monitoring
+   tools such as PagerDuty and OpsGenie are just some
+   of the ways in which alerts can be delivered.
+
+5. Finally, SRE teams need to routinely monitor service or
+   application health and make any necessary adjustments
+   to  alerting  thresholds. Depending on  the  data and
+   performance  trends,  this may  involve  adjusting  the
+   thresholds at which alerts are triggered or adjusting the
+   acceptable ranges for key metrics.
+
+Strategies for proactive capacity planning
+
+Anticipating and arranging for potential demand shifts in
+advance is an example of proactive capacity planning.
+Services and applications that have SRE teams behind them
+are much less likely to experience downtime or performance
+degradation as demand grows. Several methods for
+anticipating future needs and allocating resources effectively
+are outlined as follows:
+
+    Maintain a regular testing schedule for performance.
+     Proactive   capacity   planning   relies  on   regular
+    performance  testing. SRE teams can  find  potential
+     bottlenecks and  capacity  issues before they  affect
+     users by running tests that simulate varying levels of
+    demand.
+
+--- Page 202 ---
+Performance metrics should be monitored in real-time
+     to help SRE teams identify potential capacity issues as
+    soon as they arise. SRE teams can react swiftly to
+    problems by setting up alerts based on predefined
+     thresholds.
+
+     Forecasting models can help you  anticipate  future
+    demand and allocate resources accordingly. SRE teams
+    can  accurately  predict  future demand and  adjust
+     capacity by analyzing historical data and performance
+     trends to create predictive models.
+
+    Finding and fixing system inefficiencies is a key part of
+     optimizing  resource   utilization.  SRE  teams  can
+     optimize resource utilization and guarantee efficient
+    system operation by analyzing performance metrics
+    and locating wasteful areas.
+
+The SRE team can respond more quickly and efficiently to
+fluctuations in demand if they use automation and auto-
+scaling. SRE teams can automatically adjust resource
+allocations in response to fluctuations in demand by
+automating processes and using auto-scaling tools.
+
+Regular performance testing, monitoring, forecasting,
+optimization, and automation are all parts of proactive
+capacity planning. By taking preventative measures SRE
+teams can keep their service or application always running
+smoothly and reliably, regardless of the load.
+
+As defined by Luis Quesada Torres and Doug Colish in their
+paper SRE Best practices for capacity management, SRE
+shows ways to estimate usage and find blind spots. We also
+talk about the benefits of building redundancy to prevent
+failures. You will use this information to plan your
+architecture so that adding more resources to each part of
+the service has the same effect as adding more resources to
+the whole service. Look at the following table:
+
+--- Page 203 ---
+Hardware                       Specs
+
+
+ Processors            CPU type count (cores)
+
+ Graphic processing units  GPU type and count
+
+ Storage            HDD (hard drives) and SSD (solid state disk)
+                      Amount of storage (TB)
+                        Bandwidth
+                       IOPS
+
+ Network                    Intra datacenter, inter datacenter,
+                       ISP access:
+                           Latencies
+                        Bandwidth
+
+ Back Ends                 Services and capacity needed
+
+ Other                    AI accelerators, other special hardware
+
+            Table 7.1: Resource assessment
+
+You may need to perform load testing to assess:
+
+    Peak usage
+
+   Maximum peak utilization
+
+    Redundancy
+
+     Latency-insensitive processes
+
+    Spare resources for the unknowns
+
+Consider aspects such as:
+
+     Priority
+
+    Region
+
+     Service components
+
+Capacity planning in the cloud
+
+Capacity planning in the cloud involves managing and
+scaling infrastructure resources to meet fluctuating demand.
+Traditional on-premises capacity planning entails predicting
+
+--- Page 204 ---
+future demand and investing in additional hardware or
+infrastructure. However, in the cloud, capacity planning
+involves using cloud services to dynamically provision and
+scale resources to meet demand. Cloud service providers
+provide a vast array of services that enable users to rapidly
+provision and scale up or down resources based on demand.
+For instance, cloud providers provide virtual machines,
+storage, and networking services that can be quickly scaled
+up or down as needed. In addition, cloud service providers
+provide auto-scaling tools that automatically provision
+additional resources based on predefined thresholds.
+
+In addition to optimizing resource utilization to reduce costs,
+capacity planning in the cloud also involves optimizing
+resource utilization. Cloud service providers provide users
+with the means to monitor and analyze resource utilization,
+identify inefficiencies, and optimize resource allocation to
+reduce costs.
+
+Understanding cloud resource allocation
+
+Models for allocating and using cloud resources, such as
+virtual machines, storage, and networking, are cloud
+resource allocation models. Understanding these models is
+necessary for optimizing resource allocation and reducing
+expenses. The following are some of the most prevalent
+models for allocating cloud resources:
+    Reserved instances are a type of virtual machine that
+      is reserved  for a  specific period  of time,  typically
+    between one and  three  years. They are  ideal  for
+    workloads with predictable demand because they offer
+    a substantial discount compared to instances created
+    on demand.
+
+   On-demand  instances  are  provisional  and  de-
+     provisional   virtual  machines.  Because   of   their
+
+--- Page 205 ---
+adaptability and lack of long-term commitments, they
+     are ideal for workloads with unpredictable demand.
+
+    Spot instances are virtual machines available at a
+     significantly reduced  cost compared  to on-demand
+     instances. However, their availability is contingent on
+    market demand and can be terminated at any time.
+    They are ideal for tasks with variable beginning and
+    ending  times, such  as batch  processing and  data
+     analysis.
+
+    Dedicated instances are virtual machines assigned to
+    a single user or organization. Shared instances offer
+     increased control and security but at a higher price.
+
+Serverless computing is a model in which the cloud provider
+manages the infrastructure and automatically provisions
+resources to handle incoming requests. This model is ideal
+for workloads with unpredictable and irregular demand, such
+as event-driven applications.
+
+Understanding cloud resource allocation models is crucial for
+optimizing resource allocation and reducing expenses. Each
+model has its own advantages and disadvantages, and the
+optimal model depends on the workload’s requirements and
+characteristics.
+
+Leveraging cloud provider tools
+
+Companies that use various public clouds, such as AWS,
+Azure Cloud, and GCP, have developed some of the most
+important and useful tools, including the following:
+
+Azure
+
+Many factors influence Azure pricing, including the type of
+service, the capacity required, the location, and the level of
+management. Azure has a free tier that enables free use of
+
+--- Page 206 ---
+certain services for the first 12 months and free use of
+certain services forever.
+
+The tools developed by Azure are as follows:
+    Azure  cost  management  and  billing  provide
+      visibility into your Azure usage and spending, allowing
+    you to identify and manage costs across all your Azure
+     resources.
+
+    Azure      Advisor      provides      personalized
+    recommendations  for  cost  optimization  and  best
+     practices for resource utilization.
+
+    Azure budgets enable you to set and manage custom
+    budgets  for your Azure resources, providing  alerts
+    when your spending exceeds your set limits.
+
+AWS
+
+AWS price is influenced by a variety of factors that
+organizations must examine to effectively manage costs.
+These aspects include resource utilization, instance types,
+and regional expenses. Pricing is also affected by decisions
+about reserved instances, data transfer, storage type, and
+the use of supplementary services. Effectively managing
+these variables, exploiting elasticity, and monitoring
+consumption is critical for optimizing AWS expenses and
+ensuring that your cloud architecture remains efficient and
+cost-effective.
+
+The tools developed by AWS are as follows:
+   AWS cost explorer provides a graphical interface for
+     analyzing and optimizing your AWS usage and costs
+    over time.
+
+   AWS   trusted   advisor   provides   personalized
+    recommendations  for  cost  optimization  and  best
+     practices for resource utilization.
+
+--- Page 207 ---
+AWS budgets enable you to set and manage custom
+    budgets for your AWS resources, providing alerts when
+    your spending exceeds your set limits.
+
+   AWS auto scaling enables you to automatically adjust
+    your EC2 capacity based on demand, ensuring that you
+    have the right number of resources at the right time.
+
+GCP
+
+The pricing of Google Cloud Platform (GCP) is determined
+by a number of variables that businesses need to take into
+account to control their cloud expenses. The selection of
+preemptible instances, persistent disc kinds, and data
+transfer volumes are important factors, as are resource
+consumption, instance types, and regional variations. Using
+GCP’s wide range of services, committed use agreements,
+and support plans has an effect on total costs as well.
+Businesses may maintain a cost-effective cloud
+infrastructure by using cost management tools, auto-scaling
+methodologies, and careful service configuration selection,
+all while keeping an eye on consumption, staying updated on
+GCP pricing changes, and monitoring expenses constantly.
+
+The tools developed by GCP are as follows:
+   GCP pricing calculator provides an estimate of your
+    monthly  bill  based  on  your  usage  and  resource
+     selection.
+
+   GCP cost management provides visibility into your
+   GCP usage and spending, allowing you to identify and
+    manage costs across all your GCP resources.
+
+   GCP   recommender     provides     personalized
+    recommendations  for  cost  optimization  and  best
+     practices for resource utilization.
+
+--- Page 208 ---
+GCP auto scaling enables you to automatically adjust
+    your VM capacity based on demand, ensuring that you
+    have the right number of resources at the right time.
+
+Overall, these cost optimization tools can help you to
+manage your cloud resources efficiently and effectively,
+enabling you to optimize your usage and reduce your costs.
+
+Capacity planning for disaster recovery
+
+The term capacity planning for disaster recovery is used to
+describe the procedure of establishing the resources,
+infrastructure, and capacity necessary to guarantee that a
+business’s most important systems and applications can be
+recovered in the event of a disaster. The purpose of disaster
+recovery capacity planning is to set reasonable RTOs and
+RPOs for the recovery process and to ensure that they can
+be met RPOs.
+
+Disaster recovery capacity needs
+
+Planning for disaster recovery capacity is crucial to ensuring
+a company can recover quickly and effectively in the event
+of a disaster, thereby limiting downtime, data loss, and other
+negative effects. Organizations can lessen their vulnerability
+to disasters and keep operations running smoothly by
+making sure they have adequate supplies and facilities.
+
+Capacity planning for disaster recovery typically involves the
+following steps:
+
+1. Assessing the impact of a disaster on the organization’s
+    critical systems and applications, including the potential
+   loss of data, systems, and infrastructure.
+
+2. Identifying the minimum infrastructure and resources
+   required for disaster recovery, including backup systems,
+   redundant network connectivity, and power supplies.
+
+--- Page 209 ---
+3. Estimating the capacity requirements  for the backup
+   systems  and  infrastructure  needed  to  support  the
+   recovery process.
+
+4. Determining the RTOs and recovery point objectives
+  RPOs for each critical system and application.
+
+5. Testing the disaster recovery plan to ensure that it meets
+   the  organization’s  RTOs  and  RPOs  and  that  the
+   necessary capacity is available for recovery.
+
+Developing disaster recovery capacity plans
+
+To guarantee that critical systems and applications can be
+recovered in the event of a disaster, businesses must
+develop disaster recovery capacity plans through a thorough
+and iterative process. The following are the usual steps in
+the process:
+
+1. Determine which systems and applications are crucial to
+   the organization’s daily operations and give them higher
+    priority.
+
+2. Determine the level of danger by identifying  all the
+   potential dangers that could affect the most important
+  computer programs and systems and rating how bad
+  each one could be.
+
+3. Define recovery objectives: Based on business needs and
+   risk assessment, set RTOs and RPOs for each mission-
+    critical system and application.
+
+4. Plan  for  system  and  application  recoverability  by
+   establishing  data backup and  restoration  processes,
+   secondary data center sites, and redundant hardware
+  and software.  Traffic switch  is one  of the important
+   factors in the disaster recovery (DR) situation. Active-
+   active and active-passive are two important models that
+   are considered by companies to handle traffic.
+
+--- Page 210 ---
+5. Determine how much time, money, and people will be
+   required to implement each recovery plan.
+
+6. Create a recovery environment that conforms to the RTO
+  and RPO targets by basing it on the recovery strategies
+  and resource needs you have already identified.
+
+The disaster recovery plan should be tested to make sure it
+can be put into action and that the RTOs and RPOs will be
+met. There should be a thorough test of all backups,
+restoration, and failover processes.
+
+Keep the plan current by documenting it and updating it
+regularly.
+
+Disaster recovery plans and capacity
+
+To guarantee that an organization can recover quickly and
+effectively from a disaster, it is important to test its disaster
+recovery plans and analyze its capacity needs.
+
+Simulating a disaster and then carrying out the
+organization’s recovery plan to see if it works and if it
+satisfies the RTOs and RPOs of the business is what is meant
+by testing disaster recovery plans. Several different kinds of
+examinations are possible.
+
+Walking through the disaster recovery plan with key
+stakeholders to find flaws or ways to improve it is the goal of
+a tabletop exercise.
+
+The purpose of a functional test is to verify that all mission-
+critical systems and applications can be successfully
+restored and run normally in the recovery setting.
+
+The effectiveness of a recovery plan can be evaluated by
+running a full-scale simulation of a disaster and putting it
+into action.
+
+--- Page 211 ---
+Chaos testing can be used to cover each of these areas.
+Testing under conditions of chaos is something we will get
+into later in the book.
+
+By analyzing capacity needs, you can calculate how many
+resources must be allocated to back up your disaster
+recovery plan and guarantee your recovery environment can
+keep up with your RTOs and RPOs.
+
+Consider the following points:
+
+    Having enough space to store backups and replicas of
+     data.
+
+    Data replication and failover rely on having enough
+    network bandwidth.
+
+    Assuring adequate compute capacity to back up the
+     recovery environment and hit the RTOs and RPOs.
+
+    Power and cooling ensure enough to sustain a suitable
+     recovery setting.
+
+The effectiveness of a disaster recovery plan and the ability
+of an organization to recover from a disaster with minimal
+downtime and data loss depends on regular testing and
+analysis of capacity requirements. To keep the plan up-to-
+date and effective, businesses should put it through its paces
+on a regular basis, including a thorough examination of
+capacity needs and a series of test runs.
+
+Capacity management best practices consist of elements like
+load testing, resource allocation evaluation, outage impact
+mitigation, graceful degradation, denial-of-service (DoS)
+attack protection, effective timeouts, load shedding, quota
+management, and throttling. To perform load testing, a
+miniature version of the service is run at the expected load
+level, and various failure and rollout scenarios are simulated.
+It is crucial to assess resource allocation to ensure it is
+sufficient to meet a specified demand. Limiting the amount
+
+--- Page 212 ---
+of data sent and received between the service and the back
+end is one way to keep it separate from other services that
+share the back end.
+
+To meet the specific needs of modern computing paradigms
+like the cloud, the edge, and containerized environments,
+capacity planning will increasingly rely on cutting-edge
+technologies to enhance the precision and efficiency of
+capacity planning procedures.
+
+Artificial intelligence and machine learning can also
+automate capacity planning procedures like forecasting
+demand and allocating resources efficiently. Capacity
+planning is being influenced by the rise of edge computing,
+which involves deploying compute resources closer to the
+end-user, and the rise of containerization and microservices,
+which help businesses more easily deploy and manage
+applications.
+
+Conclusion
+
+Capacity planning in SRE is a vital, forward-looking process
+that ensures services can handle current and future loads
+efficiently. By analyzing trends and using predictive
+modeling, SRE teams align infrastructure scalability with user
+demand and business growth, avoiding overprovisioning and
+unexpected downtimes. Automation enhances this process
+by facilitating real-time resource adjustments, thus
+optimizing costs and maintaining service reliability.
+Ultimately, capacity planning is a strategic task that supports
+robust, uninterrupted service delivery and drives business
+success within a framework of fiscal prudence and technical
+foresight.
+
+In the next chapter, we will discuss the vital functions and
+obligations that ensure the continuous operation of services.
+This encompasses the framework of on-call rotations, tactics
+
+--- Page 213 ---
+for efficient incident response, and the resources that
+facilitate prompt resolution. Best practices for managing the
+human elements of on-call responsibilities, assuring team
+health, and preventing burnout will be examined.
+Additionally, the chapter will emphasize the significance of
+an initially prepared response in preventing the escalation of
+problems, thereby preserving service dependability and user
+confidence. This is the frontline of defense in SRE, where
+robust engineering meets swift response.
+
+Multiple choice questions
+
+1. What is the primary goal of capacity planning in
+  SRE?,
+   a. To  prevent  service  failures  caused by  insufficient
+     resources.
+
+   b. To maximize the utilization of available resources.
+
+   c. To minimize the cost of resources.
+
+   d. To improve the performance of the service.
+
+2. Which  of  the  following  factors  should  be
+  considered    when     estimating     capacity
+  requirements?
+   a. Historical usage patterns.
+
+   b. Projected growth in user base.
+
+   c. Changes in service features or functionality.
+
+   d. All of the above
+
+3. What is the purpose of load testing in capacity
+  planning?
+   a. To determine the maximum capacity of the system
+
+--- Page 214 ---
+b. To validate that the service can handle expected levels
+     of traffic.
+
+   c. To identify performance bottlenecks in the system.
+
+   d. All of the above
+
+4. What  is  the  difference between  vertical and
+   horizontal scaling?
+   a. Vertical scaling involves adding more resources to a
+     single  node,  whereas  horizontal  scaling  involves
+    adding more nodes to a system.
+
+   b. Vertical  scaling  involves adding more nodes  to a
+    system, whereas horizontal scaling involves adding
+    more resources to a single node.
+
+   c. Vertical  scaling  is more expensive than  horizontal
+     scaling.
+
+   d. Horizontal scaling is more difficult to implement than
+     vertical scaling.
+
+5. What is the purpose of a capacity plan document?
+   a. To outline the steps required to implement capacity
+     planning.
+
+   b. To document the capacity requirements and plans for a
+     specific service or system.
+
+   c. To provide guidance on how to troubleshoot capacity-
+     related issues.
+
+   d. To estimate the cost of capacity planning efforts.
+
+Answers
+   1. a.
+   2. d.
+
+--- Page 215 ---
+3. d.
+   4. a.
+   5. b.
+
+Join our book’s Discord space
+Join the book's Discord Workspace for Latest updates, Offers,
+Tech happenings around the world, New Release and
+Sessions with the Authors:
+
+https://discord.bpbonline.com
