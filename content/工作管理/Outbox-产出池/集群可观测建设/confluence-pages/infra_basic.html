@@ -1,120 +1,97 @@
-<h2>infra_basic — 迁移深度分析 v3</h2>
+<h2>infra_basic — 迁移深度分析 v5</h2>
 
-<ac:structured-macro ac:name="info">
-  <ac:parameter ac:name="title">📊 规则总览（80 条）</ac:parameter>
-  <ac:rich-text-body>
-    <table>
-      <tr><th>分类</th><th>数量</th><th>迁移路径</th></tr>
-      <tr><td>✅ 已匹配（matched）</td><td>27</td><td>告警迁移平台已建 Foxeye 规则，直接复用</td></tr>
-      <tr><td>🔀 混合匹配（mixed）</td><td>5</td><td>部分 ready，部分需补充采集</td></tr>
-      <tr><td>🔧 未匹配·Categraf 可覆盖</td><td>14</td><td>Categraf ping/net_response/mem 插件 + 建 Foxeye 规则</td></tr>
-      <tr><td>🚧 Nginx 组（需 Exporter）</td><td>14</td><td>部署 nginx-exporter 或改用 http_response 探活</td></tr>
-      <tr><td>🔩 OS 基础指标（需扩配）</td><td>10</td><td>node-exporter/Categraf 扩配置后建规则</td></tr>
-      <tr><td>❓ DPVS（retire 候选）</td><td>2</td><td>DPVS 已迁移 SCLB，确认是否仍有实例后决定</td></tr>
-      <tr><td>❓ Tinyproxy（待评估）</td><td>2</td><td>确认服务是否仍在用，若无则 retire</td></tr>
-      <tr><td>🗑 建议退休（retire）</td><td>6</td><td>Zabbix 特有能力（文件完整性/hostname变更），无对应云原生方案</td></tr>
-    </table>
-  </ac:rich-text-body>
-</ac:structured-macro>
-
-<h3>✅ 第一组：已匹配规则（27 条）</h3>
-<p>平台已建立 Foxeye 对应规则，无需额外操作。覆盖以下维度：磁盘 I/O、Swap 内存、CPU 空闲率、Keepalived 状态、NTP 同步、TIME_WAIT/CLOSE_WAIT 连接数、ICMP 可达性、系统日志异常、ETCD 进程、Loki 系统日志告警等。</p>
+<div style="background:#e8f4fd;border-left:4px solid #1976d2;padding:12px 16px;margin:12px 0;">
+<strong>📊 Foxeye 实际规则状态（6 个业务组，68 条规则，2026-06-11 实测）</strong>
 <table>
-  <tr><th>#</th><th>规则名称</th></tr>
-  <tr><td>1</td><td>Disk I/O is overloaded on HOST（×2）</td></tr>
-  <tr><td>2</td><td>Hardware Monitor Smartctl Found Error Disk</td></tr>
-  <tr><td>3</td><td>服务器物理内存小于1G且swap小于20%</td></tr>
-  <tr><td>4</td><td>系统日志出现异常状况[/var/log/messages]</td></tr>
-  <tr><td>5</td><td>Lack of free swap space on HOST</td></tr>
-  <tr><td>6</td><td>CPU空闲率低于5%</td></tr>
-  <tr><td>7</td><td>cpu空闲率持续10分钟低于5%且2分钟内未恢复</td></tr>
-  <tr><td>8</td><td>keepalived服务异常 / keepalive_proc</td></tr>
-  <tr><td>9</td><td>Too many network TIME_WAIT connections on HOST</td></tr>
-  <tr><td>10</td><td>Too many network CLOSE_WAIT connections on HOST</td></tr>
-  <tr><td>11</td><td>Too many network connections on HOST</td></tr>
-  <tr><td>12</td><td>Unavailable by ICMP ping</td></tr>
-  <tr><td>13</td><td>服务器HOST内存使用率大于90%</td></tr>
-  <tr><td>14</td><td>系统健康状况不良[/var/log/messages]</td></tr>
-  <tr><td>15</td><td>CPU I/O load is overloaded on HOST (iowait &gt; 40)</td></tr>
-  <tr><td>16</td><td>Chrony or NTP service is down on HOST</td></tr>
-  <tr><td>17</td><td>Misalignment of the upper NTP has exceeded the 5s（×2）</td></tr>
-  <tr><td>18</td><td>Misalignment of the upper NTP has exceeded the 50ms（×2）</td></tr>
-  <tr><td>19</td><td>Process of ETCD server is DEAD</td></tr>
-  <tr><td>20</td><td>ES/KIBANA Keepalived: state change / is BACKUP but stopped / is MASTER but stopped / is MASTER but not a router（×5）</td></tr>
+  <tr><th>业务组</th><th>GID</th><th>✅ 启用</th><th>❌ 禁用</th><th>说明</th></tr>
+  <tr><td>大数据中心-集群-基础运营组-其他</td><td>301</td><td>11</td><td>0</td><td>Categraf 心跳 / NTP / systemd / CMDB Ping 探测</td></tr>
+  <tr><td>大数据中心-集群-基础运营组-硬件故障</td><td>395</td><td>7</td><td>1</td><td>IPMI / ECC / MCE；syslog_mce 禁用</td></tr>
+  <tr><td>大数据中心-集群-基础运营组-系统问题-内存</td><td>398</td><td>7</td><td>4</td><td>OOM / kernel 规则启用；mem_used_percent×2 禁用（VM 噪音）</td></tr>
+  <tr><td>大数据中心-集群-基础运营组-系统问题-文件系统&amp;磁盘</td><td>399</td><td>9</td><td>1</td><td>磁盘使用率 / IO / inode / SMART；磁盘预测告警禁用</td></tr>
+  <tr><td>大数据中心-集群-基础运营组-系统问题-网络</td><td>400</td><td>15</td><td>8</td><td>网络流量 / keepalived / TCP 规则启用；Ping×4 禁用</td></tr>
+  <tr><td>大数据中心-集群-基础运营组-系统问题-CPU/Load</td><td>401</td><td>2</td><td>3</td><td>iowait / steal 启用；cpu_idle / load×3 禁用（VM 噪音）</td></tr>
+  <tr><td><strong>合计</strong></td><td>—</td><td><strong>51</strong></td><td><strong>17</strong></td><td><strong>🆕 缺失规则：1 条（system_uptime 重启检测）</strong></td></tr>
 </table>
+<p><strong>覆盖范围：</strong>大数据中心-集群-基础运营组（6个组），约 2123 台主机（含大数据 / 云存储 / 容器 / 弹性计算 / 中间件）。</p>
+</div>
 
-<h3>🔀 第二组：混合匹配规则（5 条）</h3>
-<p>这些规则在平台中有部分匹配，但存在多个子规则分别属于 ready 和 blocked 两种状态。需要逐条确认已匹配部分的 Foxeye 规则是否覆盖业务诉求，对 blocked 部分补充 Categraf 采集。</p>
-<table>
-  <tr><th>规则名称</th><th>迁移可行性</th><th>处理建议</th></tr>
-  <tr><td>find new read only file system / 磁盘健康状况不良</td><td>mixed</td><td>Loki 日志告警覆盖 /var/log/messages 中的 readonly 事件；Categraf smartctl 覆盖磁盘健康</td></tr>
-  <tr><td>Server PING 大于10ms</td><td>ready</td><td>Categraf ping 插件已配置，建 Foxeye 规则即可</td></tr>
-  <tr><td>Processor load is too high on HOST</td><td>mixed</td><td>matched 部分已有 Foxeye 规则；unmatched 部分用 node_load1/5/15 建补充规则</td></tr>
-  <tr><td>服务器HOST内存使用率大于90%</td><td>ready</td><td>Categraf mem 指标，建 Foxeye 规则</td></tr>
-  <tr><td>Zabbix agent on HOST is unreachable for 5 minutes</td><td>mixed</td><td>ready 部分：Categraf agent_ping/heartbeat；blocked 部分：Zabbix 特有，建议 retire</td></tr>
-</table>
+<h3>🆕 待新建规则（1 条）</h3>
 
-<h3>🔧 第三组：未匹配·Categraf 可直接覆盖（14 条）</h3>
-<p>平台指标库中暂无对应指标，但均可通过 Categraf 现有插件采集后建 Foxeye 规则。</p>
-<table>
-  <tr><th>规则名称</th><th>Categraf 采集方案</th></tr>
-  <tr><td>Lack of available memory on HOST</td><td>Categraf <code>mem</code> 插件 → <code>mem_available</code> 告警</td></tr>
-  <tr><td>Lack of available virtual memory on HOST</td><td>Categraf <code>mem</code> 插件 → <code>mem_commit_limit</code></td></tr>
-  <tr><td>Lack of free memory on HOST</td><td>Categraf <code>mem</code> 插件 → <code>mem_free</code></td></tr>
-  <tr><td>CPU load is too high on HOST</td><td>Categraf <code>system</code> 插件 → <code>system_load1/5/15</code></td></tr>
-  <tr><td>High ICMP ping loss</td><td>Categraf <code>ping</code> 插件 → <code>ping_percent_packet_loss</code></td></tr>
-  <tr><td>High ICMP ping response time</td><td>Categraf <code>ping</code> 插件 → <code>ping_average_response_ms</code></td></tr>
-  <tr><td>ETCD server Port is DOWN</td><td>Categraf <code>net_response</code> 插件 → ETCD 2379 端口探活</td></tr>
-  <tr><td>core 1160 HOST has just been restarted</td><td>Categraf <code>system</code> 插件 → <code>system_uptime</code> &lt; 600s</td></tr>
-  <tr><td>KIBANA Keepalived: state change MASTER↔BACKUP（×2）</td><td>Categraf keepalived 插件 → <code>keepalived_vrrp_state</code></td></tr>
-  <tr><td>ES Keepalived: state change MASTER↔BACKUP（×2）</td><td>同上</td></tr>
-  <tr><td>ES/KIBANA Keepalived: state is BACKUP but not a router（×2）</td><td>同上，补充 <code>keepalived_vrrp_become_master</code> 状态判断</td></tr>
-  <tr><td>ES/KIBANA Keepalived: state is BACKUP/MASTER but stopped（×2）</td><td>同上 + procstat 检测 keepalived 进程存活</td></tr>
-</table>
-
-<h3>🚧 第四组：Nginx 告警（14 条，需部署 nginx-exporter）</h3>
-
-<ac:structured-macro ac:name="warning">
-  <ac:parameter ac:name="title">⚠ Nginx 告警全量 blocked — 需先确认 nginx-exporter 部署范围</ac:parameter>
-  <ac:rich-text-body>
-    <p>Zabbix 通过 Nginx 的 <code>stub_status</code> 和 <code>info</code> 接口采集指标，当前 Foxeye 平台无任何 Nginx 指标。需要选择以下方案之一：</p>
-    <ul>
-      <li><strong>方案 A（推荐）</strong>：部署 <code>nginx-prometheus-exporter</code>，通过 stub_status 暴露 Prometheus 指标（<code>nginx_connections_active/waiting/writing/reading</code>），接入 VM + Foxeye</li>
-      <li><strong>方案 B（降级）</strong>：仅用 Categraf <code>http_response</code> 插件做 Nginx 存活探活，放弃连接数/请求速率等业务指标告警</li>
-    </ul>
-  </ac:rich-text-body>
-</ac:structured-macro>
+<div style="background:#fce4ec;border-left:4px solid #c62828;padding:10px 14px;margin:8px 0;">
+<strong>以下规则在 6 个业务组中均不存在，是当前唯一需要新建的规则。</strong>
+</div>
 
 <table>
-  <tr><th>规则名称</th><th>方案 A 指标</th><th>方案 B 可否覆盖</th></tr>
-  <tr><td>Nginx: Service is down（×2）</td><td>nginx_up == 0</td><td>✅ http_response 探活</td></tr>
-  <tr><td>Nginx: Process is not running</td><td>nginx_up == 0</td><td>✅ procstat</td></tr>
-  <tr><td>Nginx: Service response time is too high（×2）</td><td>nginx_response_time</td><td>✅ http_response 响应时间</td></tr>
-  <tr><td>Nginx: Failed to fetch stub status page（×2）</td><td>nginx_up == 0</td><td>⚠ 仅探活，无法区分 stub_status 失联</td></tr>
-  <tr><td>Nginx: Failed to fetch info data（×1）</td><td>nginx_up == 0</td><td>⚠ 同上</td></tr>
-  <tr><td>Nginx: has been restarted（×1）</td><td>nginx_restarts_total</td><td>❌ 无法覆盖</td></tr>
-  <tr><td>Nginx: High connections drop rate（×2）</td><td>nginx_connections_waiting/active 变化率</td><td>❌ 无法覆盖</td></tr>
-  <tr><td>Nginx: Server response error（×1）</td><td>nginx_http_requests_total by status_code</td><td>❌ 无法覆盖</td></tr>
-  <tr><td>Nginx: Version has changed（×2）</td><td>nginx_version label 变更检测</td><td>❌ 无法覆盖</td></tr>
+  <tr><th>规则名称</th><th>目标业务组</th><th>PromQL</th><th>建议阈值</th></tr>
+  <tr>
+    <td>HOST has just been restarted</td>
+    <td>GID=301（其他）</td>
+    <td><code>system_uptime{} &lt; 600</code></td>
+    <td>&lt; 600s，持续 1 min，Critical</td>
+  </tr>
 </table>
 
-<p><strong>结论</strong>：若选方案 B（降级），仅能覆盖 5/14 条，有 9 条无法迁移。强烈建议方案 A（全量 nginx-exporter），需评估 Nginx 节点数量和部署成本。</p>
+<p><strong>新建命令参考：</strong></p>
+<pre>opencli foxeye create-rule \
+  --group-id 301 \
+  --name "system_uptime【infra_basic】【主机最近重启检测】" \
+  --prom-ql 'system_uptime &lt; 600' \
+  --severity 2 \
+  --duration 1m</pre>
 
-<h3>🔩 第五组：OS 基础指标扩配（10 条）</h3>
-<p>平台当前无 Linux 基础系统指标（进程数、文件句柄数、cgroup 内存、buff/cache 增量、磁盘健康）。需要扩充 Categraf 配置或确认 node-exporter 接入范围。</p>
+<h3>❌ 已建但禁用规则（17 条）</h3>
+
+<div style="background:#fff3e0;border-left:4px solid #f57c00;padding:10px 14px;margin:8px 0;">
+<strong>以下规则已在 Foxeye 建立，因以下原因被禁用：① VM 告警噪音（约 2123 台主机含大量过载虚拟机）；② 测试规则；③ 数据源缺失。</strong>
+</div>
+
 <table>
-  <tr><th>规则名称</th><th>迁移路径</th><th>所需指标</th></tr>
-  <tr><td>Too many processes running on HOST</td><td>Categraf <code>system</code> 插件</td><td><code>system_n_cpus</code> / proc 总数</td></tr>
-  <tr><td>Too many processes on HOST</td><td>同上</td><td>同上</td></tr>
-  <tr><td>Configured max number of processes is too low</td><td>Categraf <code>kernel</code> 插件</td><td><code>kernel_pid_max</code></td></tr>
-  <tr><td>Configured max number of opened files is too low</td><td>Categraf <code>kernel</code> 插件</td><td><code>kernel_file-max</code></td></tr>
-  <tr><td>磁盘健康状况不良[/var/log/messages]</td><td>Loki Pattern Alert 或 Categraf <code>smart</code></td><td>日志关键词 "I/O error" / smartctl 健康分</td></tr>
-  <tr><td>内存cgroup 超过3W</td><td>Categraf <code>cgroup</code> 插件</td><td><code>cgroup_memory_usage_bytes</code></td></tr>
-  <tr><td>服务器buff/cache内存1分钟内增量大于35%</td><td>node-exporter / Categraf <code>mem</code></td><td><code>node_memory_Buffers_bytes</code> + <code>Cached_bytes</code> 变化率</td></tr>
-  <tr><td>HOST has just been restarted</td><td>Categraf <code>system</code></td><td><code>system_uptime</code> &lt; 600s</td></tr>
-  <tr><td>Lack of available virtual memory on HOST</td><td>Categraf <code>mem</code></td><td><code>mem_commit_limit - mem_committed_as</code></td></tr>
-  <tr><td>Lack of free memory on HOST</td><td>Categraf <code>mem</code></td><td><code>mem_free</code></td></tr>
+  <tr><th>规则 ID</th><th>规则名称</th><th>业务组</th><th>禁用原因</th><th>建议处置</th></tr>
+  <tr><td>2752499</td><td>mem_used_percent【infra_basic】【主机内存使用率超过90%】</td><td>398 内存</td><td>VM 长期过载，频繁误报</td><td>可加 instance_type 过滤或调高阈值后重启</td></tr>
+  <tr><td>2752500</td><td>内存使用率高于90%告警【NodeManager】</td><td>398 内存</td><td>VM 噪音（NodeManager 场景）</td><td>同上，或与 YARN 组协调专属规则</td></tr>
+  <tr><td>105778</td><td>mem_swap_free【GC可能释放了swap内存】</td><td>398 内存</td><td>GC swap 释放场景误报</td><td>评估阈值后按需重启</td></tr>
+  <tr><td>105777</td><td>diskio_reads【swap/sda3】【swap分区读次数超过50】</td><td>398 内存</td><td>场景特定，当前不适用</td><td>确认覆盖目标后决定是否重启</td></tr>
+  <tr><td>75205</td><td>node_disk_used_percent_predict_Warning【磁盘预测不足】</td><td>399 磁盘</td><td>预测算法噪音</td><td>保持禁用，或待模型稳定后重启</td></tr>
+  <tr><td>2752519</td><td>keepalived主备切换告警 【{{$labels.insName}}】</td><td>400 网络</td><td>标签占位符未正确配置</td><td>修正 PromQL/标签后重启（与 ID=2752510 功能重叠）</td></tr>
+  <tr><td>2752511</td><td>netstat_tcp_inuse【infra_basic】【TCP连接数过多】</td><td>400 网络</td><td>Categraf netstat 指标 0 series（与 node_netstat 指标不同）</td><td>改用 node_netstat_tcp_* 指标或部署 Categraf netstat 插件</td></tr>
+  <tr><td>75211</td><td>node_netstat_tcp_time_wait【异常tcp_time_wait大于2000-test】</td><td>400 网络</td><td>测试规则，阈值过低（2000 测试值）</td><td>retire，生产规则已有 ID=75212（阈值 8000）</td></tr>
+  <tr><td>75216</td><td>node_nf_conntrack_entries【nf conntrack表项使用率超80%】</td><td>400 网络</td><td>主动禁用（噪音或场景不适用）</td><td>按需评估重启</td></tr>
+  <tr><td>2752507</td><td>SlaProbe_ping_avg_rtt【infra_basic】【服务器Ping平均延迟超阈值】</td><td>400 网络</td><td>SlaProbe 指标 0 series（探针未部署或配置缺失）</td><td>阻塞：需先解决 SlaProbe 数据源（见下方阻塞项）</td></tr>
+  <tr><td>2752512</td><td>SlaProbe_ping_sla低于80%告警【ICMP高丢包率】</td><td>400 网络</td><td>同上，SlaProbe 数据源缺失</td><td>阻塞：同上</td></tr>
+  <tr><td>2752517</td><td>Ping延迟高于10ms告警【NodeManager网络】</td><td>400 网络</td><td>同上，SlaProbe 数据源缺失</td><td>阻塞：同上</td></tr>
+  <tr><td>2752523</td><td>Ping延迟高于150ms告警【网络高延迟】</td><td>400 网络</td><td>同上，SlaProbe 数据源缺失</td><td>阻塞：同上</td></tr>
+  <tr><td>2752524</td><td>cpu_usage_idle【infra_basic】【CPU空闲率持续低于5%】</td><td>401 CPU/Load</td><td>VM 长期过载，频繁误报</td><td>可加 instance_type 过滤后重启（物理机场景可用）</td></tr>
+  <tr><td>2752525</td><td>system_load5【infra_basic】【CPU 5分钟平均负载过高】</td><td>401 CPU/Load</td><td>VM 噪音</td><td>同上</td></tr>
+  <tr><td>2752527</td><td>CPU归一化Load超过1告警【高CPU负载】</td><td>401 CPU/Load</td><td>VM 噪音</td><td>同上</td></tr>
+  <tr><td>75178</td><td>syslog_mce_log_error_value【硬件故障-内存】【系统日志出现mce错误】</td><td>395 硬件故障</td><td>syslog 解析器未配置或指标 0 series</td><td>确认 syslog Categraf 插件状态后重启</td></tr>
 </table>
+
+<h3>🚫 阻塞项（Blockers）</h3>
+<table>
+  <tr><th>阻塞项</th><th>影响规则</th><th>阻塞原因</th><th>解除方式</th></tr>
+  <tr>
+    <td><strong>SlaProbe 数据源缺失</strong></td>
+    <td>4 条 Ping 规则（ID：2752507 / 2752512 / 2752517 / 2752523）</td>
+    <td>SlaProbe_ping_avg_rtt / SlaProbe_ping_sla 指标 0 series，SlaProbe 探针未就绪或配置缺失</td>
+    <td>① 确认 SlaProbe 探针是否部署；② 若无部署计划，可改用 cmdb_device_probe_status（GID=301 ID=74371 已启用）或 node-exporter 网络指标替代</td>
+  </tr>
+  <tr>
+    <td><strong>VM 告警噪音（未分组）</strong></td>
+    <td>7 条 CPU/内存/Load 规则（GID=398/401 禁用规则）</td>
+    <td>业务组 GID=301~401 覆盖约 2123 台主机，含大量虚拟机，阈值统一设置导致 VM 频繁误报</td>
+    <td>① 在 PromQL 增加 <code>instance_type!="vm"</code> 标签过滤物理机；② 或按集群类型拆分业务组（物理机/虚拟机分组）</td>
+  </tr>
+  <tr>
+    <td><strong>Categraf netstat 指标 0 series</strong></td>
+    <td>1 条（ID=2752511 netstat_tcp_inuse）</td>
+    <td>使用 Categraf 原生 netstat 插件指标，但该插件未启用，与 node_netstat 指标体系不兼容</td>
+    <td>改写 PromQL 使用 node_netstat_tcp_* 指标（node_netstat 版本 ID=75212 已启用）</td>
+  </tr>
+</table>
+
+<h3>🚧 第五组：Nginx（14 条 → SCLB 四层平台承载）</h3>
+<!-- 以下第五组起不变，保持原有内容 -->
+<p>Nginx 告警 14 条统一由 SCLB 四层平台提供，不迁入 Foxeye infra_basic 组，此处仅作记录。</p>
 
 <h3>❓ 第六组：DPVS 规则（2 条，retire 候选）</h3>
 <table>
@@ -132,30 +109,30 @@
 
 <h3>🗑 第八组：建议退休规则（6 条）</h3>
 
-<ac:structured-macro ac:name="warning">
-  <ac:parameter ac:name="title">🗑 以下规则依赖 Zabbix 特有能力，无对应云原生方案，建议 Retire</ac:parameter>
-  <ac:rich-text-body>
-    <table>
-      <tr><th>规则名称</th><th>Zabbix 原理</th><th>替代方案</th></tr>
-      <tr><td>/etc/passwd has been changed on HOST</td><td>Zabbix vfs.file.cksum 计算文件校验和变化</td><td>若有文件完整性监控需求，使用 AIDE/auditd + Loki，否则直接 retire</td></tr>
-      <tr><td>Hostname was changed on HOST</td><td>Zabbix system.hostname 检测变更</td><td>配置管理（SaltStack）已管控 hostname，告警意义低，retire</td></tr>
-      <tr><td>Host name of zabbix_agentd was changed on HOST</td><td>Zabbix agent 自身 hostname 检测</td><td>Zabbix 特有，无需迁移，retire</td></tr>
-      <tr><td>Host information was changed on HOST</td><td>Zabbix system.uname 硬件信息检测</td><td>retire（SaltStack 管控变更，无需告警）</td></tr>
-      <tr><td>linux kernel version on HOST</td><td>Zabbix system.sw.os 检测内核版本变更</td><td>retire（内核升级通过变更管控，非告警场景）</td></tr>
-      <tr><td>公网IP获取失败</td><td>Zabbix UserParameter 脚本获取公网IP</td><td>retire（若有公网IP监控需求，另行设计）</td></tr>
-    </table>
-  </ac:rich-text-body>
-</ac:structured-macro>
+<div style="background:#fff3e0;border-left:4px solid #f57c00;padding:10px 14px;margin:8px 0;">
+<strong>🗑 以下规则依赖 Zabbix 特有能力，无对应云原生方案，建议 Retire</strong>
+</div>
+
+<table>
+  <tr><th>规则名称</th><th>Zabbix 原理</th><th>替代方案</th></tr>
+  <tr><td>/etc/passwd has been changed on HOST</td><td>vfs.file.cksum 计算文件校验和变化</td><td>若有需求使用 AIDE/auditd + Loki，否则 retire</td></tr>
+  <tr><td>Hostname was changed on HOST</td><td>system.hostname 检测变更</td><td>SaltStack 已管控 hostname，retire</td></tr>
+  <tr><td>Host name of zabbix_agentd was changed on HOST</td><td>Zabbix agent 自身 hostname 检测</td><td>Zabbix 特有，retire</td></tr>
+  <tr><td>Host information was changed on HOST</td><td>system.uname 硬件信息检测</td><td>retire（SaltStack 管控变更）</td></tr>
+  <tr><td>linux kernel version on HOST</td><td>system.sw.os 检测内核版本变更</td><td>retire（内核升级通过变更管控）</td></tr>
+  <tr><td>公网IP获取失败</td><td>UserParameter 脚本获取公网IP</td><td>retire</td></tr>
+</table>
 
 <h3>📋 行动优先级</h3>
 <table>
   <tr><th>优先级</th><th>行动</th><th>影响规则数</th></tr>
-  <tr><td>P0（立即）</td><td>确认平台 matched 的 27 条 Foxeye 规则是否已启用，逐条验证告警阈值与 Zabbix 一致</td><td>27</td></tr>
-  <tr><td>P1（本周）</td><td>补充 Categraf ping/net_response/mem/system/keepalived 插件配置，为 14 条 ready_unmatched 建 Foxeye 规则</td><td>14</td></tr>
-  <tr><td>P1（本周）</td><td>评估 Nginx 告警方案（推荐部署 nginx-exporter），明确部署节点范围</td><td>14</td></tr>
-  <tr><td>P2（本月）</td><td>扩充 Categraf kernel/cgroup/smart 插件配置，覆盖 OS 基础指标 10 条</td><td>10</td></tr>
+  <tr><td><strong>P0（立即）</strong></td><td>在 GID=301 新建 system_uptime 重启检测规则（唯一缺失规则，指标数据已就绪）</td><td>1</td></tr>
+  <tr><td>P1（本周）</td><td>调查 SlaProbe 数据源状态（4 条 Ping 规则阻塞）；确认 SlaProbe 探针是否已部署，若无部署计划则改用 cmdb_device_probe_status 指标替代</td><td>4</td></tr>
+  <tr><td>P1（本周）</td><td>为 ID=75211（tcp_time_wait 2000-test）执行 retire 操作；为 ID=2752519（keepalived insName占位符）修正 PromQL 后重启或合并至 ID=2752510</td><td>2</td></tr>
+  <tr><td>P2（本月）</td><td>评估 VM 噪音方案：在禁用的 CPU/内存/Load 规则 PromQL 中增加 instance_type!="vm" 过滤，或按集群类型拆分业务组，逐步重新启用 7 条规则</td><td>7</td></tr>
+  <tr><td>P2（本月）</td><td>扩充 Categraf kernel/cgroup 插件配置，覆盖第四组 OS 基础指标 10 条</td><td>10</td></tr>
   <tr><td>P2（本月）</td><td>确认 DPVS 和 Tinyproxy 服务状态，决定 retire 或迁移</td><td>4</td></tr>
-  <tr><td>P3（归档）</td><td>将 6 条 Zabbix 特有规则标记为 retire，在 Zabbix 中禁用并归档</td><td>6</td></tr>
+  <tr><td>P3（归档）</td><td>将第八组 6 条 Zabbix 特有规则标记为 retire，在 Zabbix 中禁用并归档</td><td>6</td></tr>
 </table>
 
-<p><em>v3 深度分析 - 2026-05-12 更新</em></p>
+<p><em>v5 深度分析 - 2026-06-11 更新 | 修正业务组名称（6组真实命名），重构规则状态分类（51启用/17禁用/1待建），修正"僵尸规则"描述（大部分规则已存在 Foxeye），新增阻塞项分析</em></p>

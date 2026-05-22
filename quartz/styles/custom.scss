@@ -436,12 +436,15 @@ button.search-button {
   font-variation-settings: "SOFT" 100;
 
   a {
-    color: var(--dark);
+    // 渐变文字：moss → clay，强化品牌视觉重量
+    background: linear-gradient(135deg, var(--secondary) 0%, var(--tertiary) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
     border-bottom: none;
 
     &:hover {
-      color: var(--secondary);
-      background: transparent;
+      opacity: 0.78;
     }
   }
 }
@@ -517,6 +520,16 @@ button.search-button {
 
   .folder-icon {
     color: var(--tertiary);
+    // 展开/收起时旋转 + 变色动画
+    transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1), color 0.2s ease;
+  }
+
+  // .folder-outer 获得 "open" class 后，其前一个兄弟（.folder-container div）内的 icon 旋转
+  .folder-outer.open ~ * .folder-icon,
+  li:has(> .folder-container) > .folder-outer.open + .folder-container .folder-icon,
+  .folder-outer.open .folder-icon {
+    transform: rotate(90deg);
+    color: var(--secondary);
   }
 
   .folder-outer > ul {
@@ -580,8 +593,13 @@ ul.toc-content.overflow {
       }
 
       &.in-view {
-        color: var(--dark);
+        // 激活态：moss 高亮 + 左侧竖线指示器
+        color: var(--secondary);
         font-weight: 700;
+        background: color-mix(in srgb, var(--secondary) 12%, transparent);
+        border-left: 2px solid var(--secondary);
+        border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+        padding-left: 0.7rem;
       }
     }
   }
@@ -781,6 +799,11 @@ footer {
 
   & .sidebar.left {
     padding-right: 1.5rem;
+    // 磨砂玻璃效果：与主内容区产生空间层次分隔
+    background: color-mix(in srgb, var(--light) 82%, transparent);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border-right: 1px solid color-mix(in srgb, var(--lightgray) 55%, transparent);
   }
 
   & .sidebar.right {
@@ -912,4 +935,91 @@ ul.section-ul {
     opacity: 0.3;
     filter: blur(60px);
   }
+}
+
+// ----------------------------------------------------------
+// 25. Article H2 — moss→clay 渐变左侧装饰条（仅正文 h2）
+// ----------------------------------------------------------
+article h2 {
+  position: relative;
+  padding-left: 1rem;
+
+  &::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0.2em;
+    bottom: 0.2em;
+    width: 3px;
+    background: linear-gradient(to bottom, var(--secondary), var(--tertiary));
+    border-radius: 2px;
+  }
+}
+
+// ----------------------------------------------------------
+// 26. Navigation progress bar — moss→clay 渐变
+// ----------------------------------------------------------
+.navigation-progress {
+  background: linear-gradient(90deg, var(--secondary), var(--tertiary)) !important;
+}
+
+// ----------------------------------------------------------
+// 27. Table — 首列 th 加 moss 左边框锚点
+// ----------------------------------------------------------
+.table-container > table th:first-child {
+  border-left: 3px solid var(--secondary);
+}
+
+// ----------------------------------------------------------
+// 28. Code block — 右上角语言类型标签
+// ----------------------------------------------------------
+figure[data-rehype-pretty-code-figure] > pre[data-language]::after {
+  content: attr(data-language);
+  position: absolute;
+  top: 0.55rem;
+  right: 0.9rem;
+  font-family: var(--codeFont);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--gray);
+  opacity: 0.65;
+  pointer-events: none;
+  user-select: none;
+}
+
+// ----------------------------------------------------------
+// 29. Dark mode — 增强 ambient blob 可见度
+// ----------------------------------------------------------
+[saved-theme="dark"] body::after {
+  opacity: 0.72;
+}
+
+[saved-theme="dark"] .page::before {
+  opacity: 0.62;
+}
+
+// ----------------------------------------------------------
+// 30. View Transitions — SPA 页面切换淡入淡出
+// ----------------------------------------------------------
+@view-transition {
+  navigation: auto;
+}
+
+::view-transition-old(root) {
+  animation: 160ms ease vt-fade-out;
+}
+
+::view-transition-new(root) {
+  animation: 260ms ease vt-fade-in;
+}
+
+@keyframes vt-fade-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+@keyframes vt-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }

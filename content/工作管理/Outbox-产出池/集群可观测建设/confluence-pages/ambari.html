@@ -7,60 +7,92 @@
 <p>Ambari 共 3 条告警规则，<strong>全部为探活类规则</strong>（进程存活 / TCP 端口 / HTTP API 响应），无 JMX 指标需求。</p>
 <p><strong>决策：不新增独立 Exporter，通过扩展 Categraf 配置覆盖。</strong></p>
 <ul>
-<li>进程存活 → <code>procstat</code> 插件（已在集群部署，只需追加 pattern 配置）</li>
+<li>进程存活 → <code>procstat</code> 插件（追加 <code>search_cmdline_substring</code> 配置，平台上报 label 为 <code>search_string</code>）</li>
 <li>TCP 端口探测 → <code>net_response</code> 插件</li>
 <li>HTTP API 响应 → <code>http_response</code> 插件</li>
 </ul>
-<p>优势：零新增二进制、零新增部署流程，仅追加 Categraf 配置文件，Foxeye 侧新建对应告警规则引用新指标即可。</p>
 </ac:rich-text-body>
 </ac:structured-macro>
 
 <h2>📊 汇总统计</h2>
+<p><strong>2026-06-11 实测更新：</strong>发现 Foxeye gid=5 中额外存在 rule 109（http_response 端口探测），Ambari 实际已有 4 条规则。</p>
 <table><thead><tr><th>汇总项</th><th>数量</th></tr></thead><tbody>
-<tr><td>规则组总数</td><td><strong>3</strong></td></tr>
-<tr><td>✅ 已匹配（可进入双跑）</td><td><strong style="color:#00875A">0</strong></td></tr>
-<tr><td>⬜ 未匹配（待处理）</td><td><strong style="color:#BF2600">3</strong></td></tr>
-<tr><td>迁移方案：Categraf 扩配置</td><td>3 条</td></tr>
+<tr><td>Zabbix 原始规则总数</td><td><strong>3</strong></td></tr>
+<tr><td>Foxeye 实际规则数</td><td><strong>4</strong></td></tr>
+<tr><td>✅ 已迁移至 Foxeye 并启用</td><td><strong style="color:#00875A">4</strong></td></tr>
+<tr><td>迁移方案</td><td>Categraf procstat / net_response / http_response 插件</td></tr>
 </tbody></table>
 
-<h3>按规则类型分布</h3>
-<table><thead><tr><th>规则类型</th><th>总计</th><th>迁移路径</th></tr></thead><tbody>
-<tr><td>进程存活类</td><td>1</td><td>Categraf procstat 插件</td></tr>
-<tr><td>网络连通类</td><td>1</td><td>Categraf net_response 插件</td></tr>
-<tr><td>服务响应类</td><td>1</td><td>Categraf http_response 插件</td></tr>
-</tbody></table><hr/>
-
-<h2>规则详情 &amp; 迁移方案</h2>
+<h2>规则详情 &amp; 迁移状态</h2>
 <table>
 <thead><tr>
-<th>#</th><th>规则名称</th><th>Zabbix 表达式</th><th>Trigger ID</th><th>规则类型</th><th>迁移路径（Categraf 插件）</th><th>Foxeye 规则链接</th>
+<th>#</th><th>规则名称</th><th>Zabbix 表达式</th><th>Trigger ID</th><th>迁移路径</th><th>Foxeye 规则</th><th>Foxeye PromQL</th><th>状态</th>
 </tr></thead><tbody>
-<tr><td>1</td><td>Process of Ambari Server is DEAD</td><td><code>last(/Template Ambari Server/proc.num[,,,"org.apache.ambari.server.controller.AmbariServer"])=0</code></td><td>1385703</td><td>进程存活类</td><td>Categraf <code>procstat</code> 插件（pattern 匹配 AmbariServer 进程）</td><td>—</td></tr>
-<tr><td>2</td><td>Ambari Server connection refused</td><td><code>last(/Template Ambari Server/net.tcp.service[http,*UNKNOWN*,8080])=0</code></td><td>1385704</td><td>网络连通类</td><td>Categraf <code>net_response</code> 插件（TCP probe port 8080）</td><td>—</td></tr>
-<tr><td>3</td><td>Ambari Server api test timeout（2分钟内无响应）</td><td><code>nodata(/Template Ambari Server/web.test.rspcode[Ambari Server HTTP status codes,api测试],2m)=1</code></td><td>1385705</td><td>服务响应类</td><td>Categraf <code>http_response</code> 插件（GET /api/v1/clusters，检查 200 响应）</td><td>—</td></tr>
+<tr>
+  <td>1</td>
+  <td>Process of Ambari Server is DEAD</td>
+  <td><code>last(/Template Ambari Server/proc.num[,,,"org.apache.ambari.server.controller.AmbariServer"])=0</code></td>
+  <td>1385703</td>
+  <td>Categraf <code>procstat</code> 插件（search_cmdline_substring）</td>
+  <td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/2762021">ambari_server_dead [ID: 2762021]</a></td>
+  <td><code>procstat_lookup_count{search_string="org.apache.ambari.server.controller.AmbariServer"} == 0</code></td>
+  <td>✅ 已启用</td>
+</tr>
+<tr>
+  <td>2</td>
+  <td>Ambari Server connection refused</td>
+  <td><code>last(/Template Ambari Server/net.tcp.service[http,*UNKNOWN*,8080])=0</code></td>
+  <td>1385704</td>
+  <td>Categraf <code>net_response</code> 插件（TCP probe port 8080）</td>
+  <td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/108">ambari_server_port_down [ID: 108]</a></td>
+  <td><code>net_response_result_code{instance="10.18.13.226"} != 0</code></td>
+  <td>✅ 已启用</td>
+</tr>
+<tr>
+  <td>3</td>
+  <td>Ambari Server api test timeout（2分钟内无响应）</td>
+  <td><code>nodata(/Template Ambari Server/web.test.rspcode[Ambari Server HTTP status codes,api测试],2m)=1</code></td>
+  <td>1385705</td>
+  <td>Categraf <code>http_response</code> 插件（GET /api/v1/clusters）</td>
+  <td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/2762026">ambari_server_api_unavailable [ID: 2762026]</a></td>
+  <td><code>http_response_result_code{target=~".*8080/api.*"} != 0</code></td>
+  <td>✅ 已启用</td>
+</tr>
+<tr>
+  <td>4</td>
+  <td>Ambari Server 端口探测（HTTP）</td>
+  <td>—（非 Zabbix 迁移规则，平台自建）</td>
+  <td>—</td>
+  <td>Categraf <code>http_response</code> 插件</td>
+  <td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/109">http_response_response_code [ID: 109]</a></td>
+  <td><code>http_response_response_code{instance="10.18.13.226"} != 0</code></td>
+  <td>✅ 已启用</td>
+</tr>
 </tbody></table>
 
 <h2>📋 Categraf 配置参考</h2>
 <pre>
-# 1. 进程存活 - 追加到已有 procstat 配置
-[[inputs.procstat]]
-  pattern = "org.apache.ambari.server.controller.AmbariServer"
-  # Foxeye 告警规则: procstat_running{process_name=~".*AmbariServer.*"} == 0
+# 1. 进程存活（追加到 Ambari Server 节点的 procstat 配置）
+[[instances]]
+search_cmdline_substring = "org.apache.ambari.server.controller.AmbariServer"
+gather_total = true
+gather_per_pid = false
+# 上报 label: search_string="org.apache.ambari.server.controller.AmbariServer"
 
 # 2. TCP 端口探测
-[[inputs.net_response]]
-  address = "ambari-host:8080"
-  protocol = "tcp"
-  timeout = "5s"
-  # Foxeye 告警规则: net_response_result_code{server="ambari-host",port="8080"} != 0
+[[instances]]
+targets = ["10.18.14.33:8080"]
+# 上报 label: instance=采集节点IP, target="10.18.14.33:8080"
 
 # 3. HTTP API 响应检查
-[[inputs.http_response]]
-  address = "http://ambari-host:8080/api/v1/clusters"
-  method = "GET"
-  response_timeout = "10s"
-  username = "admin"    # Ambari Basic Auth，建议使用只读账号
-  password = "xxxx"
-  # Foxeye 告警规则: http_response_result_code{server="ambari-host"} != 0
+[[instances]]
+targets = ["http://10.18.130.160:8080/api/v1/clusters"]
+method = "GET"
+response_timeout = "10s"
+username = "admin"
+password = "YOUR_READONLY_PASSWORD"
+expected_response_code = 200
+# 上报 label: instance=采集节点IP, target="http://10.18.130.160:8080/api/v1/clusters"
 </pre>
-<p><strong>注意：</strong>上述配置需部署在能访问 Ambari Server 的采集节点上（建议 Ambari Server 本机或同网段 Categraf 实例）。HTTP API 鉴权需配置 Ambari 账号，建议使用只读账号。</p>
+
+<p><em>最后更新：2026-06-11 | 迁移状态：全部 Zabbix 3 条规则已迁移，Foxeye 实际共 4 条（含 1 条平台自建）</em></p>

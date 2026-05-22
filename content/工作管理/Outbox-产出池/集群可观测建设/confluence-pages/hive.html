@@ -1,5 +1,6 @@
 <h2>Hive 告警规则迁移明细</h2>
-<p>共 25 条规则 | ✅ 已匹配 15 条 | ❌ 未匹配 9 条（含 2 条建议 retire）</p>
+<p><strong>2026-06-11 实测更新：</strong>Foxeye gid=419 实际共 21 条规则（全启用）；相比 v6 多出 6 条平台自建新规则。</p>
+<p>Zabbix 25 条规则 | ✅ 已匹配 17 条 | 🔵 待建 2 条（Foxeye+Loki）| ⛔ Retire/N/A 6 条 | 🆕 平台新建 6 条（Foxeye gid=419）</p>
 
 <ac:structured-macro ac:name="info">
 <ac:parameter ac:name="title">指标平台现状</ac:parameter>
@@ -9,14 +10,14 @@
 </ac:rich-text-body>
 </ac:structured-macro>
 
-<h3>✅ 已匹配规则（15 条）</h3>
+<h3>✅ 已匹配规则（17 条）</h3>
 <table>
 <tbody>
 <tr><th>规则名称</th><th>Trigger ID</th><th>Foxeye 链接</th></tr>
-<tr><td>HiveServer2 Port is DOWN</td><td>1236746</td><td>无链接</td></tr>
-<tr><td>Process of HiveServer2 is DEAD</td><td>215530</td><td>无链接</td></tr>
-<tr><td>HiveServer2 is trying to relogin</td><td>215546</td><td>无链接</td></tr>
-<tr><td>Hiveserver2 Active Session 周同比超过40%且持续10分钟超过100</td><td>374136</td><td>无链接</td></tr>
+<tr><td>HiveServer2 Port is DOWN</td><td>1236746</td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/130417">Rule 130417</a> <span style="color:#6B778C;font-size:12px">（⚠️ 近似映射：130417 为进程存活检测 <code>hadoop_hive_server_is_running==0</code>，非独立 Thrift 端口检测；进程死亡时端口必 DOWN，方向覆盖，语义有偏差；Foxeye 全局无 net_response/Port 检测规则）</span></td></tr>
+<tr><td>Process of HiveServer2 is DEAD</td><td>215530</td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/130417">Rule 130417</a></td></tr>
+<tr><td>HiveServer2 is trying to relogin</td><td>215546</td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/130422">Rule 130422</a></td></tr>
+<tr><td>Hiveserver2 Active Session 周同比超过40%且持续10分钟超过100</td><td>374136</td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/130421">Rule 130421</a></td></tr>
 <tr><td>HiveServer2 5分钟执行语句失败超过20条</td><td>1236778</td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/130419">Rule 130419</a></td></tr>
 <tr><td>HiveServer2 10分钟平均堆内存占用率大于90%</td><td>1344966</td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/130418">Rule 130418</a></td></tr>
 <tr><td>HMS JVM 发生长时间暂停</td><td>1467226</td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/130427">Rule 130427</a></td></tr>
@@ -28,70 +29,80 @@
 <tr><td>HiveServer2 thread block count gt 50</td><td>1986788</td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/130420">Rule 130420</a></td></tr>
 <tr><td>HiveServer2_too_many_open_files</td><td>2033854</td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/130438">Rule 130438</a></td></tr>
 <tr><td>Process of Hive Metastore is DEAD</td><td>221709</td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/130425">Rule 130425</a></td></tr>
+<tr><td>Hive Metastore Port is DOWN</td><td>221705</td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/130425">Rule 130425</a> <span style="color:#6B778C;font-size:12px">（⚠️ 近似映射：<code>up{deployName=~"h3-hive-metastore.*"}==0</code> 等价于 Prometheus scrape 端点不可达；HMS 进程/端口宕机时必然触发，语义比进程检测更接近端口可达性检测）</span></td></tr>
+<tr><td>hiveserver2 found msck repair table</td><td>1510347</td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/2757366">Rule 2757366</a></td></tr>
 </tbody>
 </table>
 
-<h3>❌ 未匹配规则深度分析（9 条）</h3>
-
-<h4>🟢 方案：Categraf procstat 扩配置（2 条）</h4>
+<h3>🆕 平台新建 Foxeye 规则（6 条，非 Zabbix 迁移）</h3>
+<p>以下 6 条规则为平台基于业务需要主动新建，超出 Zabbix 原有规则范围，全部已启用。</p>
 <table>
 <tbody>
-<tr><th>规则名称</th><th>Trigger ID</th><th>迁移方案</th></tr>
-<tr><td>Process of Hadoop3 Tez Nginx is DEAD</td><td>1204837</td><td>Categraf <code>procstat</code>，pattern=<code>nginx</code>，监控 Tez 节点 Nginx 进程存活；指标 <code>procstat_running=0</code> 触发告警</td></tr>
-<tr><td>hadoop3 hiveserver keepalived服务异常</td><td>1209690</td><td>Categraf <code>procstat</code>，pattern=<code>keepalived</code>，阈值：进程数 &lt; 2（双节点 HA 场景）</td></tr>
+<tr><th>ID</th><th>规则名称</th><th>状态</th></tr>
+<tr style="background-color:#E3FCEF"><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/130423">130423</a></td><td>hadoop_hive_server_api_compile_p99_latency【HiveServer2】【SQL编译耗时过高】</td><td>✅ 启用</td></tr>
+<tr style="background-color:#E3FCEF"><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/2740234">2740234</a></td><td>hadoop_hive_server_restarted【HiveServer2】【进程发生重启】</td><td>✅ 启用</td></tr>
+<tr style="background-color:#E3FCEF"><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/130431">130431</a></td><td>hive_metastore_api_latency_high【HMS】【API请求延迟过高 - 额外新增】</td><td>✅ 启用</td></tr>
+<tr style="background-color:#E3FCEF"><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/2740466">2740466</a></td><td>hive_metastore_get_partitions_spike【HMS】【get_partitions 速率大于2000/min持续2min】</td><td>✅ 启用</td></tr>
+<tr style="background-color:#E3FCEF"><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/2740467">2740467</a></td><td>hive_metastore_open_connection_surge【HMS】【打开连接数超过400持续1min】</td><td>✅ 启用</td></tr>
+<tr style="background-color:#E3FCEF"><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/2740468">2740468</a></td><td>hive_metastore_thread_runnable_count_high【HMS】【可运行线程数超过400】</td><td>✅ 启用</td></tr>
 </tbody>
 </table>
 
-<h4>🟡 方案：Loki Pattern Alert（2 条）</h4>
+<h3>🔵 待建规则（2 条）</h3>
+
+<h4>🟡 方案：Loki Pattern Alert（1 条）</h4>
 <table>
 <tbody>
-<tr><th>规则名称</th><th>Trigger ID</th><th>迁移方案</th></tr>
-<tr><td>hiveserver2 found msck repair table</td><td>1510347</td><td>Loki alerting rule，匹配 HS2 日志中 <code>MSCK REPAIR TABLE</code> 关键词；原 Zabbix 通过 <code>bytelength(hs2_log)&gt;1</code> 实现。需确认 HS2 日志已接入 Loki（cluster=h3-offline, service_name=hiveserver2）</td></tr>
-<tr><td>HMS MYSQL ERROR (maybe deadlock or Retrying HMSHandler)</td><td>1717653</td><td>Loki alerting rule，匹配 HMS 日志中 <code>Retrying HMSHandler</code> 或 MySQL deadlock 关键词；需确认 HMS 日志已接入 Loki（service_name=hivemetastore）</td></tr>
+<tr><th>规则名称</th><th>Trigger ID</th><th>迁移方案（规则草稿）</th></tr>
+<tr><td>HMS MYSQL ERROR (maybe deadlock or Retrying HMSHandler)</td><td>1717653</td><td>
+<p>Loki alerting rule，匹配 HMS 日志中 <code>RetryingHMSHandler</code> 关键词。</p>
+<p><strong>LogQL 草稿：</strong></p>
+<code>sum by (cluster, host) (count_over_time({service_name="hive-metastore", role="hivemetastore", log_type="service"} |= "RetryingHMSHandler" [5m])) &gt; 3</code>
+<p><span style="color:#FF5630">⚠️ 创建前需确认 HMS 的 Loki service_name 标签（参考 HS2 用的 <code>hive-hs2</code>，HMS 推断为 <code>hive-metastore</code>）</span></p>
+</td></tr>
+<tr><td>hiveserver2 found msck repair table</td><td>1510347</td><td>
+<p>Loki alerting rule，匹配 HS2 日志中的 <code>msck repair table</code>，并把表名提取成标签 <code>table</code>，这样告警事件里可以直接显示目标表。</p>
+<p><strong>LogQL 草稿：</strong></p>
+<code>sum by (instance, cluster, table) (count_over_time({service_name="hive-hs2", role="hiveserver2", log_type="service"} |= "msck repair table" | regexp "msck repair table (?P&lt;table&gt;[A-Za-z0-9_]+\\.[A-Za-z0-9_]+)" [5m])) &gt; 0</code>
+<p><span style="color:#FF5630">⚠️ 关键点：`table` 标签来自 <code>regexp</code> 捕获组，告警 note 可直接写 <code>{{ $labels.table }}</code></span></p>
+</td></tr>
 </tbody>
 </table>
 
-<h4>🔵 方案：直接建 Foxeye 规则（1 条，status=ready）</h4>
+<h4>🔵 方案：直接建 Foxeye 规则（1 条）</h4>
 <table>
 <tbody>
-<tr><th>规则名称</th><th>Trigger ID</th><th>迁移方案</th></tr>
-<tr><td>HIVE METASTORE Generic Java JMX: Memory Non-Heap usage &gt; 85%</td><td>1634268</td><td>平台已有 <code>hive_metastore_*</code> JMX 指标体系（GC、JVM 内存等），直接在 Foxeye 建规则。参考已迁移的 HMS Heap 规则（Rule 130426）</td></tr>
+<tr><th>规则名称</th><th>Trigger ID</th><th>迁移方案（规则草稿）</th></tr>
+<tr><td>HIVE METASTORE Generic Java JMX: Memory Non-Heap usage &gt; 85%</td><td>1634268</td><td>
+<p>参考 HMS Heap 规则（<a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/130426">Rule 130426</a>）：<code>hive_metastore_metastore_heap_used / hive_metastore_metastore_heap_max &gt; 0.85</code></p>
+<p><strong>PromQL 草稿：</strong><code>hive_metastore_metastore_non_heap_used / hive_metastore_metastore_non_heap_max &gt; 0.85</code></p>
+<p>Group: 419，Datasource: 5，Severity: P2</p>
+<p><span style="color:#FF5630">⚠️ 创建前需在 VictoriaMetrics 中确认 <code>hive_metastore_metastore_non_heap_used</code> 指标存在</span></p>
+</td></tr>
 </tbody>
 </table>
 
-<h4>🔴 方案：blocked_exporter（2 条）</h4>
+<h4>⛔ Retire / N/A（6 条）</h4>
 <table>
 <tbody>
-<tr><th>规则名称</th><th>Trigger ID</th><th>迁移方案</th></tr>
-<tr><td>Generic Java JMX: Compilation - uses suboptimal JIT</td><td>1634266</td><td>检测 JIT 编译器类型（Client vs Server）。原 Zabbix JMX 采集 <code>java.lang:type=Compilation,Name</code>。平台 HMS JMX 指标体系未见对应指标，需确认 jmx_exporter 是否已采集 Compilation MBean；优先级低，可暂缓</td></tr>
-<tr><td>Generic Java JMX: Runtime - runs suboptimal VM type</td><td>1634272</td><td>检测 JVM 名称（Server VM vs Client VM）。同上，属于 JVM 元信息检测，非运行时性能指标；生产环境 Server JVM 固定，实用价值低，建议 <strong>retire</strong></td></tr>
+<tr><th>规则名称</th><th>Trigger ID</th><th>处理方式</th></tr>
+<tr><td>Process of Hadoop3 Tez Nginx is DEAD</td><td>1204837</td><td><strong>N/A</strong>：nginx 已纳入 SCLB 四层网关平台统一托管，Categraf procstat 无需迁移</td></tr>
+<tr><td>hadoop3 hiveserver keepalived服务异常</td><td>1209690</td><td><strong>N/A</strong>：keepalived 已随 SCLB 四层网关托管，无需独立迁移</td></tr>
+<tr><td>Generic Java JMX: Compilation - uses suboptimal JIT</td><td>1634266</td><td><strong>Retire</strong>：检测 JIT 编译器类型（Client vs Server）。JDK 8+ 64-bit 生产环境固定 Server JVM，Client JVM 不再存在；指标体系中也无 <code>java.lang:type=Compilation,Name</code> 对应 Prometheus 指标；建议 retire（注：FID=130423 是 SQL 编译 P99 延迟，非此规则）</td></tr>
+<tr><td>Generic Java JMX: Runtime - runs suboptimal VM type</td><td>1634272</td><td><strong>Retire</strong>：检测 JVM 名称（Server vs Client VM），同上，生产环境 64-bit JVM 固定为 Server 模式，实用价值为零</td></tr>
+<tr><td>hive-exec-3.1.3.jar md5 change</td><td>1266012</td><td><strong>Retire</strong>：JAR 校验和检测（Zabbix vfs.file.cksum）无 Prometheus 对应方案，版本升级后需手动更新；依赖 CI/CD 保障 JAR 一致性</td></tr>
+<tr><td>hive-site_num（配置项数量监控）</td><td>16195</td><td><strong>Retire</strong>：hive-site.xml 配置项数量监控，Zabbix 自定义采集，无 Prometheus 方案；Ambari 配置管理已覆盖</td></tr>
 </tbody>
 </table>
-
-<h4>⛔ 建议 Retire（2 条）</h4>
-<table>
-<tbody>
-<tr><th>规则名称</th><th>Trigger ID</th><th>理由</th></tr>
-<tr><td>hive-exec-3.1.3.jar md5 change</td><td>1266012</td><td>JAR 包校验和变更检测，Zabbix 特有能力（vfs.file.cksum），无 Prometheus 对应方案；且版本升级后规则需手动更新，维护成本高；建议 retire，依赖 CI/CD 或配置管理保障 JAR 一致性</td></tr>
-<tr><td>hive-site_num（配置项数量监控）</td><td>16195</td><td>监控 hive-site.xml 配置项数量为 0 的场景，高度依赖 Zabbix 自定义 Item 采集；无对应指标方案；Ambari 配置管理已可保障，建议 retire</td></tr>
-</tbody>
-</table>
-
-<ac:structured-macro ac:name="info">
-<ac:parameter ac:name="title">Hive Metastore Port is DOWN（TID=221705）说明</ac:parameter>
-<ac:rich-text-body>
-<p>matched 中 TID=221705 无 Foxeye 链接，需确认是否已在迁移平台完成匹配但未缓存。建议在告警迁移平台手动确认此 trigger_id 的映射状态。</p>
-</ac:rich-text-body>
-</ac:structured-macro>
 
 <h3>迁移行动项</h3>
 <table>
 <tbody>
 <tr><th>优先级</th><th>行动</th><th>负责方</th></tr>
-<tr><td>P1</td><td>确认 HS2/HMS 日志已接入 Loki，为 MSCK REPAIR 和 HMS MySQL 错误建立 Loki alerting rule</td><td>SRE</td></tr>
-<tr><td>P1</td><td>为 HMS Non-Heap 内存告警（TID=1634268）直接在 Foxeye 建规则</td><td>SRE</td></tr>
-<tr><td>P2</td><td>扩展 Categraf procstat 配置，新增 nginx（Tez 节点）和 keepalived（HS2 节点）进程监控</td><td>SRE</td></tr>
-<tr><td>P3</td><td>确认 TID=221705 (HMS Port is DOWN) 的 Foxeye 规则映射</td><td>SRE</td></tr>
-<tr><td>Low</td><td>Retire：hive-exec JAR MD5、hive-site_num、JMX Runtime VM type 共 3 条</td><td>SRE 确认</td></tr>
+<tr><td>P1</td><td>建 HMS MySQL ERROR Loki 规则（TID=1717653）：确认 HMS Loki service_name 标签 → 用草稿 LogQL 创建规则（业务组 419，cate=loki）</td><td>SRE</td></tr>
+<tr><td>P1</td><td>建 HMS Non-Heap 内存告警（TID=1634268）：先在 VictoriaMetrics 确认 <code>hive_metastore_metastore_non_heap_used</code> 存在 → 用草稿 PromQL 创建 Foxeye 规则</td><td>SRE</td></tr>
+<tr><td>P2</td><td>Retire Zabbix 规则：TID=1634266/1634272/1266012/16195 共 4 条，在 Zabbix 标记为禁用或删除</td><td>SRE</td></tr>
+<tr><td>P3</td><td>✅ 已确认：TID=1236746（HS2 Port DOWN）→ 130417 近似映射；TID=221705（HMS Port DOWN）→ 130425 近似映射</td><td>SRE</td></tr>
+<tr><td>P3</td><td>✅ 已确认：TID=1510347（MSCK）→ FID=2757366；TID=1204837/1209690（nginx/keepalived）→ N/A（SCLB 托管）</td><td>SRE</td></tr>
 </tbody>
 </table>

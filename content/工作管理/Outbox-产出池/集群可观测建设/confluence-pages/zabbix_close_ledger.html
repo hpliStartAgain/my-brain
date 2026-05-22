@@ -1,0 +1,96 @@
+<h1>Zabbix 告警规则关闭台账 v3</h1>
+<p><strong>数据更新：</strong>2026-05-22 &nbsp;|&nbsp;
+<strong>数据来源：</strong>Doris alert_shadow.alert_events（2026-05-14 16:00:58 ~ 2026-05-22 02:04:58，共 <strong>35,051 条</strong>事件）&nbsp;|&nbsp;
+<strong>覆盖平台：</strong>Zabbix + Foxeye + Ambari</p>
+
+<ac:structured-macro ac:name="info">
+<ac:parameter ac:name="title">数据驱动决策说明</ac:parameter>
+<ac:rich-text-body>
+<p>本台账基于 Doris OLAP 聚合分析生成，不直接压测 Zabbix API。当前数据窗口内 Zabbix 事件 <strong>18,879</strong> 条，Foxeye 事件 <strong>16,166</strong> 条，Ambari 事件 <strong>6</strong> 条。关闭建议只针对“Foxeye 已有等价覆盖或规则本身应退役”的 Zabbix 告警；未覆盖的关键链路继续保留。</p>
+</ac:rich-text-body>
+</ac:structured-macro>
+
+<h2>一、双平台告警重叠矩阵（最新窗口）</h2>
+<table>
+<thead><tr>
+<th>告警类别</th><th>Zabbix 事件数</th><th>Foxeye 事件数</th><th>覆盖状态</th><th>治理建议</th>
+</tr></thead><tbody>
+<tr><td><strong>Kafka ISR 收缩/扩展</strong></td><td>14,246</td><td><strong style="color:red">0</strong></td><td>无覆盖</td><td><strong>不可整体关闭</strong>；仅 ISR 扩展可作为恢复噪音单独评估退役，ISR 收缩必须等 Kafka JMX 规则上线</td></tr>
+<tr><td><strong>CPU / Load</strong></td><td>3,062</td><td>1,650</td><td>部分覆盖</td><td><strong>暂保留</strong>；Foxeye 有 steal/iowait，但 Zabbix 通用 load 语义仍未完全对齐</td></tr>
+<tr><td><strong>YARN 队列</strong></td><td>593</td><td>0</td><td>无子队列覆盖</td><td><strong>暂保留</strong>；需先创建 YARN 4 条 per-queue 规则</td></tr>
+<tr><td><strong>infra_basic / 主机基础</strong></td><td>395</td><td>9,112</td><td>大部分已覆盖</td><td>按规则逐条关闭；重启、SlaProbe、VM 噪音类需先补齐或调参</td></tr>
+<tr><td><strong>Elasticsearch 集群告警</strong></td><td>77</td><td>1,931</td><td>核心场景已覆盖</td><td><strong>可关闭 ES 集群/节点变更类</strong>；per-IP coordinator HTTP 探测仍转 ES 负责人确认</td></tr>
+<tr><td><strong>YARN Failed Container</strong></td><td>62</td><td>5</td><td>覆盖不足</td><td><strong>暂保留</strong>；需对齐 Foxeye 阈值和实时/离线队列维度</td></tr>
+<tr><td><strong>HDFS 存储/GC/EC</strong></td><td>40</td><td>1,427</td><td>完整覆盖</td><td><strong>可关闭</strong>；Foxeye HDFS 规则持续活跃</td></tr>
+<tr><td><strong>Hive HMS/MySQL 日志</strong></td><td>30</td><td>0</td><td>待补 Loki</td><td><strong>暂保留</strong>；先创建 HMS RetryingHMSHandler Loki 规则</td></tr>
+</tbody></table>
+
+<h2>二、Kafka ISR：最高频噪音仍未被 Foxeye 覆盖</h2>
+<ac:structured-macro ac:name="warning">
+<ac:parameter ac:name="title">高优问题：单 Broker 异常导致 ISR 风暴</ac:parameter>
+<ac:rich-text-body>
+<p>最新窗口内 Kafka ISR 告警共 <strong>14,246</strong> 次，其中 <strong>ISR收缩 7,295</strong> 次、<strong>ISR扩展 6,951</strong> 次。主因仍集中在两个 broker：<strong>10.18.128.24</strong> 触发 <strong>10,442</strong> 次，<strong>10.18.128.22</strong> 触发 <strong>3,700</strong> 次，两台合计占比约 <strong>99%</strong>。</p>
+</ac:rich-text-body>
+</ac:structured-macro>
+
+<table>
+<thead><tr><th>Broker IP</th><th>最新窗口触发次数</th><th>占比</th><th>建议</th></tr></thead><tbody>
+<tr><td><code>10.18.128.24</code></td><td><strong>10,442</strong></td><td>73%</td><td>优先排查 GC Pause / 磁盘 IO / 网络抖动 / broker 负载</td></tr>
+<tr><td><code>10.18.128.22</code></td><td><strong>3,700</strong></td><td>26%</td><td>关联排查，确认是否与 10.18.128.24 同根因</td></tr>
+<tr><td>其他 broker</td><td>104</td><td>1%</td><td>低频抖动，暂不作为主治理对象</td></tr>
+</tbody></table>
+
+<p><strong>解锁关闭条件：</strong>Kafka controller / ISR / OfflinePartitions / UnderReplicatedPartitions 规则在 Foxeye 创建并双跑验证后，Zabbix ISR 收缩规则方可关闭。ISR 扩展属于恢复型噪音，可先单独评估关闭，但必须保留 ISR 收缩或等价 Foxeye 规则。</p>
+
+<h2>三、建议优先关闭 / 退役的 Zabbix 规则</h2>
+<table>
+<thead><tr>
+<th>#</th><th>规则 / 类别</th><th>最新窗口 Zabbix 事件数</th><th>对应 Foxeye 覆盖</th><th>关闭建议</th>
+</tr></thead><tbody>
+<tr><td>1</td><td><strong>ISR扩展</strong></td><td>6,951</td><td>N/A（扩展多为恢复型事件）</td><td>可作为噪音规则单独退役；ISR收缩不可同时关闭</td></tr>
+<tr><td>2</td><td><strong>HDFS3 namenode PendingReplicationBlocks 增量大于30%</strong></td><td>24</td><td>Foxeye HDFS 存储/块健康规则活跃</td><td>可关闭，关闭前抽查 HDFS 明细页映射</td></tr>
+<tr><td>3</td><td><strong>Haoop3 HDFS 使用总存储超过75%</strong></td><td>9</td><td>hadoop_hdfs_namenode_capacity_usage_high（1,394 次）</td><td>可关闭</td></tr>
+<tr><td>4</td><td><strong>HDFS 使用总存储超过75%</strong></td><td>2</td><td>同上</td><td>可关闭</td></tr>
+<tr><td>5</td><td><strong>Haoop3 HDFS gc时间超过20s</strong></td><td>3</td><td>Foxeye NameNode JVM/GC 规则</td><td>可关闭，建议确认 GC 规则阈值</td></tr>
+<tr><td>6</td><td><strong>bd_log_es_node-left_or_node-join</strong></td><td>68</td><td>elasticsearch_cluster_health_number_of_nodes / 节点变更类规则</td><td>可关闭</td></tr>
+<tr><td>7</td><td><strong>bd_es_online_master_error_and_failed</strong></td><td>8</td><td>ES master / cluster state 规则</td><td>可关闭</td></tr>
+<tr><td>8</td><td><strong>ES coordinator HTTP 单点探测</strong></td><td>1</td><td>待 ES 负责人确认</td><td>暂不关闭，转 ES 负责人确认 Categraf/exporter 覆盖</td></tr>
+</tbody></table>
+
+<h2>四、暂保留规则（补齐 Foxeye 后再关闭）</h2>
+<table>
+<thead><tr>
+<th>规则 / 类别</th><th>最新窗口 Zabbix 事件数</th><th>保留原因</th><th>解锁条件</th>
+</tr></thead><tbody>
+<tr><td><strong>ISR收缩</strong></td><td>7,295</td><td>Kafka 可靠性核心信号，Foxeye 当前无等价 JMX 规则</td><td>创建 Kafka ISR / OfflinePartitions / UnderReplicatedPartitions 规则并双跑验证</td></tr>
+<tr><td><strong>CPU load / iowait 类</strong></td><td>3,062</td><td>Foxeye 覆盖 steal/iowait，但通用 load 归一化规则未完全对齐</td><td>补充或确认 node_load / CPU 核数归一化规则</td></tr>
+<tr><td><strong>YARN 子队列 PendingContainers / AppsPending</strong></td><td>593</td><td>Foxeye 现有规则以 root 队列为主，未覆盖子队列</td><td>创建 YARN 4 条 per-queue 规则</td></tr>
+<tr><td><strong>YARN Failed Container</strong></td><td>62</td><td>Foxeye 事件量明显偏低，阈值/维度未完全对齐</td><td>对齐失败率阈值和实时/离线队列维度</td></tr>
+<tr><td><strong>HMS MYSQL ERROR / RetryingHMSHandler</strong></td><td>30</td><td>Foxeye 仍缺 HMS Loki 规则</td><td>创建 HMS RetryingHMSHandler Loki 规则后观察</td></tr>
+</tbody></table>
+
+<h2>五、每日事件趋势</h2>
+<table>
+<thead><tr><th>日期</th><th>Zabbix</th><th>Foxeye</th><th>Ambari</th><th>备注</th></tr></thead><tbody>
+<tr><td>2026-05-14</td><td>855</td><td>731</td><td>0</td><td>半天数据</td></tr>
+<tr><td>2026-05-15</td><td>2,800</td><td>2,222</td><td>2</td><td></td></tr>
+<tr><td>2026-05-16</td><td>2,631</td><td>2,068</td><td>0</td><td></td></tr>
+<tr><td>2026-05-17</td><td>2,551</td><td>1,976</td><td>0</td><td></td></tr>
+<tr><td>2026-05-18</td><td>2,645</td><td>2,322</td><td>1</td><td></td></tr>
+<tr><td>2026-05-19</td><td>2,814</td><td>2,473</td><td>1</td><td></td></tr>
+<tr><td>2026-05-20</td><td>2,282</td><td>2,061</td><td>1</td><td></td></tr>
+<tr><td>2026-05-21</td><td>2,140</td><td>2,134</td><td>1</td><td>Zabbix / Foxeye 事件量接近</td></tr>
+<tr><td>2026-05-22</td><td>161</td><td>179</td><td>0</td><td>截至 02:04:58</td></tr>
+</tbody></table>
+
+<h2>六、治理路线图</h2>
+<table>
+<thead><tr><th>优先级</th><th>行动项</th><th>解锁规则数 / 类别</th><th>风险控制</th></tr></thead><tbody>
+<tr><td>P0</td><td>排查 10.18.128.24 / 10.18.128.22 Kafka broker ISR 风暴</td><td>14,246 次 ISR 事件</td><td>先根因治理，再迁移关闭</td></tr>
+<tr><td>P0</td><td>创建 ZooKeeper JMX 规则、infra_basic system_uptime 规则</td><td>ZK 5 条 + 主机重启 1 条</td><td>手工创建，避免 YAML 批量导入</td></tr>
+<tr><td>P1</td><td>创建 YARN 4 条 per-queue 规则</td><td>YARN 子队列 593 次事件</td><td>创建后双跑观察，再关闭 Zabbix 子队列规则</td></tr>
+<tr><td>P1</td><td>补齐 Hive HMS Loki 规则</td><td>HMS MySQL / RetryingHMSHandler 30 次事件</td><td>先确认 Loki label，再手工创建</td></tr>
+<tr><td>P1</td><td>关闭 HDFS/ES 已覆盖规则</td><td>HDFS 约 40 次、ES 集群约 76 次</td><td>逐条关闭，关闭后观察 24~48h</td></tr>
+</tbody></table>
+
+<p><em>本台账由 Doris alert_shadow.alert_events 数据驱动生成，更新时间：2026-05-22。</em></p>

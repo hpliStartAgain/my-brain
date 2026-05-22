@@ -6,14 +6,15 @@
 <tbody>
 <tr><td>规则组总数</td><td><strong>33</strong></td></tr>
 <tr><td>✅ 已匹配（可进入双跑）</td><td><strong style="color:#00875A">30</strong></td></tr>
-<tr><td>⬜ 未匹配（待处理）</td><td><strong style="color:#BF2600">1</strong></td></tr>
-<tr><td>🗑️ 已废弃</td><td><strong>2</strong></td></tr>
+<tr><td>⬜ 未匹配（待处理）</td><td><strong style="color:#BF2600">0</strong></td></tr>
+<tr><td>🗑️ 已废弃/建议退役</td><td><strong>3</strong></td></tr>
+<tr><td>🔵 待建规则（子队列 LLD 等价，Foxeye 新增）</td><td><strong style="color:#0052CC">4</strong></td></tr>
 </tbody>
 </table>
 <h3>按规则类型分布</h3>
 <table>
 <thead><tr><th>规则类型</th><th>总计</th><th>已匹配</th><th>未匹配</th><th>可行:ready</th><th>可行:缺Exporter</th><th>可行:待分析</th></tr></thead>
-<tbody><tr><td>指标类</td><td>25</td><td>22</td><td>1</td><td>24</td><td>1</td><td>0</td></tr>
+<tbody><tr><td>指标类</td><td>25</td><td>22</td><td>0</td><td>24</td><td>1</td><td>0</td></tr>
 <tr><td>进程存活类</td><td>3</td><td>3</td><td>0</td><td>3</td><td>0</td><td>0</td></tr>
 <tr><td>服务响应类</td><td>3</td><td>3</td><td>0</td><td>3</td><td>0</td><td>0</td></tr>
 <tr><td>网络连通类</td><td>2</td><td>2</td><td>0</td><td>2</td><td>0</td><td>0</td></tr>
@@ -21,12 +22,12 @@
 </table>
 <hr/><h2>指标类（共 25 条，已匹配 22，未匹配 1）</h2>
 <table><thead><tr><th>#</th><th>规则名称</th><th>Zabbix 表达式</th><th>Trigger ID</th><th>迁移状态</th><th>Foxeye 规则链接</th><th>备注</th></tr></thead><tbody>
-<tr><td>1</td><td>Timelineserver leveldb size &gt; 100G | Timelineserver leveldb size &gt; 110G | Timelineserver leveldb size &gt; 80G | Timelineserver leveldb size &gt; 90G <em>（4个变体）</em></td><td><code>last(/Template hadoop3 timeline Server/timeline_dir_size)&gt; 101920</code></td><td>1237812</td><td><span style="color:#BF2600">⬜ 未匹配</span></td><td><span style="color:#6B778C"><em>链接待补充</em></span></td><td></td></tr>
-<tr><td>2</td><td>Timelineserver open file &gt; 40000 | Timelineserver open file &gt; 50000 | Timelineserver open file &gt; 60000 <em>（3个变体）</em></td><td><code>last(/Template hadoop3 timeline Server/file_descriptor_count,#1)&gt;40000</code></td><td>1628038</td><td><span style="color:#00875A">✅ 已匹配</span></td><td><span style="color:#6B778C"><em>链接待补充</em></span></td><td></td></tr>
+<tr><td>1</td><td>Timelineserver leveldb size &gt; 100G | Timelineserver leveldb size &gt; 110G | Timelineserver leveldb size &gt; 80G | Timelineserver leveldb size &gt; 90G <em>（4个变体）</em></td><td><code>last(/Template hadoop3 timeline Server/timeline_dir_size)&gt; 101920</code></td><td>1237812</td><td><span style="color:#6B778C">🗑️ 建议退役</span></td><td>—</td><td>Doris查询过去365天零触发；ATS 3.x leveldb已内置自动清理；无对应Foxeye指标，建议退役</td></tr>
+<tr><td>2</td><td>Timelineserver open file &gt; 40000 | Timelineserver open file &gt; 50000 | Timelineserver open file &gt; 60000 <em>（3个变体）</em></td><td><code>last(/Template hadoop3 timeline Server/file_descriptor_count,#1)&gt;40000</code></td><td>1628038</td><td><span style="color:#00875A">✅ 已匹配</span></td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/130437">130437</a></td><td>近似映射：Foxeye 使用 ratio>0.8 替代绝对数>40000</td></tr>
 <tr><td>3</td><td>RpcProcessingTimeAvgTime 周同比波动超过200% <em>（2个变体）</em></td><td><code>last(/Template Hadoop YARN ResourceManager/yarn.resourcemanager.rpc.8032.pdelta2[&quot;5min&quot;,&quot;1w&quot;])&gt;200 and \navg(/Template H...</code></td><td>1222594</td><td><span style="color:#6B778C">🗑️ 已废弃</span></td><td>—</td><td>指标已就绪，待人工创建 Foxeye 规则</td></tr>
-<tr><td>4</td><td>Hadoop3 Real time YARN Failed tasks over 20 per 10min <em>（2个变体）</em></td><td><code>change(/Template Hadoop3 Real Time Nodemanager IN K8s/yarn3.nodemanager.ContainersFailed[8042])&gt;20</code></td><td>1239354</td><td><span style="color:#00875A">✅ 已匹配</span></td><td><span style="color:#6B778C"><em>链接待补充</em></span></td><td></td></tr>
-<tr><td>5</td><td>hadoop3 Real time YARN Failed container over 10% in 10min <em>（2个变体）</em></td><td><code>(last(/Template Hadoop3 Real Time Nodemanager IN K8s/yarn3.nodemanager.ContainersFailed[8042]) - last(/Template Hadoop3 ...</code></td><td>1716502</td><td><span style="color:#00875A">✅ 已匹配</span></td><td><span style="color:#6B778C"><em>链接待补充</em></span></td><td></td></tr>
-<tr><td>6</td><td>RpcProcessingTimeAvgTime 持续5分钟超过3s <em>（2个变体）</em></td><td><code>avg(/Template Hadoop YARN ResourceManager/yarn.resourcemanager.rpc.8032.RpcProcessingTimeAvgTime,5m)&gt;3000</code></td><td>953904</td><td><span style="color:#00875A">✅ 已匹配</span></td><td><span style="color:#6B778C"><em>链接待补充</em></span></td><td></td></tr>
+<tr><td>4</td><td>Hadoop3 Real time YARN Failed tasks over 20 per 10min <em>（2个变体）</em></td><td><code>change(/Template Hadoop3 Real Time Nodemanager IN K8s/yarn3.nodemanager.ContainersFailed[8042])&gt;20</code></td><td>1239354</td><td><span style="color:#00875A">✅ 已匹配</span></td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/130400">130400</a></td><td></td></tr>
+<tr><td>5</td><td>hadoop3 Real time YARN Failed container over 10% in 10min <em>（2个变体）</em></td><td><code>(last(/Template Hadoop3 Real Time Nodemanager IN K8s/yarn3.nodemanager.ContainersFailed[8042]) - last(/Template Hadoop3 ...</code></td><td>1716502</td><td><span style="color:#00875A">✅ 已匹配</span></td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/130399">130399</a></td><td>近似映射：Foxeye 阈值从 0.1 收紧至 0.5（实时 K8s NM 场景）</td></tr>
+<tr><td>6</td><td>RpcProcessingTimeAvgTime 持续5分钟超过3s <em>（2个变体）</em></td><td><code>avg(/Template Hadoop YARN ResourceManager/yarn.resourcemanager.rpc.8032.RpcProcessingTimeAvgTime,5m)&gt;3000</code></td><td>953904</td><td><span style="color:#00875A">✅ 已匹配</span></td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/452653">452653</a></td><td></td></tr>
 <tr><td>7</td><td>YARN3 Too many pending containers over 20k</td><td><code>last(/Template Hadoop3 EC YARN3 ResourceManager/yarn3.resourcemanager.queue.root.PendingContainers)&gt;20000</code></td><td>1174237</td><td><span style="color:#00875A">✅ 已匹配</span></td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/130389">130389</a></td><td></td></tr>
 <tr><td>8</td><td>YARN3 8032 port RpcProcessingTimeAvgTime 持续5分钟超过3s</td><td><code>avg(/Template Hadoop3 EC YARN3 ResourceManager/yarn3.resourcemanager.rpc.8033.RpcProcessingTimeAvgTime,5m)&gt;3000</code></td><td>1174240</td><td><span style="color:#00875A">✅ 已匹配</span></td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/452653">452653</a></td><td></td></tr>
 <tr><td>9</td><td>YARN Queue root pending containers 周环比增长超过4000%</td><td><code>last(/Template Hadoop3 EC YARN3 ResourceManager/yarn3.resourcemanager.queue.root.PendingContainers.delta10m)&gt;4000 and la...</code></td><td>1174266</td><td><span style="color:#6B778C">🗑️ 已废弃</span></td><td>—</td><td>指标已就绪，待人工创建 Foxeye 规则</td></tr>
@@ -49,13 +50,13 @@
 </tbody></table>
 <h2>进程存活类（共 3 条，已匹配 3，未匹配 0）</h2>
 <table><thead><tr><th>#</th><th>规则名称</th><th>Zabbix 表达式</th><th>Trigger ID</th><th>迁移状态</th><th>Foxeye 规则链接</th><th>备注</th></tr></thead><tbody>
-<tr><td>1</td><td>Hadoop3 Real time Process of NodeManager is DEAD（Hadoop3) <em>（2个变体）</em></td><td><code>last(/Template Hadoop3 Real Time Nodemanager IN K8s/proc.num[,,,&quot;org.apache.hadoop.yarn.server.nodemanager.NodeManager&quot;]...</code></td><td>1716500</td><td><span style="color:#00875A">✅ 已匹配</span></td><td><span style="color:#6B778C"><em>链接待补充</em></span></td><td></td></tr>
+<tr><td>1</td><td>Hadoop3 Real time Process of NodeManager is DEAD（Hadoop3) <em>（2个变体）</em></td><td><code>last(/Template Hadoop3 Real Time Nodemanager IN K8s/proc.num[,,,&quot;org.apache.hadoop.yarn.server.nodemanager.NodeManager&quot;]...</code></td><td>1716500</td><td><span style="color:#00875A">✅ 已匹配</span></td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/130397">130397</a></td><td></td></tr>
 <tr><td>2</td><td>Process of Timelineserver is DEAD</td><td><code>last(/Template hadoop3 timeline Server/proc.num[,,,&quot;org.apache.hadoop.yarn.server.applicationhistoryservice.ApplicationH...</code></td><td>1220510</td><td><span style="color:#00875A">✅ 已匹配</span></td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/130432">130432</a></td><td></td></tr>
 <tr><td>3</td><td>Process of ResourceManageris DEAD（Hadoop3)</td><td><code>last(/Template Hadoop3 YARN ResourceManager/proc.num[,,,&quot;org.apache.hadoop.yarn.server.resourcemanager.ResourceManager&quot;]...</code></td><td>1239424</td><td><span style="color:#00875A">✅ 已匹配</span></td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/130388">130388</a></td><td></td></tr>
 </tbody></table>
 <h2>服务响应类（共 3 条，已匹配 3，未匹配 0）</h2>
 <table><thead><tr><th>#</th><th>规则名称</th><th>Zabbix 表达式</th><th>Trigger ID</th><th>迁移状态</th><th>Foxeye 规则链接</th><th>备注</th></tr></thead><tbody>
-<tr><td>1</td><td>Resource Manager web server has not responsed for 5 minutes <em>（2个变体）</em></td><td><code>nodata(/Template Hadoop YARN ResourceManager/web.page.get[*UNKNOWN*,&quot;ws/v1/cluster/info&quot;,8088],300s)=1</code></td><td>214775</td><td><span style="color:#00875A">✅ 已匹配</span></td><td><span style="color:#6B778C"><em>链接待补充</em></span></td><td></td></tr>
+<tr><td>1</td><td>Resource Manager web server has not responsed for 5 minutes <em>（2个变体）</em></td><td><code>nodata(/Template Hadoop YARN ResourceManager/web.page.get[*UNKNOWN*,&quot;ws/v1/cluster/info&quot;,8088],300s)=1</code></td><td>214775</td><td><span style="color:#00875A">✅ 已匹配</span></td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/130388">130388</a></td><td>近似映射：Foxeye 使用进程存活 is_running==0 覆盖 web nodata 场景</td></tr>
 <tr><td>2</td><td>YARN3 Resource Manager web server has not responsed for 5 minutes</td><td><code>nodata(/Template Hadoop3 EC YARN3 ResourceManager/web.page.get[*UNKNOWN*,&quot;ws/v1/cluster/info&quot;,8088],300)=1</code></td><td>1174234</td><td><span style="color:#00875A">✅ 已匹配</span></td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/130388">130388</a></td><td></td></tr>
 <tr><td>3</td><td>Hadoop3 Real time Process of NodeManager is DEAD（No data from jmx)</td><td><code>nodata(/Template Hadoop3 Real Time Nodemanager/hadoop3.yarn.nodemanger.Uptime,3m)=1</code></td><td>1716589</td><td><span style="color:#00875A">✅ 已匹配</span></td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/130397">130397</a></td><td></td></tr>
 </tbody></table>
@@ -64,3 +65,63 @@
 <tr><td>1</td><td>Timelineserver connection refused</td><td><code>last(/Template hadoop3 timeline Server/net.tcp.service[http,*UNKNOWN*,8188])=0</code></td><td>1220511</td><td><span style="color:#00875A">✅ 已匹配</span></td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/399914">399914</a></td><td></td></tr>
 <tr><td>2</td><td>Timelineserver api test timeout (1分钟内无响应）</td><td><code>nodata(/Template hadoop3 timeline Server/web.test.rspcode[Timelineserver HTTP status codes,api测试],1m)=1</code></td><td>1220512</td><td><span style="color:#00875A">✅ 已匹配</span></td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/399914">399914</a></td><td></td></tr>
 </tbody></table>
+<hr/>
+<h2>🔵 待建规则（Foxeye 新增，子队列 per-queue 覆盖）</h2>
+<p><strong>背景：</strong>Zabbix 通过 LLD（Low-Level Discovery）自动发现每个队列，为每个子队列创建独立 TID，产生了大量高频告警（PendingContainers/AllocatedContainers 积压规则过去1年触发 157次，AppsPending/Running 积压规则触发 105次，PendingMB 溢出规则触发 26次，UsedCapacity&gt;95% 触发 31次）。Foxeye 现有 YARN 规则（FID=452648-452655）全部 hardcode <code>queue="root"</code>，<strong>完全不覆盖子队列</strong>。以下 4 条规则用 PromQL 的 <code>queue!="root"</code> 通配方式，以单条规则等价替代 Zabbix 数十条 LLD 衍生规则。</p>
+<p><strong>VM 指标验证（已完成）：</strong>H3离线 32 个队列系列、H3实时 30 个队列系列、H3冷存 8 个队列系列，数据均正常上报。</p>
+<table>
+<thead>
+<tr>
+<th>#</th><th>建议规则名称</th><th>PromQL（已验证）</th>
+<th>阈值</th><th>prom_for_duration</th><th>severity</th>
+<th>对应 Zabbix LLD 模式</th><th>过去1年LLD触发频次</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A</td>
+<td><code>hadoop_yarn_subqueue_used_capacity【子队列资源使用率&gt;95%(20min均值)】</code></td>
+<td><code>avg_over_time(hadoop_yarn_resourcemanager_used_capacity{queue!="root",user="-",ha_status="active"}[20m]) &gt; 95</code></td>
+<td>&gt; 95 (%)</td><td>0s</td><td>1 (Warning)</td>
+<td>LLD: yarn.resourcemanager.queue.&lt;q&gt;.UsedCapacity count(#20,&gt;0.95)&gt;18</td>
+<td>31次（huyou 22, irp_data 9）</td>
+</tr>
+<tr>
+<td>B</td>
+<td><code>hadoop_yarn_subqueue_container_backlog【子队列容器积压 Pending/Allocated&gt;90%(10min均值)】</code></td>
+<td><code>sum by(queue,cluster)(avg_over_time(hadoop_yarn_resourcemanager_container_count{queue!="root",user="-",status="Pending",ha_status="active"}[10m])) / (sum by(queue,cluster)(avg_over_time(hadoop_yarn_resourcemanager_container_count{queue!="root",user="-",status="Allocated",ha_status="active"}[10m])) + 1) &gt; 0.9</code></td>
+<td>&gt; 0.9 (90%)</td><td>0s</td><td>1 (Warning)</td>
+<td>LLD: yarn.resourcemanager.partition.&lt;q&gt;.PendingContainers / AllocatedContainers &gt; 0.9</td>
+<td>157次（irp_rank 104, huyou 33, irp_data 13, irp_push 5, sohumbad 1）</td>
+</tr>
+<tr>
+<td>C</td>
+<td><code>hadoop_yarn_subqueue_apps_backlog【子队列作业积压 AppsPending/Running&gt;10%(10min均值)】</code></td>
+<td><code>sum by(queue,cluster)(avg_over_time(hadoop_yarn_resourcemanager_application_count{queue!="root",user="-",status="Pending",ha_status="active"}[10m])) / (sum by(queue,cluster)(avg_over_time(hadoop_yarn_resourcemanager_application_count{queue!="root",user="-",status="Running",ha_status="active"}[10m])) + 1) &gt; 0.1</code></td>
+<td>&gt; 0.1 (10%)</td><td>300s</td><td>1 (Warning)</td>
+<td>LLD: yarn.resourcemanager.queue.&lt;q&gt;.AppsPending / AppsRunning &gt; 0.1</td>
+<td>105次（irp_rank 71, sohumbad 12, datacenter 11, huyou 11）</td>
+</tr>
+<tr>
+<td>D</td>
+<td><code>hadoop_yarn_subqueue_memory_backlog【子队列内存积压 PendingMB/maxMB&gt;500%(10min均值)】</code></td>
+<td><code>sum by(queue,cluster)(avg_over_time(hadoop_yarn_resourcemanager_memory_in_mb{queue!="root",user="-",status="Pending",ha_status="active"}[10m])) / (sum by(queue,cluster)(avg_over_time(hadoop_yarn_resourcemanager_memory_in_mb{queue!="root",user="-",status=~"Allocated|Available",ha_status="active"}[10m])) + 1) &gt; 5</code></td>
+<td>&gt; 5 (500%)</td><td>0s</td><td>1 (Warning)</td>
+<td>LLD: yarn.resourcemanager.queue.&lt;q&gt;.PendingMB / maxMB &gt; 5.0</td>
+<td>26次（irp_rank 16, huyou 10）</td>
+</tr>
+</tbody>
+</table>
+<p><strong>创建参数（均与现有 YARN 规则保持一致）：</strong></p>
+<ul>
+<li>group_id: <strong>413</strong>（大数据中心-集群-大数据业务-YARN）</li>
+<li>datasource_ids: <strong>[5]</strong>（大数据中心-vm0）</li>
+<li>append_tags: <code>service=resourcemanager</code></li>
+<li>notify_rule_ids: <strong>[93]</strong></li>
+<li>note 模板：<code>主机:【{{$labels.host}}】 集群:【{{$labels.cluster}}】 队列:【{{$labels.queue}}】 当前值:【{{$value}}】</code></li>
+</ul>
+<p><strong>注意事项：</strong>
+<br/>① 规则 B/C/D 使用 <code>sum by(queue,cluster)</code> 聚合，去掉了 host 维度，告警 label 仅含 queue/cluster；需确认 Foxeye 告警模板兼容缺少 host label 的情况。
+<br/>② <code>ha_status="active"</code> 确保只基于主 RM 的队列数据计算，避免 Standby RM 零值干扰分母。
+<br/>③ AllocatedMem 周环比&gt;200% 规则（Zabbix LLD 触发88次）因需要 7d offset 的周同比计算，复杂度较高，暂列为可选规则E，待后续评估。
+</p>

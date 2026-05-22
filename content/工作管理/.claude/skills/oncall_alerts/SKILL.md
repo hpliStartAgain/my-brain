@@ -12,6 +12,12 @@ argument-hint: "[时间范围描述，如'昨晚22点到现在'，留空表示�
 
 所有 API 凭据（Zabbix URL/Token、Foxeye URL/Token/BGID列表、Ambari 集群连接信息）已直接内嵌在各脚本头部的配置区域中。如需修改，直接编辑对应脚本文件顶部的配置变量即可。
 
+**Doris 数据源（推荐用于历史聚合分析）：**
+- DSN: `hpli:AdJt9EQv@tcp(doris-fe.venus.sohurdc.com:9030)/alert_shadow`
+- 表：`alert_shadow.alert_events`，UNIQUE KEY(source, event_id)
+- 优势：OLAP 引擎，适合多维聚合，**避免直接压 Zabbix API 带来的性能风险**
+- 数据源包含 Zabbix + Foxeye + Ambari 三平台数据（source 字段区分）
+
 ## 工作流程
 
 ### 1. 判断用户意图
@@ -21,7 +27,15 @@ argument-hint: "[时间范围描述，如'昨晚22点到现在'，留空表示�
 - **查看活跃告警**（无时间参数 / 用户说"当前告警"、"活跃告警"）：
   - 执行 `${CLAUDE_SKILL_DIR}/scripts/fetch_all_alerts.sh` 获取三个平台的当前活跃告警
 
-- **查询历史告警**（用户指定了时间范围，如"昨晚22点到现在"、"最近3小时"）：
+- **历史聚合分析**（用户说"分析最近 N 天"、"高频告警"、"告警趋势"、"服务分布"等）：
+  - **优先使用 Doris**，不直接调 Zabbix/Foxeye API：
+    - `bash ${CLAUDE_SKILL_DIR}/scripts/query_doris_alerts.sh top20 --days <N>` — 高频触发规则 Top 20
+    - `bash ${CLAUDE_SKILL_DIR}/scripts/query_doris_alerts.sh service --days <N>` — 按 source+service 告警分布
+    - `bash ${CLAUDE_SKILL_DIR}/scripts/query_doris_alerts.sh trend --days <N>` — 按天趋势
+    - `bash ${CLAUDE_SKILL_DIR}/scripts/query_doris_alerts.sh current` — 当前未恢复告警统计
+  - Doris 数据延迟 < 1分钟，可以替代实时活跃告警查询
+
+- **精确时间窗口历史告警**（用户指定了时间范围，如"昨晚22点到现在"、"最近3小时"）：
   - 将用户描述的时间范围转换为 Unix 时间戳（start_ts 和 end_ts）
   - 执行 `${CLAUDE_SKILL_DIR}/scripts/query_zabbix_history.sh --start <start_ts> --end <end_ts>` 获取 Zabbix 历史事件
   - 执行 `${CLAUDE_SKILL_DIR}/scripts/query_foxeye_history.sh --start <start_ts> --end <end_ts>` 获取 Foxeye 历史告警

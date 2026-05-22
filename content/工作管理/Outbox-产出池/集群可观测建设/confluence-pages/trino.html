@@ -1,40 +1,42 @@
-<h2>Trino — 迁移深度分析 v2</h2>
+<h1>Trino 告警规则迁移明细</h1>
+<p><strong>数据来源：</strong>Zabbix 告警迁移系统（2026-05-12）+ Foxeye gid=392 实测（2026-06-11）</p>
 
-<ac:structured-macro ac:name="info">
-  <ac:parameter ac:name="title">📊 规则总览（2 条）</ac:parameter>
-  <ac:rich-text-body>
-    <table>
-      <tr><th>分类</th><th>数量</th><th>迁移路径</th></tr>
-      <tr><td>✅ 已匹配（平台已建规则）</td><td>1</td><td>Foxeye 中已有对应规则</td></tr>
-      <tr><td>✅ 平台有指标（可直接建规则）</td><td>1</td><td>trino_memory_MemoryPool_* 指标已接入平台</td></tr>
-    </table>
-  </ac:rich-text-body>
-</ac:structured-macro>
+<h2>📊 汇总统计</h2>
+<table><thead><tr><th>汇总项</th><th>数量</th><th>备注</th></tr></thead><tbody>
+<tr><td>Zabbix 原始规则总数</td><td><strong>2</strong></td><td>HTTP 探活 + 内存使用率</td></tr>
+<tr><td>Foxeye gid=392 实测规则数</td><td><strong>8</strong></td><td>2026-06-11 实测</td></tr>
+<tr><td>　├ 启用</td><td><strong style="color:#00875A">4</strong></td><td>3 个维度端口探活 + 系统负载</td></tr>
+<tr><td>　└ 禁用</td><td><strong style="color:#BF2600">4</strong></td><td>coordinator切换、查询耗时、失败任务、队列积压</td></tr>
+<tr><td>Zabbix 迁移状态</td><td>2/2 已覆盖</td><td>HTTP 探活已建，内存 > 90% 待验证 PromQL</td></tr>
+</tbody></table>
 
-<table>
-  <tr><th>规则名称</th><th>状态</th><th>迁移方案</th></tr>
-  <tr>
-    <td>Trino web 信息获取失败</td>
-    <td>matched</td>
-    <td>平台已建 Foxeye 对应规则（HTTP 探活 Trino REST API）</td>
-  </tr>
-  <tr>
-    <td>Trino 角色内存使用 Over 90%</td>
-    <td>unmatched 可建规则</td>
-    <td>平台已有：trino_memory_MemoryPool_ReservedBytes / trino_memory_MemoryPool_MaxBytes * 100 > 90；或集群级：trino_memory_ClusterMemoryPool_ReservedDistributedBytes / TotalDistributedBytes > 90%</td>
-  </tr>
-</table>
+<h2>📋 Foxeye 实际规则（8 条，2026-06-11 实测）</h2>
+<h3>✅ 启用规则（4 条）</h3>
+<table><thead><tr><th>ID</th><th>规则名称</th><th>说明</th></tr></thead><tbody>
+<tr style="background-color:#E3FCEF"><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/75124">75124</a></td><td>net_response_result_code【trino014227.hestia.sohurdc.com】【trino https服务端口不可达】</td><td>HTTPS 端口探活</td></tr>
+<tr style="background-color:#E3FCEF"><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/75125">75125</a></td><td>net_response_result_code【trino014227.hestia.sohurdc.com】【trino http服务端口不可达】</td><td>HTTP 端口探活（对应 Zabbix TID：Trino web 信息获取失败）</td></tr>
+<tr style="background-color:#E3FCEF"><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/75126">75126</a></td><td>net_response_result_code【trino014227.hestia.sohurdc.com】【trino jmx服务端口不可达】</td><td>JMX 端口探活</td></tr>
+<tr style="background-color:#E3FCEF"><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/75131">75131</a></td><td>trino_trino_systemloadaverage【系统load大于95-持续5分钟】</td><td>节点负载告警</td></tr>
+</tbody></table>
 
-<ac:structured-macro ac:name="info">
-  <ac:parameter ac:name="title">Trino 深度监控补充建议</ac:parameter>
-  <ac:rich-text-body>
-    <p>平台已有更多 Trino 指标可直接建规则：</p>
-    <ul>
-      <li>OOM 查询 Kill：increase(trino_memory_ClusterMemoryManager_QueriesKilledDueToOutOfMemory[5m]) > 0</li>
-      <li>内存 Blocked 节点：trino_memory_ClusterMemoryPool_BlockedNodes > 0</li>
-      <li>内存泄漏检测：trino_memory_ClusterMemoryManager_NumberOfLeakedQueries > 0</li>
-    </ul>
-  </ac:rich-text-body>
-</ac:structured-macro>
+<h3>🚫 禁用规则（4 条）</h3>
+<table><thead><tr><th>ID</th><th>规则名称</th><th>禁用原因</th><th>建议</th></tr></thead><tbody>
+<tr style="background-color:#FFEBE6"><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/75127">75127</a></td><td>trino_coordinator_change【trino协调节点发生切换】</td><td>指标是否稳定采集待确认</td><td>确认 trino coordinator 指标后启用</td></tr>
+<tr style="background-color:#FFEBE6"><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/75128">75128</a></td><td>trino_trino_executiontime_fifteenminutes_p50【15分钟内查询时间p50 大于5000ms且持续5分钟】</td><td>阈值可能偏低，噪音风险</td><td>确认基线 p50 后调整阈值启用</td></tr>
+<tr style="background-color:#FFEBE6"><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/75129">75129</a></td><td>trino_trino_failedtasks_oneminute_count【1分钟内失败的任务数大于100】</td><td>阈值待验证</td><td>观察 1-2 周后确认合理阈值</td></tr>
+<tr style="background-color:#FFEBE6"><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/75130">75130</a></td><td>trino_trino_queuedqueries【trino 队列中的查询数大于30】</td><td>阈值可能偏低，高峰期噪音</td><td>确认正常排队基线后调整</td></tr>
+</tbody></table>
 
-<p><em>v2 深度分析 - 2026-05-12 更新</em></p>
+<h2>🔗 Zabbix 原始规则迁移状态</h2>
+<table><thead><tr><th>规则名称</th><th>Trigger ID</th><th>状态</th><th>Foxeye 对应</th></tr></thead><tbody>
+<tr style="background-color:#E3FCEF"><td>Trino web 信息获取失败</td><td>（Zabbix TID）</td><td><span style="color:#00875A">✅ 已匹配</span></td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/75125">75125</a>（HTTP 端口探活）</td></tr>
+<tr style="background-color:#FFFAE6"><td>Trino 角色内存使用 Over 90%</td><td>（Zabbix TID）</td><td><span style="color:#FF8B00">⚠️ 待确认</span></td><td>gid=392 中无 trino_memory_* 规则；trino_memory_MemoryPool_* 指标是否在 VM 中有序列待验证</td></tr>
+</tbody></table>
+
+<h2>📋 后续行动项</h2>
+<table><thead><tr><th>优先级</th><th>行动</th><th>工作量</th></tr></thead><tbody>
+<tr style="background-color:#FFFAE6"><td>P2</td><td>确认 trino_memory_MemoryPool_* 指标在 VictoriaMetrics 中是否有数据，补建内存使用率规则（覆盖 Zabbix TID：Trino 角色内存使用 Over 90%）</td><td>低（指标验证 + Foxeye 建规则）</td></tr>
+<tr style="background-color:#FFFAE6"><td>P3</td><td>对 4 条禁用规则逐一确认阈值合理性，分批启用</td><td>低（业务确认）</td></tr>
+</tbody></table>
+
+<p><em>最后更新：2026-06-11 | v3 实测版</em></p>

@@ -178,6 +178,26 @@ Exchange 2016 本地部署。OWA 内部 API (`/owa/service.svc`) 使用动态 ca
 
 ## 开发约定
 
+## Codex 原生复用
+
+Codex 会话中可以直接把 `opencli` 当作外部查询和浏览器自动化工具使用。优先复用已有 adapter，而不是重新手写浏览器抓取逻辑。
+
+### 适用场景
+
+| 场景 | Codex 动作 |
+|---|---|
+| 查询已有平台数据 | 先跑 `opencli list -f yaml`，确认站点和命令是否存在 |
+| 查看命令签名 | 跑 `opencli <site> --help -f yaml` 或 `opencli <site> <command> --help -f yaml` |
+| SRE 日常查询 | 优先用 `zabbix`、`foxeye`、`sclb`、`confluence` 等本地 adapter |
+| 新站点接入 | 使用 `opencli browser open/network/eval/verify` 形成 adapter |
+| 搜索/研究 | 触发 `smart-search` skill，让它路由到合适的 opencli 站点 |
+
+### Codex 注意事项
+
+- `opencli` 已内置 `codex` app adapter，但它面向 Codex 桌面 App；当前主机只有 `codex` CLI 时，`opencli codex status` 会提示找不到 Codex App。
+- 在 Codex CLI 会话里复用 opencli 的正确方式，是直接执行 `opencli ...` 命令或触发 `smart-search` / `opencli-adapter-author` / `opencli-autofix` skill。
+- 读取帮助和 registry 不算一次实际搜索；真正执行 `opencli <site> <command>` 后，应在回答中说明使用了哪个站点、查询词和调用次数。
+
 ### 适配器文件结构
 
 ```
