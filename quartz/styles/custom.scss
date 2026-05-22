@@ -16,11 +16,12 @@
 // ----------------------------------------------------------
 :root {
   // Radii
-  --radius-sm: 0.75rem;
-  --radius-md: 1rem;
-  --radius-lg: 1.5rem;
-  --radius-xl: 2rem;
-  --radius-pill: 999px;
+  // 极小圆角体系 —— 近直角，保留 2-4px 防止锯齿
+  --radius-sm: 2px;
+  --radius-md: 3px;
+  --radius-lg: 4px;
+  --radius-xl: 4px;
+  --radius-pill: 4px;
 
   // Asymmetric "blob" radii — each component picks one of these for an
   // organically eroded silhouette
@@ -847,10 +848,10 @@ footer {
 // 20. Callouts — softer asymmetric radii
 // ----------------------------------------------------------
 .callout {
-  border-radius: var(--radius-xl);
+  border-radius: var(--radius-lg);
   margin: 1.5rem 0;
   box-shadow: var(--shadow-soft);
-  border-top-right-radius: 3rem; // organic asymmetry
+  // 去掉原有的不对称大圆角
 }
 
 // ----------------------------------------------------------

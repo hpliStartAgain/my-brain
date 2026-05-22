@@ -8,7 +8,7 @@
 <tr><td>✅ 已匹配（可进入双跑）</td><td><strong style="color:#00875A">30</strong></td></tr>
 <tr><td>⬜ 未匹配（待处理）</td><td><strong style="color:#BF2600">0</strong></td></tr>
 <tr><td>🗑️ 已废弃/建议退役</td><td><strong>3</strong></td></tr>
-<tr><td>🔵 待建规则（子队列 LLD 等价，Foxeye 新增）</td><td><strong style="color:#0052CC">4</strong></td></tr>
+<tr><td>✅ 已创建 Foxeye 新增规则（子队列 LLD 等价）</td><td><strong style="color:#00875A">4</strong></td></tr>
 </tbody>
 </table>
 <h3>按规则类型分布</h3>
@@ -66,13 +66,13 @@
 <tr><td>2</td><td>Timelineserver api test timeout (1分钟内无响应）</td><td><code>nodata(/Template hadoop3 timeline Server/web.test.rspcode[Timelineserver HTTP status codes,api测试],1m)=1</code></td><td>1220512</td><td><span style="color:#00875A">✅ 已匹配</span></td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/399914">399914</a></td><td></td></tr>
 </tbody></table>
 <hr/>
-<h2>🔵 待建规则（Foxeye 新增，子队列 per-queue 覆盖）</h2>
-<p><strong>背景：</strong>Zabbix 通过 LLD（Low-Level Discovery）自动发现每个队列，为每个子队列创建独立 TID，产生了大量高频告警（PendingContainers/AllocatedContainers 积压规则过去1年触发 157次，AppsPending/Running 积压规则触发 105次，PendingMB 溢出规则触发 26次，UsedCapacity&gt;95% 触发 31次）。Foxeye 现有 YARN 规则（FID=452648-452655）全部 hardcode <code>queue="root"</code>，<strong>完全不覆盖子队列</strong>。以下 4 条规则用 PromQL 的 <code>queue!="root"</code> 通配方式，以单条规则等价替代 Zabbix 数十条 LLD 衍生规则。</p>
-<p><strong>VM 指标验证（已完成）：</strong>H3离线 32 个队列系列、H3实时 30 个队列系列、H3冷存 8 个队列系列，数据均正常上报。</p>
+<h2>✅ 已创建规则（Foxeye 新增，子队列 per-queue 覆盖）</h2>
+<p><strong>背景：</strong>Zabbix 通过 LLD（Low-Level Discovery）自动发现每个队列，为每个子队列创建独立 TID，产生了大量高频告警（PendingContainers/AllocatedContainers 积压规则过去1年触发 157次，AppsPending/Running 积压规则触发 105次，PendingMB 溢出规则触发 26次，UsedCapacity&gt;95% 触发 31次）。Foxeye 现有 YARN 规则（FID=452648-452655）全部 hardcode <code>queue="root"</code>，<strong>完全不覆盖子队列</strong>。以下 4 条规则已在 GID=413 创建并启用，用 <code>queue!="root"</code> 通配方式以单条规则等价替代 Zabbix 数十条 LLD 衍生规则。</p>
+<p><strong>平台回读校验（2026-05-22）：</strong>4 条规则均启用，Datasource=5，eval_interval=60s，PromQL 均可通过 Foxeye datasource proxy 解析执行；container/apps backlog 当前已有命中样例（H3离线 root.irp_rank），其余当前 0 命中。</p>
 <table>
 <thead>
 <tr>
-<th>#</th><th>建议规则名称</th><th>PromQL（已验证）</th>
+<th>#</th><th>Foxeye 规则</th><th>PromQL（已验证）</th>
 <th>阈值</th><th>prom_for_duration</th><th>severity</th>
 <th>对应 Zabbix LLD 模式</th><th>过去1年LLD触发频次</th>
 </tr>
@@ -80,45 +80,44 @@
 <tbody>
 <tr>
 <td>A</td>
-<td><code>hadoop_yarn_subqueue_used_capacity【子队列资源使用率&gt;95%(20min均值)】</code></td>
+<td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/2765032">2765032</a><br/><code>hadoop_yarn_resourcemanager_subqueue_used_capacity</code></td>
 <td><code>avg_over_time(hadoop_yarn_resourcemanager_used_capacity{queue!="root",user="-",ha_status="active"}[20m]) &gt; 95</code></td>
-<td>&gt; 95 (%)</td><td>0s</td><td>1 (Warning)</td>
+<td>&gt; 95 (%)</td><td>1200s</td><td>2 (Warning)</td>
 <td>LLD: yarn.resourcemanager.queue.&lt;q&gt;.UsedCapacity count(#20,&gt;0.95)&gt;18</td>
 <td>31次（huyou 22, irp_data 9）</td>
 </tr>
 <tr>
 <td>B</td>
-<td><code>hadoop_yarn_subqueue_container_backlog【子队列容器积压 Pending/Allocated&gt;90%(10min均值)】</code></td>
+<td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/2765033">2765033</a><br/><code>hadoop_yarn_resourcemanager_subqueue_container_backlog</code></td>
 <td><code>sum by(queue,cluster)(avg_over_time(hadoop_yarn_resourcemanager_container_count{queue!="root",user="-",status="Pending",ha_status="active"}[10m])) / (sum by(queue,cluster)(avg_over_time(hadoop_yarn_resourcemanager_container_count{queue!="root",user="-",status="Allocated",ha_status="active"}[10m])) + 1) &gt; 0.9</code></td>
-<td>&gt; 0.9 (90%)</td><td>0s</td><td>1 (Warning)</td>
+<td>&gt; 0.9 (90%)</td><td>600s</td><td>2 (Warning)</td>
 <td>LLD: yarn.resourcemanager.partition.&lt;q&gt;.PendingContainers / AllocatedContainers &gt; 0.9</td>
 <td>157次（irp_rank 104, huyou 33, irp_data 13, irp_push 5, sohumbad 1）</td>
 </tr>
 <tr>
 <td>C</td>
-<td><code>hadoop_yarn_subqueue_apps_backlog【子队列作业积压 AppsPending/Running&gt;10%(10min均值)】</code></td>
+<td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/2765036">2765036</a><br/><code>hadoop_yarn_resourcemanager_subqueue_apps_backlog</code></td>
 <td><code>sum by(queue,cluster)(avg_over_time(hadoop_yarn_resourcemanager_application_count{queue!="root",user="-",status="Pending",ha_status="active"}[10m])) / (sum by(queue,cluster)(avg_over_time(hadoop_yarn_resourcemanager_application_count{queue!="root",user="-",status="Running",ha_status="active"}[10m])) + 1) &gt; 0.1</code></td>
-<td>&gt; 0.1 (10%)</td><td>300s</td><td>1 (Warning)</td>
+<td>&gt; 0.1 (10%)</td><td>600s</td><td>2 (Warning)</td>
 <td>LLD: yarn.resourcemanager.queue.&lt;q&gt;.AppsPending / AppsRunning &gt; 0.1</td>
 <td>105次（irp_rank 71, sohumbad 12, datacenter 11, huyou 11）</td>
 </tr>
 <tr>
 <td>D</td>
-<td><code>hadoop_yarn_subqueue_memory_backlog【子队列内存积压 PendingMB/maxMB&gt;500%(10min均值)】</code></td>
-<td><code>sum by(queue,cluster)(avg_over_time(hadoop_yarn_resourcemanager_memory_in_mb{queue!="root",user="-",status="Pending",ha_status="active"}[10m])) / (sum by(queue,cluster)(avg_over_time(hadoop_yarn_resourcemanager_memory_in_mb{queue!="root",user="-",status=~"Allocated|Available",ha_status="active"}[10m])) + 1) &gt; 5</code></td>
-<td>&gt; 5 (500%)</td><td>0s</td><td>1 (Warning)</td>
+<td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/2765037">2765037</a><br/><code>hadoop_yarn_resourcemanager_subqueue_memory_backlog</code></td>
+<td><code>sum by(queue,cluster)(avg_over_time(hadoop_yarn_resourcemanager_memory_in_mb{queue!="root",user="-",status="Pending",ha_status="active"}[10m])) / (sum by(queue,cluster)(avg_over_time(hadoop_yarn_resourcemanager_memory_in_mb{queue!="root",user="-",status="Running",ha_status="active"}[10m])) + 1) &gt; 0.1</code></td>
+<td>&gt; 0.1</td><td>600s</td><td>2 (Warning)</td>
 <td>LLD: yarn.resourcemanager.queue.&lt;q&gt;.PendingMB / maxMB &gt; 5.0</td>
 <td>26次（irp_rank 16, huyou 10）</td>
 </tr>
 </tbody>
 </table>
-<p><strong>创建参数（均与现有 YARN 规则保持一致）：</strong></p>
+<p><strong>实际创建参数（均与现有 YARN 规则保持一致）：</strong></p>
 <ul>
 <li>group_id: <strong>413</strong>（大数据中心-集群-大数据业务-YARN）</li>
 <li>datasource_ids: <strong>[5]</strong>（大数据中心-vm0）</li>
 <li>append_tags: <code>service=resourcemanager</code></li>
-<li>notify_rule_ids: <strong>[93]</strong></li>
-<li>note 模板：<code>主机:【{{$labels.host}}】 集群:【{{$labels.cluster}}】 队列:【{{$labels.queue}}】 当前值:【{{$value}}】</code></li>
+<li>notify_rule_ids: <strong>[93]</strong>，规则均已启用</li>
 </ul>
 <p><strong>注意事项：</strong>
 <br/>① 规则 B/C/D 使用 <code>sum by(queue,cluster)</code> 聚合，去掉了 host 维度，告警 label 仅含 queue/cluster；需确认 Foxeye 告警模板兼容缺少 host label 的情况。

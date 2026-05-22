@@ -1,6 +1,6 @@
 <h2>Hive 告警规则迁移明细</h2>
-<p><strong>2026-06-11 实测更新：</strong>Foxeye gid=419 实际共 21 条规则（全启用）；相比 v6 多出 6 条平台自建新规则。</p>
-<p>Zabbix 25 条规则 | ✅ 已匹配 17 条 | 🔵 待建 2 条（Foxeye+Loki）| ⛔ Retire/N/A 6 条 | 🆕 平台新建 6 条（Foxeye gid=419）</p>
+<p><strong>2026-05-22 实测更新：</strong>Foxeye gid=419 已补齐 HMS RetryingHMSHandler Loki 规则与 HMS Non-Heap JMX 规则，当前迁移覆盖提升至 19 条。</p>
+<p>Zabbix 25 条规则 | ✅ 已匹配 19 条 | 🔵 待建 0 条 | ⛔ Retire/N/A 6 条 | 🆕 平台新建 6 条（Foxeye gid=419）</p>
 
 <ac:structured-macro ac:name="info">
 <ac:parameter ac:name="title">指标平台现状</ac:parameter>
@@ -10,7 +10,7 @@
 </ac:rich-text-body>
 </ac:structured-macro>
 
-<h3>✅ 已匹配规则（17 条）</h3>
+<h3>✅ 已匹配规则（19 条）</h3>
 <table>
 <tbody>
 <tr><th>规则名称</th><th>Trigger ID</th><th>Foxeye 链接</th></tr>
@@ -23,6 +23,7 @@
 <tr><td>HMS JVM 发生长时间暂停</td><td>1467226</td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/130427">Rule 130427</a></td></tr>
 <tr><td>HMS 监测到访问大分区操作</td><td>1483054</td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/130428">Rule 130428</a></td></tr>
 <tr><td>HIVE METASTORE Generic Java JMX: Memory Heap used &gt; 85%</td><td>1634267</td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/130426">Rule 130426</a></td></tr>
+<tr><td>HIVE METASTORE Generic Java JMX: Memory Non-Heap usage &gt; 85%</td><td>1634268</td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/2765048">Rule 2765048</a></td></tr>
 <tr><td>HIVE METASTORE Generic Java JMX: OperatingSystem CPU load &gt; 80%</td><td>1634269</td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/130429">Rule 130429</a></td></tr>
 <tr><td>HIVE METASTORE Generic Java JMX: Threading ThreadCount &gt; threshold</td><td>1634270</td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/130430">Rule 130430</a></td></tr>
 <tr><td>HIVE METASTORE Generic Java JMX: Runtime JVM is not up-to-date</td><td>1634271</td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/130425">Rule 130425</a></td></tr>
@@ -31,6 +32,7 @@
 <tr><td>Process of Hive Metastore is DEAD</td><td>221709</td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/130425">Rule 130425</a></td></tr>
 <tr><td>Hive Metastore Port is DOWN</td><td>221705</td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/130425">Rule 130425</a> <span style="color:#6B778C;font-size:12px">（⚠️ 近似映射：<code>up{deployName=~"h3-hive-metastore.*"}==0</code> 等价于 Prometheus scrape 端点不可达；HMS 进程/端口宕机时必然触发，语义比进程检测更接近端口可达性检测）</span></td></tr>
 <tr><td>hiveserver2 found msck repair table</td><td>1510347</td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/2757366">Rule 2757366</a></td></tr>
+<tr><td>HMS MYSQL ERROR (maybe deadlock or Retrying HMSHandler)</td><td>1717653</td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/2765045">Rule 2765045</a></td></tr>
 </tbody>
 </table>
 
@@ -48,36 +50,31 @@
 </tbody>
 </table>
 
-<h3>🔵 待建规则（2 条）</h3>
+<h3>✅ 本次新增迁移规则（2 条，已创建并校验）</h3>
 
-<h4>🟡 方案：Loki Pattern Alert（1 条）</h4>
+<h4>🟡 Loki Pattern Alert（1 条）</h4>
 <table>
 <tbody>
-<tr><th>规则名称</th><th>Trigger ID</th><th>迁移方案（规则草稿）</th></tr>
+<tr><th>规则名称</th><th>Trigger ID</th><th>Foxeye 规则与校验结果</th></tr>
 <tr><td>HMS MYSQL ERROR (maybe deadlock or Retrying HMSHandler)</td><td>1717653</td><td>
-<p>Loki alerting rule，匹配 HMS 日志中 <code>RetryingHMSHandler</code> 关键词。</p>
-<p><strong>LogQL 草稿：</strong></p>
-<code>sum by (cluster, host) (count_over_time({service_name="hive-metastore", role="hivemetastore", log_type="service"} |= "RetryingHMSHandler" [5m])) &gt; 3</code>
-<p><span style="color:#FF5630">⚠️ 创建前需确认 HMS 的 Loki service_name 标签（参考 HS2 用的 <code>hive-hs2</code>，HMS 推断为 <code>hive-metastore</code>）</span></p>
-</td></tr>
-<tr><td>hiveserver2 found msck repair table</td><td>1510347</td><td>
-<p>Loki alerting rule，匹配 HS2 日志中的 <code>msck repair table</code>，并把表名提取成标签 <code>table</code>，这样告警事件里可以直接显示目标表。</p>
-<p><strong>LogQL 草稿：</strong></p>
-<code>sum by (instance, cluster, table) (count_over_time({service_name="hive-hs2", role="hiveserver2", log_type="service"} |= "msck repair table" | regexp "msck repair table (?P&lt;table&gt;[A-Za-z0-9_]+\\.[A-Za-z0-9_]+)" [5m])) &gt; 0</code>
-<p><span style="color:#FF5630">⚠️ 关键点：`table` 标签来自 <code>regexp</code> 捕获组，告警 note 可直接写 <code>{{ $labels.table }}</code></span></p>
+<p><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/2765045">Rule 2765045</a>，Datasource=81（loki-hadoop-cluster），已启用。</p>
+<p><strong>LogQL：</strong></p>
+<code>sum by (cluster, instance) (count_over_time({service_name="hive-hms", role="hivemetastore", log_type="service"} |= "RetryingHMSHandler" [5m])) &gt; 1000</code>
+<p><strong>日志查询：</strong><a href="https://panther.sohurdc.com/foxeye/log/explorer?data_source_id=81&amp;data_source_name=loki&amp;start=now-1h&amp;end=now&amp;__execute__=true&amp;query=%7Bservice_name%3D%22hive-hms%22%2Crole%3D%22hivemetastore%22%2Clog_type%3D%22service%22%2Cinstance%3D%22%7B%7B%20%24labels.instance%20%7D%7D%22%7D%20%7C%3D%20%22RetryingHMSHandler%22">按告警 instance 打开 HMS RetryingHMSHandler 日志</a></p>
+<p><span style="color:#00875A">✅ 2026-05-22 回读校验：LogQL success，当前 0 命中；实际 Loki label 使用 <code>instance</code>，不使用 <code>host</code>。</span></p>
 </td></tr>
 </tbody>
 </table>
 
-<h4>🔵 方案：直接建 Foxeye 规则（1 条）</h4>
+<h4>🔵 Prometheus JMX 规则（1 条）</h4>
 <table>
 <tbody>
-<tr><th>规则名称</th><th>Trigger ID</th><th>迁移方案（规则草稿）</th></tr>
+<tr><th>规则名称</th><th>Trigger ID</th><th>Foxeye 规则与校验结果</th></tr>
 <tr><td>HIVE METASTORE Generic Java JMX: Memory Non-Heap usage &gt; 85%</td><td>1634268</td><td>
 <p>参考 HMS Heap 规则（<a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/130426">Rule 130426</a>）：<code>hive_metastore_metastore_heap_used / hive_metastore_metastore_heap_max &gt; 0.85</code></p>
-<p><strong>PromQL 草稿：</strong><code>hive_metastore_metastore_non_heap_used / hive_metastore_metastore_non_heap_max &gt; 0.85</code></p>
-<p>Group: 419，Datasource: 5，Severity: P2</p>
-<p><span style="color:#FF5630">⚠️ 创建前需在 VictoriaMetrics 中确认 <code>hive_metastore_metastore_non_heap_used</code> 指标存在</span></p>
+<p><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/2765048">Rule 2765048</a>，Group=419，Datasource=5，Severity=2，prom_for_duration=300s，已启用。</p>
+<p><strong>PromQL：</strong><code>hive_metastore_metastore_non_heap_used / hive_metastore_metastore_non_heap_max &gt; 0.85</code></p>
+<p><span style="color:#00875A">✅ 2026-05-22 回读校验：PromQL success，当前 0 命中。</span></p>
 </td></tr>
 </tbody>
 </table>
@@ -99,8 +96,8 @@
 <table>
 <tbody>
 <tr><th>优先级</th><th>行动</th><th>负责方</th></tr>
-<tr><td>P1</td><td>建 HMS MySQL ERROR Loki 规则（TID=1717653）：确认 HMS Loki service_name 标签 → 用草稿 LogQL 创建规则（业务组 419，cate=loki）</td><td>SRE</td></tr>
-<tr><td>P1</td><td>建 HMS Non-Heap 内存告警（TID=1634268）：先在 VictoriaMetrics 确认 <code>hive_metastore_metastore_non_heap_used</code> 存在 → 用草稿 PromQL 创建 Foxeye 规则</td><td>SRE</td></tr>
+<tr><td>P1</td><td>✅ 已完成：HMS MySQL ERROR Loki 规则（TID=1717653）→ FID=2765045</td><td>SRE</td></tr>
+<tr><td>P1</td><td>✅ 已完成：HMS Non-Heap 内存告警（TID=1634268）→ FID=2765048</td><td>SRE</td></tr>
 <tr><td>P2</td><td>Retire Zabbix 规则：TID=1634266/1634272/1266012/16195 共 4 条，在 Zabbix 标记为禁用或删除</td><td>SRE</td></tr>
 <tr><td>P3</td><td>✅ 已确认：TID=1236746（HS2 Port DOWN）→ 130417 近似映射；TID=221705（HMS Port DOWN）→ 130425 近似映射</td><td>SRE</td></tr>
 <tr><td>P3</td><td>✅ 已确认：TID=1510347（MSCK）→ FID=2757366；TID=1204837/1209690（nginx/keepalived）→ N/A（SCLB 托管）</td><td>SRE</td></tr>

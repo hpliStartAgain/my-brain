@@ -1,43 +1,35 @@
-<h2>infra_basic — 迁移深度分析 v5</h2>
+<h2>infra_basic — 迁移深度分析 v6</h2>
 
 <div style="background:#e8f4fd;border-left:4px solid #1976d2;padding:12px 16px;margin:12px 0;">
-<strong>📊 Foxeye 实际规则状态（6 个业务组，68 条规则，2026-06-11 实测）</strong>
+<strong>📊 Foxeye 实际规则状态（6 个业务组，69 条规则，2026-05-22 实测）</strong>
 <table>
   <tr><th>业务组</th><th>GID</th><th>✅ 启用</th><th>❌ 禁用</th><th>说明</th></tr>
-  <tr><td>大数据中心-集群-基础运营组-其他</td><td>301</td><td>11</td><td>0</td><td>Categraf 心跳 / NTP / systemd / CMDB Ping 探测</td></tr>
+  <tr><td>大数据中心-集群-基础运营组-其他</td><td>301</td><td>12</td><td>0</td><td>Categraf 心跳 / NTP / systemd / CMDB Ping 探测 / system_uptime 重启检测</td></tr>
   <tr><td>大数据中心-集群-基础运营组-硬件故障</td><td>395</td><td>7</td><td>1</td><td>IPMI / ECC / MCE；syslog_mce 禁用</td></tr>
   <tr><td>大数据中心-集群-基础运营组-系统问题-内存</td><td>398</td><td>7</td><td>4</td><td>OOM / kernel 规则启用；mem_used_percent×2 禁用（VM 噪音）</td></tr>
   <tr><td>大数据中心-集群-基础运营组-系统问题-文件系统&amp;磁盘</td><td>399</td><td>9</td><td>1</td><td>磁盘使用率 / IO / inode / SMART；磁盘预测告警禁用</td></tr>
   <tr><td>大数据中心-集群-基础运营组-系统问题-网络</td><td>400</td><td>15</td><td>8</td><td>网络流量 / keepalived / TCP 规则启用；Ping×4 禁用</td></tr>
   <tr><td>大数据中心-集群-基础运营组-系统问题-CPU/Load</td><td>401</td><td>2</td><td>3</td><td>iowait / steal 启用；cpu_idle / load×3 禁用（VM 噪音）</td></tr>
-  <tr><td><strong>合计</strong></td><td>—</td><td><strong>51</strong></td><td><strong>17</strong></td><td><strong>🆕 缺失规则：1 条（system_uptime 重启检测）</strong></td></tr>
+  <tr><td><strong>合计</strong></td><td>—</td><td><strong>52</strong></td><td><strong>17</strong></td><td><strong>✅ system_uptime 重启检测已补齐</strong></td></tr>
 </table>
 <p><strong>覆盖范围：</strong>大数据中心-集群-基础运营组（6个组），约 2123 台主机（含大数据 / 云存储 / 容器 / 弹性计算 / 中间件）。</p>
 </div>
 
-<h3>🆕 待新建规则（1 条）</h3>
+<h3>✅ 本次新增迁移规则（1 条，已创建并校验）</h3>
 
-<div style="background:#fce4ec;border-left:4px solid #c62828;padding:10px 14px;margin:8px 0;">
-<strong>以下规则在 6 个业务组中均不存在，是当前唯一需要新建的规则。</strong>
+<div style="background:#e3fcef;border-left:4px solid #00875a;padding:10px 14px;margin:8px 0;">
+<strong>system_uptime 主机重启检测已在 GID=301 创建并启用，PromQL 回读校验通过。</strong>
 </div>
 
 <table>
-  <tr><th>规则名称</th><th>目标业务组</th><th>PromQL</th><th>建议阈值</th></tr>
+  <tr><th>Foxeye 规则</th><th>目标业务组</th><th>PromQL</th><th>实际配置</th></tr>
   <tr>
-    <td>HOST has just been restarted</td>
+    <td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/2765049">2765049</a><br/>system_uptime【系统】【主机最近重启检测】</td>
     <td>GID=301（其他）</td>
-    <td><code>system_uptime{} &lt; 600</code></td>
-    <td>&lt; 600s，持续 1 min，Critical</td>
+    <td><code>system_uptime &lt; 600</code></td>
+    <td>Severity=1（Critical），prom_for_duration=60s，eval_interval=60s，当前 0 命中</td>
   </tr>
 </table>
-
-<p><strong>新建命令参考：</strong></p>
-<pre>opencli foxeye create-rule \
-  --group-id 301 \
-  --name "system_uptime【infra_basic】【主机最近重启检测】" \
-  --prom-ql 'system_uptime &lt; 600' \
-  --severity 2 \
-  --duration 1m</pre>
 
 <h3>❌ 已建但禁用规则（17 条）</h3>
 
@@ -126,7 +118,7 @@
 <h3>📋 行动优先级</h3>
 <table>
   <tr><th>优先级</th><th>行动</th><th>影响规则数</th></tr>
-  <tr><td><strong>P0（立即）</strong></td><td>在 GID=301 新建 system_uptime 重启检测规则（唯一缺失规则，指标数据已就绪）</td><td>1</td></tr>
+  <tr><td><strong>P0（已完成）</strong></td><td>已在 GID=301 新建 system_uptime 重启检测规则（FID=2765049）</td><td>1</td></tr>
   <tr><td>P1（本周）</td><td>调查 SlaProbe 数据源状态（4 条 Ping 规则阻塞）；确认 SlaProbe 探针是否已部署，若无部署计划则改用 cmdb_device_probe_status 指标替代</td><td>4</td></tr>
   <tr><td>P1（本周）</td><td>为 ID=75211（tcp_time_wait 2000-test）执行 retire 操作；为 ID=2752519（keepalived insName占位符）修正 PromQL 后重启或合并至 ID=2752510</td><td>2</td></tr>
   <tr><td>P2（本月）</td><td>评估 VM 噪音方案：在禁用的 CPU/内存/Load 规则 PromQL 中增加 instance_type!="vm" 过滤，或按集群类型拆分业务组，逐步重新启用 7 条规则</td><td>7</td></tr>
@@ -135,4 +127,4 @@
   <tr><td>P3（归档）</td><td>将第八组 6 条 Zabbix 特有规则标记为 retire，在 Zabbix 中禁用并归档</td><td>6</td></tr>
 </table>
 
-<p><em>v5 深度分析 - 2026-06-11 更新 | 修正业务组名称（6组真实命名），重构规则状态分类（51启用/17禁用/1待建），修正"僵尸规则"描述（大部分规则已存在 Foxeye），新增阻塞项分析</em></p>
+<p><em>v6 更新 - 2026-05-22 | system_uptime 重启检测规则已创建并回读校验；规则状态更新为 52 启用 / 17 禁用 / 0 待建。</em></p>

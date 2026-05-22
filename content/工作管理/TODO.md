@@ -9,6 +9,14 @@
 - [x] 推送 Confluence：`progress_summary.html` pageId=107717201（v5）
 - [x] 如关闭台账同步变化，推送 `zabbix_close_ledger.html` pageId=109248930（v3）
 
+## 当前任务：核查已手工创建 Foxeye 规则并更新迁移文档
+
+- [x] 只读回读 Foxeye 已创建规则核心配置
+- [x] 通过 Foxeye datasource proxy 验证 PromQL / LogQL 可执行性
+- [x] 输出更新 HTML / Confluence 前的状态摘要供确认
+- [ ] 根据确认结果更新本地 HTML
+- [ ] 推送对应 Confluence 页面
+
 ## 需求理解
 
 - 目标：探索并设计一个比 YAML 批量导入更安全的 Foxeye 告警规则创建/更新工具。
