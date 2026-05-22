@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip show *)",
+      "Bash(python *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(awk '{print $NF, $5}')",
+      "Bash(git status *)",
+      "Bash(python3 *)",
+      "Bash(pip3 list *)",
+      "Bash(pip --version)",
+      "Bash(pip list *)"
+    ]
+  }
+}

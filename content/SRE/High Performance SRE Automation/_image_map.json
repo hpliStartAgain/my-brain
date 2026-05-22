@@ -1,0 +1,60 @@
+{
+  "chapter-002": {
+    "page0063_img001.png": { "page": 63, "action": "keep", "reason": "SRE 团队结构或参与模型示意图" },
+    "page0067_img001.png": { "page": 67, "action": "keep", "reason": "SRE 策略采纳模型图" },
+    "page0073_img001.png": { "page": 73, "action": "keep", "reason": "SRE 最佳实践示意图" },
+    "page0080_img001.png": { "page": 80, "action": "keep", "reason": "章节总结图示" }
+  },
+  "chapter-003": {
+    "page0084_img001.jpeg": { "page": 84, "action": "keep", "reason": "监控需求示意图" },
+    "page0085_img001.jpeg": { "page": 85, "action": "keep", "reason": "监控架构或流程图" },
+    "page0086_img001.jpeg": { "page": 86, "action": "keep", "reason": "监控数据流图" },
+    "page0094_img001.jpeg": { "page": 94, "action": "keep", "reason": "阈值监控示意图" },
+    "page0095_img001.jpeg": { "page": 95, "action": "keep", "reason": "监控面板或告警图" },
+    "page0095_img002.jpeg": { "page": 95, "action": "keep", "reason": "监控指标展示图" },
+    "page0098_img001.jpeg": { "page": 98, "action": "keep", "reason": "可观测性架构图" },
+    "page0100_img001.jpeg": { "page": 100, "action": "keep", "reason": "遥测数据流图" },
+    "page0105_img001.png": { "page": 105, "action": "keep", "reason": "应用监控工具展示" },
+    "page0106_img001.png": { "page": 106, "action": "keep", "reason": "监控工具对比或架构" },
+    "page0107_img001.jpeg": { "page": 107, "action": "keep", "reason": "监控最佳实践总结图" },
+    "page0109_img001.png": { "page": 109, "action": "keep", "reason": "监控工具示例截图" }
+  },
+  "chapter-004": {
+    "page0117_img001.png": { "page": 117, "action": "keep", "reason": "软件风险分类图" },
+    "page0118_img001.png": { "page": 118, "action": "keep", "reason": "风险识别与评估流程" },
+    "page0121_img001.png": { "page": 121, "action": "keep", "reason": "生产事件生命周期图" },
+    "page0123_img001.png": { "page": 123, "action": "keep", "reason": "事件响应计划流程图" },
+    "page0134_img001.png": { "page": 134, "action": "keep", "reason": "风险缓解框架示意图" }
+  },
+  "chapter-005": {
+    "page0138_img001.png": { "page": 138, "action": "keep", "reason": "错误预算概念图" },
+    "page0140_img001.png": { "page": 140, "action": "keep", "reason": "错误预算计算流程" },
+    "page0141_img001.png": { "page": 141, "action": "keep", "reason": "错误预算公式展示" },
+    "page0141_img002.png": { "page": 141, "action": "keep", "reason": "错误预算配比图" },
+    "page0142_img001.png": { "page": 142, "action": "keep", "reason": "错误预算公式说明" },
+    "page0147_img001.png": { "page": 147, "action": "keep", "reason": "停机策略流程图" },
+    "page0153_img001.png": { "page": 153, "action": "keep", "reason": "错误预算最佳实践图示" }
+  },
+  "chapter-006": {
+    "page0166_img001.jpeg": { "page": 166, "action": "keep", "reason": "SLA 谈判流程示意图" },
+    "page0169_img001.png": { "page": 169, "action": "keep", "reason": "SLM 实施步骤图" },
+    "page0179_img001.jpeg": { "page": 179, "action": "keep", "reason": "SLM 案例研究总结图" }
+  },
+  "chapter-007": {
+    "page0195_img001.png": { "page": 195, "action": "keep", "reason": "扩缩容策略示意图" },
+    "page0215_img001.png": { "page": 215, "action": "keep", "reason": "灾难恢复容量规划图" }
+  },
+  "chapter-008": {},
+  "chapter-009": {
+    "page0258_img001.png": { "page": 258, "action": "keep", "reason": "RCA 方法对比总结图" }
+  },
+  "chapter-010": {
+    "page0287_img001.png": { "page": 287, "action": "keep", "reason": "混沌工程总结图" }
+  },
+  "chapter-011": {
+    "page0314_img001.png": { "page": 314, "action": "keep", "reason": "AI 在 SRE 中的应用全景图" }
+  },
+  "chapter-012": {
+    "page0337_img001.png": { "page": 337, "action": "keep", "reason": "案例研究总结图" }
+  }
+}
