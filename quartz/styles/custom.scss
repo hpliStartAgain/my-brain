@@ -1,111 +1,78 @@
 @use "./base.scss";
 
 // ============================================================
-// Custom Theme — Organic / Natural (wabi-sabi, earth-drawn)
+// Custom Theme — Sleek Tech (Vercel / Linear inspired)
 // ----------------------------------------------------------
 // Visual DNA:
-//   * Earth palette (moss, terracotta, rice paper, dried grass)
-//   * Soft, asymmetric organic radii — no sharp 90° corners
-//   * Paper-grain noise overlay + ambient blob washes
-//   * Fraunces serif headings, Nunito rounded body
-//   * Soft, color-tinted shadows (never pure black)
+//   * High contrast monochrome + vibrant accent
+//   * Sleek geometry (consistent tight radii, sharp edges)
+//   * Glassmorphism (blur backdrops, semi-transparent borders)
+//   * Inter / Geist modern sans-serif typography
+//   * Crisp, soft layered shadows
 // ============================================================
 
-// ----------------------------------------------------------
-// 0. Local design tokens (radii / shadows / accents)
-// ----------------------------------------------------------
 :root {
-  // Radii
-  // 极小圆角体系 —— 近直角，保留 2-4px 防止锯齿
-  --radius-sm: 2px;
-  --radius-md: 3px;
-  --radius-lg: 4px;
-  --radius-xl: 4px;
-  --radius-pill: 4px;
+  // Sleek geometric radii
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-pill: 9999px;
 
-  // Asymmetric "blob" radii — each component picks one of these for an
-  // organically eroded silhouette
-  --blob-1: 60% 40% 30% 70% / 60% 30% 70% 40%;
-  --blob-2: 30% 70% 70% 30% / 30% 30% 70% 70%;
-  --blob-3: 50% 50% 30% 70% / 40% 70% 30% 60%;
+  // Layered crisp shadows
+  --shadow-soft: 0 4px 14px 0 rgba(0, 0, 0, 0.05);
+  --shadow-float: 0 6px 24px 0 rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(0, 0, 0, 0.02);
+  --shadow-deep: 0 12px 32px 0 rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(0, 0, 0, 0.03);
 
-  // Soft, color-tinted shadows (moss / clay)
-  --shadow-soft: 0 4px 20px -2px rgba(93, 112, 82, 0.15);
-  --shadow-float: 0 10px 40px -10px rgba(193, 140, 93, 0.20);
-  --shadow-deep: 0 20px 40px -10px rgba(93, 112, 82, 0.18);
-
-  // Border in raw timber tone (matches palette --lightgray)
-  --border-soft: 1px solid color-mix(in srgb, var(--lightgray) 70%, transparent);
+  // Borders
+  --border-soft: 1px solid var(--lightgray);
 }
 
 [saved-theme="dark"] {
-  --shadow-soft: 0 4px 20px -2px rgba(168, 193, 149, 0.10);
-  --shadow-float: 0 10px 40px -10px rgba(224, 160, 111, 0.14);
-  --shadow-deep: 0 20px 40px -10px rgba(168, 193, 149, 0.14);
+  --shadow-soft: 0 4px 14px 0 rgba(0, 0, 0, 0.3);
+  --shadow-float: 0 6px 24px 0 rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  --shadow-deep: 0 12px 32px 0 rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 
 // ----------------------------------------------------------
-// 0b. Mermaid organic palette (consumed by mermaid.inline.ts).
-// These tokens flip with theme and feed mermaid's themeVariables so all
-// diagrams (flowchart / sequence / state / ER / git / pie / gantt) stay
-// visually unified with the rest of the site.
+// Mermaid palette adaptation
 // ----------------------------------------------------------
 :root {
-  --mm-bg: #FDFCF8;
-  --mm-node-bg: #F5F1E6;
-  --mm-node-border: #5D7052;
-  --mm-text: #2C2C24;
-  --mm-line: #78786C;
-  --mm-cluster-bg: #EFEEE6;
-  --mm-cluster-border: #A8B5A0;
-  --mm-note-bg: #F2E5D5;
-  --mm-note-border: #C18C5D;
-  --mm-actor-bg: #DCE2D5;
-  --mm-actor-border: #5D7052;
-  --mm-active-bg: #B5C2A8;
-  --mm-active-border: #5D7052;
-  --mm-edge-label-bg: #FDFCF8;
-  --mm-fill-0: #DCE2D5; // moss tint
-  --mm-fill-1: #F2E5D5; // clay tint
-  --mm-fill-2: #EFEEE6; // sand tint
-  --mm-fill-3: #E5E0D0;
-  --mm-fill-4: #D6CFB6;
-  --mm-fill-5: #BFC9B5;
-  --mm-fill-6: #E0C9A8;
-  --mm-fill-7: #C9C2A8;
-  --mm-error-bg: #F2D7D2;
-  --mm-error-text: #A85448;
+  --mm-bg: transparent;
+  --mm-node-bg: #f5f5f5;
+  --mm-node-border: #d4d4d4;
+  --mm-text: #171717;
+  --mm-line: #a3a3a3;
+  --mm-cluster-bg: #fafafa;
+  --mm-cluster-border: #e5e5e5;
+  --mm-note-bg: #e0f2fe;
+  --mm-note-border: #38bdf8;
+  --mm-actor-bg: #f3f4f6;
+  --mm-actor-border: #d1d5db;
+  --mm-active-bg: #eef2ff;
+  --mm-active-border: #818cf8;
+  --mm-edge-label-bg: #ffffff;
 }
 
 [saved-theme="dark"] {
-  --mm-bg: #1F1E1A;
-  --mm-node-bg: #2A2924;
-  --mm-node-border: #A8C195;
-  --mm-text: #F3F1E9;
-  --mm-line: #9B9787;
-  --mm-cluster-bg: #2C2B26;
-  --mm-cluster-border: #4D5A45;
-  --mm-note-bg: #3A3128;
-  --mm-note-border: #E0A06F;
-  --mm-actor-bg: #2F3A2A;
-  --mm-actor-border: #A8C195;
-  --mm-active-bg: #4D5A45;
-  --mm-active-border: #A8C195;
-  --mm-edge-label-bg: #1F1E1A;
-  --mm-fill-0: #2F3A2A;
-  --mm-fill-1: #3A3128;
-  --mm-fill-2: #2C2B26;
-  --mm-fill-3: #353329;
-  --mm-fill-4: #423E32;
-  --mm-fill-5: #3D4A35;
-  --mm-fill-6: #483A2C;
-  --mm-fill-7: #3F3D2A;
-  --mm-error-bg: #3F2622;
-  --mm-error-text: #E0876E;
+  --mm-bg: transparent;
+  --mm-node-bg: #171717;
+  --mm-node-border: #404040;
+  --mm-text: #e5e5e5;
+  --mm-line: #737373;
+  --mm-cluster-bg: #0a0a0a;
+  --mm-cluster-border: #262626;
+  --mm-note-bg: #082f49;
+  --mm-note-border: #0284c7;
+  --mm-actor-bg: #1f2937;
+  --mm-actor-border: #4b5563;
+  --mm-active-bg: #312e81;
+  --mm-active-border: #4f46e5;
+  --mm-edge-label-bg: #0a0a0a;
 }
 
 // ----------------------------------------------------------
-// 1. Global base — paper background, body type, grain overlay
+// Global base
 // ----------------------------------------------------------
 html {
   font-size: 16px;
@@ -115,912 +82,421 @@ html {
 }
 
 body {
-  line-height: 1.75;
-  letter-spacing: 0.005em;
+  line-height: 1.6;
+  letter-spacing: -0.01em;
   background-color: var(--light);
   color: var(--darkgray);
-  font-feature-settings: "ss01", "calt", "kern";
-  position: relative;
-}
-
-// Paper-grain noise overlay (single fixed pseudo-element on body).
-// Inline base64 SVG fractalNoise so it ships with no extra request.
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 0;
-  opacity: 0.045;
-  mix-blend-mode: multiply;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240' viewBox='0 0 240 240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.17 0 0 0 0 0.17 0 0 0 0 0.14 0 0 0 0.6 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
-  background-repeat: repeat;
-}
-
-[saved-theme="dark"] body::before {
-  opacity: 0.07;
-  mix-blend-mode: screen;
-}
-
-// Make actual content sit above the grain
-.page,
-header,
-footer,
-#quartz-root {
-  position: relative;
-  z-index: 1;
-}
-
-// Ambient blob washes behind the page — purely decorative, soft & blurred.
-// Anchored to the viewport so they wash the whole experience.
-body::after {
-  content: "";
-  position: fixed;
-  z-index: 0;
-  pointer-events: none;
-  top: -10vh;
-  right: -15vw;
-  width: 55vw;
-  height: 55vw;
-  max-width: 800px;
-  max-height: 800px;
-  background: radial-gradient(closest-side, color-mix(in srgb, var(--secondary) 28%, transparent), transparent 70%);
-  border-radius: var(--blob-1);
-  filter: blur(80px);
-  opacity: 0.55;
-}
-
-.page::before {
-  content: "";
-  position: fixed;
-  z-index: 0;
-  pointer-events: none;
-  bottom: -15vh;
-  left: -10vw;
-  width: 50vw;
-  height: 50vw;
-  max-width: 700px;
-  max-height: 700px;
-  background: radial-gradient(closest-side, color-mix(in srgb, var(--tertiary) 25%, transparent), transparent 70%);
-  border-radius: var(--blob-2);
-  filter: blur(80px);
-  opacity: 0.45;
 }
 
 // ----------------------------------------------------------
-// 2. Article content — generous, calm, hand-crafted typography
+// Article Typography & Elements
 // ----------------------------------------------------------
 article {
   p {
     margin-top: 0;
-    margin-bottom: 1.6rem;
-    line-height: 1.85;
-    letter-spacing: 0.005em;
+    margin-bottom: 1.5rem;
   }
 
-  ul,
-  ol {
-    margin-top: 0.8rem;
-    margin-bottom: 1.6rem;
-    padding-left: 1.5rem;
-
-    li {
-      margin-bottom: 0.4rem;
-      line-height: 1.85;
-    }
-
-    li::marker {
-      color: var(--secondary);
-    }
-  }
-
-  // Quietly clay-tinted blockquotes; left bar is a soft moss line
   blockquote {
     margin: 2rem 0;
     padding: 1rem 1.4rem;
     border-left: 3px solid var(--secondary);
-    background: color-mix(in srgb, var(--lightgray) 35%, transparent);
+    background: color-mix(in srgb, var(--secondary) 5%, transparent);
     border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
     color: var(--darkgray);
     font-style: italic;
-
-    p {
-      margin-bottom: 0.6rem;
-
-      &:last-child {
-        margin-bottom: 0;
-      }
-    }
   }
 
   img {
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-soft);
-    border: 4px solid var(--light);
+    border: 1px solid var(--lightgray);
     margin: 2rem 0;
-    transition: transform 700ms ease, box-shadow 500ms ease;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
 
     &:hover {
-      transform: scale(1.01) rotate(-0.4deg);
+      transform: translateY(-2px);
       box-shadow: var(--shadow-float);
     }
   }
 
   hr {
-    margin: 4rem auto;
+    margin: 3rem auto;
     border: none;
     height: 1px;
-    background: linear-gradient(
-      90deg,
-      transparent,
-      var(--lightgray) 30%,
-      var(--lightgray) 70%,
-      transparent
-    );
-    width: 50%;
+    background: var(--lightgray);
+    width: 100%;
   }
 }
 
-// ----------------------------------------------------------
-// 3. Headings — Fraunces serif, soft & varied
-// ----------------------------------------------------------
-h1,
-h2,
-h3,
-h4,
-h5,
-h6 {
+// Headings
+h1, h2, h3, h4, h5, h6 {
   font-family: var(--headerFont);
   font-weight: 700;
-  letter-spacing: -0.015em;
+  letter-spacing: -0.02em;
   color: var(--dark);
-  // Fraunces variable axes: SOFT (rounding) + opsz (optical size)
-  font-variation-settings: "SOFT" 80, "WONK" 0;
 }
 
-h1 {
-  font-size: 2.4rem;
-  margin-top: 4rem;
-  margin-bottom: 1.6rem;
-  line-height: 1.18;
-  font-weight: 800;
-}
+h1 { font-size: 2.2rem; margin-top: 3.5rem; margin-bottom: 1.2rem; font-weight: 800; letter-spacing: -0.03em; }
+h2 { font-size: 1.6rem; margin-top: 3rem; margin-bottom: 1rem; border-bottom: 1px solid var(--lightgray); padding-bottom: 0.5rem; }
+h3 { font-size: 1.3rem; margin-top: 2rem; margin-bottom: 0.8rem; }
 
-h2 {
-  font-size: 1.7rem;
-  margin-top: 3.5rem;
-  margin-bottom: 1.2rem;
-  line-height: 1.28;
-  padding-bottom: 0;
-  border-bottom: none;
-  font-weight: 700;
-}
-
-h3 {
-  font-size: 1.32rem;
-  margin-top: 2.4rem;
-  margin-bottom: 0.7rem;
-  line-height: 1.4;
-  font-weight: 700;
-}
-
-h4,
-h5,
-h6 {
-  font-size: 1.08rem;
-  margin-top: 1.8rem;
-  margin-bottom: 0.5rem;
-  line-height: 1.45;
-  font-weight: 600;
-}
-
-// ----------------------------------------------------------
-// 4. Code — soft beige inline, framed block with moss accent
-// ----------------------------------------------------------
+// Code Blocks
 code {
-  font-size: 0.86em;
-  padding: 0.18em 0.45em;
+  font-size: 0.85em;
+  padding: 0.2em 0.4em;
   border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--lightgray) 55%, transparent);
-  color: var(--dark);
-  font-feature-settings: "liga" 1, "calt" 1;
-  border: 1px solid color-mix(in srgb, var(--lightgray) 80%, transparent);
+  background: color-mix(in srgb, var(--lightgray) 40%, transparent);
+  color: var(--secondary);
 }
 
 pre {
   border-radius: var(--radius-lg);
   border: var(--border-soft);
   box-shadow: var(--shadow-soft);
-  background: color-mix(in srgb, var(--light) 92%, var(--lightgray)) !important;
+  background: color-mix(in srgb, var(--dark) 2%, var(--light)) !important;
   margin: 2rem 0;
-  padding: 1rem 1.2rem;
+  padding: 2.5rem 1.2rem 1rem; // Extra top padding for macOS buttons
   position: relative;
+  overflow: visible;
 
+  // macOS Window Controls
   &::before {
-    // Hand-drawn corner accent dot
     content: "";
     position: absolute;
-    top: 0.7rem;
-    left: 0.9rem;
-    width: 0.45rem;
-    height: 0.45rem;
+    top: 14px;
+    left: 14px;
+    width: 11px;
+    height: 11px;
     border-radius: 50%;
-    background: var(--secondary);
-    opacity: 0.7;
+    background: #ff5f56;
+    box-shadow: 18px 0 0 #ffbd2e, 36px 0 0 #27c93f;
+    opacity: 0.9;
   }
 
   & > code {
-    font-size: 0.84rem;
-    line-height: 1.7;
+    font-size: 0.85rem;
+    line-height: 1.6;
     background: transparent;
     border: none;
     padding: 0;
+    color: var(--darkgray);
   }
+
+  &:hover {
+    box-shadow: var(--shadow-float);
+    border-color: color-mix(in srgb, var(--secondary) 50%, var(--lightgray));
+  }
+  transition: all 0.3s ease;
 }
 
-// ----------------------------------------------------------
-// 5. Links — moss underline that grows on hover
-// ----------------------------------------------------------
+[saved-theme="dark"] pre {
+  background: color-mix(in srgb, var(--lightgray) 30%, transparent) !important;
+}
+
+// Links
 a {
-  transition: color 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
   color: var(--secondary);
   text-decoration: none;
+  transition: all 0.2s ease;
 
   &.internal {
     background-color: transparent;
-    border-radius: 0;
-    padding: 0 1px;
-    border-bottom: 1px solid color-mix(in srgb, var(--secondary) 35%, transparent);
-    color: var(--secondary);
+    border-radius: var(--radius-sm);
+    padding: 0 2px;
+    border-bottom: 1px solid color-mix(in srgb, var(--secondary) 40%, transparent);
 
     &:hover {
-      background-color: color-mix(in srgb, var(--secondary) 10%, transparent);
-      border-bottom-color: var(--secondary);
-      color: var(--dark);
-      border-radius: var(--radius-sm);
+      background-color: color-mix(in srgb, var(--secondary) 15%, transparent);
+      border-bottom-color: transparent;
     }
   }
 }
 
 // ----------------------------------------------------------
-// 6. Popovers / Search — soft cards with organic radii
+// Glassmorphism (Popovers, Search, Sidebars)
 // ----------------------------------------------------------
 .popover {
-  border-radius: var(--radius-xl) !important;
+  border-radius: var(--radius-lg) !important;
   box-shadow: var(--shadow-float) !important;
-  border: var(--border-soft) !important;
-  background-color: color-mix(in srgb, var(--light) 96%, white) !important;
-  backdrop-filter: blur(8px);
+  border: 1px solid color-mix(in srgb, var(--lightgray) 80%, transparent) !important;
+  background-color: color-mix(in srgb, var(--light) 85%, transparent) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 button.search-button {
-  background: color-mix(in srgb, var(--light) 70%, transparent) !important;
-  border-radius: var(--radius-pill) !important;
-  border: 1.5px solid var(--lightgray) !important;
-  box-shadow: var(--shadow-soft) !important;
-  transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
-  padding: 0.6rem 1.2rem !important;
+  background: color-mix(in srgb, var(--lightgray) 30%, transparent) !important;
+  border-radius: var(--radius-md) !important;
+  border: 1px solid transparent !important;
+  transition: all 0.2s ease;
+  padding: 0.5rem 1rem !important;
 
   &:hover {
-    transform: scale(1.03);
-    border-color: var(--secondary) !important;
-    box-shadow: var(--shadow-float) !important;
-  }
-
-  &:active {
-    transform: scale(0.97);
+    background: color-mix(in srgb, var(--lightgray) 60%, transparent) !important;
+    border-color: var(--lightgray) !important;
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-soft) !important;
   }
 }
 
-.search {
-  & > #search-container {
-    & > #search-space {
-      & > #search-layout {
-        border-radius: var(--radius-xl);
-        box-shadow: var(--shadow-deep) !important;
-        border: var(--border-soft);
-        background: color-mix(in srgb, var(--light) 96%, white) !important;
-        backdrop-filter: blur(10px);
-      }
-    }
-  }
+.search > #search-container > #search-space > #search-layout {
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-deep) !important;
+  border: 1px solid color-mix(in srgb, var(--lightgray) 80%, transparent);
+  background: color-mix(in srgb, var(--light) 80%, transparent) !important;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
 }
 
 // ----------------------------------------------------------
-// 7. Page title (top-left logo / brand)
+// Sidebar / Explorer
 // ----------------------------------------------------------
 .page-title {
   font-family: var(--headerFont);
-  font-size: 1.6rem;
+  font-size: 1.4rem;
   font-weight: 800;
-  letter-spacing: -0.025em;
-  font-variation-settings: "SOFT" 100;
+  letter-spacing: -0.04em;
 
   a {
-    // 渐变文字：moss → clay，强化品牌视觉重量
-    background: linear-gradient(135deg, var(--secondary) 0%, var(--tertiary) 100%);
+    background: linear-gradient(135deg, var(--dark) 0%, var(--secondary) 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
     border-bottom: none;
-
-    &:hover {
-      opacity: 0.78;
-    }
   }
 }
-
-// ----------------------------------------------------------
-// 8. Left sidebar — Explorer (organic, hand-crafted nav)
-// ----------------------------------------------------------
-.explorer {
-  h2 {
-    font-family: var(--headerFont);
-    font-size: 0.95rem;
-    text-transform: none;
-    letter-spacing: 0;
-    color: var(--dark);
-    font-weight: 700;
-    font-variation-settings: "SOFT" 100;
-  }
+[saved-theme="dark"] .page-title a {
+  background: linear-gradient(135deg, #ffffff 0%, var(--secondary) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 .explorer-content {
-  ul {
-    li {
-      line-height: 1.65;
-      margin-bottom: 2px;
+  ul li > a {
+    font-size: 0.88rem;
+    padding: 0.3rem 0.6rem;
+    border-radius: var(--radius-md);
+    transition: all 0.2s ease;
+    border-bottom: none;
+    opacity: 0.8;
 
-      & > a {
-        font-size: 0.9rem;
-        padding: 0.25rem 0.7rem;
-        display: inline-block;
-        border-radius: var(--radius-pill);
-        transition: background-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
-        opacity: 0.78;
-        border-bottom: none;
+    &:hover {
+      opacity: 1;
+      background: color-mix(in srgb, var(--lightgray) 50%, transparent);
+      transform: translateX(3px);
+    }
 
-        &:hover {
-          opacity: 1;
-          color: var(--secondary);
-          background: color-mix(in srgb, var(--secondary) 10%, transparent);
-          transform: translateX(2px);
-        }
-
-        &.active {
-          opacity: 1;
-          font-weight: 700;
-          color: var(--light);
-          background: var(--secondary);
-        }
-      }
+    &.active {
+      opacity: 1;
+      font-weight: 600;
+      color: var(--secondary);
+      background: color-mix(in srgb, var(--secondary) 10%, transparent);
     }
   }
 
   .folder-container {
-    margin-top: 0.15rem;
-
-    div > button span,
-    div > a {
-      font-family: var(--headerFont);
-      font-size: 0.95rem;
-      font-weight: 700;
-      color: var(--dark);
-      font-variation-settings: "SOFT" 80;
+    div > button span, div > a {
+      font-size: 0.9rem;
+      font-weight: 600;
     }
-
-    div > a {
-      border-bottom: none;
-
-      &:hover {
-        color: var(--secondary);
-        background: transparent;
-      }
-    }
-  }
-
-  .folder-icon {
-    color: var(--tertiary);
-    // 展开/收起时旋转 + 变色动画
-    transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1), color 0.2s ease;
-  }
-
-  // .folder-outer 获得 "open" class 后，其前一个兄弟（.folder-container div）内的 icon 旋转
-  .folder-outer.open ~ * .folder-icon,
-  li:has(> .folder-container) > .folder-outer.open + .folder-container .folder-icon,
-  .folder-outer.open .folder-icon {
-    transform: rotate(90deg);
-    color: var(--secondary);
-  }
-
-  .folder-outer > ul {
-    margin-left: 0;
-    padding-left: 0.9rem;
-    border-left: 1.5px dashed color-mix(in srgb, var(--tertiary) 45%, transparent);
   }
 }
 
 // ----------------------------------------------------------
-// 9. Right sidebar — TOC (On this page)
+// Right Sidebar TOC
 // ----------------------------------------------------------
 .toc {
   position: relative;
-
   &::before {
     content: "";
     position: absolute;
     left: -1rem;
-    top: 0.5rem;
-    bottom: 0.5rem;
-    width: 1.5px;
-    background: linear-gradient(
-      to bottom,
-      transparent,
-      color-mix(in srgb, var(--tertiary) 50%, transparent) 20%,
-      color-mix(in srgb, var(--secondary) 50%, transparent) 80%,
-      transparent
-    );
-    border-radius: 1px;
-  }
-
-  button.toc-header h3 {
-    font-family: var(--headerFont);
-    font-size: 0.85rem;
-    text-transform: none;
-    letter-spacing: 0;
-    color: var(--dark);
-    font-weight: 700;
-    font-variation-settings: "SOFT" 100;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: var(--lightgray);
   }
 }
 
-ul.toc-content.overflow {
-  & > li {
-    margin-bottom: 4px;
-
-    & > a {
-      font-size: 0.84rem;
-      line-height: 1.6;
-      padding: 0.15rem 0.5rem;
-      color: var(--gray);
-      transition: color 0.15s ease, background-color 0.2s ease;
-      border-bottom: none;
-      border-radius: var(--radius-sm);
-
-      &:hover {
-        color: var(--secondary);
-        background: color-mix(in srgb, var(--secondary) 8%, transparent);
-        border-bottom: none;
-      }
-
-      &.in-view {
-        // 激活态：moss 高亮 + 左侧竖线指示器
-        color: var(--secondary);
-        font-weight: 700;
-        background: color-mix(in srgb, var(--secondary) 12%, transparent);
-        border-left: 2px solid var(--secondary);
-        border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-        padding-left: 0.7rem;
-      }
-    }
-  }
-
-  @for $i from 0 through 6 {
-    .depth-#{$i} {
-      padding-left: calc(0.85rem * #{$i});
-    }
-  }
-}
-
-// ----------------------------------------------------------
-// 10. Backlinks
-// ----------------------------------------------------------
-.backlinks {
-  border-top: var(--border-soft);
-  padding-top: 2rem;
-  margin-top: 4rem;
-
-  h3 {
-    font-family: var(--headerFont);
-    font-size: 0.85rem;
-    text-transform: none;
-    letter-spacing: 0;
-    color: var(--dark);
-    font-weight: 700;
-    font-variation-settings: "SOFT" 100;
-  }
-
-  ul li a {
-    display: inline-block;
-    padding: 0.2rem 0.7rem;
-    background: color-mix(in srgb, var(--lightgray) 50%, transparent);
-    border-radius: var(--radius-pill);
-    margin: 0.15rem 0.2rem 0.15rem 0;
-    border-bottom: none;
-    font-size: 0.85rem;
-    transition: all 0.2s ease;
-
-    &:hover {
-      background: var(--secondary);
-      color: var(--light);
-      transform: translateY(-1px);
-    }
-  }
-}
-
-// ----------------------------------------------------------
-// 11. Inputs — pill-shaped, semi-transparent
-// ----------------------------------------------------------
-input[type="text"],
-input[type="search"] {
-  border-radius: var(--radius-pill);
-  border: 1.5px solid var(--lightgray);
-  background: color-mix(in srgb, var(--light) 60%, transparent);
-  padding: 0.65rem 1rem;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
-
-  &:focus {
-    outline: none;
-    border-color: var(--secondary);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--secondary) 22%, transparent);
-  }
-}
-
-.graph {
-  border: var(--border-soft) !important;
-  border-radius: var(--radius-xl) !important;
-  box-shadow: var(--shadow-soft) !important;
-  background: color-mix(in srgb, var(--light) 96%, white) !important;
-}
-
-// ----------------------------------------------------------
-// 12. Breadcrumbs
-// ----------------------------------------------------------
-.breadcrumb-container {
+ul.toc-content.overflow > li > a {
   font-size: 0.85rem;
-  opacity: 0.7;
-  margin-bottom: 0.8rem;
+  padding: 0.2rem 0.5rem;
+  color: var(--gray);
+  border-radius: var(--radius-sm);
+  transition: all 0.2s ease;
 
-  a {
-    font-weight: 500;
-    color: var(--gray);
-    border-bottom: none;
+  &:hover {
+    color: var(--darkgray);
+    background: color-mix(in srgb, var(--lightgray) 50%, transparent);
+  }
 
-    &:hover {
-      color: var(--secondary);
+  &.in-view {
+    color: var(--secondary);
+    font-weight: 600;
+    background: color-mix(in srgb, var(--secondary) 8%, transparent);
+    position: relative;
+    
+    &::before {
+      content: "";
+      position: absolute;
+      left: -1rem; // Matches the TOC border
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      background: var(--secondary);
+      border-radius: var(--radius-sm);
     }
   }
 }
 
 // ----------------------------------------------------------
-// 13. Article title & meta
-// ----------------------------------------------------------
-.page > #quartz-body .page-header {
-  article > h1,
-  & h1 {
-    font-size: 2.6rem;
-    line-height: 1.18;
-    letter-spacing: -0.02em;
-    margin-bottom: 0.4rem;
-    font-weight: 800;
-    font-variation-settings: "SOFT" 100;
-  }
-}
-
-.article-title {
-  font-family: var(--headerFont);
-  font-size: 2.6rem;
-  line-height: 1.18;
-  letter-spacing: -0.02em;
-  font-weight: 800;
-  font-variation-settings: "SOFT" 100;
-}
-
-.content-meta {
-  font-size: 0.88rem;
-  color: var(--gray);
-  margin-top: 0.4rem;
-  margin-bottom: 1.8rem;
-  font-style: italic;
-}
-
-// ----------------------------------------------------------
-// 14. Tags — clay pills
+// Tags / Pills
 // ----------------------------------------------------------
 .tag-link {
-  font-size: 0.82rem;
-  background: color-mix(in srgb, var(--tertiary) 18%, transparent);
-  color: var(--tertiary);
-  padding: 0.2rem 0.7rem;
+  font-size: 0.8rem;
+  background: color-mix(in srgb, var(--lightgray) 50%, transparent);
+  color: var(--darkgray);
+  padding: 0.25rem 0.6rem;
   border-radius: var(--radius-pill);
-  border: 1px solid color-mix(in srgb, var(--tertiary) 35%, transparent);
-  border-bottom: 1px solid color-mix(in srgb, var(--tertiary) 35%, transparent);
+  border: 1px solid var(--lightgray);
   transition: all 0.2s ease;
-  margin: 0 0.2rem 0.2rem 0;
-  display: inline-block;
+  margin: 0 0.3rem 0.3rem 0;
 
-  &::before {
-    content: "#";
-    margin-right: 0.05em;
-    opacity: 0.7;
-  }
+  &::before { content: "#"; opacity: 0.5; margin-right: 0.1em; }
 
   &:hover {
-    background: var(--tertiary);
+    background: var(--secondary);
     color: var(--light);
+    border-color: var(--secondary);
     transform: translateY(-1px);
-    border-bottom-color: var(--tertiary);
+    box-shadow: var(--shadow-soft);
   }
 }
 
 // ----------------------------------------------------------
-// 15. Tables — soft framed
+// Bento Grid for Homepage (content/index.md)
 // ----------------------------------------------------------
-.table-container > table {
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  border: var(--border-soft);
-  box-shadow: var(--shadow-soft);
+.bento-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.5rem;
+  margin-top: 2rem;
 
-  th {
-    background: color-mix(in srgb, var(--lightgray) 50%, transparent);
-    font-family: var(--headerFont);
-    font-weight: 700;
-    font-size: 0.92rem;
-    color: var(--dark);
-  }
+  .bento-card {
+    background: color-mix(in srgb, var(--light) 95%, var(--lightgray));
+    border: 1px solid var(--lightgray);
+    border-radius: var(--radius-xl);
+    padding: 1.5rem;
+    transition: all 0.3s ease;
+    box-shadow: var(--shadow-soft);
+    position: relative;
+    overflow: hidden;
 
-  td {
-    font-size: 0.92rem;
-  }
-
-  tr:hover td {
-    background: color-mix(in srgb, var(--secondary) 5%, transparent);
-  }
-}
-
-// ----------------------------------------------------------
-// 16. Footer
-// ----------------------------------------------------------
-footer {
-  font-size: 0.86rem;
-  border-top: var(--border-soft);
-  padding-top: 2rem;
-  margin-top: 4rem;
-  color: var(--gray);
-}
-
-// ----------------------------------------------------------
-// 17. Sidebar spacing
-// ----------------------------------------------------------
-.page > #quartz-body {
-  & .sidebar {
-    padding-top: 4rem;
-  }
-
-  & .sidebar.left {
-    padding-right: 1.5rem;
-    // 磨砂玻璃效果：与主内容区产生空间层次分隔
-    background: color-mix(in srgb, var(--light) 82%, transparent);
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
-    border-right: 1px solid color-mix(in srgb, var(--lightgray) 55%, transparent);
-  }
-
-  & .sidebar.right {
-    padding-left: 1.5rem;
-  }
-}
-
-// ----------------------------------------------------------
-// 18. Scrollbar — moss thumb
-// ----------------------------------------------------------
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--secondary) 30%, transparent);
-  border-radius: var(--radius-pill);
-  border: 2px solid transparent;
-  background-clip: padding-box;
-
-  &:hover {
-    background: color-mix(in srgb, var(--secondary) 60%, transparent);
-    background-clip: padding-box;
-  }
-}
-
-// ----------------------------------------------------------
-// 19. Selection — terracotta wash
-// ----------------------------------------------------------
-::selection {
-  background: color-mix(in srgb, var(--tertiary) 35%, transparent);
-  color: var(--dark);
-}
-
-// ----------------------------------------------------------
-// 20. Callouts — softer asymmetric radii
-// ----------------------------------------------------------
-.callout {
-  border-radius: var(--radius-lg);
-  margin: 1.5rem 0;
-  box-shadow: var(--shadow-soft);
-  // 去掉原有的不对称大圆角
-}
-
-// ----------------------------------------------------------
-// 21. Article cards / list items (PageList, RecentNotes etc.)
-// ----------------------------------------------------------
-.page-listing,
-ul.section-ul {
-  & > li {
-    border-radius: var(--radius-lg);
-    padding: 0.8rem 1rem;
-    transition: background-color 0.25s ease, transform 0.25s ease;
-    border-bottom: none;
-    list-style: none;
-
-    &:hover {
-      background: color-mix(in srgb, var(--lightgray) 40%, transparent);
-      transform: translateX(2px);
-    }
-  }
-}
-
-// ----------------------------------------------------------
-// 22. Dark mode toggle / Reader mode buttons
-// ----------------------------------------------------------
-.darkmode,
-.readermode {
-  & button {
-    border-radius: 50%;
-    background: color-mix(in srgb, var(--light) 70%, transparent);
-    border: 1.5px solid var(--lightgray);
-    transition: all 0.2s ease;
-    width: 2.5rem;
-    height: 2.5rem;
-
-    &:hover {
-      transform: scale(1.08);
-      border-color: var(--secondary);
-      box-shadow: var(--shadow-soft);
+    h3 {
+      margin-top: 0;
+      margin-bottom: 1rem;
+      font-size: 1.2rem;
+      color: var(--dark);
+      border-bottom: none;
+      
+      &::before {
+        content: "✦";
+        color: var(--secondary);
+        margin-right: 0.5rem;
+        font-size: 1rem;
+      }
     }
 
-    &:active {
-      transform: scale(0.94);
-    }
-  }
-}
-
-// ----------------------------------------------------------
-// 23. Full-width layout — desktop fills screen, content max 800px
-// ----------------------------------------------------------
-@media (min-width: 1200px) {
-  .page {
-    max-width: 100%;
-    padding: 0;
-    box-sizing: border-box;
-
-    & > #quartz-body {
-      width: 100%;
-      grid-template-columns: 1fr min(820px, 100%) 1fr;
-      column-gap: 2.5rem;
-      padding: 0 2rem;
-      box-sizing: border-box;
+    p {
+      font-size: 0.9rem;
+      color: var(--gray);
+      line-height: 1.5;
     }
 
-    & > #quartz-body > .sidebar.left {
-      padding-right: 1rem;
+    ul {
+      list-style: none;
       padding-left: 0;
+      margin-bottom: 0;
+      
+      li {
+        margin-bottom: 0.5rem;
+        font-size: 0.9rem;
+        
+        a {
+          display: inline-block;
+          width: 100%;
+          padding: 0.3rem 0.5rem;
+          border-radius: var(--radius-sm);
+          border: none;
+          
+          &:hover {
+            background: color-mix(in srgb, var(--secondary) 10%, transparent);
+            transform: translateX(4px);
+          }
+        }
+      }
     }
 
-    & > #quartz-body > .sidebar.right {
-      padding-left: 1rem;
-      padding-right: 0;
+    &:hover {
+      transform: translateY(-4px);
+      box-shadow: var(--shadow-deep);
+      border-color: color-mix(in srgb, var(--secondary) 40%, transparent);
     }
   }
 }
 
-// ----------------------------------------------------------
-// 24. Mobile — gentle the blob washes so they don't bleed
-// ----------------------------------------------------------
-@media (max-width: 800px) {
-  body::after,
-  .page::before {
-    opacity: 0.3;
-    filter: blur(60px);
-  }
-}
-
-// ----------------------------------------------------------
-// 25. Article H2 — moss→clay 渐变左侧装饰条（仅正文 h2）
-// ----------------------------------------------------------
-article h2 {
+// Dashboard Hero Section
+.hero-dashboard {
+  margin-top: 2rem;
+  margin-bottom: 3rem;
+  padding: 3rem 2rem;
+  border-radius: var(--radius-xl);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--dark) 5%, transparent), color-mix(in srgb, var(--secondary) 15%, transparent));
+  border: 1px solid color-mix(in srgb, var(--secondary) 20%, transparent);
+  box-shadow: var(--shadow-soft);
+  text-align: left;
   position: relative;
-  padding-left: 1rem;
+  overflow: hidden;
 
+  // Grid background effect
   &::before {
-    content: '';
+    content: "";
     position: absolute;
-    left: 0;
-    top: 0.2em;
-    bottom: 0.2em;
-    width: 3px;
-    background: linear-gradient(to bottom, var(--secondary), var(--tertiary));
-    border-radius: 2px;
+    inset: 0;
+    background-image: linear-gradient(to right, color-mix(in srgb, var(--lightgray) 50%, transparent) 1px, transparent 1px),
+                      linear-gradient(to bottom, color-mix(in srgb, var(--lightgray) 50%, transparent) 1px, transparent 1px);
+    background-size: 30px 30px;
+    opacity: 0.5;
+    z-index: 0;
   }
-}
 
-// ----------------------------------------------------------
-// 26. Navigation progress bar — moss→clay 渐变
-// ----------------------------------------------------------
-.navigation-progress {
-  background: linear-gradient(90deg, var(--secondary), var(--tertiary)) !important;
-}
+  h1, p {
+    position: relative;
+    z-index: 1;
+  }
 
-// ----------------------------------------------------------
-// 27. Table — 首列 th 加 moss 左边框锚点
-// ----------------------------------------------------------
-.table-container > table th:first-child {
-  border-left: 3px solid var(--secondary);
-}
+  h1 {
+    font-size: 2.5rem;
+    margin-top: 0;
+    margin-bottom: 1rem;
+    font-weight: 800;
+    letter-spacing: -0.04em;
+    background: linear-gradient(90deg, var(--dark), var(--secondary));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  
+  [saved-theme="dark"] h1 {
+    background: linear-gradient(90deg, #ffffff, var(--secondary));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
 
-// ----------------------------------------------------------
-// 28. Code block — 右上角语言类型标签
-// ----------------------------------------------------------
-figure[data-rehype-pretty-code-figure] > pre[data-language]::after {
-  content: attr(data-language);
-  position: absolute;
-  top: 0.55rem;
-  right: 0.9rem;
-  font-family: var(--codeFont);
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--gray);
-  opacity: 0.65;
-  pointer-events: none;
-  user-select: none;
-}
-
-// ----------------------------------------------------------
-// 29. Dark mode — 增强 ambient blob 可见度
-// ----------------------------------------------------------
-[saved-theme="dark"] body::after {
-  opacity: 0.72;
-}
-
-[saved-theme="dark"] .page::before {
-  opacity: 0.62;
-}
-
-// ----------------------------------------------------------
-// 30. View Transitions — SPA 页面切换淡入淡出
-// ----------------------------------------------------------
-@view-transition {
-  navigation: auto;
-}
-
-::view-transition-old(root) {
-  animation: 160ms ease vt-fade-out;
-}
-
-::view-transition-new(root) {
-  animation: 260ms ease vt-fade-in;
-}
-
-@keyframes vt-fade-out {
-  from { opacity: 1; }
-  to   { opacity: 0; }
-}
-
-@keyframes vt-fade-in {
-  from { opacity: 0; }
-  to   { opacity: 1; }
+  p {
+    font-size: 1.1rem;
+    color: var(--darkgray);
+    max-width: 600px;
+    margin-bottom: 0;
+  }
 }

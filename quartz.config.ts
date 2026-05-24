@@ -23,37 +23,34 @@ const config: QuartzConfig = {
       fontOrigin: "googleFonts",
       cdnCaching: true,
       typography: {
-        // Organic / Natural design system
-        // Headings: Fraunces (variable serif, old-world warmth)
-        // Body: Nunito (rounded terminals match organic shapes)
-        header: { name: "Fraunces", weights: [600, 700, 800], includeItalic: true },
-        body: { name: "Nunito", weights: [400, 600, 700], includeItalic: true },
+        // Sleek Tech / Vercel-like Design System
+        // Headings & Body: Inter (geometric, modern sans-serif)
+        header: { name: "Inter", weights: [400, 600, 700, 800], includeItalic: true },
+        body: { name: "Inter", weights: [400, 500, 600], includeItalic: true },
         code: { name: "JetBrains Mono", weights: [400, 500], includeItalic: false },
       },
       colors: {
-        // Earth-drawn palette: forest floors, clay pottery, unbleached paper
         lightMode: {
-          light: "#FDFCF8", // Off-white / Rice Paper (background)
-          lightgray: "#E6DCCD", // Sand / Beige (accent)
-          gray: "#78786C", // Dried Grass (muted-foreground)
-          darkgray: "#4A4A40", // Bark (accent-foreground / body)
-          dark: "#2C2C24", // Deep Loam / Charcoal (foreground)
-          secondary: "#5D7052", // Moss Green (primary)
-          tertiary: "#C18C5D", // Terracotta / Clay (secondary)
-          highlight: "rgba(93, 112, 82, 0.06)", // moss tint
-          textHighlight: "rgba(193, 140, 93, 0.18)", // terracotta tint
+          light: "#ffffff", // Pure white background
+          lightgray: "#e5e5e5", // Subtle borders
+          gray: "#737373", // Muted text
+          darkgray: "#171717", // Main text
+          dark: "#000000", // Headings / contrast text
+          secondary: "#4f46e5", // Indigo / Sleek accent
+          tertiary: "#0ea5e9", // Ocean blue secondary accent
+          highlight: "rgba(79, 70, 229, 0.08)", // Indigo tint
+          textHighlight: "rgba(79, 70, 229, 0.15)",
         },
         darkMode: {
-          // Dark mode: nightwood — deep loam paper with moss/clay accents
-          light: "#1F1E1A", // dark loam (background)
-          lightgray: "#33312B", // bark (accent)
-          gray: "#9B9787", // dried grass (muted-foreground)
-          darkgray: "#D6D2C4", // pale stone (body)
-          dark: "#F3F1E9", // mist (foreground)
-          secondary: "#A8C195", // light moss (primary)
-          tertiary: "#E0A06F", // light clay (secondary)
-          highlight: "rgba(168, 193, 149, 0.10)",
-          textHighlight: "rgba(224, 160, 111, 0.22)",
+          light: "#0a0a0a", // Vercel dark background
+          lightgray: "#262626", // Dark borders
+          gray: "#a3a3a3", // Muted text
+          darkgray: "#e5e5e5", // Main text
+          dark: "#ffffff", // Headings / contrast text
+          secondary: "#818cf8", // Light Indigo
+          tertiary: "#38bdf8", // Light Ocean
+          highlight: "rgba(129, 140, 248, 0.15)",
+          textHighlight: "rgba(129, 140, 248, 0.25)",
         },
       },
     },
