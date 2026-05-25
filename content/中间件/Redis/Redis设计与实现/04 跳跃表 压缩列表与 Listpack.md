@@ -1,7 +1,7 @@
 ---
 title: "04 跳跃表 压缩列表与 Listpack"
 date: 2026-03-03
-tags: [中间件, Redis, 跳跃表, skiplist, 压缩列表, ziplist, listpack, quicklist, 有序集合, 内存优化]
+tags: [listpack, quicklist, Redis, SkipList, ziplist, 中间件, 内存优化, 压缩列表, 有序集合, 跳跃表]
 aliases: []
 ---
 

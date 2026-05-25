@@ -1,7 +1,7 @@
 ---
 title: "Starter开发——自定义starter的最佳实践"
 date: 2026-03-04
-tags: [Java, SpringBoot, Starter, AutoConfiguration, 自定义Starter, SPI, 组件封装]
+tags: [AutoConfiguration, Java, SPI, SpringBoot, Starter, 组件封装, 自定义Starter]
 aliases: []
 ---
 

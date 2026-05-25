@@ -1,7 +1,7 @@
 ---
 title: "YARN 高可用与故障恢复——ResourceManager HA 与 AM 重试机制"
 date: 2026-02-27
-tags: [YARN, HA, ResourceManager, ZooKeeper, 故障恢复, AM重启, 状态存储, ZKFC]
+tags: [AM重启, HA, ResourceManager, YARN, ZKFC, ZooKeeper, 故障恢复, 状态存储]
 aliases: [YARN HA, ResourceManager高可用, YARN故障恢复, RM主备切换]
 ---
 

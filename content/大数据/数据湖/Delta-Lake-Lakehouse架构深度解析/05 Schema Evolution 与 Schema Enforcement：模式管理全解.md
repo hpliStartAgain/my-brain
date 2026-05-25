@@ -1,7 +1,7 @@
 ---
 title: "Schema Evolution 与 Schema Enforcement：模式管理全解"
 date: 2026-02-28
-tags: [Delta Lake, Schema Evolution, Schema Enforcement, Column Mapping, Schema合并, 数据质量, 列重命名]
+tags: [Column Mapping, Delta Lake, Schema Enforcement, Schema Evolution, Schema合并, 列重命名, 数据质量]
 aliases: []
 ---
 

@@ -1,7 +1,7 @@
 ---
 title: "01 ZooKeeper 全局架构——数据模型与会话机制"
 date: 2026-03-04
-tags: [ZooKeeper, 分布式协调, ZNode, Watcher, Session, ACL, 分布式系统]
+tags: [ACL, Session, Watcher, ZNode, ZooKeeper, 分布式协调, 分布式系统]
 aliases: []
 ---
 

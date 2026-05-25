@@ -1,7 +1,7 @@
 ---
 title: "03 Redis 事务 Lua 脚本与原子性保证"
 date: 2026-03-03
-tags: [中间件, Redis, 事务, MULTI, WATCH, Lua脚本, EVAL, 原子性, Redis Function, 限流, 库存扣减]
+tags: [EVAL, Lua脚本, MULTI, Redis, Redis Function, Watch, 中间件, 事务, 原子性, 库存扣减, 限流]
 aliases: []
 ---
 

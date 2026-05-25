@@ -1,7 +1,7 @@
 ---
 title: "02 JuiceFS 元数据引擎——Redis、TiKV 与 SQL 后端的对比"
 date: 2026-03-05
-tags: [JuiceFS, 元数据引擎, Redis, TiKV, MySQL, PostgreSQL, 元数据设计, 文件系统]
+tags: [JuiceFS, MySQL, PostgreSQL, Redis, TiKV, 元数据引擎, 元数据设计, 文件系统]
 aliases: []
 ---
 

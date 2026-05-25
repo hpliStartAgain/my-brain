@@ -1,7 +1,7 @@
 ---
 title: "01 Redis 全局架构——一次请求的完整生命周期"
 date: 2026-03-03
-tags: [中间件, Redis, 架构, 事件循环, RESP协议, 命令执行, 源码分析, ae, epoll]
+tags: [ae, epoll, Redis, RESP协议, 中间件, 事件循环, 命令执行, 架构, 源码分析]
 aliases: []
 ---
 

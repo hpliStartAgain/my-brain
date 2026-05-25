@@ -1,7 +1,7 @@
 ---
 title: "Cilium深度解析——eBPF驱动的下一代网络与可观测性"
 date: 2026-03-05
-tags: [云原生, Kubernetes, Cilium, eBPF, XDP, TC, BPF Map, NetworkPolicy, Hubble, kube-proxy, 可观测性]
+tags: [BPF Map, Cilium, eBPF, Hubble, kube-proxy, Kubernetes, NetworkPolicy, TC, XDP, 云原生, 可观测性]
 aliases: []
 ---
 

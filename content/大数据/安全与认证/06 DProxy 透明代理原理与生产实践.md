@@ -1,7 +1,7 @@
 ---
 title: "DProxy 透明代理原理与生产实践：Kerberos 认证在代理层的统一承接"
 date: 2026-03-02
-tags: [大数据, 安全, DProxy, 透明代理, Kerberos, 代理用户, HTTP代理, YARN, WebApplicationProxy]
+tags: [DProxy, HTTP代理, Kerberos, WebApplicationProxy, YARN, 代理用户, 大数据, 安全, 透明代理]
 aliases: ["DProxy", "透明代理", "Hadoop代理", "WebAppProxy"]
 ---
 

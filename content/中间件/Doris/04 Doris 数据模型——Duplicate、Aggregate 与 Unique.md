@@ -1,7 +1,7 @@
 ---
 title: "04 Doris 数据模型——Duplicate、Aggregate 与 Unique"
 date: 2026-03-05
-tags: [Doris, 数据模型, Duplicate Key, Aggregate Key, Unique Key, Delete Bitmap, UPSERT, 主键模型]
+tags: [Aggregate Key, Delete Bitmap, Doris, Duplicate Key, Unique Key, UPSERT, 主键模型, 数据模型]
 aliases: []
 ---
 

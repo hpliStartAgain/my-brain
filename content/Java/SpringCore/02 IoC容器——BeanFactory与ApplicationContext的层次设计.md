@@ -1,7 +1,7 @@
 ---
 title: "IoC容器——BeanFactory与ApplicationContext的层次设计"
 date: 2026-03-04
-tags: [Java, Spring, IoC, BeanFactory, ApplicationContext, DefaultListableBeanFactory, refresh]
+tags: [ApplicationContext, BeanFactory, DefaultListableBeanFactory, IoC, Java, Refresh, Spring]
 aliases: []
 ---
 

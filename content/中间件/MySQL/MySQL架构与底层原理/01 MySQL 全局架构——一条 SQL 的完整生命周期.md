@@ -1,7 +1,7 @@
 ---
 title: "MySQL 全局架构——一条 SQL 的完整生命周期"
 date: 2026-03-02
-tags: [MySQL, 架构, InnoDB, 存储引擎, SQL执行流程]
+tags: [InnoDB, MySQL, SQL执行流程, 存储引擎, 架构]
 aliases: [MySQL全局架构, SQL生命周期]
 ---
 

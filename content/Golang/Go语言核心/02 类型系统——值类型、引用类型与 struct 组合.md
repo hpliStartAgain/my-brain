@@ -1,7 +1,7 @@
 ---
 title: "类型系统——值类型、引用类型与 struct 组合"
 date: 2026-03-04
-tags: [Golang, 类型系统, 值类型, 引用类型, struct, 内存布局, 方法集, 指针接收者, 嵌入, Embedding]
+tags: [Embedding, Golang, struct, 值类型, 内存布局, 嵌入, 引用类型, 指针接收者, 方法集, 类型系统]
 aliases: []
 ---
 

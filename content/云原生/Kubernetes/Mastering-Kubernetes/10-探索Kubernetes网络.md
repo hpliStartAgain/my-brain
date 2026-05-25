@@ -1,7 +1,7 @@
 ---
 title: "探索 Kubernetes 网络"
 date: 2026-05-13
-tags: [Kubernetes, 网络, CNI]
+tags: [CNI, Kubernetes, 网络]
 aliases: [Exploring Kubernetes Networking]
 ---
 

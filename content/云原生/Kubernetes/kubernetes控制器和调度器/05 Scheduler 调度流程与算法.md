@@ -1,7 +1,7 @@
 ---
 title: "05 Scheduler 调度流程与算法"
 date: 2026-03-04
-tags: [云原生, Kubernetes, Scheduler, 调度, Filter, Score, 亲和性, Taint, Toleration, 抢占, 拓扑分散]
+tags: [Filter, Kubernetes, Scheduler, Score, Taint, Toleration, 云原生, 亲和性, 抢占, 拓扑分散, 调度]
 aliases: []
 ---
 

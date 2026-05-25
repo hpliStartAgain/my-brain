@@ -1,7 +1,7 @@
 ---
 title: "04 DaemonSet Job CronJob 控制器解析"
 date: 2026-03-04
-tags: [云原生, Kubernetes, DaemonSet, Job, CronJob, 批处理, 节点守护, TTL, Controller]
+tags: [Controller, CronJob, DaemonSet, Job, Kubernetes, TTL, 云原生, 批处理, 节点守护]
 aliases: []
 ---
 

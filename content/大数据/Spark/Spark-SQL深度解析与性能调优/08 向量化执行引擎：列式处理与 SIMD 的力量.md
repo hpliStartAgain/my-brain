@@ -1,7 +1,7 @@
 ---
 title: "向量化执行引擎：列式处理与 SIMD 的力量"
 date: 2026-02-28
-tags: [Spark, SparkSQL, 向量化执行, Vectorized Execution, ColumnarBatch, Arrow, SIMD, Parquet向量化读取, 列式存储]
+tags: [Arrow, ColumnarBatch, Parquet向量化读取, SIMD, Spark, SparkSQL, Vectorized Execution, 列式存储, 向量化执行]
 aliases: []
 ---
 

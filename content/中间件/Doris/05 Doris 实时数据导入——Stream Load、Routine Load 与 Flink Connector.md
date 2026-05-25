@@ -1,7 +1,7 @@
 ---
 title: "05 Doris 实时数据导入——Stream Load、Routine Load 与 Flink Connector"
 date: 2026-03-05
-tags: [Doris, Stream Load, Routine Load, Flink Connector, CDC, 实时导入, Kafka, 数据同步]
+tags: [CDC, Doris, Flink Connector, Kafka, Routine Load, Stream Load, 实时导入, 数据同步]
 aliases: []
 ---
 

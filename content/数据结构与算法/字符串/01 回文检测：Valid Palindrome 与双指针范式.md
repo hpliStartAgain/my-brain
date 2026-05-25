@@ -1,7 +1,7 @@
 ---
 title: "回文检测：Valid Palindrome 与双指针范式"
 date: 2026-04-27
-tags: [数据结构, 算法, 字符串, 回文, 双指针, LeetCode, 面试]
+tags: [LeetCode, 双指针, 回文, 字符串, 数据结构, 算法, 面试]
 aliases: [回文字符串, Valid Palindrome, 字符串双指针]
 ---
 

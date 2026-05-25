@@ -1,7 +1,7 @@
 ---
 title: "string 与 rune——UTF-8 编码与不可变性"
 date: 2026-03-04
-tags: [Golang, string, rune, UTF-8, 编码, 字符串, 不可变性, 字节, Unicode, strings.Builder]
+tags: [Golang, rune, String, strings.Builder, Unicode, UTF-8, 不可变性, 字符串, 字节, 编码]
 aliases: []
 ---
 

@@ -1,7 +1,7 @@
 ---
 title: "04 注册中心——ZooKeeper、Nacos 与服务发现模型"
 date: 2026-03-04
-tags: [Dubbo, 注册中心, ZooKeeper, Nacos, 服务发现, 应用级服务发现, 接口级服务发现, 元数据中心]
+tags: [Dubbo, Nacos, ZooKeeper, 元数据中心, 应用级服务发现, 接口级服务发现, 服务发现, 注册中心]
 aliases: []
 ---
 

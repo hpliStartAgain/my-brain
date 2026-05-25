@@ -1,7 +1,7 @@
 ---
 title: "06 ZAB 协议：ZooKeeper 的一致性基石"
 date: 2026-03-03
-tags: [分布式系统, ZAB, ZooKeeper, 原子广播, 崩溃恢复, ZXID]
+tags: [ZAB, ZooKeeper, ZXID, 分布式系统, 原子广播, 崩溃恢复]
 aliases: []
 ---
 

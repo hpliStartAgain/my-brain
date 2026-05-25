@@ -1,7 +1,7 @@
 ---
 title: "01 任务提交全链路：从用户代码到 RDD 动作的触发细节"
 date: 2026-02-27
-tags: [Spark, 调度系统, 任务提交, 源码分析]
+tags: [Spark, 任务提交, 源码分析, 调度系统]
 aliases: [Job Submission Flow]
 ---
 

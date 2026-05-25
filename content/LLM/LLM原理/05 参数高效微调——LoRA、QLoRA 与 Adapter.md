@@ -1,7 +1,7 @@
 ---
 title: "参数高效微调——LoRA、QLoRA 与 Adapter"
 date: 2026-03-04
-tags: [LLM, LoRA, QLoRA, PEFT, Adapter, 微调, 低秩分解, 量化, P-Tuning]
+tags: [Adapter, LLM, LoRA, P-Tuning, PEFT, QLoRA, 低秩分解, 微调, 量化]
 aliases: []
 ---
 

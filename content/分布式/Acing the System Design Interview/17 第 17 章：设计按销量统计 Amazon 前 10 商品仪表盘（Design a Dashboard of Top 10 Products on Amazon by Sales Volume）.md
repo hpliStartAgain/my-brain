@@ -1,7 +1,7 @@
 ---
 title: "17 第 17 章：设计按销量统计 Amazon 前 10 商品仪表盘（Design a Dashboard of Top 10 Products on Amazon by Sales Volume）"
 date: 2026-05-16
-tags: [系统设计, 面试, 分布式架构, 译书]
+tags: [分布式架构, 系统设计, 译书, 面试]
 aliases: ["Design a Dashboard of Top 10 Products on Amazon by Sales Volume", "设计按销量统计 Amazon 前 10 商品仪表盘"]
 ---
 

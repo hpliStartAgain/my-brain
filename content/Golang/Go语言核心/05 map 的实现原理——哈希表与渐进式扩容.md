@@ -1,7 +1,7 @@
 ---
 title: "map 的实现原理——哈希表与渐进式扩容"
 date: 2026-03-04
-tags: [Golang, map, 哈希表, hmap, bmap, 桶, 哈希冲突, 渐进式扩容, 等量扩容, 翻倍扩容, 并发安全]
+tags: [bmap, Golang, hmap, map, 哈希冲突, 哈希表, 并发安全, 桶, 渐进式扩容, 等量扩容, 翻倍扩容]
 aliases: []
 ---
 

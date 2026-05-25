@@ -1,7 +1,7 @@
 ---
 title: "Java 安全基石：UserGroupInformation 与 Subject 深度解析"
 date: 2026-03-02
-tags: [大数据, 安全, Java, JAAS, UGI, Kerberos, Hadoop]
+tags: [Hadoop, JAAS, Java, Kerberos, UGI, 大数据, 安全]
 aliases: ["UGI", "UserGroupInformation", "JAAS"]
 ---
 

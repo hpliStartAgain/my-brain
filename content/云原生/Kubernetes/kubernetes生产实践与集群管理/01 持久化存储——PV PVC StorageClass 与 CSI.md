@@ -1,7 +1,7 @@
 ---
 title: "01 持久化存储——PV PVC StorageClass 与 CSI"
 date: 2026-03-04
-tags: [云原生, Kubernetes, PV, PVC, StorageClass, CSI, 持久化存储, Volume, 动态供给]
+tags: [CSI, Kubernetes, PV, PVC, StorageClass, Volume, 云原生, 动态供给, 持久化存储]
 aliases: []
 ---
 

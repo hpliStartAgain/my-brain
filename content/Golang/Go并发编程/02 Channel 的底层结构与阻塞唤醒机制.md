@@ -1,7 +1,7 @@
 ---
 title: "Channel 的底层结构与阻塞唤醒机制"
 date: 2026-03-04
-tags: [Golang, Channel, hchan, 阻塞, 唤醒, sudog, 环形缓冲区, CSP, select, 并发, 无锁]
+tags: [Channel, CSP, Golang, hchan, select, sudog, 唤醒, 并发, 无锁, 环形缓冲区, 阻塞]
 aliases: []
 ---
 

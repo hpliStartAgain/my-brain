@@ -1,7 +1,7 @@
 ---
 title: "Go 并发模式——Pipeline、Fan-out Fan-in 与 Worker Pool"
 date: 2026-03-04
-tags: [Golang, 并发模式, Pipeline, Fan-out, Fan-in, Worker Pool, Channel, Goroutine, 并发设计, 背压]
+tags: [Channel, Fan-in, Fan-out, Golang, Goroutine, Pipeline, Worker Pool, 并发模式, 并发设计, 背压]
 aliases: []
 ---
 

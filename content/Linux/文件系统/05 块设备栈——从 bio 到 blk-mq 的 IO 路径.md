@@ -1,7 +1,7 @@
 ---
 title: "块设备栈——从 bio 到 blk-mq 的 IO 路径"
 date: 2026-03-02
-tags: [Linux, 块设备, bio, blk-mq, IO路径, 请求队列, 通用块层, NVMe, SCSI, IO调度, DMA]
+tags: [bio, blk-mq, DMA, IO调度, IO路径, Linux, NVMe, SCSI, 块设备, 请求队列, 通用块层]
 aliases: ["Linux块设备栈", "bio结构体", "blk-mq多队列", "通用块层原理", "IO请求路径"]
 ---
 

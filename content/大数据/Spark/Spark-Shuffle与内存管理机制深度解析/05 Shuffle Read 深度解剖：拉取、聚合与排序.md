@@ -1,7 +1,7 @@
 ---
 title: "Shuffle Read 深度解剖：拉取、聚合与排序"
 date: 2026-02-27
-tags: [Spark, Shuffle, BlockStoreShuffleReader, MapOutputTracker, ExternalAppendOnlyMap, 网络拉取]
+tags: [BlockStoreShuffleReader, ExternalAppendOnlyMap, MapOutputTracker, Shuffle, Spark, 网络拉取]
 aliases: []
 ---
 

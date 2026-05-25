@@ -1,13 +1,7 @@
 ---
 title: "5 分布式查询引擎 Apache Spark"
 date: 2026-05-17
-tags:
-  - Spark
-  - 大数据
-  - Hadoop
-  - RDD
-  - DataFrame
-  - YARN
+tags: [DataFrame, Hadoop, RDD, Spark, YARN, 大数据]
 ---
 
 # 第 5 章 分布式查询引擎：Apache Spark

@@ -1,10 +1,7 @@
 ---
 title: 15 - 扩展Kubernetes
 date: 2026-05-13
-tags:
-  - Kubernetes
-  - Mastering-Kubernetes
-  - 扩展
+tags: [Kubernetes, Mastering-Kubernetes, 扩展]
 aliases:
   - 扩展Kubernetes
   - Chapter 15 - Extending Kubernetes

@@ -1,7 +1,7 @@
 ---
 title: "Mybatis-Spring整合原理——SqlSessionTemplate与事务管理"
 date: 2026-03-04
-tags: [Java, Mybatis, Spring, SqlSessionTemplate, SqlSessionHolder, MapperScannerConfigurer, 事务管理, 线程安全, TransactionSynchronizationManager]
+tags: [Java, MapperScannerConfigurer, Mybatis, Spring, SqlSessionHolder, SqlSessionTemplate, TransactionSynchronizationManager, 事务管理, 线程安全]
 aliases: []
 ---
 

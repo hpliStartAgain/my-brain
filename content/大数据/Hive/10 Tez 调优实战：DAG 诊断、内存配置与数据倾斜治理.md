@@ -1,7 +1,7 @@
 ---
 title: "Tez 调优实战：DAG 诊断、内存配置与数据倾斜治理"
 date: 2026-02-28
-tags: [Hive, Tez, 性能调优, DAG诊断, 内存配置, 数据倾斜, 向量化执行, TezUI, 慢Vertex, Container]
+tags: [Container, DAG诊断, Hive, Tez, TezUI, 内存配置, 向量化执行, 性能调优, 慢Vertex, 数据倾斜]
 aliases: []
 ---
 

@@ -1,7 +1,7 @@
 ---
 title: "Undo Log 与 MVCC——多版本并发控制的实现真相"
 date: 2026-03-02
-tags: [MySQL, InnoDB, Undo Log, MVCC, ReadView, 事务]
+tags: [InnoDB, MVCC, MySQL, ReadView, Undo Log, 事务]
 aliases: [MVCC, ReadView, 版本链]
 ---
 

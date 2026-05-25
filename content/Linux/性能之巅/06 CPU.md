@@ -1,7 +1,7 @@
 ---
 title: 06 CPU
 date: 2026-05-10
-tags: [Linux, 性能调优, CPU, 调度器, 硬件架构]
+tags: [CPU, Linux, 性能调优, 硬件架构, 调度器]
 aliases: [CPUs]
 ---
 

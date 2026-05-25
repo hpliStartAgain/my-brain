@@ -1,7 +1,7 @@
 ---
 title: "Milvus 运维——集群部署、索引调优与容量规划"
 date: 2026-03-05
-tags: [中间件, Milvus, 运维, Kubernetes, 容量规划, 索引调优, 监控, 告警]
+tags: [Kubernetes, Milvus, 中间件, 告警, 容量规划, 监控, 索引调优, 运维]
 aliases: []
 ---
 

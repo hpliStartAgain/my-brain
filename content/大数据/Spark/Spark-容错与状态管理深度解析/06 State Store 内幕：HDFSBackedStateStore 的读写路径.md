@@ -1,7 +1,7 @@
 ---
 title: "State Store 内幕：HDFSBackedStateStore 的读写路径"
 date: 2026-02-28
-tags: [Spark, Structured Streaming, State Store, HDFSBackedStateStore, 有状态计算, 状态快照, 增量文件, StateStoreProvider]
+tags: [HDFSBackedStateStore, Spark, State Store, StateStoreProvider, Structured Streaming, 增量文件, 有状态计算, 状态快照]
 aliases: []
 ---
 

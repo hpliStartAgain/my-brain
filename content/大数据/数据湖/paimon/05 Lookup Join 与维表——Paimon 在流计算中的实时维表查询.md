@@ -1,7 +1,7 @@
 ---
 title: "Lookup Join 与维表——Paimon 在流计算中的实时维表查询"
 date: 2026-03-02
-tags: [Paimon, Lookup Join, 维表, 实时维表, Cache, Partial Update, Flink, 流计算, HBase替代]
+tags: [Cache, Flink, HBase替代, Lookup Join, Paimon, Partial Update, 实时维表, 流计算, 维表]
 aliases: ["Paimon维表", "Lookup Join", "实时维表查询", "Paimon Lookup Cache", "流计算维表"]
 ---
 

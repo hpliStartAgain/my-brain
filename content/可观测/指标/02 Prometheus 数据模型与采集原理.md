@@ -1,7 +1,7 @@
 ---
 title: "02 Prometheus 数据模型与采集原理"
 date: 2026-03-03
-tags: [可观测性, 指标, Prometheus, 时间序列, Pull模型, Service Discovery, scrape]
+tags: [Prometheus, Pull模型, scrape, Service Discovery, 可观测性, 指标, 时间序列]
 aliases: []
 ---
 

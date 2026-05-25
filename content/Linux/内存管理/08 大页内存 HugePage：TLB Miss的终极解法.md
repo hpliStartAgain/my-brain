@@ -1,7 +1,7 @@
 ---
 title: "大页内存 HugePage：TLB Miss的终极解法"
 date: 2026-02-28
-tags: [Linux, 内存管理, HugePage, TLB, THP, 透明大页, 性能优化]
+tags: [HugePage, Linux, THP, TLB, 内存管理, 性能优化, 透明大页]
 aliases: [大页内存, HugePage, THP, 透明大页]
 ---
 

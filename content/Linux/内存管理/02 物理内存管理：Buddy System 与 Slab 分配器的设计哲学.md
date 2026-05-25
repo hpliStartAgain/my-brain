@@ -1,7 +1,7 @@
 ---
 title: "物理内存管理：Buddy System 与 Slab 分配器的设计哲学"
 date: 2026-02-28
-tags: [Linux, 内存管理, Buddy System, Slab, SLUB, kmalloc, 内存碎片]
+tags: [Buddy System, kmalloc, Linux, Slab, SLUB, 内存碎片, 内存管理]
 aliases: [伙伴系统, Slab分配器, SLUB分配器]
 ---
 

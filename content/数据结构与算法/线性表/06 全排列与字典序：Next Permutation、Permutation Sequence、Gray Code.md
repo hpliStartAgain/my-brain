@@ -1,7 +1,7 @@
 ---
 title: "全排列与字典序：Next Permutation、Permutation Sequence、Gray Code"
 date: 2026-04-27
-tags: [数据结构, 算法, 数组, 排列, 字典序, LeetCode, 面试]
+tags: [LeetCode, 字典序, 排列, 数据结构, 数组, 算法, 面试]
 aliases: [全排列, 字典序, 下一个排列, 康托展开]
 ---
 

@@ -1,7 +1,7 @@
 ---
 title: "Spark SQL 调优实战：从慢查询到根因的诊断方法论"
 date: 2026-02-28
-tags: [Spark, SparkSQL, 调优, 性能诊断, 慢查询, SparkUI, EXPLAIN, Join调优, OOM, 调优方法论]
+tags: [EXPLAIN, Join调优, OOM, Spark, Spark UI, SparkSQL, 性能诊断, 慢查询, 调优, 调优方法论]
 aliases: []
 ---
 

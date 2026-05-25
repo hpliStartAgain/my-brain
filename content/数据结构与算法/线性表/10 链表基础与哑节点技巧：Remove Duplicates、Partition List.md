@@ -1,7 +1,7 @@
 ---
 title: "链表基础与哑节点技巧：Remove Duplicates、Partition List"
 date: 2026-04-27
-tags: [数据结构, 算法, 链表, 哑节点, 双指针, LeetCode, 面试]
+tags: [LeetCode, 双指针, 哑节点, 数据结构, 算法, 链表, 面试]
 aliases: [链表入门, 哑节点, 链表去重, 链表分区]
 ---
 

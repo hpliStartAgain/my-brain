@@ -1,7 +1,7 @@
 ---
 title: "SqlSession与Executor——命令执行的核心引擎"
 date: 2026-03-04
-tags: [Java, Mybatis, SqlSession, Executor, SimpleExecutor, ReuseExecutor, BatchExecutor, CachingExecutor, 一级缓存, 装饰器模式]
+tags: [BatchExecutor, CachingExecutor, Executor, Java, Mybatis, ReuseExecutor, SimpleExecutor, SqlSession, 一级缓存, 装饰器模式]
 aliases: []
 ---
 

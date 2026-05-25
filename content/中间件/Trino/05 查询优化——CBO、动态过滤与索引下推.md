@@ -1,7 +1,7 @@
 ---
 title: "查询优化——CBO、动态过滤与索引下推"
 date: 2026-03-05
-tags: [中间件, Trino, CBO, 查询优化, 动态过滤, 谓词下推, Join重排序, 执行计划]
+tags: [CBO, Join重排序, Trino, 中间件, 动态过滤, 执行计划, 查询优化, 谓词下推]
 aliases: []
 ---
 

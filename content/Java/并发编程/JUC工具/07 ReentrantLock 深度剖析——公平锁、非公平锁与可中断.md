@@ -1,7 +1,7 @@
 ---
 title: "ReentrantLock 深度剖析——公平锁、非公平锁与可中断"
 date: 2026-03-05
-tags: [Java, 并发编程, ReentrantLock, 公平锁, 非公平锁, 可中断, tryLock, AQS, synchronized对比]
+tags: [AQS, Java, ReentrantLock, synchronized对比, tryLock, 公平锁, 可中断, 并发编程, 非公平锁]
 aliases: []
 ---
 

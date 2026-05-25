@@ -1,5 +1,14 @@
 # TODO - Foxeye 安全规则创建/更新工具探索
 
+## 当前任务：基于 Foxeye 现场事件修正关闭台账（2026-05-25）
+
+- [x] 获取 Doris 最新事件聚合并识别新规则采集缺口
+- [x] 通过 Foxeye 历史/当前事件只读查询验证新增规则触发事实
+- [x] 更新本地 `zabbix_close_ledger.html` / `progress_summary.html` 与页面版本映射
+- [x] 推送 Confluence：`zabbix_close_ledger.html` pageId=109248930（v4）
+- [x] 推送 Confluence：`progress_summary.html` pageId=107717201（v7）
+- [x] 回读 Confluence 版本并确认最终关闭范围
+
 ## 当前任务：更新告警迁移进度概要页
 
 - [x] 读取 `progress_summary.html` 与 `zabbix_close_ledger.html`

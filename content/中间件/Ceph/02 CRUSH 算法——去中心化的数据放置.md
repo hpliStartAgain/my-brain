@@ -1,7 +1,7 @@
 ---
 title: "02 CRUSH 算法——去中心化的数据放置"
 date: 2026-03-05
-tags: [Ceph, CRUSH, 数据放置, 一致性哈希, 故障域, CRUSH Map, Bucket, 分布式存储]
+tags: [Bucket, Ceph, CRUSH, CRUSH Map, 一致性哈希, 分布式存储, 故障域, 数据放置]
 aliases: []
 ---
 

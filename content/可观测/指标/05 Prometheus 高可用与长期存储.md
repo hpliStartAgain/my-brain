@@ -1,7 +1,7 @@
 ---
 title: "05 Prometheus 高可用与长期存储"
 date: 2026-03-03
-tags: [可观测性, 指标, Prometheus, Thanos, Mimir, VictoriaMetrics, Remote Write, 高可用]
+tags: [Mimir, Prometheus, Remote Write, Thanos, VictoriaMetrics, 可观测性, 指标, 高可用]
 aliases: []
 ---
 

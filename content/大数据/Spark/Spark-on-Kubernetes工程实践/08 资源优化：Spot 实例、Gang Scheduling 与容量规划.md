@@ -1,7 +1,7 @@
 ---
 title: "资源优化：Spot 实例、Gang Scheduling 与容量规划"
 date: 2026-02-28
-tags: [Spark, Kubernetes, Spot实例, Gang Scheduling, Volcano, Yunikorn, 容量规划, 资源优化, 抢占]
+tags: [Gang Scheduling, Kubernetes, Spark, Spot实例, Volcano, Yunikorn, 容量规划, 抢占, 资源优化]
 aliases: []
 ---
 

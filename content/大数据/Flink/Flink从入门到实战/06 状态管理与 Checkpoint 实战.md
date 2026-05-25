@@ -1,7 +1,7 @@
 ---
 title: "状态管理与 Checkpoint 实战"
 date: 2026-03-02
-tags: [Flink, State, Checkpoint, Savepoint, ValueState, MapState, TTL, 容错, 实战]
+tags: [Checkpoint, Flink, MapState, Savepoint, State, TTL, ValueState, 实战, 容错]
 aliases: ["Flink状态管理", "Flink Checkpoint实战", "Flink Savepoint", "Flink容错"]
 ---
 

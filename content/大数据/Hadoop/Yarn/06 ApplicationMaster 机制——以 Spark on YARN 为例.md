@@ -1,7 +1,7 @@
 ---
 title: "ApplicationMaster 机制——以 Spark on YARN 为例"
 date: 2026-02-27
-tags: [YARN, ApplicationMaster, Spark, SparkOnYARN, DynamicAllocation, Executor, 资源谈判]
+tags: [ApplicationMaster, Dynamic Allocation, Executor, Spark, SparkOnYARN, YARN, 资源谈判]
 aliases: [YARN AM机制, Spark on YARN, Spark ApplicationMaster, Dynamic Allocation]
 ---
 

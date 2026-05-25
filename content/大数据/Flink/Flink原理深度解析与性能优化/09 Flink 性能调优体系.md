@@ -1,7 +1,7 @@
 ---
 title: "Flink 性能调优体系"
 date: 2026-03-02
-tags: [Flink, 性能调优, 反压, 数据倾斜, 序列化, 算子链, GC调优, RocksDB调优, Checkpoint调优]
+tags: [Checkpoint调优, Flink, GC调优, RocksDB调优, 反压, 序列化, 性能调优, 数据倾斜, 算子链]
 aliases: ["Flink性能调优", "Flink调优体系", "Flink数据倾斜", "Flink GC优化"]
 ---
 

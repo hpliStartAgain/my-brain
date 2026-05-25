@@ -1,7 +1,7 @@
 ---
 title: "性能调优全攻略：worker 进程、连接数与内核参数"
 date: 2026-02-28
-tags: [Nginx, 性能调优, worker_processes, sendfile, tcp_nopush, tcp_nodelay, open_file_cache, ulimit, 内核参数, 连接数]
+tags: [Nginx, open_file_cache, sendfile, TCP_NODELAY, tcp_nopush, ulimit, worker_processes, 内核参数, 性能调优, 连接数]
 aliases: []
 ---
 

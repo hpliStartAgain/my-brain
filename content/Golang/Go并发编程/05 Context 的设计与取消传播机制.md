@@ -1,7 +1,7 @@
 ---
 title: "Context 的设计与取消传播机制"
 date: 2026-03-04
-tags: [Golang, Context, 取消传播, 超时, 截止时间, cancelCtx, timerCtx, valueCtx, 并发, 请求链路]
+tags: [cancelCtx, Context, Golang, timerCtx, valueCtx, 取消传播, 并发, 截止时间, 请求链路, 超时]
 aliases: []
 ---
 

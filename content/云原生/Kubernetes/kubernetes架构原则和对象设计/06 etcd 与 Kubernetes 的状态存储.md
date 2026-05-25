@@ -1,7 +1,7 @@
 ---
 title: "06 etcd 与 Kubernetes 的状态存储"
 date: 2026-03-04
-tags: [云原生, Kubernetes, etcd, Raft, Watch, MVCC, 共识算法, 分布式存储]
+tags: [etcd, Kubernetes, MVCC, Raft, Watch, 云原生, 共识算法, 分布式存储]
 aliases: []
 ---
 

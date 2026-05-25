@@ -1,7 +1,7 @@
 ---
 title: "插件机制——Interceptor的责任链模式与分页插件原理"
 date: 2026-03-04
-tags: [Java, Mybatis, 插件, Interceptor, InterceptorChain, 动态代理, PageHelper, 分页, 责任链模式, 四大核心对象]
+tags: [Interceptor, InterceptorChain, Java, Mybatis, PageHelper, 分页, 动态代理, 四大核心对象, 插件, 责任链模式]
 aliases: []
 ---
 

@@ -1,7 +1,7 @@
 ---
 title: "Kerberos 协议深度解析：TGT、ST 与票据体系"
 date: 2026-03-02
-tags: [大数据, 安全, Kerberos, KDC, TGT, 认证, keytab]
+tags: [KDC, Kerberos, keytab, TGT, 大数据, 安全, 认证]
 aliases: ["Kerberos", "KDC", "TGT", "Service Ticket"]
 ---
 

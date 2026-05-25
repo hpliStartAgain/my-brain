@@ -1,7 +1,7 @@
 ---
 title: "DDR 频率、时序与带宽——CAS、tRCD、tRP 到真实性能"
 date: 2026-04-30
-tags: [Linux, 性能优化, DDR, 时序, 带宽, CAS, tRCD, tRP, 内存硬件]
+tags: [CAS, DDR, Linux, tRCD, tRP, 内存硬件, 带宽, 性能优化, 时序]
 aliases: ["DDR频率与时序", "CAS与tRCD", "DDR带宽计算", "内存时序真实性能"]
 ---
 

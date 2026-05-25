@@ -1,7 +1,7 @@
 ---
 title: "组合型回溯：Combination Sum 系列与去重艺术"
 date: 2026-04-28
-tags: [算法, 回溯, 组合, Combination Sum, 去重, 剪枝, LeetCode, 面试]
+tags: [Combination Sum, LeetCode, 剪枝, 去重, 回溯, 算法, 组合, 面试]
 aliases: [Combination Sum, 组合回溯, 去重剪枝, LeetCode 39, LeetCode 40]
 ---
 

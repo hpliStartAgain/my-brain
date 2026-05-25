@@ -1,7 +1,7 @@
 ---
 title: "03 存储引擎——BoltDB、WAL 与 Compaction"
 date: 2026-03-04
-tags: [etcd, BoltDB, WAL, Compaction, Defragmentation, B+树, MVCC, 持久化, 碎片整理]
+tags: [B+Tree, BoltDB, Compaction, Defragmentation, etcd, MVCC, WAL, 持久化, 碎片整理]
 aliases: []
 ---
 

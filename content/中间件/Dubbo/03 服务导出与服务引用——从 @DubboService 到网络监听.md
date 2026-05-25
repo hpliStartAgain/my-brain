@@ -1,7 +1,7 @@
 ---
 title: "03 服务导出与服务引用——从 @DubboService 到网络监听"
 date: 2026-03-04
-tags: [Dubbo, 服务导出, 服务引用, ServiceConfig, ReferenceConfig, Netty, 延迟暴露, 服务预热]
+tags: [Dubbo, Netty, ReferenceConfig, ServiceConfig, 延迟暴露, 服务导出, 服务引用, 服务预热]
 aliases: []
 ---
 

@@ -1,7 +1,7 @@
 ---
 title: "synchronized 的锁升级——偏向锁、轻量级锁与重量级锁"
 date: 2026-03-05
-tags: [Java, 并发编程, synchronized, 锁升级, 偏向锁, 轻量级锁, 重量级锁, Mark Word, Monitor, 对象头]
+tags: [Java, Mark Word, Monitor, synchronized, 偏向锁, 对象头, 并发编程, 轻量级锁, 重量级锁, 锁升级]
 aliases: []
 ---
 

@@ -1,7 +1,7 @@
 ---
 title: "09 主从复制与 Sentinel 高可用"
 date: 2026-03-03
-tags: [中间件, Redis, 主从复制, Sentinel, 高可用, 全量同步, 增量同步, PSYNC, failover, 哨兵]
+tags: [failover, PSYNC, Redis, Sentinel, 中间件, 主从复制, 全量同步, 哨兵, 增量同步, 高可用]
 aliases: []
 ---
 

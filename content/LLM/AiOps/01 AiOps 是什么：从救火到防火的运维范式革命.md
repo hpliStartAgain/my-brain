@@ -1,7 +1,7 @@
 ---
 title: "01 AiOps 是什么：从救火到防火的运维范式革命"
 date: 2026-04-13
-tags: [AiOps, SRE, 智能运维, 运维范式, DevOps]
+tags: [AiOps, DevOps, SRE, 智能运维, 运维范式]
 aliases: [AiOps定义, 智能运维是什么]
 ---
 

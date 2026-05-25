@@ -1,7 +1,7 @@
 ---
 title: "02 ZAB 协议——Leader 选举、崩溃恢复与消息广播"
 date: 2026-03-04
-tags: [ZooKeeper, ZAB, Paxos, Raft, Leader选举, 崩溃恢复, 消息广播, 分布式一致性]
+tags: [Leader选举, Paxos, Raft, ZAB, ZooKeeper, 分布式一致性, 崩溃恢复, 消息广播]
 aliases: []
 ---
 

@@ -1,7 +1,7 @@
 ---
 title: "10 AiOps 闭环：从感知到自愈的完整链路设计"
 date: 2026-04-13
-tags: [AiOps, 闭环, 自愈, 预测性运维, 成熟度模型, SRE, 大数据]
+tags: [AiOps, SRE, 大数据, 成熟度模型, 自愈, 闭环, 预测性运维]
 aliases: [AiOps闭环, 自愈闭环, AiOps成熟度]
 ---
 

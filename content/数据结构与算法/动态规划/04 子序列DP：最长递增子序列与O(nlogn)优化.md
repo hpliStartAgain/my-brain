@@ -1,7 +1,7 @@
 ---
 title: "子序列 DP：最长递增子序列与 O(n log n) 优化"
 date: 2026-04-28
-tags: [算法, 动态规划, 子序列, LIS, 最长递增子序列, LeetCode, 面试]
+tags: [LeetCode, LIS, 动态规划, 子序列, 最长递增子序列, 算法, 面试]
 aliases: [LIS, 最长递增子序列, Longest Increasing Subsequence, patience sorting]
 ---
 

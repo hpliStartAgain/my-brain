@@ -1,12 +1,7 @@
 ---
 title: 15 BPF
 date: 2026-05-10
-tags:
-  - SRE
-  - SystemsPerformance
-  - BPF
-  - BCC
-  - bpftrace
+tags: [BCC, BPF, bpftrace, SRE, SystemsPerformance]
 aliases:
   - BPF
 ---

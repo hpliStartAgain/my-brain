@@ -1,7 +1,7 @@
 ---
 title: "微批执行模型：MicroBatch 与 Continuous Processing 的本质差异"
 date: 2026-02-28
-tags: [Spark, Structured Streaming, MicroBatch, Continuous Processing, 流处理, 执行模型, 触发器]
+tags: [Continuous Processing, MicroBatch, Spark, Structured Streaming, 执行模型, 流处理, 触发器]
 aliases: []
 ---
 

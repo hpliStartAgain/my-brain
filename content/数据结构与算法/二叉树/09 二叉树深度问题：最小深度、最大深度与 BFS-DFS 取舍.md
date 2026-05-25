@@ -1,7 +1,7 @@
 ---
 title: "二叉树深度问题：最小深度、最大深度与 BFS/DFS 取舍"
 date: 2026-04-27
-tags: [数据结构, 算法, 二叉树, 最小深度, 最大深度, BFS, DFS, LeetCode]
+tags: [BFS, DFS, LeetCode, 二叉树, 数据结构, 最大深度, 最小深度, 算法]
 aliases: [LC111, LC104, 二叉树深度问题：最小深度、最大深度与 BFS/DFS 取舍]
 ---
 

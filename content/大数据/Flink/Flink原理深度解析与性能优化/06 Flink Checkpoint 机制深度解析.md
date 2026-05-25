@@ -1,7 +1,7 @@
 ---
 title: "Flink Checkpoint 机制深度解析"
 date: 2026-03-02
-tags: [Flink, Checkpoint, Chandy-Lamport, Barrier, 精确一次, 容错, Savepoint, Unaligned Checkpoint]
+tags: [Barrier, Chandy-Lamport, Checkpoint, Flink, Savepoint, Unaligned Checkpoint, 容错, 精确一次]
 aliases: ["Flink Checkpoint原理", "Chandy-Lamport算法", "Flink容错机制", "Barrier对齐"]
 ---
 

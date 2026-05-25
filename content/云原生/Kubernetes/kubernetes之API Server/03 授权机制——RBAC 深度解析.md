@@ -1,7 +1,7 @@
 ---
 title: "03 授权机制——RBAC 深度解析"
 date: 2026-03-04
-tags: [云原生, Kubernetes, API Server, RBAC, 授权, Role, ClusterRole, RoleBinding, 最小权限]
+tags: [API Server, ClusterRole, Kubernetes, RBAC, Role, RoleBinding, 云原生, 授权, 最小权限]
 aliases: []
 ---
 

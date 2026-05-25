@@ -1,7 +1,7 @@
 ---
 title: "04 第 4 章：扩展数据库（Scaling Databases）"
 date: 2026-05-16
-tags: [系统设计, 数据库, 可扩展性, 缓存, ETL, 译书]
+tags: [ETL, 可扩展性, 数据库, 系统设计, 缓存, 译书]
 aliases: ["Scaling Databases", "扩展数据库"]
 ---
 

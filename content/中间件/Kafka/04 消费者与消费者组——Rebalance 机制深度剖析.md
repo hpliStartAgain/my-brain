@@ -1,7 +1,7 @@
 ---
 title: "消费者与消费者组——Rebalance 机制深度剖析"
 date: 2026-03-04
-tags: [中间件, Kafka, Consumer, ConsumerGroup, Rebalance, GroupCoordinator, 分区分配, 静态成员]
+tags: [Consumer, ConsumerGroup, GroupCoordinator, Kafka, Rebalance, 中间件, 分区分配, 静态成员]
 aliases: []
 ---
 

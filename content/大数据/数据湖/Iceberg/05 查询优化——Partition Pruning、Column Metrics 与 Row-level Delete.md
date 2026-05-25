@@ -1,7 +1,7 @@
 ---
 title: "查询优化——Partition Pruning、Column Metrics 与 Row-level Delete"
 date: 2026-03-02
-tags: [Iceberg, 查询优化, Partition Pruning, Data Skipping, Column Statistics, Row-level Delete, Position Delete, Equality Delete, Compaction]
+tags: [Column Statistics, Compaction, Data Skipping, Equality Delete, Iceberg, Partition Pruning, Position Delete, Row-level Delete, 查询优化]
 aliases: ["Iceberg查询优化", "分区剪枝", "Data Skipping", "行级删除", "Iceberg Compaction"]
 ---
 

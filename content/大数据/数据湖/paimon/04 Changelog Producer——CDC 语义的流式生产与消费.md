@@ -1,7 +1,7 @@
 ---
 title: "Changelog Producer——CDC 语义的流式生产与消费"
 date: 2026-03-02
-tags: [Paimon, Changelog, CDC, Full Compaction, Lookup Changelog, 流式消费, 变更日志, 流批一体]
+tags: [CDC, Changelog, Full Compaction, Lookup Changelog, Paimon, 变更日志, 流式消费, 流批一体]
 aliases: ["Paimon Changelog", "CDC语义", "Changelog Producer", "Full Compaction Producer", "Lookup Changelog"]
 ---
 

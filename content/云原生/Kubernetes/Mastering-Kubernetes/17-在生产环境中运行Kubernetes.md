@@ -1,8 +1,7 @@
 ---
 title: "17 - 在生产环境中运行Kubernetes"
 date: 2026-05-13
-tags:
-  - Kubernetes/Mastering-Kubernetes/生产环境
+tags: [Kubernetes/Mastering-Kubernetes/生产环境]
 ---
 
 # 在生产环境中运行Kubernetes

@@ -1,7 +1,7 @@
 ---
 title: "查询优化器：RBO 规则集与 CBO 代价模型"
 date: 2026-02-28
-tags: [Hive, 查询优化器, RBO, CBO, Calcite, 统计信息, ANALYZE, Join策略, 谓词下推, 代价模型]
+tags: [ANALYZE, Calcite, CBO, Hive, Join策略, RBO, 代价模型, 查询优化器, 统计信息, 谓词下推]
 aliases: []
 ---
 

@@ -1,7 +1,7 @@
 ---
 title: "MCP 协议深度解析——Agent 与工具的标准化连接"
 date: 2026-03-04
-tags: [LLM, MCP, Agent, 工具调用, 协议, Anthropic, 标准化, Function Calling, Resources, Prompts]
+tags: [Agent, Anthropic, Function Calling, LLM, MCP, Prompts, Resources, 协议, 工具调用, 标准化]
 aliases: []
 ---
 

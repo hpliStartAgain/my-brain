@@ -1,7 +1,7 @@
 ---
 title: "08 Gossip 协议：去中心化信息传播"
 date: 2026-03-03
-tags: [分布式系统, Gossip协议, 流行病传播, Cassandra, Redis-Cluster, 成员管理]
+tags: [Cassandra, Gossip协议, Redis-Cluster, 分布式系统, 成员管理, 流行病传播]
 aliases: []
 ---
 

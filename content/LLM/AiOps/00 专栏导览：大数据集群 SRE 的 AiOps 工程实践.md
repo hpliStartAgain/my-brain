@@ -1,7 +1,7 @@
 ---
 title: "00 专栏导览：大数据集群 SRE 的 AiOps 工程实践"
 date: 2026-04-13
-tags: [AiOps, SRE, 大数据, 智能运维, 专栏导览]
+tags: [AiOps, SRE, 专栏导览, 大数据, 智能运维]
 aliases: [AiOps专栏, 智能运维专栏]
 ---
 

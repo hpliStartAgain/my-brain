@@ -1,7 +1,7 @@
 ---
 title: "Container 生命周期——从资源申请到进程启动的完整调用链"
 date: 2026-02-27
-tags: [YARN, Container, NodeManager, 本地化, ContainerExecutor, 生命周期, 进程启动]
+tags: [Container, ContainerExecutor, NodeManager, YARN, 本地化, 生命周期, 进程启动]
 aliases: [YARN Container生命周期, Container启动流程, NM Container管理]
 ---
 

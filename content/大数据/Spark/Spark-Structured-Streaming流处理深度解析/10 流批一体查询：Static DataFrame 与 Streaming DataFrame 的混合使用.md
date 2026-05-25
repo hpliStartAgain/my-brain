@@ -1,7 +1,7 @@
 ---
 title: "流批一体查询：Static DataFrame 与 Streaming DataFrame 的混合使用"
 date: 2026-02-28
-tags: [Spark, Structured Streaming, 流批一体, 流批Join, Static DataFrame, Streaming DataFrame, 维表关联, 广播Join]
+tags: [Spark, Static DataFrame, Streaming DataFrame, Structured Streaming, 广播Join, 流批Join, 流批一体, 维表关联]
 aliases: []
 ---
 

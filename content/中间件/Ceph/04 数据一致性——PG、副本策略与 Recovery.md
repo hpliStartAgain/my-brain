@@ -1,7 +1,7 @@
 ---
 title: "04 数据一致性——PG、副本策略与 Recovery"
 date: 2026-03-05
-tags: [Ceph, PG, Placement Group, Recovery, Peering, 副本, 一致性, 自愈]
+tags: [Ceph, Peering, PG, Placement Group, Recovery, 一致性, 副本, 自愈]
 aliases: []
 ---
 

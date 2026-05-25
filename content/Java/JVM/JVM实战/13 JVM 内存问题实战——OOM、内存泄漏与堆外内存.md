@@ -1,7 +1,7 @@
 ---
 title: "JVM 内存问题实战——OOM、内存泄漏与堆外内存"
 date: 2026-03-05
-tags: [Java, JVM, OOM, 内存泄漏, 堆外内存, MAT, jmap, jstack, Arthas, Direct Memory, Metaspace, 生产调优]
+tags: [Arthas, Direct Memory, Java, jmap, jstack, JVM, MAT, Metaspace, OOM, 内存泄漏, 堆外内存, 生产调优]
 aliases: []
 ---
 

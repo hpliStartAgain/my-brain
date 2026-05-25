@@ -1,7 +1,7 @@
 ---
 title: "HDFS 副本放置策略——机架感知与数据可靠性的工程权衡"
 date: 2026-02-27
-tags: [HDFS, 副本策略, 机架感知, BlockPlacementPolicy, 数据可靠性]
+tags: [BlockPlacementPolicy, HDFS, 副本策略, 数据可靠性, 机架感知]
 aliases: [HDFS副本放置, 机架感知策略]
 ---
 

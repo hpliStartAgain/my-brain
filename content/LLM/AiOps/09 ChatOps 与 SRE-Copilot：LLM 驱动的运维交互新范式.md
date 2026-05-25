@@ -1,7 +1,7 @@
 ---
 title: "09 ChatOps 与 SRE-Copilot：LLM 驱动的运维交互新范式"
 date: 2026-04-13
-tags: [AiOps, ChatOps, SRE-Copilot, LLM, eino, Tool-Calling, 内网部署, 大数据]
+tags: [AiOps, ChatOps, Eino, LLM, SRE-Copilot, Tool-Calling, 内网部署, 大数据]
 aliases: [SRE-Copilot, ChatOps, LLM运维助手]
 ---
 

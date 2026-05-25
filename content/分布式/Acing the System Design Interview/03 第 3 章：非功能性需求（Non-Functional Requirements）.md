@@ -1,7 +1,7 @@
 ---
 title: "03 第 3 章：非功能性需求（Non-Functional Requirements）"
 date: 2026-05-16
-tags: [系统设计, 面试, 非功能需求, 译书]
+tags: [系统设计, 译书, 非功能需求, 面试]
 aliases: ["Non-Functional Requirements", "非功能性需求"]
 ---
 

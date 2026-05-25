@@ -1,7 +1,7 @@
 ---
 title: "07 分区器（Partitioner）：分布式数据布局的数学逻辑与数据倾斜攻坚"
 date: 2026-02-27
-tags: [Spark, RDD, Partitioner, 数据倾斜, Shuffle]
+tags: [Partitioner, RDD, Shuffle, Spark, 数据倾斜]
 aliases: [RDD Partitioner and Data Skew]
 ---
 

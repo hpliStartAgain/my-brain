@@ -1,7 +1,7 @@
 ---
 title: "进程的终结与善后——exit、wait 与僵尸进程"
 date: 2026-03-02
-tags: [Linux, 进程管理, exit, wait, 僵尸进程, 孤儿进程, do_exit, SIGCHLD, waitpid]
+tags: [do_exit, exit, Linux, SIGCHLD, wait, waitpid, 僵尸进程, 孤儿进程, 进程管理]
 aliases: ["Linux进程退出", "僵尸进程原理", "孤儿进程收养", "exit内核实现"]
 ---
 

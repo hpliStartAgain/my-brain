@@ -1,7 +1,7 @@
 ---
 title: "DataStream API 深度使用指南"
 date: 2026-03-02
-tags: [Flink, DataStream, API, Source, Sink, Transformation, 算子, 分区策略, 并行度]
+tags: [API, DataStream, Flink, Sink, Source, Transformation, 分区策略, 并行度, 算子]
 aliases: ["DataStream API", "Flink算子", "Flink Source Sink"]
 ---
 

@@ -1,7 +1,7 @@
 ---
 title: "并发编程的硬件基础——CPU 缓存、MESI 与内存屏障"
 date: 2026-03-05
-tags: [Java, 并发编程, CPU缓存, MESI, 内存屏障, 缓存一致性, Store Buffer, 伪共享]
+tags: [CPU缓存, Java, MESI, Store Buffer, 伪共享, 内存屏障, 并发编程, 缓存一致性]
 aliases: []
 ---
 

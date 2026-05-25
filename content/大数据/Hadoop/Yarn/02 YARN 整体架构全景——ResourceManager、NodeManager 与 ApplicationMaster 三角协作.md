@@ -1,7 +1,7 @@
 ---
 title: "YARN 整体架构全景——ResourceManager、NodeManager 与 ApplicationMaster 三角协作"
 date: 2026-02-27
-tags: [YARN, ResourceManager, NodeManager, ApplicationMaster, Container, 架构, 协议]
+tags: [ApplicationMaster, Container, NodeManager, ResourceManager, YARN, 协议, 架构]
 aliases: [YARN架构, YARN三大组件, RM NM AM]
 ---
 

@@ -1,7 +1,7 @@
 ---
 title: "Go 性能剖析——pprof、trace 与基准测试"
 date: 2026-03-04
-tags: [Golang, pprof, trace, 基准测试, 性能优化, CPU分析, 内存分析, 火焰图, benchmark, 性能调优]
+tags: [Benchmark, CPU分析, Golang, pprof, Trace, 内存分析, 基准测试, 性能优化, 性能调优, 火焰图]
 aliases: []
 ---
 

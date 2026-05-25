@@ -1,7 +1,7 @@
 ---
 title: "结果映射——ResultMap的嵌套映射与延迟加载"
 date: 2026-03-04
-tags: [Java, Mybatis, ResultMap, ResultSetHandler, 嵌套映射, 延迟加载, N+1问题, association, collection, 鉴别器]
+tags: [association, Collection, Java, Mybatis, N+1问题, ResultMap, ResultSetHandler, 嵌套映射, 延迟加载, 鉴别器]
 aliases: []
 ---
 

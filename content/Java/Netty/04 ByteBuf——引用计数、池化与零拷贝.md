@@ -1,7 +1,7 @@
 ---
 title: "ByteBuf——引用计数、池化与零拷贝"
 date: 2026-03-04
-tags: [Java, Netty, ByteBuf, 引用计数, 内存池, 零拷贝, PooledByteBufAllocator, CompositeByteBuf, 内存泄漏]
+tags: [ByteBuf, CompositeByteBuf, Java, Netty, PooledByteBufAllocator, 内存池, 内存泄漏, 引用计数, 零拷贝]
 aliases: []
 ---
 

@@ -1,7 +1,7 @@
 ---
 title: "高性能网络编程——io_uring 网络、SO_REUSEPORT 与多队列 NIC"
 date: 2026-03-02
-tags: [Linux, io_uring, SO_REUSEPORT, 多队列NIC, RSS, RPS, RFS, 高性能网络, 异步IO, 网络编程]
+tags: [io_uring, Linux, RFS, RPS, RSS, SO_REUSEPORT, 多队列NIC, 异步IO, 网络编程, 高性能网络]
 aliases: ["io_uring网络IO", "SO_REUSEPORT原理", "多队列网卡调优", "高性能网络编程"]
 ---
 

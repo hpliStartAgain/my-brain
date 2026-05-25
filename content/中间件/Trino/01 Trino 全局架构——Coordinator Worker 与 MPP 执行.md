@@ -1,7 +1,7 @@
 ---
 title: "Trino 全局架构——Coordinator Worker 与 MPP 执行"
 date: 2026-03-05
-tags: [中间件, Trino, MPP, Coordinator, Worker, 联邦查询, 大数据, OLAP, Presto]
+tags: [Coordinator, MPP, OLAP, Presto, Trino, Worker, 中间件, 大数据, 联邦查询]
 aliases: []
 ---
 

@@ -1,7 +1,7 @@
 ---
 title: "BFS 与 DFS 全景导览：搜索算法的本质与适用边界"
 date: 2026-04-28
-tags: [算法, BFS, DFS, 搜索, 状态空间, 面试, LeetCode]
+tags: [BFS, DFS, LeetCode, 搜索, 状态空间, 算法, 面试]
 aliases: [BFS DFS对比, 搜索算法导论, 广度优先搜索, 深度优先搜索]
 ---
 

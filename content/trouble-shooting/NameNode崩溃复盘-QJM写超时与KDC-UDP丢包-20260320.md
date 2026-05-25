@@ -1,7 +1,7 @@
 ---
 title: "NameNode 崩溃复盘：HDFS QJM 写超时与 KDC UDP 丢包根因分析（2026-03-20）"
 date: 2026-03-24
-tags: [HDFS, Kerberos, NameNode, QJM, 故障复盘, SRE]
+tags: [HDFS, Kerberos, NameNode, QJM, SRE, 故障复盘]
 aliases: ["NN1崩溃", "QJM写超时", "KDC UDP丢包"]
 ---
 

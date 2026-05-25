@@ -1,7 +1,7 @@
 ---
 title: "最大子数组问题：Kadane 算法与分治视角"
 date: 2026-04-28
-tags: [算法, 分治法, 动态规划, Kadane, 最大子数组, LeetCode, 面试]
+tags: [Kadane, LeetCode, 分治法, 动态规划, 最大子数组, 算法, 面试]
 aliases: [最大子数组, Kadane算法, 53, 152, 918]
 ---
 

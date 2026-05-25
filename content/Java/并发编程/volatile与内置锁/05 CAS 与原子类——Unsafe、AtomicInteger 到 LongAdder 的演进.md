@@ -1,7 +1,7 @@
 ---
 title: "CAS 与原子类——Unsafe、AtomicInteger 到 LongAdder 的演进"
 date: 2026-03-05
-tags: [Java, 并发编程, CAS, Unsafe, AtomicInteger, AtomicLong, LongAdder, ABA问题, 伪共享, Contended]
+tags: [ABA问题, AtomicInteger, AtomicLong, CAS, Contended, Java, LongAdder, Unsafe, 伪共享, 并发编程]
 aliases: []
 ---
 

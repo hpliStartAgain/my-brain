@@ -1,7 +1,7 @@
 ---
 title: "触发器 Trigger：ProcessingTime、Once、AvailableNow 与 Continuous"
 date: 2026-02-28
-tags: [Spark, Structured Streaming, Trigger, ProcessingTime, AvailableNow, Once, Continuous, 微批, 延迟]
+tags: [AvailableNow, Continuous, Once, ProcessingTime, Spark, Structured Streaming, Trigger, 延迟, 微批]
 aliases: []
 ---
 

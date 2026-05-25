@@ -1,7 +1,7 @@
 ---
 title: "Structured Streaming 容错模型：Offset 与 Checkpoint"
 date: 2026-02-28
-tags: [Spark, Structured Streaming, 容错, Checkpoint, Offset, Epoch, Exactly-once, StreamExecution]
+tags: [Checkpoint, Epoch, Exactly-once, Offset, Spark, StreamExecution, Structured Streaming, 容错]
 aliases: []
 ---
 

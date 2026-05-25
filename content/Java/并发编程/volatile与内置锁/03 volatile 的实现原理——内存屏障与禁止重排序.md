@@ -1,7 +1,7 @@
 ---
 title: "volatile 的实现原理——内存屏障与禁止重排序"
 date: 2026-03-05
-tags: [Java, 并发编程, volatile, 内存屏障, 重排序, JMM, StoreLoad, 可见性]
+tags: [Java, JMM, StoreLoad, volatile, 内存屏障, 可见性, 并发编程, 重排序]
 aliases: []
 ---
 

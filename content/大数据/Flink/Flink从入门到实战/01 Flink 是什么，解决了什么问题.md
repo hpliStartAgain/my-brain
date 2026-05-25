@@ -1,7 +1,7 @@
 ---
 title: "Flink 是什么，解决了什么问题"
 date: 2026-03-02
-tags: [Flink, 流处理, 大数据, 入门, 流批一体, Storm, Spark Streaming]
+tags: [Flink, Spark Streaming, Storm, 入门, 大数据, 流处理, 流批一体]
 aliases: ["Flink简介", "Flink是什么"]
 ---
 

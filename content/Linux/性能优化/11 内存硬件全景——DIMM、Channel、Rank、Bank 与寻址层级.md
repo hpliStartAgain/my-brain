@@ -1,7 +1,7 @@
 ---
 title: "内存硬件全景——DIMM、Channel、Rank、Bank 与寻址层级"
 date: 2026-04-29
-tags: [Linux, 性能优化, 内存硬件, DIMM, Channel, Rank, Bank, Row Buffer, DDR, NUMA]
+tags: [Bank, Channel, DDR, DIMM, Linux, NUMA, Rank, Row Buffer, 内存硬件, 性能优化]
 aliases: ["DIMM与Rank原理", "内存硬件全景", "DRAM组织结构", "Channel与Bank", "Linux内存硬件基础"]
 ---
 

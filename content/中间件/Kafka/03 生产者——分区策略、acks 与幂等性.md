@@ -1,7 +1,7 @@
 ---
 title: "生产者——分区策略、acks 与幂等性"
 date: 2026-03-04
-tags: [中间件, Kafka, Producer, 分区策略, acks, 幂等性, 事务消息, 精确一次]
+tags: [acks, Kafka, Producer, 中间件, 事务消息, 分区策略, 幂等性, 精确一次]
 aliases: []
 ---
 

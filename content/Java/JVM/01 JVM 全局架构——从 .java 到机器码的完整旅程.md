@@ -1,7 +1,7 @@
 ---
 title: "JVM 全局架构——从 .java 到机器码的完整旅程"
 date: 2026-03-05
-tags: [Java, JVM, HotSpot, 类加载, 字节码, JIT, GC, 运行时数据区, 执行引擎]
+tags: [GC, HotSpot, Java, JIT, JVM, 字节码, 执行引擎, 类加载, 运行时数据区]
 aliases: []
 ---
 

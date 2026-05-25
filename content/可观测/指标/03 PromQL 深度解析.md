@@ -1,7 +1,7 @@
 ---
 title: "03 PromQL 深度解析"
 date: 2026-03-03
-tags: [可观测性, 指标, Prometheus, PromQL, rate, histogram_quantile, 聚合]
+tags: [histogram_quantile, Prometheus, PromQL, rate, 可观测性, 指标, 聚合]
 aliases: []
 ---
 

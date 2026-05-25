@@ -1,6 +1,6 @@
 ---
 date: 2026-05-20
-tags: [HDFS, DataNode, 坏盘, fstab, nofail, rootfs, SOP, 风险分析, Ambari]
+tags: [Ambari, DataNode, fstab, HDFS, nofail, rootfs, SOP, 坏盘, 风险分析]
 category: 风险分析 & SOP
 severity: P1-潜在
 ---

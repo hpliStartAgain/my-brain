@@ -1,7 +1,7 @@
 ---
 title: "为什么需要 Lakehouse：数据仓库与数据湖的架构演进"
 date: 2026-02-28
-tags: [Delta Lake, Lakehouse, 数据仓库, 数据湖, 架构演进, ACID, Lambda架构]
+tags: [ACID, Delta Lake, Lakehouse, Lambda架构, 数据仓库, 数据湖, 架构演进]
 aliases: []
 ---
 

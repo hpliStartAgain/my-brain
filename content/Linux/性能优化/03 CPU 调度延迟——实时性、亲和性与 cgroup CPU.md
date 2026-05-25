@@ -1,7 +1,7 @@
 ---
 title: "CPU 调度延迟——实时性、亲和性与 cgroup CPU"
 date: 2026-03-02
-tags: [Linux, 性能优化, 调度延迟, CPU亲和性, cgroup, 实时调度, CFS, SCHED_FIFO, taskset, numactl, 延迟抖动]
+tags: [CFS, cgroups, CPU亲和性, Linux, numactl, SCHED_FIFO, taskset, 实时调度, 延迟抖动, 性能优化, 调度延迟]
 aliases: ["CPU调度延迟优化", "调度延迟分析", "CPU亲和性设置", "cgroup CPU调优", "实时进程调度"]
 ---
 

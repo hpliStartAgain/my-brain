@@ -1,7 +1,7 @@
 ---
 title: "故障排查手册：从 HS2 无响应到 Tez 作业失败的系统诊断"
 date: 2026-02-28
-tags: [Hive, 故障排查, HS2, Tez, OOM, Kerberos, 数据倾斜, 诊断方法论, 生产运维, 全链路诊断]
+tags: [Hive, HS2, Kerberos, OOM, Tez, 全链路诊断, 故障排查, 数据倾斜, 生产运维, 诊断方法论]
 aliases: []
 ---
 

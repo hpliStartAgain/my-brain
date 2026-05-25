@@ -1,7 +1,7 @@
 ---
 title: "Spill 机制：从内存到磁盘的安全阀"
 date: 2026-02-27
-tags: [Spark, Spill, 内存管理, ExternalSorter, 磁盘IO, 性能调优, MemoryConsumer]
+tags: [ExternalSorter, MemoryConsumer, Spark, Spill, 内存管理, 性能调优, 磁盘IO]
 aliases: []
 ---
 

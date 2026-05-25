@@ -1,7 +1,7 @@
 ---
 title: "Spring事务管理——声明式事务的传播行为与失效场景"
 date: 2026-03-04
-tags: [Java, Spring, 事务, Transactional, 传播行为, 隔离级别, TransactionSynchronizationManager]
+tags: [Java, Spring, Transactional, TransactionSynchronizationManager, 事务, 传播行为, 隔离级别]
 aliases: []
 ---
 

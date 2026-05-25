@@ -1,7 +1,7 @@
 ---
 title: "缓存机制：proxy_cache 的物理结构与失效策略"
 date: 2026-02-28
-tags: [Nginx, proxy_cache, 缓存, 两级存储, 内存索引, 失效策略, Cache-Control, Stale, 缓存穿透]
+tags: [Cache-Control, Nginx, proxy_cache, Stale, 两级存储, 内存索引, 失效策略, 缓存, 缓存穿透]
 aliases: []
 ---
 

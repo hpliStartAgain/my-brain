@@ -1,7 +1,7 @@
 ---
 title: "Spark 统一内存管理模型"
 date: 2026-02-27
-tags: [Spark, 内存管理, UnifiedMemoryManager, StaticMemoryManager, Execution Memory, Storage Memory]
+tags: [Execution Memory, Spark, StaticMemoryManager, Storage Memory, UnifiedMemoryManager, 内存管理]
 aliases: []
 ---
 

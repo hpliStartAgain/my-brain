@@ -1,7 +1,7 @@
 ---
 title: "零拷贝技术全景——sendfile、splice 与 DMA gather"
 date: 2026-03-02
-tags: [Linux, 零拷贝, sendfile, splice, mmap, DMA, Page Cache, SG-DMA, 网络IO优化, Kafka, Nginx]
+tags: [DMA, Kafka, Linux, mmap, Nginx, Page Cache, sendfile, SG-DMA, splice, 网络IO优化, 零拷贝]
 aliases: ["零拷贝原理", "sendfile系统调用", "splice零拷贝", "DMA gather", "Linux零拷贝实现"]
 ---
 

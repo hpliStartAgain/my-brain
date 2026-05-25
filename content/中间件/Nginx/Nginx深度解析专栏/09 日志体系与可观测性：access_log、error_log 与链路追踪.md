@@ -1,7 +1,7 @@
 ---
 title: "日志体系与可观测性：access_log、error_log 与链路追踪"
 date: 2026-02-28
-tags: [Nginx, access_log, error_log, log_format, 可观测性, 链路追踪, request_id, 缓冲写日志, 变量体系]
+tags: [access_log, error_log, log_format, Nginx, request_id, 变量体系, 可观测性, 缓冲写日志, 链路追踪]
 aliases: []
 ---
 

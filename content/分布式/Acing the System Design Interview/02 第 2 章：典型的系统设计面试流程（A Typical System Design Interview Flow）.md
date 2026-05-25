@@ -1,7 +1,7 @@
 ---
 title: "02 第 2 章：典型的系统设计面试流程（A Typical System Design Interview Flow）"
 date: 2026-05-16
-tags: [系统设计, 面试, 面试流程, 译书]
+tags: [系统设计, 译书, 面试, 面试流程]
 aliases: ["A Typical System Design Interview Flow", "典型的系统设计面试流程"]
 ---
 

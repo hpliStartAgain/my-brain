@@ -1,7 +1,7 @@
 ---
 title: "09 范式演进与回归：从 RDD 到 DataFrame & Dataset 的结构化跃迁"
 date: 2026-02-27
-tags: [Spark, RDD, DataFrame, Dataset, Catalyst, Tungsten, 架构演进]
+tags: [Catalyst, DataFrame, Dataset, RDD, Spark, Tungsten, 架构演进]
 aliases: [Evolution of Spark APIs]
 ---
 

@@ -1,7 +1,7 @@
 ---
 title: "04 SkyWalking 集成 Profiler"
 date: 2026-03-03
-tags: [可观测性, Profiler, SkyWalking, 线程栈采样, APM, Trace Profiling]
+tags: [APM, Profiler, SkyWalking, Trace Profiling, 可观测性, 线程栈采样]
 aliases: []
 ---
 

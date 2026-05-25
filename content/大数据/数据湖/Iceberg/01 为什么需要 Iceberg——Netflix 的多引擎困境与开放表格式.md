@@ -1,7 +1,7 @@
 ---
 title: "为什么需要 Iceberg——Netflix 的多引擎困境与开放表格式"
 date: 2026-03-02
-tags: [Iceberg, 数据湖, 开放表格式, Netflix, Hive元存储, 多引擎, 分区, HMS]
+tags: [Hive元存储, HMS, Iceberg, Netflix, 分区, 多引擎, 开放表格式, 数据湖]
 aliases: ["Iceberg诞生背景", "开放表格式", "Hive元存储瓶颈", "多引擎数据湖"]
 ---
 

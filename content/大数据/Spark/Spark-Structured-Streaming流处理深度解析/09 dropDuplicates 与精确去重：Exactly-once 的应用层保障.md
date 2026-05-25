@@ -1,7 +1,7 @@
 ---
 title: "dropDuplicates 与精确去重：Exactly-once 的应用层保障"
 date: 2026-02-28
-tags: [Spark, Structured Streaming, dropDuplicates, 去重, Exactly-once, Watermark, State Store, 幂等]
+tags: [dropDuplicates, Exactly-once, Spark, State Store, Structured Streaming, Watermark, 去重, 幂等]
 aliases: []
 ---
 

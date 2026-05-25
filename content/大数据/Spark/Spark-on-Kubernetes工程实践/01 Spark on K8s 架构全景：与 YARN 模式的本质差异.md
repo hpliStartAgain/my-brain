@@ -1,7 +1,7 @@
 ---
 title: "Spark on K8s 架构全景：与 YARN 模式的本质差异"
 date: 2026-02-28
-tags: [Spark, Kubernetes, K8s, YARN, 架构, Driver, Executor, Pod, 云原生]
+tags: [Driver, Executor, Kubernetes, Pod, Spark, YARN, 云原生, 架构]
 aliases: []
 ---
 

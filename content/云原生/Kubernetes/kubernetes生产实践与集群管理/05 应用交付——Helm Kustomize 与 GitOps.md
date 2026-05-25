@@ -1,7 +1,7 @@
 ---
 title: "05 应用交付——Helm Kustomize 与 GitOps"
 date: 2026-03-04
-tags: [云原生, Kubernetes, Helm, Kustomize, GitOps, ArgoCD, Flux, CI/CD, 应用交付]
+tags: [ArgoCD, CI/CD, Flux, GitOps, Helm, Kubernetes, Kustomize, 云原生, 应用交付]
 aliases: []
 ---
 

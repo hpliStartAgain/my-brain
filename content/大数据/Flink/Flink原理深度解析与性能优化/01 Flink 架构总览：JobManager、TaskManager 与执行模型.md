@@ -1,7 +1,7 @@
 ---
 title: "Flink 架构总览：JobManager、TaskManager 与执行模型"
 date: 2026-03-02
-tags: [Flink, 架构, JobManager, TaskManager, Dispatcher, JobMaster, TaskSlot, 执行模型, 原理]
+tags: [Dispatcher, Flink, JobManager, JobMaster, TaskManager, TaskSlot, 原理, 执行模型, 架构]
 aliases: ["Flink架构", "Flink JobManager", "Flink TaskManager"]
 ---
 

@@ -1,7 +1,7 @@
 ---
 title: "为什么 Shuffle 是分布式计算的命门"
 date: 2026-02-27
-tags: [Spark, Shuffle, 分布式计算, MapReduce, 性能优化]
+tags: [MapReduce, Shuffle, Spark, 分布式计算, 性能优化]
 aliases: []
 ---
 zo

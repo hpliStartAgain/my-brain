@@ -1,7 +1,7 @@
 ---
 title: "CGroups 内存子系统：容器内存隔离的底层实现"
 date: 2026-02-28
-tags: [Linux, 内存管理, cgroup, 容器, Docker, Kubernetes, 内存隔离]
+tags: [cgroups, Docker, Kubernetes, Linux, 内存管理, 内存隔离, 容器]
 aliases: [cgroup内存, 内存子系统, cgroup v2内存, 容器内存限制]
 ---
 

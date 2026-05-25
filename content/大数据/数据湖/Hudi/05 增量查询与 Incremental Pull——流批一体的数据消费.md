@@ -1,7 +1,7 @@
 ---
 title: "增量查询与 Incremental Pull——流批一体的数据消费"
 date: 2026-03-02
-tags: [Hudi, 增量查询, Incremental Query, Incremental Pull, CDC消费, 流批一体, Checkpoint, 增量ETL]
+tags: [CDC消费, Checkpoint, Hudi, Incremental Pull, Incremental Query, 增量ETL, 增量查询, 流批一体]
 aliases: ["Hudi增量查询", "Incremental Pull", "Hudi CDC消费", "增量ETL管道"]
 ---
 

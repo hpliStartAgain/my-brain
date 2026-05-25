@@ -1,7 +1,7 @@
 ---
 title: "推理优化——KV Cache、量化与投机解码"
 date: 2026-03-04
-tags: [LLM, 推理优化, KV Cache, 量化, GPTQ, AWQ, 投机解码, Continuous Batching, PagedAttention]
+tags: [AWQ, Continuous Batching, GPTQ, KV Cache, LLM, PagedAttention, 投机解码, 推理优化, 量化]
 aliases: []
 ---
 

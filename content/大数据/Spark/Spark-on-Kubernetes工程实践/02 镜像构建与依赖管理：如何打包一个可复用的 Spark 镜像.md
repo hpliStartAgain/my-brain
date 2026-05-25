@@ -1,7 +1,7 @@
 ---
 title: "镜像构建与依赖管理：如何打包一个可复用的 Spark 镜像"
 date: 2026-02-28
-tags: [Spark, Kubernetes, Docker, 镜像构建, 依赖管理, Python, JAR, 镜像分层, 云原生]
+tags: [Docker, JAR, Kubernetes, Python, Spark, 云原生, 依赖管理, 镜像分层, 镜像构建]
 aliases: []
 ---
 

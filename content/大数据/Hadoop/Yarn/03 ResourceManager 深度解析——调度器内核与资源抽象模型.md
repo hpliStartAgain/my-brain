@@ -1,7 +1,7 @@
 ---
 title: "ResourceManager 深度解析——调度器内核与资源抽象模型"
 date: 2026-02-27
-tags: [YARN, ResourceManager, 调度器, CapacityScheduler, FairScheduler, 资源抽象, 队列]
+tags: [CapacityScheduler, FairScheduler, ResourceManager, YARN, 调度器, 资源抽象, 队列]
 aliases: [YARN ResourceManager, YARN调度器内核, RM深度解析]
 ---
 

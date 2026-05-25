@@ -1,8 +1,7 @@
 ---
 title: "18 - Kubernetes的未来"
 date: 2026-05-13
-tags:
-  - Kubernetes/Mastering-Kubernetes/未来
+tags: [Kubernetes/Mastering-Kubernetes/未来]
 ---
 
 # Kubernetes的未来

@@ -1,7 +1,7 @@
 ---
 title: "Mybatis全局架构——从SQL到结果映射的完整链路"
 date: 2026-03-04
-tags: [Java, Mybatis, ORM, SqlSession, Executor, StatementHandler, Configuration, 架构]
+tags: [Configuration, Executor, Java, Mybatis, ORM, SqlSession, StatementHandler, 架构]
 aliases: []
 ---
 

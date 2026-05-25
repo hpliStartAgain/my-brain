@@ -1,7 +1,7 @@
 ---
 title: "内存回收：kswapd、LRU与直接回收的博弈"
 date: 2026-02-28
-tags: [Linux, 内存管理, kswapd, LRU, 内存回收, 水位线, 直接回收]
+tags: [kswapd, Linux, LRU, 内存回收, 内存管理, 水位线, 直接回收]
 aliases: [内存回收, kswapd, LRU链表]
 ---
 

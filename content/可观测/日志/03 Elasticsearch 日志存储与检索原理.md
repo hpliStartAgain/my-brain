@@ -1,7 +1,7 @@
 ---
 title: "03 Elasticsearch 日志存储与检索原理"
 date: 2026-03-03
-tags: [可观测性, 日志, Elasticsearch, 倒排索引, ELK, Kibana]
+tags: [Elasticsearch, ELK, Kibana, 倒排索引, 可观测性, 日志]
 aliases: []
 ---
 

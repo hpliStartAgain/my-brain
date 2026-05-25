@@ -1,7 +1,7 @@
 ---
 title: "存储栈性能调优——从 fio 到 iotop 的全套方法论"
 date: 2026-03-02
-tags: [Linux, 存储性能, fio, iostat, iotop, blktrace, 读写放大, IO调优, 性能基准, 延迟分析]
+tags: [blktrace, fio, iostat, iotop, IO调优, Linux, 存储性能, 延迟分析, 性能基准, 读写放大]
 aliases: ["Linux存储性能调优", "fio基准测试", "iostat分析", "blktrace使用", "IO性能诊断"]
 ---
 

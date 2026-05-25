@@ -1,7 +1,7 @@
 ---
 title: "Prompt 工程——从零样本到思维链"
 date: 2026-03-04
-tags: [LLM, Prompt工程, Chain-of-Thought, Few-Shot, Zero-Shot, System Prompt, 思维链, 思维树, Prompt注入]
+tags: [Chain-of-Thought, Few-Shot, LLM, Prompt工程, Prompt注入, System Prompt, Zero-Shot, 思维树, 思维链]
 aliases: []
 ---
 

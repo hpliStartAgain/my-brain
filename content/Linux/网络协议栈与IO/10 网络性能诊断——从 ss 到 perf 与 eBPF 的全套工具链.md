@@ -1,7 +1,7 @@
 ---
 title: "网络性能诊断——从 ss 到 perf/eBPF 的全套工具链"
 date: 2026-03-02
-tags: [Linux, 网络诊断, ss, tcpdump, perf, eBPF, BCC, bpftrace, 性能分析, 网络调优, 工具链]
+tags: [BCC, bpftrace, eBPF, Linux, perf, ss, tcpdump, 工具链, 性能分析, 网络诊断, 网络调优]
 aliases: ["Linux网络诊断工具", "ss命令详解", "tcpdump使用", "eBPF网络追踪", "BCC工具集", "网络性能分析"]
 ---
 

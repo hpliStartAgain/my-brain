@@ -1,7 +1,7 @@
 ---
 title: "07 ClickHouse 运维——集群部署、监控与版本升级"
 date: 2026-03-05
-tags: [ClickHouse, 运维, 集群部署, 监控, 版本升级, system表, Prometheus, Doris, StarRocks]
+tags: [ClickHouse, Doris, Prometheus, StarRocks, system表, 版本升级, 监控, 运维, 集群部署]
 aliases: []
 ---
 

@@ -1,7 +1,7 @@
 ---
 title: "WAL 与幂等写出：Exactly-once 的两道保险"
 date: 2026-02-28
-tags: [Spark, Structured Streaming, WAL, 幂等, Exactly-once, Kafka Sink, Delta Lake, ForeachBatch, 事务]
+tags: [Delta Lake, Exactly-once, ForeachBatch, Kafka Sink, Spark, Structured Streaming, WAL, 事务, 幂等]
 aliases: []
 ---
 

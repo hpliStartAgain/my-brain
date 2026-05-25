@@ -1,7 +1,7 @@
 ---
 title: "01 容器的本质——从进程隔离到 OCI 标准"
 date: 2026-03-04
-tags: [云原生, Docker, 容器, Linux, OCI, containerd, runc, chroot, LXC]
+tags: [chroot, containerd, Docker, Linux, LXC, OCI, runc, 云原生, 容器]
 aliases: []
 ---
 

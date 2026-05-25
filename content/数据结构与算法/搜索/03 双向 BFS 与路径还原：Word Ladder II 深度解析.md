@@ -1,7 +1,7 @@
 ---
 title: "双向 BFS 与路径还原：Word Ladder II 深度解析"
 date: 2026-04-28
-tags: [算法, BFS, 双向BFS, 路径还原, LeetCode, Word Ladder II, 面试]
+tags: [BFS, LeetCode, Word Ladder II, 双向BFS, 算法, 路径还原, 面试]
 aliases: [双向BFS, Word Ladder II, 前驱图, LeetCode 126]
 ---
 

@@ -1,7 +1,7 @@
 ---
 title: "08 作业画像与异常检测：Spark 和 Flink 的 AiOps 专属能力"
 date: 2026-04-13
-tags: [AiOps, Spark, Flink, 作业画像, 异常检测, 动态基线, YARN, 大数据]
+tags: [AiOps, Flink, Spark, YARN, 作业画像, 动态基线, 大数据, 异常检测]
 aliases: [Spark作业画像, Flink异常检测, 作业生命周期管理]
 ---
 

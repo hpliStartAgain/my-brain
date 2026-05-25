@@ -1,7 +1,7 @@
 ---
 title: "哈希表与连续序列：Two Sum 与 Longest Consecutive Sequence"
 date: 2026-04-27
-tags: [数据结构, 算法, 数组, 哈希表, LeetCode, 面试]
+tags: [LeetCode, 哈希表, 数据结构, 数组, 算法, 面试]
 aliases: [Two Sum, 最长连续序列, 哈希表辅助]
 ---
 

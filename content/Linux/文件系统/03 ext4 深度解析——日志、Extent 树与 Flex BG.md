@@ -1,7 +1,7 @@
 ---
 title: "ext4 深度解析——日志、Extent 树与 Flex BG"
 date: 2026-03-02
-tags: [Linux, 文件系统, ext4, Extent树, 日志, journal, Flex BG, 块组, 崩溃一致性, JBD2]
+tags: [ext4, Extent树, Flex BG, JBD2, journal, Linux, 块组, 崩溃一致性, 文件系统, 日志]
 aliases: ["ext4文件系统原理", "ext4 Extent树", "ext4日志机制", "JBD2内核", "ext4块组布局"]
 ---
 

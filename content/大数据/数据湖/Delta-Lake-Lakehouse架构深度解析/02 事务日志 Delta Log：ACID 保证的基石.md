@@ -1,7 +1,7 @@
 ---
 title: "事务日志 Delta Log：ACID 保证的基石"
 date: 2026-02-28
-tags: [Delta Lake, Delta Log, 事务日志, ACID, Checkpoint, Action, 元数据, 乐观并发]
+tags: [ACID, Action, Checkpoint, Delta Lake, Delta Log, 乐观并发, 事务日志, 元数据]
 aliases: []
 ---
 

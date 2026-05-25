@@ -1,7 +1,7 @@
 ---
 title: "02 CAP 定理深度解析"
 date: 2026-03-03
-tags: [分布式系统, CAP定理, 一致性, 可用性, 分区容忍性, PACELC]
+tags: [CAP定理, PACELC, 一致性, 分区容忍性, 分布式系统, 可用性]
 aliases: []
 ---
 

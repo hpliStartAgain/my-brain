@@ -1,7 +1,7 @@
 ---
 title: "flatMapGroupsWithState：任意有状态逻辑的终极武器"
 date: 2026-02-28
-tags: [Spark, Structured Streaming, flatMapGroupsWithState, mapGroupsWithState, GroupState, 有状态算子, 状态机, 超时机制, 欺诈检测]
+tags: [flatMapGroupsWithState, GroupState, mapGroupsWithState, Spark, Structured Streaming, 有状态算子, 欺诈检测, 状态机, 超时机制]
 aliases: []
 ---
 

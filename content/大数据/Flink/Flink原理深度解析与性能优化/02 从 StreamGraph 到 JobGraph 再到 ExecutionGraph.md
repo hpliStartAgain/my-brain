@@ -1,7 +1,7 @@
 ---
 title: "从 StreamGraph 到 JobGraph 再到 ExecutionGraph：Flink 作业编译流水线全解析"
 date: 2026-03-02
-tags: [Flink, 原理, StreamGraph, JobGraph, ExecutionGraph, 算子链, 编译流水线, 并行化]
+tags: [ExecutionGraph, Flink, JobGraph, StreamGraph, 原理, 并行化, 算子链, 编译流水线]
 aliases: ["Flink编译流水线", "StreamGraph", "JobGraph", "ExecutionGraph", "算子链原理"]
 ---
 

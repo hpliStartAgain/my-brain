@@ -1,7 +1,7 @@
 ---
 title: "Flink 网络传输与反压机制深度解析"
 date: 2026-03-02
-tags: [Flink, 网络传输, 反压, Backpressure, Credit-based, NetworkBuffer, ResultPartition, InputGate, 调优]
+tags: [Backpressure, Credit-based, Flink, InputGate, NetworkBuffer, ResultPartition, 反压, 网络传输, 调优]
 aliases: ["Flink反压", "Flink网络层", "Credit-based流控", "Flink背压机制"]
 ---
 

@@ -1,7 +1,7 @@
 ---
 title: "01 etcd 全局架构——Raft 共识与 MVCC 存储"
 date: 2026-03-04
-tags: [etcd, Raft, MVCC, BoltDB, WAL, Kubernetes, gRPC, 分布式存储]
+tags: [BoltDB, etcd, gRPC, Kubernetes, MVCC, Raft, WAL, 分布式存储]
 aliases: []
 ---
 

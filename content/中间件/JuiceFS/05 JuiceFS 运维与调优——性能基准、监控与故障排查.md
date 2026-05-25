@@ -1,7 +1,7 @@
 ---
 title: "05 JuiceFS 运维与调优——性能基准、监控与故障排查"
 date: 2026-03-05
-tags: [JuiceFS, 运维, 性能基准, 监控, Prometheus, 故障排查, 调优, Block Cache]
+tags: [Block Cache, JuiceFS, Prometheus, 性能基准, 故障排查, 监控, 调优, 运维]
 aliases: []
 ---
 

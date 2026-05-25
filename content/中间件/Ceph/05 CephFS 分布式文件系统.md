@@ -1,7 +1,7 @@
 ---
 title: "05 CephFS 分布式文件系统"
 date: 2026-03-05
-tags: [Ceph, CephFS, MDS, 分布式文件系统, POSIX, 元数据, 动态子树分区, JuiceFS]
+tags: [Ceph, CephFS, JuiceFS, MDS, POSIX, 元数据, 分布式文件系统, 动态子树分区]
 aliases: []
 ---
 

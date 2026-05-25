@@ -1,7 +1,7 @@
 ---
 title: "时间语义与 Watermark 实战"
 date: 2026-03-02
-tags: [Flink, 时间语义, Watermark, EventTime, ProcessingTime, 乱序数据, 迟到数据, 实战]
+tags: [EventTime, Flink, ProcessingTime, Watermark, 乱序数据, 实战, 时间语义, 迟到数据]
 aliases: ["Flink时间语义", "Flink Watermark", "EventTime实战", "Flink乱序处理"]
 ---
 

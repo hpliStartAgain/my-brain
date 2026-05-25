@@ -1,7 +1,7 @@
 ---
 title: "06 SkyWalking 采样策略与性能影响"
 date: 2026-03-03
-tags: [可观测性, SkyWalking, 采样, 头部采样, 尾部采样, 性能优化]
+tags: [SkyWalking, 可观测性, 头部采样, 尾部采样, 性能优化, 采样]
 aliases: []
 ---
 

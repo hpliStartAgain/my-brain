@@ -1,7 +1,7 @@
 ---
 title: "05 Service 与 kube-proxy 原理"
 date: 2026-03-04
-tags: [云原生, Kubernetes, Service, kube-proxy, iptables, IPVS, ClusterIP, NodePort, LoadBalancer, EndpointSlice]
+tags: [ClusterIP, EndpointSlice, iptables, IPVS, kube-proxy, Kubernetes, LoadBalancer, NodePort, Service, 云原生]
 aliases: []
 ---
 

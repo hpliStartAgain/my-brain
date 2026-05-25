@@ -1,7 +1,7 @@
 ---
 title: "矩阵深搜：Word Search、路径问题与 Trie 优化"
 date: 2026-04-28
-tags: [算法, DFS, 矩阵搜索, Word Search, Trie, 路径问题, LeetCode, 面试]
+tags: [DFS, LeetCode, Trie, Word Search, 矩阵搜索, 算法, 路径问题, 面试]
 aliases: [Word Search, Word Search II, Trie剪枝, 矩阵路径DFS, LeetCode 79, LeetCode 212]
 ---
 

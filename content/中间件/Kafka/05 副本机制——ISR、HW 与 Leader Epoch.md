@@ -1,7 +1,7 @@
 ---
 title: "副本机制——ISR、HW 与 Leader Epoch"
 date: 2026-03-04
-tags: [中间件, Kafka, 副本, ISR, HighWatermark, LeaderEpoch, 数据一致性, 高可用]
+tags: [HighWatermark, ISR, Kafka, LeaderEpoch, 中间件, 副本, 数据一致性, 高可用]
 aliases: []
 ---
 

@@ -1,7 +1,7 @@
 ---
 title: "07 执行器（Executor）底层机制：任务运行环境、线程池管理与资源隔离"
 date: 2026-02-27
-tags: [Spark, Executor, 线程池, 内存模型, 资源隔离, BlockManager]
+tags: [BlockManager, Executor, Spark, 内存模型, 线程池, 资源隔离]
 aliases: [Executor Internals]
 ---
 

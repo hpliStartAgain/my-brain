@@ -1,7 +1,7 @@
 ---
 title: "AOP实现原理——JDK动态代理与CGLIB"
 date: 2026-03-04
-tags: [Java, Spring, AOP, JDK动态代理, CGLIB, Proxy, Advisor, Pointcut, Advice]
+tags: [Advice, Advisor, AOP, CGLIB, Java, JDK动态代理, Pointcut, Proxy, Spring]
 aliases: []
 ---
 

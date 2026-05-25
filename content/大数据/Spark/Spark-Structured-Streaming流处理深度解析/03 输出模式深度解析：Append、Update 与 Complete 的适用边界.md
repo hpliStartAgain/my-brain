@@ -1,7 +1,7 @@
 ---
 title: "输出模式深度解析：Append、Update 与 Complete 的适用边界"
 date: 2026-02-28
-tags: [Spark, Structured Streaming, 输出模式, Append, Update, Complete, 聚合, Watermark]
+tags: [Append, Complete, Spark, Structured Streaming, UPDATE, Watermark, 聚合, 输出模式]
 aliases: []
 ---
 

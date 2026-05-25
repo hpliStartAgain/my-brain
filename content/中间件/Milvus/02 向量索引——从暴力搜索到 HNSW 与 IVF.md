@@ -1,7 +1,7 @@
 ---
 title: "向量索引——从暴力搜索到 HNSW 与 IVF"
 date: 2026-03-05
-tags: [中间件, Milvus, 向量索引, ANN, HNSW, IVF, DiskANN, 近似最近邻, Recall]
+tags: [ANN, DiskANN, HNSW, IVF, Milvus, Recall, 中间件, 向量索引, 近似最近邻]
 aliases: []
 ---
 

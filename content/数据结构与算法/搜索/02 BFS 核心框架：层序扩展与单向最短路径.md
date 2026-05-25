@@ -1,7 +1,7 @@
 ---
 title: "BFS 核心框架：层序扩展与单向最短路径——Word Ladder 深度解析"
 date: 2026-04-28
-tags: [算法, BFS, 广度优先搜索, 最短路径, LeetCode, Word Ladder, 面试]
+tags: [BFS, LeetCode, Word Ladder, 广度优先搜索, 最短路径, 算法, 面试]
 aliases: [Word Ladder BFS, BFS最短路径, 单词接龙, LeetCode 127]
 ---
 

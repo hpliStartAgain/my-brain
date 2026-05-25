@@ -1,7 +1,7 @@
 ---
 title: "二叉搜索树判定与修复：Validate BST 与 Recover BST"
 date: 2026-04-27
-tags: [数据结构, 算法, 二叉树, 二叉搜索树, 中序遍历, LeetCode]
+tags: [LeetCode, 中序遍历, 二叉搜索树, 二叉树, 数据结构, 算法]
 aliases: [Validate BST, Recover BST, LC98, LC99]
 ---
 

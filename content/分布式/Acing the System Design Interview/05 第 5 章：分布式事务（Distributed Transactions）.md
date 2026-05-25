@@ -1,7 +1,7 @@
 ---
 title: "05 第 5 章：分布式事务（Distributed Transactions）"
 date: 2026-05-16
-tags: [系统设计, 分布式事务, 事件驱动架构, Saga, 译书]
+tags: [Saga, 事件驱动架构, 分布式事务, 系统设计, 译书]
 aliases: ["Distributed Transactions", "分布式事务"]
 ---
 

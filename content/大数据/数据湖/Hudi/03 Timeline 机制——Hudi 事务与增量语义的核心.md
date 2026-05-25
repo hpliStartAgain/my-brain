@@ -1,7 +1,7 @@
 ---
 title: "Timeline 机制——Hudi 事务与增量语义的核心"
 date: 2026-03-02
-tags: [Hudi, Timeline, 事务, ACID, 增量语义, Commit, Compaction, Rollback, 状态机]
+tags: [ACID, Commit, Compaction, Hudi, Rollback, Timeline, 事务, 增量语义, 状态机]
 aliases: ["Hudi Timeline", "Hudi事务机制", "Hudi增量语义", "Timeline状态机"]
 ---
 

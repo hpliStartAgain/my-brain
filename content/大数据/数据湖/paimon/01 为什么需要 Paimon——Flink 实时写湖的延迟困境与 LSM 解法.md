@@ -1,7 +1,7 @@
 ---
 title: "为什么需要 Paimon——Flink 实时写湖的延迟困境与 LSM 解法"
 date: 2026-03-02
-tags: [Paimon, LSM-Tree, Flink, 实时数仓, 流存储, 数据湖, 延迟, Checkpoint, 写湖困境]
+tags: [Checkpoint, Flink, LSM-Tree, Paimon, 写湖困境, 实时数仓, 延迟, 数据湖, 流存储]
 aliases: ["Paimon诞生背景", "流式写湖延迟", "LSM-Tree数据湖", "Flink实时数仓"]
 ---
 

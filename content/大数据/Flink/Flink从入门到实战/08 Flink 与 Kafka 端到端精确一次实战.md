@@ -1,7 +1,7 @@
 ---
 title: "Flink 与 Kafka 端到端精确一次实战"
 date: 2026-03-02
-tags: [Flink, Kafka, 精确一次, Exactly-Once, 两阶段提交, KafkaSink, 事务, 容错]
+tags: [Exactly-once, Flink, Kafka, Kafka Sink, 两阶段提交, 事务, 容错, 精确一次]
 aliases: ["Flink Kafka精确一次", "Exactly-Once实战", "KafkaSink事务", "端到端一致性"]
 ---
 

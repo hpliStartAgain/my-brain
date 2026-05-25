@@ -1,7 +1,7 @@
 ---
 title: "RAG 架构——核心原理与工程实践"
 date: 2026-03-04
-tags: [LLM, RAG, 向量数据库, Embedding, 检索增强生成, 知识库, 语义搜索, Chunk, Rerank]
+tags: [Chunk, Embedding, LLM, RAG, Rerank, 向量数据库, 检索增强生成, 知识库, 语义搜索]
 aliases: []
 ---
 

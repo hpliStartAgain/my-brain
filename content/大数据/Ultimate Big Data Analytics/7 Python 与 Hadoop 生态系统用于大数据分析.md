@@ -1,14 +1,7 @@
 ---
 title: "7 Python 与 Hadoop 生态系统用于大数据分析与 BI"
 date: 2026-05-17
-tags:
-  - Python
-  - PySpark
-  - Hive
-  - Jupyter
-  - BI
-  - 科学计算
-  - 大数据分析
+tags: [BI, Hive, Jupyter, PySpark, Python, 大数据分析, 科学计算]
 ---
 
 # 第 7 章 Python 与 Hadoop 生态系统用于大数据分析——BI

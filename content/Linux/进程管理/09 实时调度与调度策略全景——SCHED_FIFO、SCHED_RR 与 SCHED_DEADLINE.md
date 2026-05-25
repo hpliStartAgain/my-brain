@@ -1,7 +1,7 @@
 ---
 title: "实时调度与调度策略全景——SCHED_FIFO、SCHED_RR 与 SCHED_DEADLINE"
 date: 2026-03-02
-tags: [Linux, 进程管理, 实时调度, SCHED_FIFO, SCHED_RR, SCHED_DEADLINE, 调度类, RT调度, EDF, 优先级反转]
+tags: [EDF, Linux, RT调度, SCHED_DEADLINE, SCHED_FIFO, SCHED_RR, 优先级反转, 实时调度, 调度类, 进程管理]
 aliases: ["Linux实时调度", "SCHED_FIFO原理", "SCHED_DEADLINE", "调度策略全景", "RT调度类"]
 ---
 

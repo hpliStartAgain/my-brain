@@ -1,7 +1,7 @@
 ---
 title: "04 Prometheus TSDB 深度解析"
 date: 2026-03-03
-tags: [可观测性, 指标, Prometheus, TSDB, WAL, Compaction, Gorilla, 时间序列数据库]
+tags: [Compaction, Gorilla, Prometheus, TSDB, WAL, 可观测性, 指标, 时间序列数据库]
 aliases: []
 ---
 

@@ -1,7 +1,7 @@
 ---
 title: "HDFS 的诞生——大规模分布式存储的工程哲学"
 date: 2026-02-27
-tags: [HDFS, Hadoop, 分布式存储, GFS, 大数据]
+tags: [GFS, Hadoop, HDFS, 分布式存储, 大数据]
 aliases: [HDFS诞生背景, HDFS设计哲学]
 ---
 

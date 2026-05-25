@@ -1,7 +1,7 @@
 ---
 title: "04 JuiceFS 在大数据场景的应用"
 date: 2026-03-05
-tags: [JuiceFS, Hadoop, Spark, Flink, AI训练, 数据湖, HDFS替代, 大数据存储]
+tags: [AI训练, Flink, Hadoop, HDFS替代, JuiceFS, Spark, 大数据存储, 数据湖]
 aliases: []
 ---
 

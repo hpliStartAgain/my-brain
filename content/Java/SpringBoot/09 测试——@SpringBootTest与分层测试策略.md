@@ -1,7 +1,7 @@
 ---
 title: "测试——@SpringBootTest与分层测试策略"
 date: 2026-03-04
-tags: [Java, SpringBoot, 测试, SpringBootTest, WebMvcTest, DataJpaTest, Testcontainers, MockMvc, 分层测试]
+tags: [DataJpaTest, Java, MockMvc, SpringBoot, SpringBootTest, Testcontainers, WebMvcTest, 分层测试, 测试]
 aliases: []
 ---
 

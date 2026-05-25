@@ -1,10 +1,7 @@
 ---
 title: AI名词扫盲——从Prompt到Agent的完整图谱
 date: 2026-03-17
-tags:
-  - LLM
-  - AI工具
-  - 名词扫盲
+tags: [AI工具, LLM, 名词扫盲]
 aliases: []
 ---
 

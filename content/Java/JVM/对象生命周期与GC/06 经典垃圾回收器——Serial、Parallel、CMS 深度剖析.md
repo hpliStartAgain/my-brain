@@ -1,7 +1,7 @@
 ---
 title: "经典垃圾回收器——Serial、Parallel、CMS 深度剖析"
 date: 2026-03-05
-tags: [Java, JVM, GC, Serial, ParNew, Parallel Scavenge, CMS, 并发标记, 三色标记, 垃圾回收器, Stop-The-World, 吞吐量, 延迟]
+tags: [CMS, GC, Java, JVM, Parallel Scavenge, ParNew, Serial, Stop-The-World, 三色标记, 吞吐量, 垃圾回收器, 并发标记, 延迟]
 aliases: []
 ---
 

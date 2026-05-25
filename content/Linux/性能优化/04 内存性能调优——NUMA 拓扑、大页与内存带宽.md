@@ -1,7 +1,7 @@
 ---
 title: "内存性能调优——NUMA 拓扑、大页与内存带宽"
 date: 2026-03-02
-tags: [Linux, 性能优化, NUMA, HugePage, 大页, 内存带宽, THP, numactl, numastat, 内存调优]
+tags: [HugePage, Linux, NUMA, numactl, numastat, THP, 内存带宽, 内存调优, 大页, 性能优化]
 aliases: ["NUMA调优", "HugePage配置", "透明大页THP", "内存带宽优化", "numactl使用"]
 ---
 

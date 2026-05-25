@@ -1,7 +1,7 @@
 ---
 title: "03 Cgroups 资源限制与控制"
 date: 2026-03-04
-tags: [云原生, Docker, 容器, Linux, Cgroups, CPU, Memory, OOM Killer, Kubernetes]
+tags: [cgroups, CPU, Docker, Kubernetes, Linux, Memory, OOM Killer, 云原生, 容器]
 aliases: []
 ---
 

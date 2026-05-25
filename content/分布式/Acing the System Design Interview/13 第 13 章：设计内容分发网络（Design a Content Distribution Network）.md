@@ -1,7 +1,7 @@
 ---
 title: "13 第 13 章：设计内容分发网络（Design a Content Distribution Network）"
 date: 2026-05-16
-tags: [系统设计, 面试, 分布式架构, CDN, 译书]
+tags: [CDN, 分布式架构, 系统设计, 译书, 面试]
 aliases: ["Design a Content Distribution Network", "设计内容分发网络"]
 ---
 

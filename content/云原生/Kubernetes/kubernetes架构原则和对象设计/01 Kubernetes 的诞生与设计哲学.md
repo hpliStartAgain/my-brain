@@ -1,7 +1,7 @@
 ---
 title: "01 Kubernetes 的诞生与设计哲学"
 date: 2026-03-04
-tags: [云原生, Kubernetes, Borg, 架构, 声明式, 控制器模式, 设计哲学]
+tags: [Borg, Kubernetes, 云原生, 声明式, 控制器模式, 架构, 设计哲学]
 aliases: []
 ---
 

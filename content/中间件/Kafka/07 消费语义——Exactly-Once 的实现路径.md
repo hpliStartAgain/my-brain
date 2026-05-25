@@ -1,7 +1,7 @@
 ---
 title: "消费语义——Exactly-Once 的实现路径"
 date: 2026-03-04
-tags: [中间件, Kafka, Exactly-Once, EOS, 幂等, 事务, At-Least-Once, At-Most-Once, 流处理]
+tags: [At-Least-Once, At-Most-Once, EOS, Exactly-once, Kafka, 中间件, 事务, 幂等, 流处理]
 aliases: []
 ---
 

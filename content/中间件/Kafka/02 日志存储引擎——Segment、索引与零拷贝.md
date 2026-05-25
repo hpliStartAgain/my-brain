@@ -1,7 +1,7 @@
 ---
 title: "日志存储引擎——Segment、索引与零拷贝"
 date: 2026-03-04
-tags: [中间件, Kafka, 日志存储, Segment, 稀疏索引, 零拷贝, sendfile, Page Cache, 顺序写]
+tags: [Kafka, Page Cache, Segment, sendfile, 中间件, 日志存储, 稀疏索引, 零拷贝, 顺序写]
 aliases: []
 ---
 

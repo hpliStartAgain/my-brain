@@ -1,7 +1,7 @@
 ---
 title: "安全加固：Secrets 管理、网络策略与镜像安全"
 date: 2026-02-28
-tags: [Spark, Kubernetes, 安全, Secrets, Kerberos, NetworkPolicy, 镜像安全, RBAC, TLS, 最小权限]
+tags: [Kerberos, Kubernetes, NetworkPolicy, RBAC, Secrets, Spark, TLS, 安全, 最小权限, 镜像安全]
 aliases: []
 ---
 

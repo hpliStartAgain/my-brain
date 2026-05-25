@@ -1,7 +1,7 @@
 ---
 title: "Spark Operator：声明式作业管理与 CI/CD 集成"
 date: 2026-02-28
-tags: [Spark, Kubernetes, Spark Operator, CRD, SparkApplication, Argo Workflow, CI/CD, 声明式, 作业编排]
+tags: [Argo Workflow, CI/CD, CRD, Kubernetes, Spark, Spark Operator, SparkApplication, 作业编排, 声明式]
 aliases: []
 ---
 

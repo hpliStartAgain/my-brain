@@ -1,7 +1,7 @@
 ---
 title: "JVM 性能工程"
 date: 2026-05-12
-tags: [Java, JVM, 性能工程, 垃圾回收, 索引]
+tags: [Java, JVM, 垃圾回收, 性能工程, 索引]
 aliases: [JVM Performance Engineering]
 description: "《JVM Performance Engineering》by Monica Beckwith (2024, Pearson) 完整中文翻译版"
 ---

@@ -1,7 +1,7 @@
 ---
 title: "安全——mTLS、认证与授权策略"
 date: 2026-03-05
-tags: [云原生, 服务网格, Istio, mTLS, SPIFFE, PeerAuthentication, AuthorizationPolicy, 零信任, 证书管理]
+tags: [AuthorizationPolicy, Istio, mTLS, PeerAuthentication, SPIFFE, 云原生, 服务网格, 证书管理, 零信任]
 aliases: []
 ---
 

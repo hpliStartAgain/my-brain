@@ -1,7 +1,7 @@
 ---
 title: "从 RNN 到 Transformer——注意力机制的革命"
 date: 2026-03-04
-tags: [LLM, Transformer, 注意力机制, Self-Attention, RNN, LSTM, 位置编码, 深度学习]
+tags: [LLM, LSTM, RNN, Self-Attention, Transformer, 位置编码, 注意力机制, 深度学习]
 aliases: []
 ---
 

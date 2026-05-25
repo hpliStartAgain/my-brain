@@ -1,7 +1,7 @@
 ---
 title: "Istio架构——控制面与数据面的职责分离"
 date: 2026-03-05
-tags: [云原生, 服务网格, Istio, istiod, Envoy, xDS, Pilot, Citadel, 控制面, 数据面]
+tags: [Citadel, Envoy, Istio, istiod, Pilot, xDS, 云原生, 控制面, 数据面, 服务网格]
 aliases: []
 ---
 

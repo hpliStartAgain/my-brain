@@ -1,7 +1,7 @@
 ---
 title: "文件系统的本质——从 open() 到磁盘扇区"
 date: 2026-03-02
-tags: [Linux, 文件系统, VFS, open, read, 系统调用, 块设备, IO路径, 存储栈]
+tags: [IO路径, Linux, open, read, VFS, 块设备, 存储栈, 文件系统, 系统调用]
 aliases: ["Linux文件系统原理", "open系统调用", "IO调用链", "文件系统全链路"]
 ---
 

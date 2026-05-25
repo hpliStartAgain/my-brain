@@ -1,7 +1,7 @@
 ---
 title: "棋盘型回溯：N-Queens 与数独求解的约束传播艺术"
 date: 2026-04-28
-tags: [算法, 回溯, N-Queens, 数独, 约束传播, 位运算, LeetCode, 面试]
+tags: [LeetCode, N-Queens, 位运算, 回溯, 数独, 算法, 约束传播, 面试]
 aliases: [N-Queens, Sudoku Solver, 棋盘回溯, 约束传播, LeetCode 51, LeetCode 37]
 ---
 

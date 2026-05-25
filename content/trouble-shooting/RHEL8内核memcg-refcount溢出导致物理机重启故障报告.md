@@ -1,6 +1,6 @@
 ---
 date: 2026-04-21
-tags: [kernel, crash, memcg, refcount, RHEL8, kswapd]
+tags: [crash, kernel, kswapd, memcg, refcount, RHEL8]
 category: 系统故障
 severity: P1
 ---

@@ -1,7 +1,7 @@
 ---
 title: "为什么需要 Hudi——Uber 的 CDC 增量数仓困境与 Timeline 解法"
 date: 2026-03-02
-tags: [Hudi, 数据湖, CDC, 增量处理, Lakehouse, Delta Lake对比, Timeline, 数据摄入]
+tags: [CDC, Delta Lake对比, Hudi, Lakehouse, Timeline, 增量处理, 数据摄入, 数据湖]
 aliases: ["Hudi诞生背景", "CDC增量摄入", "数据湖Upsert"]
 ---
 

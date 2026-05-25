@@ -1,7 +1,7 @@
 ---
 title: "AI 管理任务需求——基于 Claude Code 的智能工作流实践"
 date: 2026-03-17
-tags: [LLM, 任务管理, Claude Code, 工作流]
+tags: [Claude Code, LLM, 任务管理, 工作流]
 aliases: []
 ---
 

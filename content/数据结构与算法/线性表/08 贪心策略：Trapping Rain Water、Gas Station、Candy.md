@@ -1,7 +1,7 @@
 ---
 title: "贪心策略：Trapping Rain Water、Gas Station、Candy"
 date: 2026-04-27
-tags: [数据结构, 算法, 数组, 贪心, 单调栈, LeetCode, 面试]
+tags: [LeetCode, 单调栈, 数据结构, 数组, 算法, 贪心, 面试]
 aliases: [贪心算法, 接雨水, 加油站, 分糖果]
 ---
 

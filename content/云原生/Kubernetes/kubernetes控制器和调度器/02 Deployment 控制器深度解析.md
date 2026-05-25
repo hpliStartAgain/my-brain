@@ -1,7 +1,7 @@
 ---
 title: "02 Deployment 控制器深度解析"
 date: 2026-03-04
-tags: [云原生, Kubernetes, Deployment, ReplicaSet, 滚动更新, 回滚, maxSurge, maxUnavailable, Controller]
+tags: [Controller, Deployment, Kubernetes, maxSurge, maxUnavailable, ReplicaSet, 云原生, 回滚, 滚动更新]
 aliases: []
 ---
 

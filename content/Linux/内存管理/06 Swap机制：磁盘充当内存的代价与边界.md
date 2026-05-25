@@ -1,7 +1,7 @@
 ---
 title: "Swap机制：磁盘充当内存的代价与边界"
 date: 2026-02-28
-tags: [Linux, 内存管理, Swap, swappiness, 匿名页, 换入换出]
+tags: [Linux, Swap, swappiness, 内存管理, 匿名页, 换入换出]
 aliases: [Swap空间, 虚拟内存Swap, swappiness]
 ---
 

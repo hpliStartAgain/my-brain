@@ -1,7 +1,7 @@
 ---
 title: "01 JuiceFS 全局架构——元数据引擎与对象存储的分离设计"
 date: 2026-03-05
-tags: [JuiceFS, 分布式文件系统, 元数据引擎, 对象存储, POSIX, HDFS替代, 云原生存储]
+tags: [HDFS替代, JuiceFS, POSIX, 云原生存储, 元数据引擎, 分布式文件系统, 对象存储]
 aliases: []
 ---
 

@@ -1,7 +1,7 @@
 ---
 title: "07 指标工程落地与 SLO 体系"
 date: 2026-03-03
-tags: [可观测性, 指标, SLO, SLI, Error Budget, Burn Rate, 指标治理]
+tags: [Burn Rate, Error Budget, SLI, SLO, 可观测性, 指标, 指标治理]
 aliases: []
 ---
 

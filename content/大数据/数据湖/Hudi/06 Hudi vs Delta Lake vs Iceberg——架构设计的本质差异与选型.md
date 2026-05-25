@@ -1,7 +1,7 @@
 ---
 title: "Hudi vs Delta Lake vs Iceberg——架构设计的本质差异与选型"
 date: 2026-03-02
-tags: [Hudi, Delta Lake, Iceberg, 数据湖对比, Lakehouse, 选型, 架构对比, CDC, 流批一体]
+tags: [CDC, Delta Lake, Hudi, Iceberg, Lakehouse, 数据湖对比, 架构对比, 流批一体, 选型]
 aliases: ["数据湖三剑客对比", "Hudi vs Delta Lake", "Hudi vs Iceberg", "数据湖选型"]
 ---
 

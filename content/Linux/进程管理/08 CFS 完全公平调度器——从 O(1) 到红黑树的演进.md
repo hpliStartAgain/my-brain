@@ -1,7 +1,7 @@
 ---
 title: "CFS 完全公平调度器——从 O(1) 到红黑树的演进"
 date: 2026-03-02
-tags: [Linux, 进程管理, CFS, 调度器, 虚拟运行时间, vruntime, 红黑树, nice值, 完全公平调度, sched_entity]
+tags: [CFS, Linux, nice值, sched_entity, vruntime, 完全公平调度, 红黑树, 虚拟运行时间, 调度器, 进程管理]
 aliases: ["CFS调度器原理", "Linux完全公平调度", "vruntime虚拟运行时间", "调度器红黑树"]
 ---
 

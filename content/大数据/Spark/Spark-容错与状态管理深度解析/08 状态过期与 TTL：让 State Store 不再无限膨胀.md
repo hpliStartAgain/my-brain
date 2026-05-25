@@ -1,7 +1,7 @@
 ---
 title: "状态过期与 TTL：让 State Store 不再无限膨胀"
 date: 2026-02-28
-tags: [Spark, Structured Streaming, Watermark, TTL, 状态过期, GroupState, dropDuplicates, 事件时间]
+tags: [dropDuplicates, GroupState, Spark, Structured Streaming, TTL, Watermark, 事件时间, 状态过期]
 aliases: []
 ---
 

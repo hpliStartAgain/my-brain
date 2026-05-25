@@ -1,7 +1,7 @@
 ---
 title: "限流与熔断：leaky bucket 与 burst 参数的数学本质"
 date: 2026-02-28
-tags: [Nginx, 限流, 漏桶算法, 令牌桶, limit_req, limit_conn, burst, nodelay, 熔断, 共享内存]
+tags: [burst, limit_conn, limit_req, Nginx, nodelay, 令牌桶, 共享内存, 漏桶算法, 熔断, 限流]
 aliases: []
 ---
 

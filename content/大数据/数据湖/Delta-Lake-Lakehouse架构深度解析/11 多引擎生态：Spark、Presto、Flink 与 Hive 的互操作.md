@@ -1,7 +1,7 @@
 ---
 title: "多引擎生态：Spark、Presto、Flink 与 Hive 的互操作"
 date: 2026-02-28
-tags: [Delta Lake, 多引擎, Presto, Flink, Hive, UniForm, Iceberg, Delta协议, 互操作, 开放格式]
+tags: [Delta Lake, Delta协议, Flink, Hive, Iceberg, Presto, UniForm, 互操作, 多引擎, 开放格式]
 aliases: []
 ---
 

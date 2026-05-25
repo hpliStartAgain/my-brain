@@ -1,7 +1,7 @@
 ---
 title: "10 Redis 生产运维——监控 告警与故障排查"
 date: 2026-03-03
-tags: [中间件, Redis, 运维, 监控, Prometheus, Grafana, INFO, 慢查询, 故障排查, 高可用]
+tags: [Grafana, INFO, Prometheus, Redis, 中间件, 慢查询, 故障排查, 监控, 运维, 高可用]
 aliases: []
 ---
 

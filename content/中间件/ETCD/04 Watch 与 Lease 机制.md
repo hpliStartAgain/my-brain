@@ -1,7 +1,7 @@
 ---
 title: "04 Watch 与 Lease 机制"
 date: 2026-03-04
-tags: [etcd, Watch, Lease, TTL, 服务发现, 分布式锁, 事件流, WatchStore, KeepAlive]
+tags: [etcd, KeepAlive, Lease, TTL, Watch, WatchStore, 事件流, 分布式锁, 服务发现]
 aliases: []
 ---
 

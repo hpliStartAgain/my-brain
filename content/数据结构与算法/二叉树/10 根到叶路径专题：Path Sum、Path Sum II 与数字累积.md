@@ -1,7 +1,7 @@
 ---
 title: "根到叶路径专题：Path Sum、Path Sum II 与数字累积"
 date: 2026-04-27
-tags: [数据结构, 算法, 二叉树, 路径总和, DFS, 回溯, LeetCode]
+tags: [DFS, LeetCode, 二叉树, 回溯, 数据结构, 算法, 路径总和]
 aliases: [LC112, LC113, LC129, 根到叶路径专题：Path Sum、Path Sum II 与数字累积]
 ---
 

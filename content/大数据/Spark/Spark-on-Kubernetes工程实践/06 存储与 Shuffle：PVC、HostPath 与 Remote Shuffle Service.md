@@ -1,7 +1,7 @@
 ---
 title: "存储与 Shuffle：PVC、HostPath 与 Remote Shuffle Service"
 date: 2026-02-28
-tags: [Spark, Kubernetes, Shuffle, PVC, HostPath, Remote Shuffle Service, Uniffle, RSS, 存储, 动态资源分配]
+tags: [HostPath, Kubernetes, PVC, Remote Shuffle Service, RSS, Shuffle, Spark, Uniffle, 动态资源分配, 存储]
 aliases: []
 ---
 

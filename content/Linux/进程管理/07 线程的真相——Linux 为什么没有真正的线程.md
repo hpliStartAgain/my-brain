@@ -1,7 +1,7 @@
 ---
 title: "线程的真相——Linux 为什么没有真正的线程"
 date: 2026-03-02
-tags: [Linux, 进程管理, 线程, LWP, clone, NPTL, pthread, TGID, 轻量级进程, 线程组]
+tags: [clone, Linux, LWP, NPTL, pthread, TGID, 线程, 线程组, 轻量级进程, 进程管理]
 aliases: ["Linux线程模型", "轻量级进程LWP", "NPTL原理", "pthread实现原理", "Linux无真正线程"]
 ---
 

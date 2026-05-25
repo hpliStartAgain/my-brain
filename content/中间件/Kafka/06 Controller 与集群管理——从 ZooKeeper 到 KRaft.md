@@ -1,7 +1,7 @@
 ---
 title: "Controller 与集群管理——从 ZooKeeper 到 KRaft"
 date: 2026-03-04
-tags: [中间件, Kafka, Controller, KRaft, ZooKeeper, 集群管理, 元数据, Raft, Leader选举]
+tags: [Controller, Kafka, KRaft, Leader选举, Raft, ZooKeeper, 中间件, 元数据, 集群管理]
 aliases: []
 ---
 

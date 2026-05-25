@@ -1,7 +1,7 @@
 ---
 title: "03 FLP 不可能定理与共识问题"
 date: 2026-03-03
-tags: [分布式系统, FLP定理, 共识, 不可能定理, Paxos, Raft, 异步网络]
+tags: [FLP定理, Paxos, Raft, 不可能定理, 共识, 分布式系统, 异步网络]
 aliases: []
 ---
 

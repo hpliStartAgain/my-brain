@@ -1,7 +1,7 @@
 ---
 title: "多 Agent 系统与 A2A 协议——协作、通信与特化"
 date: 2026-03-04
-tags: [LLM, Agent, 多Agent, A2A, 协作, 特化, Orchestrator, Sub-Agent, Google, 通信协议]
+tags: [A2A, Agent, Google, LLM, Orchestrator, Sub-Agent, 协作, 多Agent, 特化, 通信协议]
 aliases: []
 ---
 

@@ -1,7 +1,7 @@
 ---
 title: "YARN 的诞生——从 MRv1 到资源管理与计算分离"
 date: 2026-02-27
-tags: [YARN, Hadoop, MRv1, JobTracker, TaskTracker, 资源管理, 计算框架]
+tags: [Hadoop, JobTracker, MRv1, TaskTracker, YARN, 计算框架, 资源管理]
 aliases: [YARN诞生, MRv1架构缺陷, Hadoop资源管理演进]
 ---
 

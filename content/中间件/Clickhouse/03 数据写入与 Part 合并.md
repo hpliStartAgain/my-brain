@@ -1,7 +1,7 @@
 ---
 title: "03 数据写入与 Part 合并"
 date: 2026-03-05
-tags: [ClickHouse, MergeTree, Part, Merge, Mutation, TTL, 写入流程, 后台合并]
+tags: [ClickHouse, MERGE, MergeTree, Mutation, Part, TTL, 写入流程, 后台合并]
 aliases: []
 ---
 

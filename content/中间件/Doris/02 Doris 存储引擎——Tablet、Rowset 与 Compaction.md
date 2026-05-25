@@ -1,7 +1,7 @@
 ---
 title: "02 Doris 存储引擎——Tablet、Rowset 与 Compaction"
 date: 2026-03-05
-tags: [Doris, Tablet, Rowset, Compaction, Segment, 列式存储, LSM-Tree, BloomFilter, ZoneMap]
+tags: [BloomFilter, Compaction, Doris, LSM-Tree, Rowset, Segment, Tablet, ZoneMap, 列式存储]
 aliases: []
 ---
 

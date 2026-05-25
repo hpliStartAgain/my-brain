@@ -1,7 +1,7 @@
 ---
 title: "进程描述符 task_struct 深度拆解"
 date: 2026-03-02
-tags: [Linux, 进程管理, task_struct, 内核, 进程描述符, 文件描述符, 内存描述符, 调度]
+tags: [Linux, task_struct, 内存描述符, 内核, 文件描述符, 调度, 进程描述符, 进程管理]
 aliases: ["task_struct拆解", "Linux进程描述符", "进程控制块"]
 ---
 

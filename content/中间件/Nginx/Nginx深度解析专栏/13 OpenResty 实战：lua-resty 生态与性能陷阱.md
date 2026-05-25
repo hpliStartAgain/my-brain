@@ -1,7 +1,7 @@
 ---
 title: "OpenResty 实战：lua-resty 生态与性能陷阱"
 date: 2026-02-28
-tags: [OpenResty, lua-resty, LRU缓存, 性能陷阱, 全局变量, 阻塞调用, 正则编译, 插件开发, 实战]
+tags: [LRU缓存, lua-resty, OpenResty, 全局变量, 实战, 性能陷阱, 插件开发, 正则编译, 阻塞调用]
 aliases: []
 ---
 

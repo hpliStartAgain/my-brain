@@ -1,7 +1,7 @@
 ---
 title: "XFS 文件系统深度解析——B+ 树与日志架构"
 date: 2026-03-02
-tags: [Linux, 文件系统, XFS, 分配组, AG, B+树, 日志, 延迟分配, Speculative Preallocation, RHEL, CentOS]
+tags: [AG, B+Tree, CentOS, Linux, RHEL, Speculative Preallocation, XFS, 分配组, 延迟分配, 文件系统, 日志]
 aliases: ["XFS文件系统原理", "XFS AG分配组", "XFS B+树", "XFS日志", "XFS延迟分配"]
 ---
 

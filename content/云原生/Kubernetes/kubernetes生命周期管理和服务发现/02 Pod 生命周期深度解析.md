@@ -1,7 +1,7 @@
 ---
 title: "02 Pod 生命周期深度解析"
 date: 2026-03-04
-tags: [云原生, Kubernetes, Pod, 生命周期, Phase, Init Container, postStart, preStop, restartPolicy, QoS]
+tags: [Init Container, Kubernetes, Phase, Pod, postStart, preStop, QoS, restartPolicy, 云原生, 生命周期]
 aliases: []
 ---
 

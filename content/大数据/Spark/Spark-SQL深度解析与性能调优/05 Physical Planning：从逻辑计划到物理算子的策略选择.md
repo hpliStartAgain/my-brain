@@ -1,7 +1,7 @@
 ---
 title: "Physical Planning：从逻辑计划到物理算子的策略选择"
 date: 2026-02-28
-tags: [Spark, SparkSQL, Physical Planning, Join策略, BroadcastHashJoin, SortMergeJoin, ShuffleHashJoin, BucketJoin, SparkPlan, Exchange]
+tags: [BroadcastHashJoin, BucketJoin, Exchange, Join策略, Physical Planning, ShuffleHashJoin, SortMergeJoin, Spark, SparkPlan, SparkSQL]
 aliases: []
 ---
 

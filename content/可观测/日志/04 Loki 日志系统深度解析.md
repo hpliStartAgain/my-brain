@@ -1,7 +1,7 @@
 ---
 title: "04 Loki 日志系统深度解析"
 date: 2026-03-03
-tags: [可观测性, 日志, Grafana Loki, LogQL, 对象存储, Promtail]
+tags: [Grafana Loki, LogQL, Promtail, 可观测性, 对象存储, 日志]
 aliases: []
 ---
 

@@ -1,7 +1,7 @@
 ---
 title: "执行引擎对比：MapReduce vs Tez 的本质差异"
 date: 2026-02-28
-tags: [Hive, MapReduce, Tez, DAG, Container复用, 执行引擎, YARN, ApplicationMaster, 性能对比]
+tags: [ApplicationMaster, Container复用, DAG, Hive, MapReduce, Tez, YARN, 性能对比, 执行引擎]
 aliases: []
 ---
 

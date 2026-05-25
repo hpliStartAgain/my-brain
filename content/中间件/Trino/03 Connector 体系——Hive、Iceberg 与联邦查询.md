@@ -1,7 +1,7 @@
 ---
 title: "Connector 体系——Hive、Iceberg 与联邦查询"
 date: 2026-03-05
-tags: [中间件, Trino, Connector, Hive, Iceberg, 联邦查询, SPI, 谓词下推, 数据湖]
+tags: [Connector, Hive, Iceberg, SPI, Trino, 中间件, 数据湖, 联邦查询, 谓词下推]
 aliases: []
 ---
 

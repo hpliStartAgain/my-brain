@@ -1,7 +1,7 @@
 ---
 title: "生产运维：Kerberos 认证、连接池与监控体系"
 date: 2026-02-28
-tags: [Hive, Kerberos, JDBC连接池, JVM调优, 监控, Prometheus, G1GC, HS2运维, 生产实践]
+tags: [G1GC, Hive, HS2运维, JDBC连接池, JVM调优, Kerberos, Prometheus, 生产实践, 监控]
 aliases: []
 ---
 

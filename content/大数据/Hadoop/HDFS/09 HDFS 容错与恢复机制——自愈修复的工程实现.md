@@ -1,7 +1,7 @@
 ---
 title: "HDFS 容错与恢复机制——自愈修复的工程实现"
 date: 2026-02-27
-tags: [HDFS, 容错, 副本恢复, DataNode心跳, 脑裂, Block恢复, Lease Recovery]
+tags: [Block恢复, DataNode心跳, HDFS, Lease Recovery, 副本恢复, 容错, 脑裂]
 aliases: [HDFS容错, HDFS恢复机制, 副本自愈]
 ---
 

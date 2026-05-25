@@ -1,7 +1,7 @@
 ---
 title: "Linux 网络包的完整收发路径——软中断、NAPI 与 XDP"
 date: 2026-03-02
-tags: [Linux, 网络收发路径, 软中断, NAPI, XDP, eBPF, 硬中断, Ring Buffer, 网卡驱动, 高性能网络]
+tags: [eBPF, Linux, NAPI, Ring Buffer, XDP, 硬中断, 网卡驱动, 网络收发路径, 软中断, 高性能网络]
 aliases: ["Linux网络收包路径", "NAPI原理", "XDP原理", "软中断网络处理", "网卡驱动原理"]
 ---
 

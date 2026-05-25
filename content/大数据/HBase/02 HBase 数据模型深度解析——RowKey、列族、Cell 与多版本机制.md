@@ -1,7 +1,7 @@
 ---
 title: "HBase 数据模型深度解析——RowKey、列族、Cell 与多版本机制"
 date: 2026-02-27
-tags: [HBase, 数据模型, RowKey, 列族, Cell, MVCC, 多版本, TTL]
+tags: [Cell, HBase, MVCC, RowKey, TTL, 列族, 多版本, 数据模型]
 aliases: [HBase数据模型, HBase RowKey设计]
 ---
 

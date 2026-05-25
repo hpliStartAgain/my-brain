@@ -1,7 +1,7 @@
 ---
 title: "查询执行引擎——Stage、Task 与 Pipeline"
 date: 2026-03-05
-tags: [中间件, Trino, Stage, Task, Pipeline, Driver, Operator, 执行引擎, MPP]
+tags: [Driver, MPP, Operator, Pipeline, Stage, Task, Trino, 中间件, 执行引擎]
 aliases: []
 ---
 

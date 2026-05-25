@@ -1,7 +1,7 @@
 ---
 title: "预训练——数据、算力与 Scaling Law"
 date: 2026-03-04
-tags: [LLM, 预训练, Scaling Law, 分布式训练, 数据并行, 张量并行, 流水线并行, ZeRO, 混合精度]
+tags: [LLM, Scaling Law, ZeRO, 分布式训练, 张量并行, 数据并行, 流水线并行, 混合精度, 预训练]
 aliases: []
 ---
 

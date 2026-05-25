@@ -1,7 +1,7 @@
 ---
 title: "JIT 编译与逃逸分析——从解释执行到本地代码"
 date: 2026-03-05
-tags: [Java, JVM, JIT, C1, C2, 分层编译, 逃逸分析, 内联, 锁消除, 栈上分配, 标量替换, 热点代码, Profiling]
+tags: [C1, C2, Java, JIT, JVM, Profiling, 内联, 分层编译, 标量替换, 栈上分配, 热点代码, 逃逸分析, 锁消除]
 aliases: []
 ---
 

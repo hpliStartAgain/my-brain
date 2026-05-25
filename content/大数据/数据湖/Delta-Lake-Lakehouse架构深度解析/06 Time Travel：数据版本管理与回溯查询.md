@@ -1,7 +1,7 @@
 ---
 title: "Time Travel：数据版本管理与回溯查询"
 date: 2026-02-28
-tags: [Delta Lake, Time Travel, 版本管理, VACUUM, 数据回溯, 历史查询, 数据恢复]
+tags: [Delta Lake, Time Travel, VACUUM, 历史查询, 数据回溯, 数据恢复, 版本管理]
 aliases: []
 ---
 

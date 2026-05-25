@@ -7,7 +7,7 @@
 
 | 文件名 | Confluence pageId | 标题 | 最后推送版本 |
 |---|---|---|---|
-| `progress_summary.html` | 107717201 | 迁移进度概要 | v6 |
+| `progress_summary.html` | 107717201 | 迁移进度概要 | v7 |
 | `hdfs.html` | 107718652 | HDFS 告警规则迁移明细 | v6 |
 | `yarn.html` | 107718655 | YARN 告警规则迁移明细 | v5 |
 | `infra_basic.html` | 107718658 | infra_basic 告警规则迁移明细 | v8 |
@@ -44,4 +44,4 @@ opencli confluence update --id 107717201 \
 - 父页面 pageId: `107715652`
 - URL: https://bd-docs.panther.sohurdc.com/pages/viewpage.action?pageId=107715652
 
-| `zabbix_close_ledger.html` | 109248930 | Zabbix 告警规则关闭台账 | v3（2026-05-22 Doris数据驱动更新）|
+| `zabbix_close_ledger.html` | 109248930 | Zabbix 告警规则关闭台账 | v4（2026-05-25 Foxeye事件核验更新）|

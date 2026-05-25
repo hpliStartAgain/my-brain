@@ -1,7 +1,7 @@
 ---
 title: "06 Grafana 仪表盘与告警工程化"
 date: 2026-03-03
-tags: [可观测性, 指标, Grafana, 仪表盘, 告警, Alertmanager, 模板化]
+tags: [Alertmanager, Grafana, 仪表盘, 可观测性, 告警, 指标, 模板化]
 aliases: []
 ---
 

@@ -1,7 +1,7 @@
 ---
 title: "Join 深度解析：五种 Join 策略的实现机制"
 date: 2026-02-28
-tags: [Hive, Join, MapJoin, CommonJoin, BucketMapJoin, SMBJoin, SkewJoin, Shuffle, 数据倾斜, 执行机制]
+tags: [BucketMapJoin, CommonJoin, Hive, Join, MapJoin, Shuffle, Skew Join, SMBJoin, 执行机制, 数据倾斜]
 aliases: []
 ---
 

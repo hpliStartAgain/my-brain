@@ -1,7 +1,7 @@
 ---
 title: "读写锁与 StampedLock——从 ReentrantReadWriteLock 到乐观读"
 date: 2026-03-05
-tags: [Java, 并发编程, 读写锁, ReentrantReadWriteLock, StampedLock, 乐观读, 锁降级, 写饥饿]
+tags: [Java, ReentrantReadWriteLock, StampedLock, 乐观读, 写饥饿, 并发编程, 读写锁, 锁降级]
 aliases: []
 ---
 

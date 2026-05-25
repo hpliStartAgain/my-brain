@@ -1,7 +1,7 @@
 ---
 title: "Agent 框架选型——LangChain、LlamaIndex 与 LangGraph"
 date: 2026-03-04
-tags: [LLM, Agent, LangChain, LlamaIndex, LangGraph, CrewAI, AutoGen, 框架选型, LCEL, 状态图]
+tags: [Agent, AutoGen, CrewAI, LangChain, LangGraph, LCEL, LlamaIndex, LLM, 框架选型, 状态图]
 aliases: []
 ---
 

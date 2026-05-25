@@ -1,7 +1,7 @@
 ---
 title: "sync 包——Mutex、RWMutex 与 WaitGroup 的实现"
 date: 2026-03-04
-tags: [Golang, sync, Mutex, RWMutex, WaitGroup, 互斥锁, 读写锁, 自旋, 饥饿模式, 信号量]
+tags: [Golang, Mutex, RWMutex, sync, WaitGroup, 互斥锁, 信号量, 自旋, 读写锁, 饥饿模式]
 aliases: []
 ---
 

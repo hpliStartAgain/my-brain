@@ -1,7 +1,7 @@
 ---
 title: "06 ClickHouse 性能调优——表设计、查询优化与资源管理"
 date: 2026-03-05
-tags: [ClickHouse, 性能调优, 主键设计, 跳数索引, 物化视图, 资源管理, 查询优化]
+tags: [ClickHouse, 主键设计, 性能调优, 查询优化, 物化视图, 资源管理, 跳数索引]
 aliases: []
 ---
 

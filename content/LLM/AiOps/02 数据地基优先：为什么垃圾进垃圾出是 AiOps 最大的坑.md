@@ -1,7 +1,7 @@
 ---
 title: "02 数据地基优先：为什么垃圾进垃圾出是 AiOps 最大的坑"
 date: 2026-04-13
-tags: [AiOps, 可观测性, Loki, Prometheus, Drain3, 数据质量, 大数据]
+tags: [AiOps, Drain3, Loki, Prometheus, 可观测性, 大数据, 数据质量]
 aliases: [AiOps数据地基, 可观测三支柱]
 ---
 

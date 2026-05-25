@@ -1,7 +1,7 @@
 ---
 title: "05 Raft 共识算法深度解析"
 date: 2026-03-03
-tags: [分布式系统, Raft, 共识算法, Leader选举, 日志复制, etcd]
+tags: [etcd, Leader选举, Raft, 共识算法, 分布式系统, 日志复制]
 aliases: []
 ---
 

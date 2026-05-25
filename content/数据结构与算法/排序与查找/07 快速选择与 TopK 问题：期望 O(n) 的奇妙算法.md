@@ -1,7 +1,7 @@
 ---
 title: "快速选择与 TopK 问题：期望 O(n) 的奇妙算法"
 date: 2026-04-27
-tags: [算法, 排序, 快速选择, TopK, 优先队列, LeetCode, 面试]
+tags: [LeetCode, TopK, 优先队列, 快速选择, 排序, 算法, 面试]
 aliases: [快速选择, QuickSelect, TopK问题, Kth Largest Element]
 ---
 

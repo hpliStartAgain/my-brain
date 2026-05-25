@@ -1,7 +1,7 @@
 ---
 title: "05 etcd vs ZooKeeper——设计哲学与选型对比"
 date: 2026-03-05
-tags: [etcd, ZooKeeper, Raft, ZAB, 分布式协调, 选型, 一致性, 线性一致性]
+tags: [etcd, Raft, ZAB, ZooKeeper, 一致性, 分布式协调, 线性一致性, 选型]
 aliases: []
 ---
 

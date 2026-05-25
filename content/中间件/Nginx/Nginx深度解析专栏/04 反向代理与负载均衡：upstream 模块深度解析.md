@@ -1,7 +1,7 @@
 ---
 title: "反向代理与负载均衡：upstream 模块深度解析"
 date: 2026-02-28
-tags: [Nginx, upstream, 反向代理, 负载均衡, 连接池, round-robin, least_conn, 健康检查, keepalive]
+tags: [KeepAlive, least_conn, Nginx, RoundRobin, upstream, 健康检查, 反向代理, 负载均衡, 连接池]
 aliases: []
 ---
 

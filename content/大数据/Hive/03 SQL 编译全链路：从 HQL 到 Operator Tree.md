@@ -1,7 +1,7 @@
 ---
 title: "SQL 编译全链路：从 HQL 到 Operator Tree"
 date: 2026-02-28
-tags: [Hive, SQL编译, ANTLR, AST, SemanticAnalyzer, QueryBlock, OperatorTree, 逻辑优化, 执行计划]
+tags: [ANTLR, AST, Hive, OperatorTree, QueryBlock, SemanticAnalyzer, SQL编译, 执行计划, 逻辑优化]
 aliases: []
 ---
 

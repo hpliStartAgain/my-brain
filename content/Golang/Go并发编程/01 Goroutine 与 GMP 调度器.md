@@ -1,7 +1,7 @@
 ---
 title: "Goroutine 与 GMP 调度器"
 date: 2026-03-04
-tags: [Golang, Goroutine, GMP, 调度器, G, M, P, 协程, 线程, 工作窃取, 抢占式调度, sysmon]
+tags: [G, GMP, Golang, Goroutine, M, P, sysmon, 协程, 工作窃取, 抢占式调度, 线程, 调度器]
 aliases: []
 ---
 

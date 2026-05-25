@@ -1,7 +1,7 @@
 ---
 title: "06 etcd 运维——集群管理、备份恢复与性能调优"
 date: 2026-03-05
-tags: [etcd, 运维, 备份恢复, 性能调优, 集群管理, Kubernetes, SRE, 监控]
+tags: [etcd, Kubernetes, SRE, 备份恢复, 性能调优, 监控, 运维, 集群管理]
 aliases: []
 ---
 

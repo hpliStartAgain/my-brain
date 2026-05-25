@@ -1,7 +1,7 @@
 ---
 title: "OpenJDK高级内存管理与垃圾回收"
 date: 2026-05-12
-tags: [Java, JVM, 性能工程, GC, 垃圾回收, G1, ZGC]
+tags: [G1, GC, Java, JVM, ZGC, 垃圾回收, 性能工程]
 aliases: [Advanced Memory Management and Garbage Collection in OpenJDK]
 ---
 

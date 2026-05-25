@@ -1,7 +1,7 @@
 ---
 title: "Milvus 在 RAG 场景中的应用"
 date: 2026-03-05
-tags: [中间件, Milvus, RAG, LLM, Embedding, 检索增强生成, LangChain, LlamaIndex, 向量数据库]
+tags: [Embedding, LangChain, LlamaIndex, LLM, Milvus, RAG, 中间件, 向量数据库, 检索增强生成]
 aliases: []
 ---
 

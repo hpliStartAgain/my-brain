@@ -1,7 +1,7 @@
 ---
 title: "09 Redis 与搜索——RediSearch 与 RedisJSON"
 date: 2026-03-03
-tags: [中间件, Redis, RediSearch, RedisJSON, 全文搜索, 向量搜索, 二级索引, Redis Stack, 文档存储]
+tags: [Redis, Redis Stack, RediSearch, RedisJSON, 中间件, 二级索引, 全文搜索, 向量搜索, 文档存储]
 aliases: []
 ---
 

@@ -1,7 +1,7 @@
 ---
 title: "参数处理——ParameterHandler与TypeHandler的类型映射"
 date: 2026-03-04
-tags: [Java, Mybatis, ParameterHandler, TypeHandler, TypeHandlerRegistry, 类型映射, 枚举处理, JSON字段, 参数解析]
+tags: [Java, JSON字段, Mybatis, ParameterHandler, TypeHandler, TypeHandlerRegistry, 参数解析, 枚举处理, 类型映射]
 aliases: []
 ---
 

@@ -1,7 +1,7 @@
 ---
 title: "09 第 9 章：设计通知/告警服务（Design a Notification/Alerting Service）"
 date: 2026-05-16
-tags: [系统设计, 面试, 分布式架构, 可扩展性, 译书]
+tags: [分布式架构, 可扩展性, 系统设计, 译书, 面试]
 aliases: ["Design a Notification-Alerting Service", "Design a Notification/Alerting Service", "设计通知-告警服务", "设计通知/告警服务"]
 ---
 

@@ -1,7 +1,7 @@
 ---
 title: "04 调度后端（SchedulerBackend）：Spark 与资源管理器（YARN/K8s）的对接细节"
 date: 2026-02-27
-tags: [Spark, 调度系统, SchedulerBackend, YARN, Kubernetes, 源码分析]
+tags: [Kubernetes, SchedulerBackend, Spark, YARN, 源码分析, 调度系统]
 aliases: [SchedulerBackend Internals]
 ---
 

@@ -1,7 +1,7 @@
 ---
 title: "AI Agent开发实战——基于Eino框架构建生产级多智能体系统"
 date: 2026-03-17
-tags: [LLM, Agent开发, Eino, Go, 大数据运维]
+tags: [Agent开发, Eino, Golang, LLM, 大数据运维]
 aliases: []
 ---
 

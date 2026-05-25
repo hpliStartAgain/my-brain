@@ -1,6 +1,6 @@
 ---
 date: 2026-04-21
-tags: [kernel, crash, SOP, RHEL8, troubleshooting]
+tags: [crash, kernel, RHEL8, SOP, trouble-shooting]
 category: 运维规范
 severity: P0
 ---

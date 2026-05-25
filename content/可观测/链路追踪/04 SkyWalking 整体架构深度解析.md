@@ -1,7 +1,7 @@
 ---
 title: "04 SkyWalking 整体架构深度解析"
 date: 2026-03-03
-tags: [可观测性, SkyWalking, APM, OAP, Java Agent, BanyanDB]
+tags: [APM, BanyanDB, Java Agent, OAP, SkyWalking, 可观测性]
 aliases: []
 ---
 

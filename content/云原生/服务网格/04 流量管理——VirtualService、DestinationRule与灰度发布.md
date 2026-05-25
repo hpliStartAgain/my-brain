@@ -1,7 +1,7 @@
 ---
 title: "流量管理——VirtualService、DestinationRule与灰度发布"
 date: 2026-03-05
-tags: [云原生, 服务网格, Istio, VirtualService, DestinationRule, 灰度发布, 金丝雀, 流量管理, 故障注入]
+tags: [DestinationRule, Istio, VirtualService, 云原生, 故障注入, 服务网格, 流量管理, 灰度发布, 金丝雀]
 aliases: []
 ---
 

@@ -1,7 +1,7 @@
 ---
 title: "10 第 10 章：设计数据库批量审计服务（Design a Database Batch Auditing Service）"
 date: 2026-05-16
-tags: [系统设计, 面试, 分布式架构, 数据质量, 译书]
+tags: [分布式架构, 数据质量, 系统设计, 译书, 面试]
 aliases: ["Design a Database Batch Auditing Service", "设计数据库批量审计服务"]
 ---
 

@@ -1,7 +1,7 @@
 ---
 title: "02 Raft 共识协议——Leader 选举、日志复制与安全性"
 date: 2026-03-04
-tags: [etcd, Raft, Leader选举, 日志复制, 任期, AppendEntries, 安全性, 成员变更]
+tags: [AppendEntries, etcd, Leader选举, Raft, 任期, 安全性, 成员变更, 日志复制]
 aliases: []
 ---
 

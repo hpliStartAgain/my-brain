@@ -1,7 +1,7 @@
 ---
 title: "ThreadLocal 的实现原理与内存泄漏——线程封闭的正确姿势"
 date: 2026-03-05
-tags: [Java, 并发编程, ThreadLocal, ThreadLocalMap, 内存泄漏, 弱引用, 线程封闭, InheritableThreadLocal, TransmittableThreadLocal]
+tags: [InheritableThreadLocal, Java, ThreadLocal, ThreadLocalMap, TransmittableThreadLocal, 内存泄漏, 并发编程, 弱引用, 线程封闭]
 aliases: []
 ---
 

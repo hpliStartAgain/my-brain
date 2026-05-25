@@ -1,7 +1,7 @@
 ---
 title: "08 Dubbo 3.x 新特性——Triple 协议与应用级服务发现"
 date: 2026-03-04
-tags: [Dubbo, Triple, HTTP2, gRPC, 应用级服务发现, 元数据中心, Mesh, Proxyless, Istio, 云原生]
+tags: [Dubbo, gRPC, HTTP2, Istio, Mesh, Proxyless, Triple, 云原生, 元数据中心, 应用级服务发现]
 aliases: []
 ---
 

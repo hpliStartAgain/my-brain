@@ -1,11 +1,7 @@
 ---
 title: 13 perf
 date: 2026-05-10
-tags:
-  - SRE
-  - SystemsPerformance
-  - perf
-  - Profiling
+tags: [perf, Profiling, SRE, SystemsPerformance]
 aliases:
   - perf
 ---

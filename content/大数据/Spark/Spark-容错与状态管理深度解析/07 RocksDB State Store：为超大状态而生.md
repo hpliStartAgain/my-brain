@@ -1,7 +1,7 @@
 ---
 title: "RocksDB State Store：为超大状态而生"
 date: 2026-02-28
-tags: [Spark, Structured Streaming, RocksDB, State Store, LSM Tree, 堆外内存, 大状态, Spark 3.2]
+tags: [LSM-Tree, RocksDB, Spark, Spark 3.2, State Store, Structured Streaming, 堆外内存, 大状态]
 aliases: []
 ---
 

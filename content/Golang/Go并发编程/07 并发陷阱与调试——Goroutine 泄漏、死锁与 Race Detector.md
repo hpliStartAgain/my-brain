@@ -1,7 +1,7 @@
 ---
 title: "并发陷阱与调试——Goroutine 泄漏、死锁与 Race Detector"
 date: 2026-03-04
-tags: [Golang, 并发陷阱, Goroutine泄漏, 死锁, Race Detector, pprof, 数据竞争, 调试, 生产问题]
+tags: [Golang, Goroutine泄漏, pprof, Race Detector, 并发陷阱, 数据竞争, 死锁, 生产问题, 调试]
 aliases: []
 ---
 

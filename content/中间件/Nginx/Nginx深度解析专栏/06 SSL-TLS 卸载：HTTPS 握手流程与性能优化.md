@@ -1,7 +1,7 @@
 ---
 title: "SSL/TLS 卸载：HTTPS 握手流程与性能优化"
 date: 2026-02-28
-tags: [Nginx, TLS, HTTPS, SSL卸载, TLS1.3, Session Ticket, OCSP Stapling, ssl_buffer_size, 握手优化]
+tags: [HTTPS, Nginx, OCSP Stapling, Session Ticket, ssl_buffer_size, SSL卸载, TLS, TLS1.3, 握手优化]
 aliases: []
 ---
 

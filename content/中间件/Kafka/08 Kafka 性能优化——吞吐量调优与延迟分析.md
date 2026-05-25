@@ -1,7 +1,7 @@
 ---
 title: "Kafka 性能优化——吞吐量调优与延迟分析"
 date: 2026-03-04
-tags: [中间件, Kafka, 性能优化, 吞吐量, 延迟, 压缩, linger.ms, batch.size, JVM, Page Cache]
+tags: [batch.size, JVM, Kafka, linger.ms, Page Cache, 中间件, 压缩, 吞吐量, 延迟, 性能优化]
 aliases: []
 ---
 

@@ -1,7 +1,7 @@
 ---
 title: "06 Ceph 运维——集群部署、PG 调优与故障处理"
 date: 2026-03-05
-tags: [Ceph, 运维, cephadm, PG调优, 故障处理, 监控, OSD, SRE]
+tags: [Ceph, cephadm, OSD, PG调优, SRE, 故障处理, 监控, 运维]
 aliases: []
 ---
 

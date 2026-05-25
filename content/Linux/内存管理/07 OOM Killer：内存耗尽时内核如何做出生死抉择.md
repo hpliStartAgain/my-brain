@@ -1,7 +1,7 @@
 ---
 title: "OOM Killer：内存耗尽时内核如何做出生死抉择"
 date: 2026-02-28
-tags: [Linux, 内存管理, OOM Killer, oom_score, oom_score_adj, 内存保护]
+tags: [Linux, OOM Killer, oom_score, oom_score_adj, 内存保护, 内存管理]
 aliases: [OOM Killer, Out of Memory, OOM分数]
 ---
 

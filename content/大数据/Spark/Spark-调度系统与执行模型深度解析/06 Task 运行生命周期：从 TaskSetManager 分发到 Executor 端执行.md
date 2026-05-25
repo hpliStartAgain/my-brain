@@ -1,7 +1,7 @@
 ---
 title: "06 Task 运行生命周期：从 TaskSetManager 分发到 Executor 端执行"
 date: 2026-02-27
-tags: [Spark, Task, TaskSetManager, Executor, 调度系统, TaskRunner]
+tags: [Executor, Spark, Task, TaskRunner, TaskSetManager, 调度系统]
 aliases: [Task Lifecycle]
 ---
 

@@ -1,7 +1,7 @@
 ---
 title: "字符串模拟：Valid Number、整数与罗马互转"
 date: 2026-04-27
-tags: [数据结构, 算法, 字符串, 状态机, 贪心, 罗马数字, LeetCode, 面试]
+tags: [LeetCode, 字符串, 数据结构, 状态机, 算法, 罗马数字, 贪心, 面试]
 aliases: [Valid Number, 整数转罗马, 罗马转整数, 有限状态机, LeetCode 65, LeetCode 12, LeetCode 13]
 ---
 

@@ -1,11 +1,7 @@
 ---
 title: 14 Ftrace
 date: 2026-05-10
-tags:
-  - SRE
-  - SystemsPerformance
-  - Ftrace
-  - Tracing
+tags: [Ftrace, SRE, SystemsPerformance, Tracing]
 aliases:
   - Ftrace
 ---

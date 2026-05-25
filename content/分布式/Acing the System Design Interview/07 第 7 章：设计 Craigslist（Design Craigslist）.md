@@ -1,7 +1,7 @@
 ---
 title: "07 第 7 章：设计 Craigslist（Design Craigslist）"
 date: 2026-05-16
-tags: [系统设计, 面试, 分布式架构, Craigslist, 译书]
+tags: [Craigslist, 分布式架构, 系统设计, 译书, 面试]
 aliases: ["Design Craigslist", "设计 Craigslist"]
 ---
 

@@ -1,7 +1,7 @@
 ---
 title: "16 第 16 章：设计信息流（Design a News Feed）"
 date: 2026-05-16
-tags: [系统设计, 面试, 分布式架构, 译书]
+tags: [分布式架构, 系统设计, 译书, 面试]
 aliases: ["Design a News Feed", "设计信息流"]
 ---
 

@@ -1,7 +1,7 @@
 ---
 title: "CPU 性能分析——perf、火焰图与热点定位"
 date: 2026-03-02
-tags: [Linux, 性能优化, perf, 火焰图, CPU分析, 热点定位, profiling, on-CPU, 调用栈]
+tags: [CPU分析, Linux, on-CPU, perf, Profiling, 性能优化, 火焰图, 热点定位, 调用栈]
 aliases: ["perf使用指南", "火焰图原理", "CPU热点定位", "Linux性能分析perf"]
 ---
 

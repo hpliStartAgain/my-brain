@@ -1,7 +1,7 @@
 ---
 title: "Row Buffer 命中与 Bank 冲突——内存延迟抖动的硬件根因"
 date: 2026-04-30
-tags: [Linux, 性能优化, 内存硬件, RowBuffer, Bank, DRAM, 内存延迟, perf]
+tags: [Bank, DRAM, Linux, perf, Row Buffer, 内存延迟, 内存硬件, 性能优化]
 aliases: ["Row Buffer 命中", "Bank 冲突", "DRAM 延迟抖动", "内存行缓冲"]
 ---
 

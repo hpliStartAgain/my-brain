@@ -1,7 +1,7 @@
 ---
 title: "CompletableFuture 与异步编程模型——从 Future 到响应式"
 date: 2026-03-05
-tags: [Java, 并发编程, CompletableFuture, Future, 异步编程, 回调地狱, thenApply, thenCompose, allOf, anyOf, 异常处理, 响应式]
+tags: [allOf, anyOf, CompletableFuture, Future, Java, thenApply, thenCompose, 响应式, 回调地狱, 并发编程, 异常处理, 异步编程]
 aliases: []
 ---
 

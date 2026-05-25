@@ -1,7 +1,7 @@
 ---
 title: "05 通信层——Netty 传输与 Dubbo 协议"
 date: 2026-03-04
-tags: [Dubbo, Netty, 通信协议, 协议报文, 心跳, Exchange, Triple, gRPC, 序列化]
+tags: [Dubbo, Exchange, gRPC, Netty, Triple, 协议报文, 序列化, 心跳, 通信协议]
 aliases: []
 ---
 

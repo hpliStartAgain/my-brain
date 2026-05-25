@@ -1,7 +1,7 @@
 ---
 title: "流批一体：Structured Streaming 写入与读取 Delta Lake"
 date: 2026-02-28
-tags: [Delta Lake, Structured Streaming, 流批一体, Exactly-once, Delta Source, Change Data Feed, 增量读取, 流式写入]
+tags: [Change Data Feed, Delta Lake, Delta Source, Exactly-once, Structured Streaming, 增量读取, 流式写入, 流批一体]
 aliases: []
 ---
 

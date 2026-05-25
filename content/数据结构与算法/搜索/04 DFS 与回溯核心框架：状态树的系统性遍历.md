@@ -1,7 +1,7 @@
 ---
 title: "DFS 与回溯核心框架：状态树的系统性遍历"
 date: 2026-04-28
-tags: [算法, DFS, 回溯, 深度优先搜索, Backtracking, LeetCode, 面试]
+tags: [Backtracking, DFS, LeetCode, 回溯, 深度优先搜索, 算法, 面试]
 aliases: [DFS回溯框架, 回溯算法模板, 状态树遍历, Backtracking]
 ---
 

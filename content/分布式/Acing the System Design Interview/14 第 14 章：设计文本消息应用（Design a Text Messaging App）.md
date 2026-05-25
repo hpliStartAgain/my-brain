@@ -1,7 +1,7 @@
 ---
 title: "14 第 14 章：设计文本消息应用（Design a Text Messaging App）"
 date: 2026-05-16
-tags: [系统设计, 面试, 分布式架构, 译书]
+tags: [分布式架构, 系统设计, 译书, 面试]
 aliases: ["Design a Text Messaging App", "设计文本消息应用"]
 ---
 

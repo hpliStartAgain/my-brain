@@ -1,7 +1,7 @@
 ---
 title: "InnoDB Buffer Pool——内存与磁盘之间的桥梁"
 date: 2026-03-02
-tags: [MySQL, InnoDB, Buffer Pool, LRU, 内存管理, 性能优化]
+tags: [Buffer Pool, InnoDB, LRU, MySQL, 内存管理, 性能优化]
 aliases: [Buffer Pool, InnoDB缓冲池]
 ---
 

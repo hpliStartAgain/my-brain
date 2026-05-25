@@ -1,7 +1,7 @@
 ---
 title: "02 SDS 与 Redis 对象系统"
 date: 2026-03-03
-tags: [中间件, Redis, SDS, RedisObject, 编码, 内存优化, 引用计数, 对象共享, embstr, raw]
+tags: [embstr, raw, Redis, RedisObject, SDS, 中间件, 内存优化, 对象共享, 引用计数, 编码]
 aliases: []
 ---
 

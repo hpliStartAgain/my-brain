@@ -1,7 +1,7 @@
 ---
 title: "Netty在开源项目中的应用——Dubbo、RocketMQ、Elasticsearch"
 date: 2026-03-04
-tags: [Java, Netty, Dubbo, RocketMQ, Elasticsearch, 开源项目, 网络层, 实战分析]
+tags: [Dubbo, Elasticsearch, Java, Netty, RocketMQ, 实战分析, 开源项目, 网络层]
 aliases: []
 ---
 

@@ -1,7 +1,7 @@
 ---
 title: "Catalyst 解析与分析：从 AST 到 Analyzed LogicalPlan"
 date: 2026-02-28
-tags: [Spark, SparkSQL, Catalyst, Parser, Analyzer, AST, LogicalPlan, Catalog, Antlr4, Resolution]
+tags: [Analyzer, Antlr4, AST, Catalog, Catalyst, LogicalPlan, Parser, Resolution, Spark, SparkSQL]
 aliases: []
 ---
 

@@ -1,7 +1,7 @@
 ---
 title: "Sort Shuffle 的崛起：统一写出模型"
 date: 2026-02-27
-tags: [Spark, Shuffle, SortShuffleManager, BypassMergeSortShuffleWriter, UnsafeShuffleWriter, SortShuffleWriter]
+tags: [BypassMergeSortShuffleWriter, Shuffle, SortShuffleManager, SortShuffleWriter, Spark, UnsafeShuffleWriter]
 aliases: []
 ---
 

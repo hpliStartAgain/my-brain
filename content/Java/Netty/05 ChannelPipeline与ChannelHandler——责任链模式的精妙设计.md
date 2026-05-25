@@ -1,7 +1,7 @@
 ---
 title: "ChannelPipeline与ChannelHandler——责任链模式的精妙设计"
 date: 2026-03-04
-tags: [Java, Netty, ChannelPipeline, ChannelHandler, ChannelHandlerContext, 责任链模式, InboundHandler, OutboundHandler, 异常处理, Sharable]
+tags: [ChannelHandler, ChannelHandlerContext, ChannelPipeline, InboundHandler, Java, Netty, OutboundHandler, Sharable, 异常处理, 责任链模式]
 aliases: []
 ---
 

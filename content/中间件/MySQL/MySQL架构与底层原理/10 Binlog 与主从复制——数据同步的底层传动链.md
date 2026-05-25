@@ -1,7 +1,7 @@
 ---
 title: "Binlog 与主从复制——数据同步的底层传动链"
 date: 2026-03-02
-tags: [MySQL, Binlog, 主从复制, GTID, 并行复制, Relay Log]
+tags: [Binlog, GTID, MySQL, Relay Log, 主从复制, 并行复制]
 aliases: [Binlog, 主从复制, GTID, 并行复制]
 ---
 

@@ -1,7 +1,7 @@
 ---
 title: "快速上手：第一个 Flink 程序"
 date: 2026-03-02
-tags: [Flink, 入门, DataStream, 实战, 开发环境, Maven, 本地调试]
+tags: [DataStream, Flink, Maven, 入门, 实战, 开发环境, 本地调试]
 aliases: ["Flink快速上手", "Flink第一个程序", "Flink Hello World"]
 ---
 

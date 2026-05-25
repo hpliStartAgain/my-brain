@@ -1,7 +1,7 @@
 ---
 title: "Flink SQL 与 Blink Planner 深度解析"
 date: 2026-03-02
-tags: [Flink, Flink SQL, Blink Planner, Calcite, RelNode, 查询优化, MiniBatch, LocalGlobalAgg, 流式优化]
+tags: [Blink Planner, Calcite, Flink, Flink SQL, LocalGlobalAgg, MiniBatch, RelNode, 查询优化, 流式优化]
 aliases: ["Blink Planner", "Flink SQL优化", "Calcite优化器", "FlinkRelNode", "MiniBatch优化"]
 ---
 

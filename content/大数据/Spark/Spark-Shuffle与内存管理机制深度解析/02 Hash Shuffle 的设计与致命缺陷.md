@@ -1,7 +1,7 @@
 ---
 title: "Hash Shuffle 的设计与致命缺陷"
 date: 2026-02-27
-tags: [Spark, Shuffle, HashShuffle, File Consolidation, 性能优化]
+tags: [File Consolidation, HashShuffle, Shuffle, Spark, 性能优化]
 aliases: []
 ---
 

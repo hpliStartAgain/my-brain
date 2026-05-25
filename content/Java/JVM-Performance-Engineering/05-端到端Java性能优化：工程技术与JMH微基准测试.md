@@ -1,7 +1,7 @@
 ---
 title: "端到端Java性能优化：工程技术与JMH微基准测试"
 date: 2026-05-12
-tags: [Java, JVM, 性能工程, JMH, 基准测试, 内存模型, NUMA, GC]
+tags: [GC, Java, JMH, JVM, NUMA, 内存模型, 基准测试, 性能工程]
 aliases: [Chapter 5 End-to-End Java Performance Optimization: Engineering Techniques and Microbenchmarking with JMH]
 ---
 

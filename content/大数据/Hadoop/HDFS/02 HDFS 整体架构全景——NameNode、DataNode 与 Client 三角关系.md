@@ -1,7 +1,7 @@
 ---
 title: "HDFS 整体架构全景——NameNode、DataNode 与 Client 三角关系"
 date: 2026-02-27
-tags: [HDFS, NameNode, DataNode, 分布式存储, 架构设计]
+tags: [DataNode, HDFS, NameNode, 分布式存储, 架构设计]
 aliases: [HDFS架构全景, HDFS主从架构]
 ---
 

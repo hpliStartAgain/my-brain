@@ -1,7 +1,7 @@
 ---
 title: "系统调用开销与用户态优化——vDSO、seccomp 与零系统调用"
 date: 2026-03-02
-tags: [Linux, 性能优化, 系统调用, vDSO, seccomp, strace, 零系统调用, 用户态优化, syscall overhead, VVAR]
+tags: [Linux, Seccomp, strace, syscall overhead, vDSO, VVAR, 性能优化, 用户态优化, 系统调用, 零系统调用]
 aliases: ["系统调用性能", "vDSO原理", "seccomp性能代价", "零系统调用优化", "syscall开销分析"]
 ---
 

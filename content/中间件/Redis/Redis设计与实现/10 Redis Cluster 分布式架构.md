@@ -1,7 +1,7 @@
 ---
 title: "10 Redis Cluster 分布式架构"
 date: 2026-03-03
-tags: [中间件, Redis, Cluster, 分布式, 哈希槽, Gossip, 分片, failover, 数据迁移, CRC16]
+tags: [Cluster, CRC16, failover, Gossip, Redis, 中间件, 分布式, 分片, 哈希槽, 数据迁移]
 aliases: []
 ---
 

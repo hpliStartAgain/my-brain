@@ -1,7 +1,7 @@
 ---
 title: "Java NIO基础——Channel、Buffer、Selector三大组件"
 date: 2026-03-04
-tags: [Java, NIO, Channel, Buffer, Selector, 非阻塞IO, 多路复用, Netty前置知识]
+tags: [Buffer, Channel, Java, Netty前置知识, NIO, Selector, 多路复用, 非阻塞IO]
 aliases: []
 ---
 

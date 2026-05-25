@@ -1,7 +1,7 @@
 ---
 title: "HBase 读取链路深度解析——BlockCache、Scanner 与多版本合并"
 date: 2026-02-27
-tags: [HBase, 读取链路, BlockCache, LRUBlockCache, BucketCache, Scanner, KeyValueHeap, 多版本合并, 读放大]
+tags: [Block Cache, BucketCache, HBase, KeyValueHeap, LRUBlockCache, Scanner, 多版本合并, 读取链路, 读放大]
 aliases: [HBase读取流程, HBase BlockCache原理, HBase Scanner机制]
 ---
 

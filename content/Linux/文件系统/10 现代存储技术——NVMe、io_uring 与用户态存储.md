@@ -1,7 +1,7 @@
 ---
 title: "现代存储技术——NVMe、io_uring 与用户态存储"
 date: 2026-03-02
-tags: [Linux, NVMe, io_uring, SPDK, 用户态存储, PCIe, NVMe-oF, 零拷贝, 系统调用, 存储技术演进]
+tags: [io_uring, Linux, NVMe, NVMe-oF, PCIe, SPDK, 存储技术演进, 用户态存储, 系统调用, 零拷贝]
 aliases: ["NVMe协议原理", "io_uring原理", "SPDK用户态存储", "NVMe-oF网络存储", "Linux存储未来"]
 ---
 

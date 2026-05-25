@@ -1,7 +1,7 @@
 ---
 title: "Shenandoah——与 ZGC 殊途同归的并发压缩"
 date: 2026-03-05
-tags: [Java, JVM, GC, Shenandoah, Brooks Pointer, 并发疏散, 读屏障, 写屏障, 低延迟, RedHat, JDK12]
+tags: [Brooks Pointer, GC, Java, JDK12, JVM, RedHat, Shenandoah, 低延迟, 写屏障, 并发疏散, 读屏障]
 aliases: []
 ---
 

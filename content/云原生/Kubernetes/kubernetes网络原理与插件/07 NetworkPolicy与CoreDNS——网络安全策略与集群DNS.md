@@ -1,7 +1,7 @@
 ---
 title: "NetworkPolicy与CoreDNS——网络安全策略与集群DNS"
 date: 2026-03-05
-tags: [云原生, Kubernetes, NetworkPolicy, CoreDNS, DNS, ndots, iptables, 网络安全, 服务发现]
+tags: [CoreDNS, DNS, iptables, Kubernetes, ndots, NetworkPolicy, 云原生, 服务发现, 网络安全]
 aliases: []
 ---
 

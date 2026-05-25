@@ -1,7 +1,7 @@
 ---
 title: "06 DNS 服务发现与 Ingress"
 date: 2026-03-04
-tags: [云原生, Kubernetes, CoreDNS, DNS, Ingress, IngressController, Gateway API, 服务发现, 七层路由]
+tags: [CoreDNS, DNS, Gateway API, Ingress, IngressController, Kubernetes, 七层路由, 云原生, 服务发现]
 aliases: []
 ---
 

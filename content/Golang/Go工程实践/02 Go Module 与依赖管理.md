@@ -1,7 +1,7 @@
 ---
 title: "Go Module 与依赖管理"
 date: 2026-03-04
-tags: [Golang, Go Module, go.mod, go.sum, GOPROXY, GOPATH, 版本管理, 语义化版本, vendor, 依赖管理]
+tags: [Go Module, go.mod, go.sum, Golang, GOPATH, GOPROXY, vendor, 依赖管理, 版本管理, 语义化版本]
 aliases: []
 ---
 

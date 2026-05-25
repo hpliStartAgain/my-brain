@@ -1,7 +1,7 @@
 ---
 title: "02 Dubbo SPI——微内核与插件化架构"
 date: 2026-03-04
-tags: [Dubbo, SPI, ExtensionLoader, Adaptive, Wrapper, 插件化, 微内核, 依赖注入]
+tags: [Adaptive, Dubbo, ExtensionLoader, SPI, Wrapper, 依赖注入, 微内核, 插件化]
 aliases: []
 ---
 

@@ -1,7 +1,7 @@
 ---
 title: "RDD Lineage 血缘容错：分布式计算的重建之道"
 date: 2026-02-28
-tags: [Spark, RDD, Lineage, 容错, 窄依赖, 宽依赖, DAGScheduler, 分区重算]
+tags: [DAGScheduler, Lineage, RDD, Spark, 分区重算, 容错, 宽依赖, 窄依赖]
 aliases: []
 ---
 

@@ -1,7 +1,7 @@
 ---
 title: "Linux 如何感知内存硬件——SMBIOS、EDAC、numactl 与 perf 观测链路"
 date: 2026-04-30
-tags: [Linux, 性能优化, 内存硬件, SMBIOS, EDAC, numactl, perf, NUMA, RAS]
+tags: [EDAC, Linux, NUMA, numactl, perf, RAS, SMBIOS, 内存硬件, 性能优化]
 aliases: ["Linux内存硬件观测", "SMBIOS与EDAC", "numactl与perf链路", "内存硬件观测链路"]
 ---
 

@@ -1,7 +1,7 @@
 ---
 title: "AQS 框架——AbstractQueuedSynchronizer 的设计与实现"
 date: 2026-03-05
-tags: [Java, 并发编程, AQS, AbstractQueuedSynchronizer, CLH队列, ReentrantLock, Semaphore, CountDownLatch, 模板方法]
+tags: [AbstractQueuedSynchronizer, AQS, CLH队列, CountDownLatch, Java, ReentrantLock, Semaphore, 并发编程, 模板方法]
 aliases: []
 ---
 

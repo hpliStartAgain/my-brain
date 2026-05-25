@@ -1,7 +1,7 @@
 ---
 title: "06 ZooKeeper vs ETCD——架构对比与去 ZooKeeper 化趋势"
 date: 2026-03-04
-tags: [ZooKeeper, ETCD, Kafka KRaft, 分布式协调, 对比, 云原生, Raft]
+tags: [etcd, Kafka KRaft, Raft, ZooKeeper, 云原生, 分布式协调, 对比]
 aliases: []
 ---
 

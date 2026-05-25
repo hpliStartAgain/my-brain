@@ -1,6 +1,6 @@
 ---
 date: 2026-03-31
-tags: [keepalived, vrrp, 高可用, 故障排查]
+tags: [keepalived, vrrp, 故障排查, 高可用]
 category: 网络故障
 severity: P1
 ---

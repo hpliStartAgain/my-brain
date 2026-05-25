@@ -1,4 +1,4 @@
-<h2>Zabbix → Foxeye 告警规则迁移进度概要 v6</h2>
+<h2>Zabbix → Foxeye 告警规则迁移进度概要 v7</h2>
 
 <div style="background:#e3fcef;border-left:4px solid #00875a;padding:12px 16px;margin:12px 0;">
 <strong>📌 本周关键产出（2026-05-19 ~ 05-22）</strong>
@@ -6,12 +6,13 @@
   <li>Foxeye 平台新建 <strong>16 条</strong>告警规则（全部已启用）</li>
   <li><strong>8 个服务双跑就绪</strong>：HDFS / YARN / HBase / Hive / ZooKeeper / Ranger / Ambari / Kyuubi</li>
   <li>YARN per-queue 4 条新规则全部建好，ZK 5 条 JMX 规则补齐（含级别抑制扩展为 5 个 FID）</li>
+  <li><strong>05-25 现场复核：</strong>Foxeye 已记录 YARN 子队列 344 条、HMS 2 条、ZooKeeper MaxLatency 2 条、<code>system_uptime</code> 68 条历史事件；Doris 新规则零事件不可用于否定覆盖</li>
   <li>仍阻塞：<strong>Kafka jmx_exporter MBean 不完整</strong>（影响 8+ 条）、SlaProbe 数据源缺失（影响 4 条）</li>
 </ul>
 </div>
 
 <div style="background:#e8f4fd;border-left:4px solid #1976d2;padding:12px 16px;margin:12px 0;">
-<strong>总体进度（截至 2026-05-22）</strong>
+<strong>总体进度（截至 2026-05-25，新增 Foxeye 现场事件复核）</strong>
 <table>
   <tr><th>维度</th><th>数量</th><th>备注</th></tr>
   <tr><td>Zabbix 规则清单总条数</td><td>545 条</td><td>21 个服务（Doris alert_shadow.zabbix_rules）</td></tr>
@@ -19,9 +20,10 @@
   <tr><td>本周新增 Foxeye 规则</td><td><strong>16 条</strong></td><td>详见下方第一节</td></tr>
   <tr><td>双跑就绪服务</td><td><strong>8 个</strong></td><td>详见下方第二节</td></tr>
   <tr><td>跳过服务（暂不处理）</td><td>7 个 / 139 条</td><td>zabbix_infra / spark / storm / docker_k8s / mapreduce / hardware / misc</td></tr>
-  <tr><td>最新事件样本</td><td>35,051 条</td><td>Doris alert_events，2026-05-14 16:00:58 ~ 2026-05-22 02:04:58</td></tr>
+  <tr><td>最新 Doris 事件样本</td><td>33,361 条</td><td><code>alert_events</code>，2026-05-17 16:00:28 ~ 2026-05-25 03:49:52；Zabbix 17,174 / Foxeye 16,182 / Ambari 5</td></tr>
+  <tr><td>新规则现场事件证明</td><td>Foxeye 已检出</td><td>05-22 16:30 ~ 05-25 12:07：YARN backlog、HMS、ZK MaxLatency、system_uptime 均有历史事件</td></tr>
 </table>
-<p style="margin-top:8px;"><strong>数据来源说明：</strong>本概要以 <code>opencli foxeye list-rules</code> 在 Foxeye 平台实测为权威，与 Doris <code>foxeye_rules</code> / <code>zabbix_rules</code> 表交叉验证。若与服务子文档冲突，以本概要数据为准。</p>
+<p style="margin-top:8px;"><strong>数据来源说明：</strong>规则启用状态以 Foxeye 平台实测为准；新建规则触发情况以 Foxeye <code>/api/n9e/alert-his-events/list</code> 与 <code>/api/n9e/alert-cur-events/list</code> 只读查询为准。Doris 用于统计 Zabbix 事件规模及读取既有映射，不用于否定新建 Foxeye 规则覆盖。</p>
 </div>
 
 <h3>一、本周新增告警规则（2026-05-19 ~ 05-22，共 16 条）</h3>
@@ -44,6 +46,20 @@
   <tr><td>14</td><td>05-22 15:00</td><td>infra_basic</td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/2765049">2765049</a></td><td>301</td><td>system_uptime 主机最近重启检测</td><td>覆盖宿主机非预期重启</td></tr>
   <tr><td>15</td><td>05-22 16:25</td><td>Ambari</td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/2765050">2765050</a></td><td>5</td><td>ambari_server_port_down Ambari 端口不通</td><td>Ambari Server 端口探活</td></tr>
   <tr><td>16</td><td>05-22 16:29</td><td>Ranger</td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/2765051">2765051</a></td><td>5</td><td>ranger_admin_dead Ranger Admin 进程死亡</td><td>Ranger Admin 进程存活</td></tr>
+</table>
+
+<h3>一-A、Foxeye 现场事件验证（2026-05-22 16:30 ~ 2026-05-25 12:07）</h3>
+<div style="background:#fff3e0;border-left:4px solid #f57c00;padding:10px 14px;margin:8px 0;">
+<strong>口径修正：</strong>Doris 存在新建 Foxeye 规则事件采集缺口。下表为 Foxeye 页面历史/当前事件接口的只读回查结果，作为本轮关闭判断的触发证据。
+</div>
+<table>
+  <tr><th>服务</th><th>FID / 规则</th><th>历史事件</th><th>当前事件</th><th>对关闭判断的含义</th></tr>
+  <tr><td>YARN</td><td><code>2765033</code> subqueue_container_backlog</td><td><strong>178</strong></td><td>0</td><td>PendingContainers 对应范围具备关闭候选证据，待精确映射</td></tr>
+  <tr><td>YARN</td><td><code>2765036</code> subqueue_apps_backlog</td><td><strong>166</strong></td><td>0</td><td>Apps backlog 对应范围具备关闭候选证据，待精确映射</td></tr>
+  <tr><td>Hive</td><td><code>2765045</code> HMS MYSQL ERROR</td><td><strong>2</strong></td><td>0</td><td>规则有效；与 Zabbix 6 条有差异，暂不关闭</td></tr>
+  <tr><td>ZooKeeper</td><td><code>2765040</code> zookeeper_max_latency</td><td><strong>2</strong></td><td>0</td><td>已证明规则可触发；本轮未扩大关闭范围</td></tr>
+  <tr><td>infra_basic</td><td><code>2765049</code> system_uptime</td><td><strong>68</strong></td><td>0</td><td>具备关闭候选证据，待定位 Zabbix trigger</td></tr>
+  <tr><td>无触发样本</td><td>YARN UsedCapacity/MemoryBacklog、Ambari、Ranger</td><td>0</td><td>0</td><td>仅建规则不足以支持关闭</td></tr>
 </table>
 
 <h3>二、各服务双跑就绪度（基于 Foxeye 平台实测）</h3>
@@ -187,16 +203,15 @@
 <p><strong>下周计划</strong>：评估 <code>inputs.filemd5</code> 在 Categraf 大数据节点上的部署成本，决定是否将 /etc/passwd 与 hive-exec jar 校验作为 P2 任务推进。</p>
 
 <h3>五、待关闭 Zabbix 告警台账摘要</h3>
-<p>关闭判断基于 Doris alert_events 最新窗口（2026-05-14 16:00:58 ~ 2026-05-22 02:04:58）。详细关闭台账见 <a href="https://bd-docs.panther.sohurdc.com/pages/viewpage.action?pageId=109248930">Zabbix 告警规则关闭台账</a>。</p>
+<p>关闭判断已修正为 Foxeye 现场事件与规则映射共同确认；Doris 最新窗口（2026-05-17 16:00:28 ~ 2026-05-25 03:49:52）仅用于统计 Zabbix 告警规模。详细关闭台账见 <a href="https://bd-docs.panther.sohurdc.com/pages/viewpage.action?pageId=109248930">Zabbix 告警规则关闭台账</a>。</p>
 <table>
   <tr><th>处置类别</th><th>规则 / 场景</th><th>最新窗口 Zabbix 事件数</th><th>Foxeye 覆盖状态</th><th>建议</th></tr>
-  <tr><td>可优先退役</td><td>ISR扩展</td><td>6,951</td><td>恢复型噪音，N/A</td><td>可单独退役；ISR收缩必须保留</td></tr>
-  <tr><td>可优先关闭</td><td>HDFS 存储 / GC / PendingReplication 类</td><td>40</td><td>Foxeye HDFS 事件 1,427，持续活跃</td><td>逐条关闭，关闭后观察 24~48h</td></tr>
-  <tr><td>可优先关闭</td><td>ES 集群 / 节点变更类</td><td>约 76</td><td>ES 核心规则已覆盖</td><td>关闭集群/节点类；per-IP coordinator 暂不关</td></tr>
-  <tr><td><strong>可新增关闭</strong></td><td>YARN 子队列 PendingContainers / AppsPending</td><td>593</td><td><strong>per-queue 4 条本周已建并启用</strong></td><td>建议下周双跑观察后关闭</td></tr>
-  <tr><td><strong>可新增关闭</strong></td><td>HMS MYSQL ERROR / RetryingHMSHandler</td><td>30</td><td><strong>HMS Loki 规则本周已建</strong></td><td>建议下周双跑观察后关闭</td></tr>
-  <tr><td>暂保留</td><td>ISR收缩</td><td>7,295</td><td>Foxeye 0</td><td>必须先解 Kafka MBean 阻塞</td></tr>
-  <tr><td>暂保留</td><td>CPU / Load</td><td>3,062</td><td>部分覆盖</td><td>补齐 node_load 归一化后再关</td></tr>
+  <tr><td><strong>可申请关闭</strong></td><td>HDFS 容量 75% 两条 + NameNode GC 一条</td><td>GC 新窗口 1；容量依赖映射与 Foxeye 现场证明</td><td><code>133493</code> 历史 548 / 当前 8；<code>130379</code> 历史 2 / 当前 0</td><td>仅关闭明确映射的 3 条，观察 24~48h</td></tr>
+  <tr><td>审批候选</td><td>YARN 子队列 PendingContainers / AppsPending</td><td>子队列类共 193</td><td><code>2765033</code> 历史 178；<code>2765036</code> 历史 166</td><td>补齐目标 trigger 与阈值映射后申请关闭</td></tr>
+  <tr><td>审批候选</td><td>infra_basic 主机最近重启</td><td>需补 Zabbix trigger 对照</td><td><code>2765049</code> 历史 68</td><td>完成精确映射后申请关闭</td></tr>
+  <tr><td>暂保留</td><td>HMS MYSQL ERROR / RetryingHMSHandler</td><td>6</td><td><code>2765045</code> 历史 2，阈值 <code>&gt; 1000</code></td><td>先核对灵敏度与漏报风险</td></tr>
+  <tr><td>暂保留</td><td>HDFS PendingReplication / ES 节点变更 / YARN Failed Container</td><td>26 / 36 / 24</td><td>无样本、映射不一致或事件量明显偏低</td><td>分别完成触发验证、映射对齐、阈值核对</td></tr>
+  <tr><td>暂保留</td><td>Kafka ISR收缩；ISR扩展单独评估</td><td>2,061 / 1,877</td><td>Foxeye 无等价规则</td><td>收缩不可关闭；扩展不作为迁移覆盖结论</td></tr>
 </table>
 
 <h3>六、跳过服务（7 个，暂不处理）</h3>
@@ -216,8 +231,9 @@
   <tr><th>优先级</th><th>行动项</th><th>解锁规则数 / 类别</th><th>截止</th></tr>
   <tr><td>P0</td><td>排查 broker 10.18.128.24 / 10.18.128.22 Kafka ISR 风暴根因</td><td>14,246 次/周事件</td><td>本周</td></tr>
   <tr><td>P0</td><td>补 Kafka jmx_exporter MBean，建 Kafka 业务组与 4 条 controller 规则</td><td>解锁 Kafka 双跑</td><td>下周</td></tr>
-  <tr><td>P1</td><td>关闭 HDFS / ES 已覆盖 Zabbix 规则，关闭后观察 24~48h</td><td>HDFS 约 40 + ES 约 76</td><td>本周</td></tr>
-  <tr><td>P1</td><td>YARN 子队列 4 条新规则 + HMS Loki / Non-Heap 规则双跑观察后，关闭对应 Zabbix 规则</td><td>YARN 593 + HMS 30 次/周</td><td>下周</td></tr>
+  <tr><td>P1</td><td>按审批关闭已明确验证的 3 条 HDFS Zabbix 规则，关闭后观察 24~48h</td><td>容量 75% 两条 + NameNode GC 一条</td><td>本周</td></tr>
+  <tr><td>P1</td><td>补齐 YARN 两类已触发规则与 infra_basic 重启规则的精确 Zabbix 映射后，再提交关闭申请</td><td>YARN / 主机重启候选范围</td><td>下周</td></tr>
+  <tr><td>P1</td><td>核对 HMS、YARN Failed Container 灵敏度及 ES node change 映射差异</td><td>当前暂保留范围</td><td>下周</td></tr>
   <tr><td>P1</td><td>确认 SlaProbe 探针部署状态，决定改用 cmdb_device_probe_status 或保留阻塞</td><td>4 条</td><td>下周</td></tr>
   <tr><td>P2</td><td>评估 Categraf <code>inputs.filemd5</code> 在大数据节点部署成本，决定 /etc/passwd + jar md5 替代方案</td><td>2 条</td><td>本月</td></tr>
   <tr><td>P2</td><td>infra_basic 7 条 VM 噪音规则评估 <code>instance_type!="vm"</code> 过滤方案</td><td>7 条</td><td>本月</td></tr>
@@ -225,4 +241,4 @@
   <tr><td>P3</td><td>清理 Foxeye 测试 / 旧版 / 重复规则；下线 Zabbix test item ti-A1/B2</td><td>—</td><td>本月</td></tr>
 </table>
 
-<p><em>v6 更新 - 2026-05-22 | 主要变更：① 新增"本周新增规则"明细（16 条）；② 双跑就绪服务从 0 提升到 8 个；③ 数据源切换为 Foxeye opencli 实测为权威；④ 新增 Categraf 替代方案评估章节。</em></p>
+<p><em>v7 更新 - 2026-05-25 | 主要变更：① 增补 Foxeye 历史/当前事件现场证据；② 修正 Doris 对新建规则存在采集缺口的判断口径；③ 将可申请关闭范围收敛为已明确验证的 3 条 HDFS 规则，YARN / infra_basic 转为待精确映射候选，HMS / ES / PendingReplication 暂保留。</em></p>
