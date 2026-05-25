@@ -7,23 +7,39 @@ export const sharedPageComponents: SharedLayout = {
   header: [],
   afterBody: [],
   footer: Component.Footer({
-    links: {
-      GitHub: "https://github.com/jackyzha0/quartz",
-      "Discord Community": "https://discord.gg/cRFFHYye7t",
-    },
+    links: {},
   }),
 }
 
 // components for pages that display a single page (e.g. a single note)
 export const defaultContentPageLayout: PageLayout = {
   beforeBody: [
+    // 首页不显示面包屑、标题、元数据
     Component.ConditionalRender({
       component: Component.Breadcrumbs(),
       condition: (page) => page.fileData.slug !== "index",
     }),
-    Component.ArticleTitle(),
-    Component.ContentMeta(),
-    Component.TagList(),
+    Component.ConditionalRender({
+      component: Component.ArticleTitle(),
+      condition: (page) => page.fileData.slug !== "index",
+    }),
+    Component.ConditionalRender({
+      component: Component.ContentMeta(),
+      condition: (page) => page.fileData.slug !== "index",
+    }),
+    Component.ConditionalRender({
+      component: Component.TagList(),
+      condition: (page) => page.fileData.slug !== "index",
+    }),
+    // 首页文章轮播 — Claude 博客风格，仅在首页显示
+    Component.ConditionalRender({
+      component: Component.ArticleCarousel({
+        title: "随机碎片",
+        limit: 15,
+        random: true,
+      }),
+      condition: (page) => page.fileData.slug === "index",
+    }),
   ],
   left: [
     Component.PageTitle(),
@@ -40,15 +56,15 @@ export const defaultContentPageLayout: PageLayout = {
     }),
     Component.Explorer({
       title: "文章导航",
-      
+
       // 🌟 核心优化 1：默认收起所有文件夹，防止浏览器在冷启动时渲染全量 DOM 树
-      folderDefaultState: "collapsed", 
-      
+      folderDefaultState: "collapsed",
+
       // 🌟 核心优化 2：关闭本地状态恢复。阻止 JS 在页面刚加载时去深度遍历几千个节点计算开合状态
-      useSavedState: false, 
-      
+      useSavedState: false,
+
       // 🌟 核心优化 3（可选）：点击文件夹名字时折叠/展开，而不是当做链接跳转
-      folderClickBehavior: "collapse", 
+      folderClickBehavior: "collapse",
     }),
   ],
   right: [
@@ -74,15 +90,15 @@ export const defaultListPageLayout: PageLayout = {
     }),
     Component.Explorer({
       title: "文章导航",
-      
+
       // 🌟 核心优化 1：默认收起所有文件夹，防止浏览器在冷启动时渲染全量 DOM 树
-      folderDefaultState: "collapsed", 
-      
+      folderDefaultState: "collapsed",
+
       // 🌟 核心优化 2：关闭本地状态恢复。阻止 JS 在页面刚加载时去深度遍历几千个节点计算开合状态
-      useSavedState: false, 
-      
+      useSavedState: false,
+
       // 🌟 核心优化 3（可选）：点击文件夹名字时折叠/展开，而不是当做链接跳转
-      folderClickBehavior: "collapse", 
+      folderClickBehavior: "collapse",
     }),
   ],
   right: [],

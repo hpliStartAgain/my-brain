@@ -23,34 +23,37 @@ const config: QuartzConfig = {
       fontOrigin: "googleFonts",
       cdnCaching: true,
       typography: {
-        // Sleek Tech / Vercel-like Design System
-        // Headings & Body: Inter (geometric, modern sans-serif)
-        header: { name: "Inter", weights: [400, 600, 700, 800], includeItalic: true },
-        body: { name: "Inter", weights: [400, 500, 600], includeItalic: true },
+        // Claude Blog 风格设计系统
+        // 标题：Source Serif 4（温暖衬线体，呼应 Anthropic Serif 的文学气质）
+        // 正文：Source Sans 3（人文主义无衬线，温暖感接近 Anthropic Sans）
+        // 代码：JetBrains Mono（等宽字体，保持不变）
+        header: { name: "Source Serif 4", weights: [400, 600, 700], includeItalic: true },
+        body: { name: "Source Sans 3", weights: [400, 500, 600], includeItalic: true },
         code: { name: "JetBrains Mono", weights: [400, 500], includeItalic: false },
       },
       colors: {
+        // Claude 博客象牙色系 — 从 claude.com/blog CSS 精确提取
         lightMode: {
-          light: "#ffffff", // Pure white background
-          lightgray: "#e5e5e5", // Subtle borders
-          gray: "#737373", // Muted text
-          darkgray: "#171717", // Main text
-          dark: "#000000", // Headings / contrast text
-          secondary: "#4f46e5", // Indigo / Sleek accent
-          tertiary: "#0ea5e9", // Ocean blue secondary accent
-          highlight: "rgba(79, 70, 229, 0.08)", // Indigo tint
-          textHighlight: "rgba(79, 70, 229, 0.15)",
+          light: "#faf9f5",    // 象牙白背景 (Claude gray-050)
+          lightgray: "#e8e6dc", // 温暖灰边框 (Claude gray-200)
+          gray: "#87867f",     // 柔和次要文字 (Claude gray-500)
+          darkgray: "#30302e", // 温暖主体文字 (Claude gray-750)
+          dark: "#141413",     // 深色标题 (Claude gray-950)
+          secondary: "#c96442", // 陶土交互色 (Claude clay-interactive)
+          tertiary: "#d97757", // 陶土装饰色 (Claude clay)
+          highlight: "rgba(201, 100, 66, 0.08)",  // 陶土色高亮
+          textHighlight: "rgba(201, 100, 66, 0.15)",
         },
         darkMode: {
-          light: "#0a0a0a", // Vercel dark background
-          lightgray: "#262626", // Dark borders
-          gray: "#a3a3a3", // Muted text
-          darkgray: "#e5e5e5", // Main text
-          dark: "#ffffff", // Headings / contrast text
-          secondary: "#818cf8", // Light Indigo
-          tertiary: "#38bdf8", // Light Ocean
-          highlight: "rgba(129, 140, 248, 0.15)",
-          textHighlight: "rgba(129, 140, 248, 0.25)",
+          light: "#141413",    // 温暖深色背景 (Claude gray-950)
+          lightgray: "#3d3d3a", // 暗灰边框 (Claude gray-700)
+          gray: "#73726c",     // 次要文字 (Claude gray-550)
+          darkgray: "#dedcd1", // 浅暖灰主体文字 (Claude gray-250)
+          dark: "#faf9f5",     // 象牙白标题 (Claude gray-050)
+          secondary: "#d97757", // 亮陶土色 (Claude clay)
+          tertiary: "#c96442", // 深陶土色 (Claude clay-interactive)
+          highlight: "rgba(217, 119, 87, 0.15)",
+          textHighlight: "rgba(217, 119, 87, 0.25)",
         },
       },
     },

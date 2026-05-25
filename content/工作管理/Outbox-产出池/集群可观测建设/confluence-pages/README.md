@@ -7,21 +7,21 @@
 
 | 文件名 | Confluence pageId | 标题 | 最后推送版本 |
 |---|---|---|---|
-| `progress_summary.html` | 107717201 | 迁移进度概要 | v5 |
+| `progress_summary.html` | 107717201 | 迁移进度概要 | v6 |
 | `hdfs.html` | 107718652 | HDFS 告警规则迁移明细 | v6 |
-| `yarn.html` | 107718655 | YARN 告警规则迁移明细 | v3 |
-| `infra_basic.html` | 107718658 | infra_basic 告警规则迁移明细 | v7 |
+| `yarn.html` | 107718655 | YARN 告警规则迁移明细 | v5 |
+| `infra_basic.html` | 107718658 | infra_basic 告警规则迁移明细 | v8 |
 | `elasticsearch.html` | 107718659 | Elasticsearch 告警规则迁移明细 | v4 |
 | `hbase.html` | 107718660 | HBase 告警规则迁移明细 | v3 |
-| `hive.html` | 107718661 | Hive 告警规则迁移明细 | v8 |
+| `hive.html` | 107718661 | Hive 告警规则迁移明细 | v9 |
 | `kafka.html` | 107718662 | Kafka 告警规则迁移明细 | v2 |
-| `zookeeper.html` | 107718663 | ZooKeeper 告警规则迁移明细 | v3 |
+| `zookeeper.html` | 107718663 | ZooKeeper 告警规则迁移明细 | v5 |
 | `druid.html` | 107718664 | Druid 告警规则迁移明细 | v2 |
 | `misc.html` | 107718665 | misc 告警规则迁移明细 | v2 |
 | `java_jvm.html` | 107718666 | java_jvm 告警规则迁移明细 | v3 |
 | `ambari.html` | 107718667 | Ambari 告警规则迁移明细 | v4 |
 | `kyuubi.html` | 107718668 | Kyuubi 告警规则迁移明细 | v4 |
-| `ranger.html` | 107718669 | Ranger 告警规则迁移明细 | v2 |
+| `ranger.html` | 107718669 | Ranger 告警规则迁移明细 | v4 |
 | `trino.html` | 107718670 | Trino 告警规则迁移明细 | v4 |
 | `flume.html` | 107718671 | Flume 告警规则迁移明细 | v3+ |
 

@@ -1,179 +1,228 @@
-<h2>Zabbix → Foxeye 告警规则迁移进度概要</h2>
+<h2>Zabbix → Foxeye 告警规则迁移进度概要 v6</h2>
+
+<div style="background:#e3fcef;border-left:4px solid #00875a;padding:12px 16px;margin:12px 0;">
+<strong>📌 本周关键产出（2026-05-19 ~ 05-22）</strong>
+<ul>
+  <li>Foxeye 平台新建 <strong>16 条</strong>告警规则（全部已启用）</li>
+  <li><strong>8 个服务双跑就绪</strong>：HDFS / YARN / HBase / Hive / ZooKeeper / Ranger / Ambari / Kyuubi</li>
+  <li>YARN per-queue 4 条新规则全部建好，ZK 5 条 JMX 规则补齐（含级别抑制扩展为 5 个 FID）</li>
+  <li>仍阻塞：<strong>Kafka jmx_exporter MBean 不完整</strong>（影响 8+ 条）、SlaProbe 数据源缺失（影响 4 条）</li>
+</ul>
+</div>
 
 <div style="background:#e8f4fd;border-left:4px solid #1976d2;padding:12px 16px;margin:12px 0;">
 <strong>总体进度（截至 2026-05-22）</strong>
 <table>
   <tr><th>维度</th><th>数量</th><th>备注</th></tr>
-  <tr><td>CSV 规则清单总条数</td><td>435 条</td><td>21 个服务</td></tr>
+  <tr><td>Zabbix 规则清单总条数</td><td>545 条</td><td>21 个服务（Doris alert_shadow.zabbix_rules）</td></tr>
   <tr><td>已完成深度分析服务</td><td>14 个 / 296 条</td><td>HDFS / YARN / HBase / Hive / ES / Druid / infra_basic / Kafka / ZooKeeper / java_jvm / Ambari / Kyuubi / Ranger / Trino</td></tr>
+  <tr><td>本周新增 Foxeye 规则</td><td><strong>16 条</strong></td><td>详见下方第一节</td></tr>
+  <tr><td>双跑就绪服务</td><td><strong>8 个</strong></td><td>详见下方第二节</td></tr>
   <tr><td>跳过服务（暂不处理）</td><td>7 个 / 139 条</td><td>zabbix_infra / spark / storm / docker_k8s / mapreduce / hardware / misc</td></tr>
   <tr><td>最新事件样本</td><td>35,051 条</td><td>Doris alert_events，2026-05-14 16:00:58 ~ 2026-05-22 02:04:58</td></tr>
-  <tr><td>事件来源分布</td><td>Zabbix 18,879 / Foxeye 16,166 / Ambari 6</td><td>Zabbix 仍被 Kafka ISR 噪音主导</td></tr>
 </table>
+<p style="margin-top:8px;"><strong>数据来源说明：</strong>本概要以 <code>opencli foxeye list-rules</code> 在 Foxeye 平台实测为权威，与 Doris <code>foxeye_rules</code> / <code>zabbix_rules</code> 表交叉验证。若与服务子文档冲突，以本概要数据为准。</p>
 </div>
 
-<h3>一、已完成深度分析服务（14 个）</h3>
+<h3>一、本周新增告警规则（2026-05-19 ~ 05-22，共 16 条）</h3>
+<p>来源：Doris <code>foxeye_rules</code> 表按 <code>full_rule_json.create_at</code> 过滤。全部 16 条均已启用。</p>
+<table>
+  <tr><th>#</th><th>创建时间</th><th>服务</th><th>FID</th><th>GID</th><th>规则名</th><th>价值</th></tr>
+  <tr><td>1</td><td>05-19 09:32</td><td>infra_basic</td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/2763626">2763626</a></td><td>399</td><td>kernel_disk_medium_error_detected 磁盘介质错误预警</td><td>覆盖 kernel/disk 介质错误</td></tr>
+  <tr><td>2</td><td>05-19 14:55</td><td>HBase</td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/2763691">2763691</a></td><td>416</td><td>hadoop_hbase_master_leader_change HMaster 发生切换</td><td>修正 HMaster 切换检测语义</td></tr>
+  <tr><td>3</td><td>05-19 16:33</td><td>HDFS</td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/2763722">2763722</a></td><td>384</td><td>hadoop_hdfs_zkfc_is_running ZKFC 进程存活</td><td>第二台 NN 的 ZKFC 探活补齐</td></tr>
+  <tr><td>4</td><td>05-22 12:05</td><td>YARN</td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/2765032">2765032</a></td><td>413</td><td>subqueue_used_capacity 子队列使用率</td><td rowspan="4"><strong>per-queue 4 条全建</strong>，解锁 Zabbix YARN 子队列 593 次/周事件关闭</td></tr>
+  <tr><td>5</td><td>05-22 12:08</td><td>YARN</td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/2765033">2765033</a></td><td>413</td><td>subqueue_container_backlog 子队列容器待分配</td></tr>
+  <tr><td>6</td><td>05-22 14:13</td><td>YARN</td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/2765036">2765036</a></td><td>413</td><td>subqueue_apps_backlog 子队列应用待运行</td></tr>
+  <tr><td>7</td><td>05-22 14:15</td><td>YARN</td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/2765037">2765037</a></td><td>413</td><td>subqueue_memory_backlog 子队列内存待分配</td></tr>
+  <tr><td>8</td><td>05-22 14:17</td><td>ZooKeeper</td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/2765039">2765039</a></td><td>394</td><td>zookeeper_request_queued ZK 队列积压</td><td rowspan="4"><strong>ZK 5 条 JMX 规则补齐</strong>（含级别抑制扩展为 5 个 FID），ZK 进入双跑</td></tr>
+  <tr><td>9</td><td>05-22 14:25</td><td>ZooKeeper</td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/2765040">2765040</a></td><td>394</td><td>zookeeper_max_latency 最大响应时间增加</td></tr>
+  <tr><td>10</td><td>05-22 14:28</td><td>ZooKeeper</td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/2765041">2765041</a></td><td>394</td><td>zookeeper_znode_count 节点数 &gt; 200000</td></tr>
+  <tr><td>11</td><td>05-22 14:31</td><td>ZooKeeper</td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/2765042">2765042</a></td><td>394</td><td>zookeeper_too_much_open_fd 打开 FD 过多（级别抑制）</td></tr>
+  <tr><td>12</td><td>05-22 14:47</td><td>Hive</td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/2765045">2765045</a></td><td>419</td><td>HMS MYSQL ERROR (RetryingHMSHandler Loki)</td><td>HMS MySQL 死锁 / Retry 检测</td></tr>
+  <tr><td>13</td><td>05-22 14:50</td><td>Hive</td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/2765048">2765048</a></td><td>419</td><td>hive_metastore_nonheap_usage_high HMS Non-Heap &gt; 85%</td><td>HMS Metaspace OOM 早预警</td></tr>
+  <tr><td>14</td><td>05-22 15:00</td><td>infra_basic</td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/2765049">2765049</a></td><td>301</td><td>system_uptime 主机最近重启检测</td><td>覆盖宿主机非预期重启</td></tr>
+  <tr><td>15</td><td>05-22 16:25</td><td>Ambari</td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/2765050">2765050</a></td><td>5</td><td>ambari_server_port_down Ambari 端口不通</td><td>Ambari Server 端口探活</td></tr>
+  <tr><td>16</td><td>05-22 16:29</td><td>Ranger</td><td><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/2765051">2765051</a></td><td>5</td><td>ranger_admin_dead Ranger Admin 进程死亡</td><td>Ranger Admin 进程存活</td></tr>
+</table>
+
+<h3>二、各服务双跑就绪度（基于 Foxeye 平台实测）</h3>
+<p>就绪标准：<strong>该服务所有可迁移 Zabbix 规则在 Foxeye 上对应规则均已建好且启用</strong>。SlaProbe / VM 噪音 / 待 ES 负责人确认等阻塞不算"可迁移"，但会在第三节单列。</p>
+
 <table>
   <tr>
-    <th>服务</th><th>规则总数</th><th>Foxeye 覆盖状态</th><th>待新建 / 阻塞</th><th>建议 Retire</th><th>分析页面</th>
+    <th>服务</th><th>就绪度</th><th>Foxeye 实测（规则数/启用）</th><th>子文档分析页</th><th>说明</th>
   </tr>
-  <tr>
-    <td>HDFS</td><td>44</td>
-    <td>43 已匹配（97%）</td>
-    <td>ZKFC 第二台 NN procstat 配置待补；452219 PromQL 单引号问题待修正；452659/130400 重复规则待清理</td>
-    <td>0</td>
-    <td><a href="https://bd-docs.panther.sohurdc.com/pages/viewpage.action?pageId=107718652">HDFS 告警规则迁移明细</a></td>
+  <tr style="background:#E3FCEF">
+    <td><strong>HDFS</strong></td><td>✅ 已就绪</td><td>GID=384 共 66 条 / 65 启用</td>
+    <td><a href="https://bd-docs.panther.sohurdc.com/pages/viewpage.action?pageId=107718652">HDFS 明细</a></td>
+    <td>本周新增 ZKFC 进程存活；452219 单引号 / 452659 / 130400 为规则质量问题，不阻塞双跑</td>
   </tr>
-  <tr>
-    <td>YARN</td><td>33</td>
-    <td>30 已匹配（91%）</td>
-    <td>4 条 per-queue 规则待建（GID=413，PromQL 已验证）；3 条 LevelDB 磁盘阻塞</td>
-    <td>0</td>
-    <td><a href="https://bd-docs.panther.sohurdc.com/pages/viewpage.action?pageId=107718655">YARN 告警规则迁移明细</a></td>
+  <tr style="background:#E3FCEF">
+    <td><strong>YARN</strong></td><td>✅ 已就绪</td><td>GID=413 共 43 条 / 全启用 + GID=414 共 21 条 / 10 启用</td>
+    <td><a href="https://bd-docs.panther.sohurdc.com/pages/viewpage.action?pageId=107718655">YARN 明细</a></td>
+    <td>本周补齐 per-queue 4 条；GID=414 中 11 条禁用规则仅在子文档评估，不阻塞双跑</td>
   </tr>
-  <tr>
-    <td>HBase</td><td>20</td>
-    <td>19 已匹配（95%），HMaster 切换规则 2757298 已修正</td>
-    <td>0</td>
-    <td>0</td>
-    <td><a href="https://bd-docs.panther.sohurdc.com/pages/viewpage.action?pageId=107718660">HBase 告警规则迁移明细</a></td>
+  <tr style="background:#E3FCEF">
+    <td><strong>HBase</strong></td><td>✅ 已就绪</td><td>GID=416 共 28 条 / 26 启用</td>
+    <td><a href="https://bd-docs.panther.sohurdc.com/pages/viewpage.action?pageId=107718660">HBase 明细</a></td>
+    <td>HMaster 切换规则本周修正完毕</td>
   </tr>
-  <tr>
-    <td>Hive</td><td>25</td>
-    <td>17 已匹配；2757366 需修正 LogQL</td>
-    <td>2 条待建（HMS Loki + HMS Non-Heap），1 条待更新（MSCK 规则）</td>
-    <td>6</td>
-    <td><a href="https://bd-docs.panther.sohurdc.com/pages/viewpage.action?pageId=107718661">Hive 告警规则迁移明细</a></td>
+  <tr style="background:#E3FCEF">
+    <td><strong>Hive</strong></td><td>✅ 已就绪</td><td>GID=419 共 23 条 / 全启用</td>
+    <td><a href="https://bd-docs.panther.sohurdc.com/pages/viewpage.action?pageId=107718661">Hive 明细</a></td>
+    <td>本周补齐 HMS MySQL Loki + HMS Non-Heap 共 2 条</td>
   </tr>
-  <tr>
-    <td>Elasticsearch</td><td>43</td>
-    <td>核心集群/节点/GC/FD 场景已覆盖</td>
-    <td>20 条 per-IP coordinator HTTP 探测转 ES 负责人确认</td>
-    <td>旧版/测试/重复规则待清理</td>
-    <td><a href="https://bd-docs.panther.sohurdc.com/pages/viewpage.action?pageId=107718659">Elasticsearch 告警规则迁移明细</a></td>
+  <tr style="background:#E3FCEF">
+    <td><strong>ZooKeeper</strong></td><td>✅ 已就绪</td><td>GID=394 共 5 条 / 4 启用 + 1 级别抑制副本</td>
+    <td><a href="https://bd-docs.panther.sohurdc.com/pages/viewpage.action?pageId=107718663">ZooKeeper 明细</a></td>
+    <td>本周补齐 OutstandingRequests / MaxLatency / NodeCount / FD 4 条；FD 规则使用级别抑制扩展为 2 个 FID</td>
   </tr>
-  <tr>
-    <td>Druid</td><td>10</td>
-    <td>5 已匹配（50%）</td>
-    <td>2 条 procstat 扩配置；3 条需 Druid Prometheus Emitter</td>
-    <td>2</td>
-    <td><a href="https://bd-docs.panther.sohurdc.com/pages/viewpage.action?pageId=107718664">Druid 告警规则迁移明细</a></td>
+  <tr style="background:#E3FCEF">
+    <td><strong>Ranger</strong></td><td>✅ 已就绪</td><td>GID=5 内 2 条（FID=108 + 2765051）/ 全启用</td>
+    <td><a href="https://bd-docs.panther.sohurdc.com/pages/viewpage.action?pageId=107718669">Ranger 明细</a></td>
+    <td>端口探活 + Admin 进程存活，本周补齐 Admin 进程</td>
   </tr>
-  <tr>
-    <td>infra_basic</td><td>80</td>
-    <td>Foxeye 6 组已有 68 条（51 启用 + 17 禁用）</td>
-    <td>1 条待建（system_uptime 重启检测）；SlaProbe Ping 4 条阻塞；VM 噪音规则待调参</td>
-    <td>6（Zabbix 特有）+ 2（DPVS/Tinyproxy 评估中）</td>
-    <td><a href="https://bd-docs.panther.sohurdc.com/pages/viewpage.action?pageId=107718658">infra_basic 告警规则迁移明细</a></td>
+  <tr style="background:#E3FCEF">
+    <td><strong>Ambari</strong></td><td>✅ 已就绪</td><td>GID=5 内 1 条（FID=2765050）+ 通用 procstat/http_response 承接</td>
+    <td><a href="https://bd-docs.panther.sohurdc.com/pages/viewpage.action?pageId=107718667">Ambari 明细</a></td>
+    <td>本周补齐 ambari_server_port_down</td>
   </tr>
-  <tr>
-    <td>Kafka</td><td>16</td>
-    <td>controller 类指标可直接建规则；ISR 仍无覆盖</td>
-    <td>4 条 controller 规则可建；2 条 Categraf；8 条阻塞于 jmx_exporter MBean</td>
-    <td>0</td>
-    <td><a href="https://bd-docs.panther.sohurdc.com/pages/viewpage.action?pageId=107718662">Kafka 告警规则迁移明细</a></td>
+  <tr style="background:#E3FCEF">
+    <td><strong>Kyuubi</strong></td><td>✅ 已就绪</td><td>GID=5 通用 procstat 承接</td>
+    <td><a href="https://bd-docs.panther.sohurdc.com/pages/viewpage.action?pageId=107718668">Kyuubi 明细</a></td>
+    <td>基础探活已覆盖；查询耗时规则阈值确认中（不阻塞双跑）</td>
   </tr>
-  <tr>
-    <td>ZooKeeper</td><td>9</td>
-    <td>JMX Exporter 指标已就绪</td>
-    <td>5 条 JMX 规则待建（GID=394）；2 条存活类依赖 Categraf</td>
-    <td>0</td>
-    <td><a href="https://bd-docs.panther.sohurdc.com/pages/viewpage.action?pageId=107718663">ZooKeeper 告警规则迁移明细</a></td>
+  <tr style="background:#FFF3E0">
+    <td><strong>infra_basic</strong></td><td>🟡 部分就绪</td><td>6 个 GID 共 69 条 / 52 启用</td>
+    <td><a href="https://bd-docs.panther.sohurdc.com/pages/viewpage.action?pageId=107718658">infra_basic 明细</a></td>
+    <td>核心规则全部建好；SlaProbe 4 条 + VM 噪音 7 条单列阻塞</td>
   </tr>
-  <tr>
-    <td>java_jvm</td><td>7</td>
-    <td>5 条可由 jmx_exporter / procstat 覆盖</td>
-    <td>先盘点未被专用 exporter 覆盖的 Java 进程</td>
-    <td>2（JIT/VM 类型）</td>
-    <td><a href="https://bd-docs.panther.sohurdc.com/pages/viewpage.action?pageId=107718666">java_jvm 告警规则迁移明细</a></td>
+  <tr style="background:#FFF3E0">
+    <td><strong>Elasticsearch</strong></td><td>🟡 部分就绪</td><td>GID=390 共 39 条 / 30 启用</td>
+    <td><a href="https://bd-docs.panther.sohurdc.com/pages/viewpage.action?pageId=107718659">ES 明细</a></td>
+    <td>集群/节点/GC/FD 已覆盖；per-IP coordinator HTTP 探测 20 条转 ES 负责人确认</td>
   </tr>
-  <tr>
-    <td>Ambari</td><td>3</td>
-    <td>已由 procstat / net_response / http_response 覆盖</td>
-    <td>0</td>
-    <td>0</td>
-    <td><a href="https://bd-docs.panther.sohurdc.com/pages/viewpage.action?pageId=107718667">Ambari 告警规则迁移明细</a></td>
+  <tr style="background:#FFF3E0">
+    <td><strong>Trino</strong></td><td>🟡 部分就绪</td><td>GID=392 共 8 条 / 4 启用</td>
+    <td><a href="https://bd-docs.panther.sohurdc.com/pages/viewpage.action?pageId=107718670">Trino 明细</a></td>
+    <td>HTTP 探活已覆盖；1 条内存规则待确认 <code>trino_memory_MemoryPool_*</code> 指标</td>
   </tr>
-  <tr>
-    <td>Kyuubi</td><td>2</td>
-    <td>基础探活已由 gid=5 通用 procstat 覆盖</td>
-    <td>6827 查询耗时规则阈值待确认；专属 gid=418 是否启用待定</td>
-    <td>0</td>
-    <td><a href="https://bd-docs.panther.sohurdc.com/pages/viewpage.action?pageId=107718668">Kyuubi 告警规则迁移明细</a></td>
+  <tr style="background:#FFF3E0">
+    <td><strong>Druid</strong></td><td>🟡 详见子文档</td><td>5 条已匹配 / 5 条待建</td>
+    <td><a href="https://bd-docs.panther.sohurdc.com/pages/viewpage.action?pageId=107718664">Druid 明细</a></td>
+    <td>2 条 procstat 可立即建；3 条依赖 druid-prometheus-emitter 上线</td>
   </tr>
-  <tr>
-    <td>Ranger</td><td>2</td>
-    <td>可由 Categraf net_response + procstat 覆盖</td>
-    <td>确认是否已有通用规则承接</td>
-    <td>0</td>
-    <td><a href="https://bd-docs.panther.sohurdc.com/pages/viewpage.action?pageId=107718669">Ranger 告警规则迁移明细</a></td>
+  <tr style="background:#FFEBE6">
+    <td><strong>Kafka</strong></td><td>❌ 未就绪</td><td>0 条 Foxeye 规则</td>
+    <td><a href="https://bd-docs.panther.sohurdc.com/pages/viewpage.action?pageId=107718662">Kafka 明细</a></td>
+    <td>8 条 MBean 阻塞 + 4 条 controller 可建未建；Kafka 业务组未单独建</td>
   </tr>
-  <tr>
-    <td>Trino</td><td>2</td>
-    <td>HTTP 探活已覆盖</td>
-    <td>1 条内存规则待确认 trino_memory_MemoryPool_* 指标</td>
-    <td>0</td>
-    <td><a href="https://bd-docs.panther.sohurdc.com/pages/viewpage.action?pageId=107718670">Trino 告警规则迁移明细</a></td>
+  <tr style="background:#F4F5F7">
+    <td><strong>java_jvm</strong></td><td>⏳ 重新分类</td><td>由各服务 JMX 承接</td>
+    <td><a href="https://bd-docs.panther.sohurdc.com/pages/viewpage.action?pageId=107718666">java_jvm 明细</a></td>
+    <td>7 条规则按服务（HMS/HS2/RM/NN）拆解归口，不再独立成组</td>
   </tr>
 </table>
 
-<h3>二、待新建 / 新创建 Foxeye 规则清单</h3>
-<p>以下规则建议通过 Foxeye UI 手工创建或更新，暂不使用 YAML 批量导入。原则：参考同业务组现存规则模板，逐条创建，写后回读确认。</p>
+<h3>三、关键阻塞项（Blocker）汇总</h3>
 <table>
-  <tr><th>优先级</th><th>服务</th><th>规则数量</th><th>业务组 / 数据源</th><th>规则内容</th><th>风险控制</th></tr>
-  <tr><td>P0</td><td>ZooKeeper</td><td>5</td><td>GID=394 / VM=5</td><td>OutstandingRequests、MaxLatency、NodeCount、FD 使用率、FD 绝对值</td><td>MaxLatency / NodeCount 文档中已标记超阈值，创建前确认是否立即触发</td></tr>
-  <tr><td>P0</td><td>infra_basic</td><td>1</td><td>GID=301 / VM</td><td><code>system_uptime &lt; 600</code> 主机最近重启检测</td><td>确认 severity 与持续时间，建议先双跑观察</td></tr>
-  <tr><td>P1</td><td>YARN</td><td>4</td><td>GID=413 / VM=5</td><td>子队列 UsedCapacity、Pending/Allocated、AppsPending/Running、PendingMB/maxMB</td><td>表达式按 <code>queue!="root"</code> 覆盖子队列；note 不要引用不存在的 host label</td></tr>
-  <tr><td>P1</td><td>Hive</td><td>2 新建 + 1 更新</td><td>GID=419 / VM=5 或 Loki=81</td><td>HMS RetryingHMSHandler Loki、HMS Non-Heap、更新 MSCK 规则 2757366 提取 table 标签</td><td>先确认 Loki label 与 HMS non-heap 指标；2757366 仅改表达式和 note</td></tr>
-  <tr><td>P1</td><td>Kafka</td><td>4</td><td>Kafka 业务组待确认 / VM</td><td>ActiveControllerCount、UncleanLeaderElection、OfflinePartitions、LeaderElection</td><td>先确认 Kafka 业务组 GID；ISR 类仍需补 jmx_exporter MBean</td></tr>
-  <tr><td>P2</td><td>Druid</td><td>5</td><td>Druid 业务组待确认</td><td>historical/middleManager procstat、Coordinator/Overlord 选举、查询失败率</td><td>后 3 条依赖 druid-prometheus-emitter，未上线前不建</td></tr>
-  <tr><td>P2</td><td>Trino</td><td>1</td><td>GID=392</td><td>角色内存使用率 &gt; 90%</td><td>先确认 <code>trino_memory_MemoryPool_*</code> 指标有数据</td></tr>
-  <tr><td>P2</td><td>Ranger</td><td>2</td><td>待确认</td><td>6080 端口探活、Ranger Admin 进程存活</td><td>先确认是否已有通用 procstat/net_response 规则覆盖</td></tr>
+  <tr><th>#</th><th>阻塞项</th><th>影响规则</th><th>涉及服务</th><th>解锁路径</th><th>负责方</th></tr>
+  <tr><td>1</td><td><strong>Kafka jmx_exporter MBean 不完整</strong></td><td>8+ 条</td><td>Kafka</td><td>补充 ISR / RequestTotalTimeMs / OfflineLogDirectory / UnderReplicatedPartitions MBean 配置</td><td>SRE + Kafka</td></tr>
+  <tr><td>2</td><td><strong>Kafka 业务组未单独建</strong></td><td>4 条 controller 类</td><td>Kafka</td><td>在 Foxeye 新建 Kafka 业务组（GID 待分配），迁入 ActiveControllerCount / UncleanLeaderElection / OfflinePartitions / LeaderElection</td><td>SRE</td></tr>
+  <tr><td>3</td><td><strong>SlaProbe Ping 数据源缺失</strong></td><td>4 条</td><td>infra_basic</td><td>① 确认 SlaProbe 探针部署状态；② 若无部署计划改用 <code>cmdb_device_probe_status</code>（GID=301 ID=74371 已启用）</td><td>SRE</td></tr>
+  <tr><td>4</td><td><strong>VM 告警噪音（未分组）</strong></td><td>7 条</td><td>infra_basic</td><td>PromQL 增加 <code>instance_type!="vm"</code> 过滤，或按集群类型拆分物理机/虚拟机业务组</td><td>SRE</td></tr>
+  <tr><td>5</td><td><strong>Druid Prometheus Emitter 未上线</strong></td><td>3 条</td><td>Druid</td><td>联系 Druid 负责人启用 <code>druid-prometheus-emitter</code> 插件</td><td>Druid + SRE</td></tr>
+  <tr><td>6</td><td><strong>ES per-IP coordinator HTTP 探测策略</strong></td><td>20 条</td><td>ES</td><td>转 ES 负责人确认 Categraf <code>http_response</code> 或 exporter 覆盖方案</td><td>ES 负责人</td></tr>
+  <tr><td>7</td><td><strong>HDFS 规则质量问题</strong></td><td>2 条</td><td>HDFS</td><td>修正 452219 PromQL 单引号；清理 452659 / 130400 重复规则</td><td>SRE</td></tr>
+  <tr><td>8</td><td><strong>Hive MSCK 规则 LogQL 表达式</strong></td><td>1 条</td><td>Hive</td><td>FID=2757366 提取 <code>table</code> 标签后改 LogQL</td><td>SRE</td></tr>
+  <tr><td>9</td><td><strong>Kafka ISR 风暴根因未消除</strong></td><td>—（事件量 14,246/周）</td><td>Kafka</td><td>排查 broker 10.18.128.24 / 10.18.128.22 GC Pause / 磁盘 IO / 网络抖动</td><td>SRE + Kafka</td></tr>
 </table>
 
-<h3>三、待关闭 Zabbix 告警台账摘要</h3>
+<h3>四、配置变更 / 文件校验类规则：Categraf 可选方案</h3>
+<div style="background:#fff3e0;border-left:4px solid #f57c00;padding:10px 14px;margin:8px 0;">
+<strong>背景：</strong>infra_basic 第八组 6 条规则当前标 retire，但 Categraf <code>filemd5</code> / <code>system</code> 插件理论上可承接部分场景。本节汇总取舍建议，子文档分类不变。
+</div>
+
+<table>
+  <tr><th>Zabbix 规则</th><th>现有结论</th><th>Categraf 替代方案</th><th>本概要建议</th></tr>
+  <tr>
+    <td><code>/etc/passwd has been changed on HOST</code></td>
+    <td>retire（依赖 vfs.file.cksum）</td>
+    <td><code>inputs.filemd5</code> 计算文件 hash → <code>changes(filemd5_hash[5m]) &gt; 0</code></td>
+    <td><strong>推荐迁移</strong>（高价值变更检测）</td>
+  </tr>
+  <tr>
+    <td><code>hive-exec-3.1.3.jar md5 change</code></td>
+    <td>retire（依赖 vfs.file.cksum）</td>
+    <td><code>inputs.filemd5</code> + 版本白名单（升级时同步更新）</td>
+    <td><strong>推荐迁移</strong>（jar 一致性检测，与发布流程联动）</td>
+  </tr>
+  <tr>
+    <td><code>linux kernel version on HOST</code></td>
+    <td>retire（内核升级走变更管控）</td>
+    <td><code>inputs.system</code> 暴露 kernel_version label，用 label drift 检测</td>
+    <td>保持 retire（SaltStack 已管控，价值低）</td>
+  </tr>
+  <tr>
+    <td><code>Host information was changed on HOST</code><br/><code>Hostname was changed on HOST</code></td>
+    <td>retire（SaltStack 管控）</td>
+    <td>—</td>
+    <td>保持 retire（SaltStack 是源头管控）</td>
+  </tr>
+  <tr>
+    <td><code>公网IP获取失败</code></td>
+    <td>retire（UserParameter 脚本）</td>
+    <td><code>inputs.script</code> 自定义脚本（实施成本高）</td>
+    <td>保持 retire</td>
+  </tr>
+  <tr>
+    <td><code>Zabbix test item ti-A1 / ti-B2</code></td>
+    <td>misc 待评估</td>
+    <td>—（Zabbix 测试规则，无业务场景）</td>
+    <td>retire（建议本周下线）</td>
+  </tr>
+</table>
+
+<p><strong>下周计划</strong>：评估 <code>inputs.filemd5</code> 在 Categraf 大数据节点上的部署成本，决定是否将 /etc/passwd 与 hive-exec jar 校验作为 P2 任务推进。</p>
+
+<h3>五、待关闭 Zabbix 告警台账摘要</h3>
 <p>关闭判断基于 Doris alert_events 最新窗口（2026-05-14 16:00:58 ~ 2026-05-22 02:04:58）。详细关闭台账见 <a href="https://bd-docs.panther.sohurdc.com/pages/viewpage.action?pageId=109248930">Zabbix 告警规则关闭台账</a>。</p>
 <table>
   <tr><th>处置类别</th><th>规则 / 场景</th><th>最新窗口 Zabbix 事件数</th><th>Foxeye 覆盖状态</th><th>建议</th></tr>
-  <tr><td>可优先退役</td><td>ISR扩展</td><td>6,951</td><td>N/A，恢复型噪音</td><td>可单独退役；ISR收缩必须保留到 Foxeye Kafka JMX 规则上线</td></tr>
-  <tr><td>可优先关闭</td><td>HDFS 存储 / GC / PendingReplication 类</td><td>40</td><td>Foxeye HDFS 事件 1,427，覆盖持续活跃</td><td>逐条关闭，关闭后观察 24~48h</td></tr>
-  <tr><td>可优先关闭</td><td>ES 集群 / 节点变更类</td><td>约 76</td><td>Foxeye ES 核心规则覆盖</td><td>关闭集群/节点类；per-IP coordinator HTTP 探测暂不关闭</td></tr>
-  <tr><td>暂保留</td><td>ISR收缩</td><td>7,295</td><td>Foxeye 0</td><td>必须先创建 Kafka ISR / OfflinePartitions / UnderReplicatedPartitions 规则</td></tr>
-  <tr><td>暂保留</td><td>CPU / Load</td><td>3,062</td><td>部分覆盖</td><td>补齐 node_load 归一化或确认现有 CPU 规则语义后再关</td></tr>
-  <tr><td>暂保留</td><td>YARN 子队列</td><td>593</td><td>Foxeye 缺子队列覆盖</td><td>创建 YARN 4 条 per-queue 规则并双跑后再关</td></tr>
-  <tr><td>暂保留</td><td>Hive HMS MySQL / RetryingHMSHandler</td><td>30</td><td>Foxeye 0</td><td>创建 HMS Loki 规则后再关</td></tr>
+  <tr><td>可优先退役</td><td>ISR扩展</td><td>6,951</td><td>恢复型噪音，N/A</td><td>可单独退役；ISR收缩必须保留</td></tr>
+  <tr><td>可优先关闭</td><td>HDFS 存储 / GC / PendingReplication 类</td><td>40</td><td>Foxeye HDFS 事件 1,427，持续活跃</td><td>逐条关闭，关闭后观察 24~48h</td></tr>
+  <tr><td>可优先关闭</td><td>ES 集群 / 节点变更类</td><td>约 76</td><td>ES 核心规则已覆盖</td><td>关闭集群/节点类；per-IP coordinator 暂不关</td></tr>
+  <tr><td><strong>可新增关闭</strong></td><td>YARN 子队列 PendingContainers / AppsPending</td><td>593</td><td><strong>per-queue 4 条本周已建并启用</strong></td><td>建议下周双跑观察后关闭</td></tr>
+  <tr><td><strong>可新增关闭</strong></td><td>HMS MYSQL ERROR / RetryingHMSHandler</td><td>30</td><td><strong>HMS Loki 规则本周已建</strong></td><td>建议下周双跑观察后关闭</td></tr>
+  <tr><td>暂保留</td><td>ISR收缩</td><td>7,295</td><td>Foxeye 0</td><td>必须先解 Kafka MBean 阻塞</td></tr>
+  <tr><td>暂保留</td><td>CPU / Load</td><td>3,062</td><td>部分覆盖</td><td>补齐 node_load 归一化后再关</td></tr>
 </table>
 
-<h3>四、跳过服务（7 个，暂不处理）</h3>
+<h3>六、跳过服务（7 个，暂不处理）</h3>
 <table>
   <tr><th>服务</th><th>规则数</th><th>跳过原因</th></tr>
-  <tr><td>zabbix_infra</td><td>78</td><td>Zabbix 自身监控，迁移后无需保留</td></tr>
-  <tr><td>misc</td><td>46</td><td>已重分类到各服务，单独归档</td></tr>
-  <tr><td>spark</td><td>5</td><td>H2 规划，暂不处理</td></tr>
+  <tr><td>zabbix_infra</td><td>81</td><td>Zabbix 自身监控，迁移后无需保留</td></tr>
+  <tr><td>misc</td><td>56</td><td>已重分类到各服务，单独归档</td></tr>
+  <tr><td>spark</td><td>6</td><td>H2 规划，暂不处理</td></tr>
   <tr><td>storm</td><td>3</td><td>Storm 集群已基本退役</td></tr>
   <tr><td>docker_k8s</td><td>4</td><td>K8s 体系独立监控，不纳入本次迁移</td></tr>
   <tr><td>mapreduce</td><td>2</td><td>MapReduce 作业监控已被 YARN 覆盖</td></tr>
   <tr><td>hardware</td><td>1</td><td>硬件监控由 IPMI/BMC 独立负责</td></tr>
 </table>
 
-<h3>五、关键阻塞项（Blocker）汇总</h3>
+<h3>七、后续行动建议</h3>
 <table>
-  <tr><th>阻塞项</th><th>影响规则数</th><th>涉及服务</th><th>解决方案</th></tr>
-  <tr><td>Kafka jmx_exporter 配置不完整</td><td>8+</td><td>Kafka</td><td>补充 ISR / RequestTotalTimeMs / OfflineLogDirectory / UnderReplicatedPartitions MBean</td></tr>
-  <tr><td>ZooKeeper 规则待建</td><td>5</td><td>ZooKeeper</td><td>按 GID=394 手工创建 JMX 规则，避免批量导入</td></tr>
-  <tr><td>YARN 子队列无 Foxeye 覆盖</td><td>4 条新规则</td><td>YARN</td><td>创建 per-queue 规则，覆盖 queue!="root"</td></tr>
-  <tr><td>SlaProbe Ping 数据源缺失</td><td>4</td><td>infra_basic</td><td>确认 SlaProbe 探针部署状态；可评估 cmdb_device_probe_status 替代</td></tr>
-  <tr><td>VM 告警噪音导致规则禁用</td><td>7</td><td>infra_basic</td><td>加 instance_type!="vm" 过滤，或拆分物理机/虚拟机业务组</td></tr>
-  <tr><td>HDFS 规则质量问题</td><td>2</td><td>HDFS</td><td>修正 452219 单引号；清理 452659/130400 重复规则</td></tr>
+  <tr><th>优先级</th><th>行动项</th><th>解锁规则数 / 类别</th><th>截止</th></tr>
+  <tr><td>P0</td><td>排查 broker 10.18.128.24 / 10.18.128.22 Kafka ISR 风暴根因</td><td>14,246 次/周事件</td><td>本周</td></tr>
+  <tr><td>P0</td><td>补 Kafka jmx_exporter MBean，建 Kafka 业务组与 4 条 controller 规则</td><td>解锁 Kafka 双跑</td><td>下周</td></tr>
+  <tr><td>P1</td><td>关闭 HDFS / ES 已覆盖 Zabbix 规则，关闭后观察 24~48h</td><td>HDFS 约 40 + ES 约 76</td><td>本周</td></tr>
+  <tr><td>P1</td><td>YARN 子队列 4 条新规则 + HMS Loki / Non-Heap 规则双跑观察后，关闭对应 Zabbix 规则</td><td>YARN 593 + HMS 30 次/周</td><td>下周</td></tr>
+  <tr><td>P1</td><td>确认 SlaProbe 探针部署状态，决定改用 cmdb_device_probe_status 或保留阻塞</td><td>4 条</td><td>下周</td></tr>
+  <tr><td>P2</td><td>评估 Categraf <code>inputs.filemd5</code> 在大数据节点部署成本，决定 /etc/passwd + jar md5 替代方案</td><td>2 条</td><td>本月</td></tr>
+  <tr><td>P2</td><td>infra_basic 7 条 VM 噪音规则评估 <code>instance_type!="vm"</code> 过滤方案</td><td>7 条</td><td>本月</td></tr>
+  <tr><td>P2</td><td>Druid procstat 2 条规则补建（不依赖 Prometheus Emitter）</td><td>2 条</td><td>本月</td></tr>
+  <tr><td>P3</td><td>清理 Foxeye 测试 / 旧版 / 重复规则；下线 Zabbix test item ti-A1/B2</td><td>—</td><td>本月</td></tr>
 </table>
 
-<h3>六、后续行动建议</h3>
-<ol>
-  <li><strong>P0</strong>：先处理 ZooKeeper 5 条 JMX 规则、infra_basic system_uptime 规则、Kafka ISR 风暴根因排查。</li>
-  <li><strong>P1</strong>：创建 YARN 4 条 per-queue 规则；更新 Hive 2757366；创建 HMS Loki / Non-Heap 规则。</li>
-  <li><strong>P1</strong>：按关闭台账逐条关闭 HDFS/ES 已覆盖 Zabbix 规则，执行后观察 24~48 小时。</li>
-  <li><strong>P2</strong>：补齐 Kafka JMX MBean、Druid Prometheus Emitter、Ranger/Trino 低频规则。</li>
-  <li><strong>P3</strong>：清理 Foxeye 测试/旧版/重复规则，完善关闭台账执行状态。</li>
-</ol>
-
-<p><em>最后更新：2026-05-22 | 主要变更：补充新建规则清单与待关闭告警台账摘要，基于 Doris 最新 35,051 条事件重算关闭建议。</em></p>
+<p><em>v6 更新 - 2026-05-22 | 主要变更：① 新增"本周新增规则"明细（16 条）；② 双跑就绪服务从 0 提升到 8 个；③ 数据源切换为 Foxeye opencli 实测为权威；④ 新增 Categraf 替代方案评估章节。</em></p>

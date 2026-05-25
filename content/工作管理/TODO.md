@@ -14,8 +14,16 @@
 - [x] 只读回读 Foxeye 已创建规则核心配置
 - [x] 通过 Foxeye datasource proxy 验证 PromQL / LogQL 可执行性
 - [x] 输出更新 HTML / Confluence 前的状态摘要供确认
-- [ ] 根据确认结果更新本地 HTML
-- [ ] 推送对应 Confluence 页面
+- [x] 根据确认结果更新本地 HTML（YARN / ZooKeeper / Hive / infra_basic）
+- [x] 推送对应 Confluence 页面（YARN v5 / ZooKeeper v5 / Hive v9 / infra_basic v8）
+
+## 当前任务：核查 Ranger Admin 两条规则
+
+- [x] 回读 `108` / `2765051` 规则配置
+- [x] 验证 net_response / procstat 查询可执行性
+- [x] 等待修复 `108` 端口表达式缺少 `!= 0`
+- [x] 等待修复 note 模板中的 `{{$labels. target}}` / `{{$labels. instance}}` 空格
+- [x] 修复后更新 `ranger.html` 并推送 Confluence pageId=107718669（v4）
 
 ## 需求理解
 

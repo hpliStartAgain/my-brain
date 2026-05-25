@@ -1,20 +1,24 @@
-<div class="hero-dashboard">
-  <h1>汀的知识碎片</h1>
-  <p><strong>Senior Data Infra SRE</strong> / 探索系统底层的运转逻辑，从内核调优到分布式计算引擎的核心原理，构建稳如磐石的基础设施。</p>
+---
+title: 汀的知识碎片
+---
+
+<div class="homepage-header">
+  <h1>关于我</h1>
+  <p><strong>Data Infra SRE</strong> — 探索系统底层的运转逻辑，从内核调优到分布式计算引擎的核心原理，构建稳如磐石的基础设施。</p>
 </div>
 
-欢迎来到这片不断生长的赛博空间。这里的知识没有严格的线性顺序，你可以通过左侧的资源管理器自由探索，或者通过全局搜索直达目标。
+欢迎来到这片不断生长的赛博空间。这里的知识没有严格的线性顺序，你可以通过左侧的资源管理器自由探索，或者通过全局搜索直达目标，也可以通过顶部的随机碎片功能拾取随机的知识碎片。
 
 ---
 
-## 🧭 知识领域全景
+<div class="knowledge-section">
+<h2>知识领域</h2>
 
-<div class="bento-grid">
+<div class="knowledge-grid">
 
-<div class="bento-card">
-
-### 操作系统与底层原理
-内核调度、内存分配机制与协议栈的深度剖析。
+<div class="knowledge-card">
+<h3>操作系统与底层原理</h3>
+<div class="card-desc">内核调度、内存分配机制与协议栈的深度剖析</div>
 
 - [[Linux/进程管理/00 专栏导览|进程生命周期与调度器]]
 - [[Linux/内存管理/00 专栏导览|虚拟内存与 Slab 分配器]]
@@ -24,10 +28,9 @@
 
 </div>
 
-<div class="bento-card">
-
-### 编程语言与并发原理
-底层机制与高并发工程实践。
+<div class="knowledge-card">
+<h3>编程语言与并发原理</h3>
+<div class="card-desc">底层机制与高并发工程实践</div>
 
 - [[Golang/Go并发编程/00 专栏导览|Go GMP 调度与 Channel]]
 - [[Golang/Go语言核心/00 专栏导览|Go 内存分配器与 GC]]
@@ -36,10 +39,9 @@
 
 </div>
 
-<div class="bento-card">
-
-### 中间件存储引擎
-数据存储与高可用架构核心。
+<div class="knowledge-card">
+<h3>中间件存储引擎</h3>
+<div class="card-desc">数据存储与高可用架构核心</div>
 
 - [[中间件/MySQL/MySQL架构与底层原理/00 专栏导览|MySQL InnoDB 与 MVCC]]
 - [[中间件/Redis/Redis设计与实现/00 专栏导览|Redis 数据结构与 Cluster]]
@@ -48,10 +50,9 @@
 
 </div>
 
-<div class="bento-card">
-
-### 分布式与大数据系统
-计算引擎与海量数据处理架构。
+<div class="knowledge-card">
+<h3>分布式与大数据系统</h3>
+<div class="card-desc">计算引擎与海量数据处理架构</div>
 
 - [[分布式/分布式系统原理与协议/00 专栏导览|Paxos、Raft 与一致性模型]]
 - [[大数据/Spark/Spark-RDD核心原理解析/00 专栏导览|Spark 核心原理与调优]]
@@ -60,10 +61,9 @@
 
 </div>
 
-<div class="bento-card">
-
-### 云原生与可观测性
-容器编排、流量治理与系统画像。
+<div class="knowledge-card">
+<h3>云原生与可观测性</h3>
+<div class="card-desc">容器编排、流量治理与系统画像</div>
 
 - [[云原生/Kubernetes/kubernetes架构原则和对象设计/00 专栏导览|Kubernetes 架构与调度器]]
 - [[云原生/服务网格/00 专栏导览|Istio 服务网格与数据面]]
@@ -72,10 +72,9 @@
 
 </div>
 
-<div class="bento-card">
-
-### 硬核故障排查与 AI
-真实生产事故复盘与前沿工程。
+<div class="knowledge-card">
+<h3>硬核故障排查与 AI</h3>
+<div class="card-desc">真实生产事故复盘与前沿工程</div>
 
 - [[Trouble-shooting/NameNode长GC事故深度分析：JVM内存管理与Linux Swap的致命交互|NameNode JVM x Swap 致命交互]]
 - [[Trouble-shooting/HiveServer2 Kerberos 认证故障深度分析报告|Kerberos 票据过期认证故障]]
@@ -85,23 +84,24 @@
 </div>
 
 </div>
+</div>
 
 ---
 
-## 🗺️ 知识拓扑概览
+## 知识拓扑概览
 
-如果按系统的生命周期来划分我的思考域，它大概呈现如下的拓扑结构：
+如果按系统的生命周期来划分我的知识体系，它大概呈现如下的拓扑结构：
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#faf6f1', 'primaryTextColor': '#1c1917', 'lineColor': '#b45309', 'secondaryColor': '#fef3c7'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#faf9f5', 'primaryTextColor': '#30302e', 'lineColor': '#c96442', 'secondaryColor': '#f5f4ed'}}}%%
 graph TD
-    classDef os fill:#fef3c7,stroke:#b45309,color:#1c1917
-    classDef lang fill:#dbeafe,stroke:#2563eb,color:#1c1917
-    classDef middleware fill:#f3e8ff,stroke:#7c3aed,color:#1c1917
-    classDef bigdata fill:#dcfce7,stroke:#16a34a,color:#1c1917
-    classDef cloud fill:#e0f2fe,stroke:#0284c7,color:#1c1917
-    classDef obs fill:#fce7f3,stroke:#db2777,color:#1c1917
-    classDef ai fill:#fef9c3,stroke:#ca8a04,color:#1c1917
+    classDef os fill:#fef3c7,stroke:#b45309,color:#30302e
+    classDef lang fill:#dbeafe,stroke:#2563eb,color:#30302e
+    classDef middleware fill:#f3e8ff,stroke:#7c3aed,color:#30302e
+    classDef bigdata fill:#dcfce7,stroke:#16a34a,color:#30302e
+    classDef cloud fill:#e0f2fe,stroke:#0284c7,color:#30302e
+    classDef obs fill:#fce7f3,stroke:#db2777,color:#30302e
+    classDef ai fill:#fef9c3,stroke:#ca8a04,color:#30302e
 
     Linux["Linux 内核</br>(进程/内存/文件/网络)"]
     Go["Go 语言</br>(核心/并发/工程)"]
