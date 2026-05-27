@@ -10,7 +10,14 @@
       "Bash(python3 *)",
       "Bash(pip3 list *)",
       "Bash(pip --version)",
-      "Bash(pip list *)"
+      "Bash(pip list *)",
+      "Bash(pdftotext -v)",
+      "Bash(pdfimages -list \"content/电子书/Software Architecture The Hard Parts Modern Trade-Off Analyses for Distributed Architectures \\(Neal Ford, Mark Richards, Pramod Sadalage etc.\\) \\(z-library.sk, 1lib.sk, z-lib.sk\\).pdf\")",
+      "Bash(awk *)",
+      "Bash(grep -v \"^$\")",
+      "Bash(mv '/Users/lihaopeng/Documents/my-brain/content/分布式/Software Architecture The Hard Parts/images/ch*-fig*.*' '/Users/lihaopeng/Documents/my-brain/content/分布式/Software Architecture The Hard Parts/images/renamed/')",
+      "Bash(mv '/Users/lihaopeng/Documents/my-brain/content/分布式/Software Architecture The Hard Parts/images/appendix-fig*.*' '/Users/lihaopeng/Documents/my-brain/content/分布式/Software Architecture The Hard Parts/images/renamed/')",
+      "Bash(mv '/Users/lihaopeng/Documents/my-brain/content/分布式/Software Architecture The Hard Parts/images/other-fig*.*' '/Users/lihaopeng/Documents/my-brain/content/分布式/Software Architecture The Hard Parts/images/renamed/')"
     ]
   }
 }

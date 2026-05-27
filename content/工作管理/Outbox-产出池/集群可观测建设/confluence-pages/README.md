@@ -13,7 +13,7 @@
 | `infra_basic.html` | 107718658 | infra_basic 告警规则迁移明细 | v8 |
 | `elasticsearch.html` | 107718659 | Elasticsearch 告警规则迁移明细 | v4 |
 | `hbase.html` | 107718660 | HBase 告警规则迁移明细 | v3 |
-| `hive.html` | 107718661 | Hive 告警规则迁移明细 | v9 |
+| `hive.html` | 107718661 | Hive 告警规则迁移明细 | v10 |
 | `kafka.html` | 107718662 | Kafka 告警规则迁移明细 | v2 |
 | `zookeeper.html` | 107718663 | ZooKeeper 告警规则迁移明细 | v5 |
 | `druid.html` | 107718664 | Druid 告警规则迁移明细 | v2 |

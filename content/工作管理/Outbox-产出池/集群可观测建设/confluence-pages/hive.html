@@ -1,4 +1,5 @@
 <h2>Hive 告警规则迁移明细</h2>
+<p><strong>2026-05-26 修正更新：</strong>HMS MYSQL ERROR Loki 规则（Rule 2765045）LogQL 经反查 Zabbix deadlock.sh 脚本后完全重写，覆盖 4 类关键词（Deadlock found / Retrying HMSHandler after / MySQLTransactionRollbackException / JDODataStoreException）。</p>
 <p><strong>2026-05-22 实测更新：</strong>Foxeye gid=419 已补齐 HMS RetryingHMSHandler Loki 规则与 HMS Non-Heap JMX 规则，当前迁移覆盖提升至 19 条。</p>
 <p>Zabbix 25 条规则 | ✅ 已匹配 19 条 | 🔵 待建 0 条 | ⛔ Retire/N/A 6 条 | 🆕 平台新建 6 条（Foxeye gid=419）</p>
 
@@ -58,10 +59,11 @@
 <tr><th>规则名称</th><th>Trigger ID</th><th>Foxeye 规则与校验结果</th></tr>
 <tr><td>HMS MYSQL ERROR (maybe deadlock or Retrying HMSHandler)</td><td>1717653</td><td>
 <p><a href="https://panther.sohurdc.com/foxeye/alert-rules/edit/2765045">Rule 2765045</a>，Datasource=81（loki-hadoop-cluster），已启用。</p>
-<p><strong>LogQL：</strong></p>
-<code>sum by (cluster, instance) (count_over_time({service_name="hive-hms", role="hivemetastore", log_type="service"} |= "RetryingHMSHandler" [5m])) &gt; 1000</code>
-<p><strong>日志查询：</strong><a href="https://panther.sohurdc.com/foxeye/log/explorer?data_source_id=81&amp;data_source_name=loki&amp;start=now-1h&amp;end=now&amp;__execute__=true&amp;query=%7Bservice_name%3D%22hive-hms%22%2Crole%3D%22hivemetastore%22%2Clog_type%3D%22service%22%2Cinstance%3D%22%7B%7B%20%24labels.instance%20%7D%7D%22%7D%20%7C%3D%20%22RetryingHMSHandler%22">按告警 instance 打开 HMS RetryingHMSHandler 日志</a></p>
-<p><span style="color:#00875A">✅ 2026-05-22 回读校验：LogQL success，当前 0 命中；实际 Loki label 使用 <code>instance</code>，不使用 <code>host</code>。</span></p>
+<p><strong>LogQL（2026-05-26 修正）：</strong></p>
+<code>sum by (cluster, instance) (count_over_time({service_name="hive-hms", role="hivemetastore", log_type="service"} |~ "Deadlock found|Retrying HMSHandler after|MySQLTransactionRollbackException.*Lock wait timeout exceeded|JDODataStoreException" != "JDOException:" [5m])) &gt; 0</code>
+<p><strong>修正说明：</strong>通过反查 Zabbix Agent UserParameter 脚本（<code>/opt/zabbix_agent/share/zabbix/externalscripts/deadlock.sh</code>）确认，原始脚本 grep 4 类关键词（Deadlock found / Retrying HMSHandler after / MySQLTransactionRollbackException / JDODataStoreException），并排除 <code>JDOException:</code> 子类。旧 LogQL 用 <code>JDOUserException</code> 完全错误，覆盖率为 0。</p>
+<p><strong>日志查询：</strong><a href="https://panther.sohurdc.com/foxeye/log/explorer?data_source_id=81&amp;data_source_name=loki&amp;start=now-1h&amp;end=now&amp;__execute__=true&amp;query=%7Bservice_name%3D%22hive-hms%22%2Crole%3D%22hivemetastore%22%2Clog_type%3D%22service%22%7D%20%7C~%20%22Deadlock%20found%7CRetrying%20HMSHandler%20after%7CMySQLTransactionRollbackException%7CJDODataStoreException%22%20!%3D%20%22JDOException%3A%22">打开 HMS deadlock/retry 日志</a></p>
+<p><span style="color:#00875A">✅ 2026-05-22 回读校验：LogQL 可执行；2026-05-26 修正 LogQL 覆盖全部 4 类匹配模式，对齐 Zabbix deadlock.sh 脚本逻辑。</span></p>
 </td></tr>
 </tbody>
 </table>
