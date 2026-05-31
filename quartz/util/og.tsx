@@ -88,11 +88,23 @@ export async function fetchTtf(
     // ignore errors and fetch font
   }
 
-  // Get css file from google fonts
-  const cssResponse = await fetch(
-    `https://fonts.googleapis.com/css2?family=${fontName}:wght@${weight}`,
-  )
-  const css = await cssResponse.text()
+  // Get css file from google fonts — wrap in try/catch to handle network errors gracefully
+  let css: string
+  let cssResponse: Response
+  try {
+    cssResponse = await fetch(
+      `https://fonts.googleapis.com/css2?family=${fontName}:wght@${weight}`,
+    )
+    css = await cssResponse.text()
+  } catch (err) {
+    console.log(
+      styleText(
+        "yellow",
+        `\nWarning: Network error fetching font ${rawFontName} with weight ${weight}: ${err}`,
+      ),
+    )
+    return
+  }
 
   // Extract .ttf url from css file
   const urlRegex = /url\((https:\/\/fonts.gstatic.com\/s\/.*?.ttf)\)/g
@@ -109,8 +121,19 @@ export async function fetchTtf(
   }
 
   // fontData is an ArrayBuffer containing the .ttf file data
-  const fontResponse = await fetch(match[1])
-  const fontData = Buffer.from(await fontResponse.arrayBuffer())
+  let fontData: Buffer<ArrayBufferLike>
+  try {
+    const fontResponse = await fetch(match[1])
+    fontData = Buffer.from(await fontResponse.arrayBuffer())
+  } catch (err) {
+    console.log(
+      styleText(
+        "yellow",
+        `\nWarning: Network error downloading font file for ${rawFontName} weight ${weight}: ${err}`,
+      ),
+    )
+    return
+  }
   await fs.mkdir(cacheDir, { recursive: true })
   await fs.writeFile(cachePath, fontData)
 

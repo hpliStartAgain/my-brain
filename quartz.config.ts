@@ -23,12 +23,12 @@ const config: QuartzConfig = {
       fontOrigin: "localFonts",
       cdnCaching: true,
       typography: {
-        // Maple Font 全站统一字体方案
-        // Maple Mono：等宽圆角字体，连字 + 中英文 2:1 宽度
-        // 全角色统一使用同一字体族，通过字重区分层级
-        header: { name: "Maple Mono", weights: [400, 600, 700], includeItalic: true },
-        body: { name: "Maple Mono", weights: [400, 500, 600], includeItalic: true },
-        code: { name: "Maple Mono", weights: [400, 500], includeItalic: false },
+        // 霞鹜文楷等宽 TC — 中英文统一字体
+        // 兼顾汉字手写感与等宽代码排版，繁体中文优先
+        // 仅有 Regular(400) / Bold(700) 两个字重
+        header: { name: "LXGW WenKai Mono TC", weights: [400, 700], includeItalic: false },
+        body:   { name: "LXGW WenKai Mono TC", weights: [400, 700], includeItalic: false },
+        code:   { name: "LXGW WenKai Mono TC", weights: [400, 700], includeItalic: false },
       },
       colors: {
         // Claude 博客象牙色系 — 从 claude.com/blog CSS 精确提取

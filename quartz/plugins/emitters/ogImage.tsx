@@ -128,6 +128,8 @@ export const CustomOgImages: QuartzEmitterPlugin<Partial<SocialImageOptions>> = 
     async *emit(ctx, content, _resources) {
       const cfg = ctx.cfg.configuration
       const fonts = await getOgFonts(cfg)
+      // If no fonts could be loaded (network unreachable), skip OG image generation
+      if (fonts.length === 0) return
 
       for (const [_tree, vfile] of content) {
         if (vfile.data.frontmatter?.socialImage !== undefined) continue

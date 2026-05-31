@@ -52,17 +52,8 @@ export default (() => {
         )}
         {cfg.theme.fontOrigin === "localFonts" && (
           <>
-            {/* Maple Mono — 英文等宽字体（jsDelivr CDN via @fontsource） */}
+            {/* 霞鹜文楷等宽 TC — 中英文统一字体（jsDelivr CDN via @fontsource） */}
             <link rel="preconnect" href="https://cdn.jsdelivr.net" crossOrigin="anonymous" />
-            <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/maple-mono@latest/400.css" />
-            <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/maple-mono@latest/400-italic.css" />
-            <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/maple-mono@latest/500.css" />
-            <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/maple-mono@latest/500-italic.css" />
-            <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/maple-mono@latest/600.css" />
-            <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/maple-mono@latest/600-italic.css" />
-            <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/maple-mono@latest/700.css" />
-            <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/maple-mono@latest/700-italic.css" />
-            {/* LXGW WenKai Mono TC — 中文字体（fontsource，仅含常规字重） */}
             <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/lxgw-wenkai-mono-tc@latest/400.css" />
             <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/lxgw-wenkai-mono-tc@latest/700.css" />
           </>
