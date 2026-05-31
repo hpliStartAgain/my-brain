@@ -52,7 +52,7 @@ export default (() => {
         )}
         {cfg.theme.fontOrigin === "localFonts" && (
           <>
-            {/* Maple Mono — jsDelivr CDN via @fontsource */}
+            {/* Maple Mono — 英文等宽字体（jsDelivr CDN via @fontsource） */}
             <link rel="preconnect" href="https://cdn.jsdelivr.net" crossOrigin="anonymous" />
             <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/maple-mono@latest/400.css" />
             <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/maple-mono@latest/400-italic.css" />
@@ -62,6 +62,9 @@ export default (() => {
             <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/maple-mono@latest/600-italic.css" />
             <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/maple-mono@latest/700.css" />
             <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/maple-mono@latest/700-italic.css" />
+            {/* LXGW WenKai Mono TC — 中文字体（fontsource，仅含常规字重） */}
+            <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/lxgw-wenkai-mono-tc@latest/400.css" />
+            <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/lxgw-wenkai-mono-tc@latest/700.css" />
           </>
         )}
         <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossOrigin="anonymous" />

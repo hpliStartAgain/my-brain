@@ -26,6 +26,13 @@
 
   // 边框
   --border-soft: 1px solid var(--lightgray);
+
+  // ── 字体 fallback 链 ──────────────────────────────────────────
+  // 英文优先使用 Maple Mono，汉字 fallback 到霞鹜文楷等宽 TC
+  // 系统字体兜底防止无字形显示
+  --bodyFont:   "Maple Mono", "LXGW WenKai Mono TC", ui-monospace, "Cascadia Code", monospace;
+  --headerFont: "Maple Mono", "LXGW WenKai Mono TC", ui-monospace, "Cascadia Code", monospace;
+  --codeFont:   "Maple Mono", "LXGW WenKai Mono TC", ui-monospace, "Cascadia Code", monospace;
 }
 
 [saved-theme="dark"] {
