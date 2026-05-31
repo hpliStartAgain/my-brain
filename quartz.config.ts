@@ -20,16 +20,15 @@ const config: QuartzConfig = {
     ignorePatterns: ["private", "templates", ".obsidian", "工作管理", "Template"],
     defaultDateType: "modified",
     theme: {
-      fontOrigin: "googleFonts",
+      fontOrigin: "localFonts",
       cdnCaching: true,
       typography: {
-        // Claude Blog 风格设计系统
-        // 标题：Source Serif 4（温暖衬线体，呼应 Anthropic Serif 的文学气质）
-        // 正文：Source Sans 3（人文主义无衬线，温暖感接近 Anthropic Sans）
-        // 代码：JetBrains Mono（等宽字体，保持不变）
-        header: { name: "Source Serif 4", weights: [400, 600, 700], includeItalic: true },
-        body: { name: "Source Sans 3", weights: [400, 500, 600], includeItalic: true },
-        code: { name: "JetBrains Mono", weights: [400, 500], includeItalic: false },
+        // Maple Font 全站统一字体方案
+        // Maple Mono：等宽圆角字体，连字 + 中英文 2:1 宽度
+        // 全角色统一使用同一字体族，通过字重区分层级
+        header: { name: "Maple Mono", weights: [400, 600, 700], includeItalic: true },
+        body: { name: "Maple Mono", weights: [400, 500, 600], includeItalic: true },
+        code: { name: "Maple Mono", weights: [400, 500], includeItalic: false },
       },
       colors: {
         // Claude 博客象牙色系 — 从 claude.com/blog CSS 精确提取

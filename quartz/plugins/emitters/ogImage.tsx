@@ -3,6 +3,7 @@ import { i18n } from "../../i18n"
 import { unescapeHTML } from "../../util/escape"
 import { FullSlug, getFileExtension, isAbsoluteURL, joinSegments, QUARTZ } from "../../util/path"
 import { ImageOptions, SocialImageOptions, defaultImage, getSatoriFonts } from "../../util/og"
+import { FontSpecification } from "../../util/theme"
 import sharp from "sharp"
 import satori, { SatoriOptions } from "satori"
 import { loadEmoji, getIconCode } from "../../util/emoji"
@@ -104,6 +105,21 @@ export const CustomOgImagesEmitterName = "CustomOgImages"
 export const CustomOgImages: QuartzEmitterPlugin<Partial<SocialImageOptions>> = (userOpts) => {
   const fullOptions = { ...defaultOptions, ...userOpts }
 
+  /** Try to load config fonts; fall back to Noto Sans SC if the font isn't on Google Fonts */
+  async function getOgFonts(cfg: { theme: { typography: { header: FontSpecification; body: FontSpecification } } }) {
+    const headerFont = cfg.theme.typography.header
+    const bodyFont = cfg.theme.typography.body
+    let fonts = await getSatoriFonts(headerFont, bodyFont)
+    if (fonts.length === 0) {
+      // Configured font is not on Google Fonts (e.g. Maple Mono) — use Noto Sans SC as fallback
+      fonts = await getSatoriFonts(
+        { name: "Noto Sans SC", weights: [700] },
+        { name: "Noto Sans SC", weights: [400] },
+      )
+    }
+    return fonts
+  }
+
   return {
     name: CustomOgImagesEmitterName,
     getQuartzComponents() {
@@ -111,9 +127,7 @@ export const CustomOgImages: QuartzEmitterPlugin<Partial<SocialImageOptions>> = 
     },
     async *emit(ctx, content, _resources) {
       const cfg = ctx.cfg.configuration
-      const headerFont = cfg.theme.typography.header
-      const bodyFont = cfg.theme.typography.body
-      const fonts = await getSatoriFonts(headerFont, bodyFont)
+      const fonts = await getOgFonts(cfg)
 
       for (const [_tree, vfile] of content) {
         if (vfile.data.frontmatter?.socialImage !== undefined) continue
@@ -122,9 +136,7 @@ export const CustomOgImages: QuartzEmitterPlugin<Partial<SocialImageOptions>> = 
     },
     async *partialEmit(ctx, _content, _resources, changeEvents) {
       const cfg = ctx.cfg.configuration
-      const headerFont = cfg.theme.typography.header
-      const bodyFont = cfg.theme.typography.body
-      const fonts = await getSatoriFonts(headerFont, bodyFont)
+      const fonts = await getOgFonts(cfg)
 
       // find all slugs that changed or were added
       for (const changeEvent of changeEvents) {
