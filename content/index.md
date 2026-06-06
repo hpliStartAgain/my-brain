@@ -73,12 +73,25 @@ title: 汀的知识碎片
 </div>
 
 <div class="knowledge-card">
+<h3>译书与精读</h3>
+<div class="card-desc">英文技术书翻译、结构化精读与主题化检索</div>
+
+- [[译书/00 译书索引|译书书架总览]]
+- [[译书/Linux/性能之巅/00 专览导读|Systems Performance / 性能之巅]]
+- [[译书/Java/JVM-Performance-Engineering/_index|JVM Performance Engineering]]
+- [[译书/云原生/Mastering-Kubernetes/_index|Mastering Kubernetes]]
+- [[译书/分布式/Designing Data-Intensive Applications, 2nd Edition/1 数据系统架构中的权衡|Designing Data-Intensive Applications]]
+
+</div>
+
+<div class="knowledge-card">
 <h3>硬核故障排查与 AI</h3>
 <div class="card-desc">真实生产事故复盘与前沿工程</div>
 
-- [[Trouble-shooting/NameNode长GC事故深度分析：JVM内存管理与Linux Swap的致命交互|NameNode JVM x Swap 致命交互]]
-- [[Trouble-shooting/HiveServer2 Kerberos 认证故障深度分析报告|Kerberos 票据过期认证故障]]
-- [[Trouble-shooting/Flink Savepoint 磁盘打满事故分析与最佳实践|Flink Savepoint 磁盘爆满分析]]
+- [[SRE/故障排查与复盘/00 故障排查索引|故障排查与复盘索引]]
+- [[SRE/故障排查与复盘/NameNode长GC事故深度分析：JVM内存管理与Linux Swap的致命交互|NameNode JVM x Swap 致命交互]]
+- [[SRE/故障排查与复盘/HiveServer2 Kerberos 认证故障深度分析报告|Kerberos 票据过期认证故障]]
+- [[SRE/故障排查与复盘/Flink Savepoint 磁盘打满事故分析与最佳实践|Flink Savepoint 磁盘爆满分析]]
 - [[LLM/Agent开发技术/00 专栏导览|AI Agent 开发技术与应用]]
 
 </div>
@@ -102,6 +115,7 @@ graph TD
     classDef cloud fill:#e0f2fe,stroke:#0284c7,color:#30302e
     classDef obs fill:#fce7f3,stroke:#db2777,color:#30302e
     classDef ai fill:#fef9c3,stroke:#ca8a04,color:#30302e
+    classDef book fill:#f1f5f9,stroke:#64748b,color:#30302e
 
     Linux["Linux 内核</br>(进程/内存/文件/网络)"]
     Go["Go 语言</br>(核心/并发/工程)"]
@@ -114,6 +128,7 @@ graph TD
     Mesh["服务网格</br>(Istio/Envoy)"]
     Obs["可观测性</br>(指标/追踪/日志/Profiler)"]
     AI["AI & LLM</br>(原理/Agent/RAG)"]
+    Books["译书书架</br>(技术书翻译/精读)"]
 
     Linux --> Go
     Linux --> Java
@@ -128,6 +143,11 @@ graph TD
     Mesh --> Obs
     BD --> Obs
     AI -.->|"赋能运维"| Obs
+    Books -.-> Linux
+    Books -.-> Java
+    Books -.-> Dist
+    Books -.-> BD
+    Books -.-> K8s
 
     class Linux os
     class Go,Java lang
@@ -136,4 +156,5 @@ graph TD
     class Docker,K8s,Mesh cloud
     class Obs obs
     class AI ai
+    class Books book
 ```

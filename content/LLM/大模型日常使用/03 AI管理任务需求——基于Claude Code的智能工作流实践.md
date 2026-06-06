@@ -846,7 +846,7 @@ AI 在更新看板时最常见的错误是修改了 kanban:settings 区块，或
 Obsidian 的 Templates 插件用于初始化新文件的 frontmatter 和结构。当 `weekly-init` 新建 Inbox 任务文件时，它实际上不依赖 Obsidian Templates 插件（因为 AI 直接写文件，不通过 Obsidian UI），而是在 Skill 文件中内联了任务模板：
 
 ```markdown
-**文件模板**（基于 Template/engineer.md）：
+**文件模板**（基于 templates/engineer.md）：
 
 \```markdown
 ---
@@ -1049,7 +1049,7 @@ OKR 文档的价值类似。工程师通常拖到 deadline 前才写 OKR，因�
 | 工作管理系统上下文 | `工作管理/CLAUDE.md` | CC 工作区上下文，每次会话自动读取 |
 | 每日日报 Skill | `工作管理/.claude/skills/daily-report/SKILL.md` | 日报生成逻辑 |
 | 每周初始化 Skill | `工作管理/.claude/skills/weekly-init/SKILL.md` | 周度任务盘点逻辑 |
-| 任务模板 | `Template/engineer.md` | 新建 Inbox 任务文件的基础模板 |
+| 任务模板 | `templates/engineer.md` | 新建 Inbox 任务文件的基础模板 |
 | 架构交付看板 | `工作管理/架构演进与交付.md` | 中大型交付任务看板 |
 | 运维看板 | `工作管理/日常运维与琐事.md` | 日常运维任务看板 |
 | 技术预研看板 | `工作管理/技术攻坚与前瞻研究.md` | 技术预研任务看板 |

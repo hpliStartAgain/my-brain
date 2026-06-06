@@ -17,7 +17,7 @@ description: "《JVM Performance Engineering》by Monica Beckwith (2024, Pearson
 
 | 章节 | 英文原标题 | 词数 | 仲裁 |
 |------|-----------|------|------|
-| [[Java/JVM-Performance-Engineering/00-前言]] | Preface | 5,434 | 100 ✅ |
+| [[译书/Java/JVM-Performance-Engineering/00-前言]] | Preface | 5,434 | 100 ✅ |
 | [[01-Java语言与虚拟机的性能演进]] | The Performance Evolution of Java | 14,440 | 90 ✅ |
 | [[02-Java类型系统演进的性能影响]] | Performance Implications of Java's Type System Evolution | 8,272 | 95 ✅ |
 | [[03-从单体到模块化Java：回顾与持续演进]] | From Monolithic to Modular Java | 7,935 | 100 ✅ |

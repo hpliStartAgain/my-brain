@@ -1,7 +1,7 @@
 ---
 title: dnn014018 THP khugepaged 死锁导致系统级 D 状态雪崩根因分析
 date: 2026-05-07
-tags: [alloy, cgroups, deadlock, incident, khugepaged, linux-kernel, THP, trouble-shooting]
+tags: [alloy, cgroups, deadlock, incident, khugepaged, linux-kernel, THP, 故障排查]
 domain: 集群日常运维
 severity: P0
 status: resolved

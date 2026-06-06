@@ -1,6 +1,6 @@
 ---
 date: 2026-04-21
-tags: [crash, kernel, RHEL8, SOP, trouble-shooting]
+tags: [crash, kernel, RHEL8, SOP, 故障排查]
 category: 运维规范
 severity: P0
 ---
@@ -262,7 +262,7 @@ ls /var/crash/
 
 ## 第七步：输出排查报告
 
-排查完成后，在 `Trouble-shooting/` 目录输出故障报告，包含：
+排查完成后，在 `SRE/故障排查与复盘/` 目录输出故障报告，包含：
 - 故障现象与时间
 - 根因分析（含 crash dump 证据）
 - 解决方案（具体命令）
@@ -346,7 +346,7 @@ ansible all -m shell -a "journalctl -k --since '1 week ago' | grep 'refcount_t o
 
 可观测性方案（Loki/Prometheus 告警规则、一键巡检脚本）已整合至本次故障分析报告，参见：
 
-→ [RHEL8内核memcg-refcount溢出导致物理机重启故障报告](../Trouble-shooting/RHEL8内核memcg-refcount溢出导致物理机重启故障报告.md#可观测与告警)
+→ [RHEL8内核memcg-refcount溢出导致物理机重启故障报告](RHEL8内核memcg-refcount溢出导致物理机重启故障报告.md#可观测与告警)
 
 ---
 
@@ -358,7 +358,7 @@ ansible all -m shell -a "journalctl -k --since '1 week ago' | grep 'refcount_t o
 | Red Hat Bugzilla | https://bugzilla.redhat.com/ |
 | RHEL 内核发布历史 | https://access.redhat.com/articles/3078 |
 | Kdump 配置文档 | https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/8/html/managing_monitoring_and_updating_the_kernel/configuring-kdump |
-| 本次故障分析报告 | [RHEL8内核memcg-refcount溢出导致物理机重启故障报告](../Trouble-shooting/RHEL8内核memcg-refcount溢出导致物理机重启故障报告.md)（含可观测性与告警配置） |
+| 本次故障分析报告 | [RHEL8内核memcg-refcount溢出导致物理机重启故障报告](RHEL8内核memcg-refcount溢出导致物理机重启故障报告.md)（含可观测性与告警配置） |
 
 ---
 

@@ -1,7 +1,7 @@
 ---
 title: SOP — THP khugepaged 死锁 / 系统级 D 状态雪崩排查手册
 date: 2026-05-07
-tags: [cgroups, deadlock, khugepaged, linux-kernel, SOP, THP, trouble-shooting]
+tags: [cgroups, deadlock, khugepaged, linux-kernel, SOP, THP, 故障排查]
 ---
 
 # SOP：THP khugepaged 死锁 / 系统级 D 状态雪崩排查手册

@@ -17,7 +17,7 @@ description: "《Mastering Kubernetes》Fourth Edition by Gigi Sayfan (2023, Pac
 
 | 章节 | 英文原标题 | 词数 | 图片 |
 |------|-----------|------|------|
-| [[云原生/Kubernetes/Mastering-Kubernetes/00-前言]] | Preface | 2,499 | - |
+| [[译书/云原生/Mastering-Kubernetes/00-前言]] | Preface | 2,499 | - |
 | [[01-理解Kubernetes架构]] | Understanding Kubernetes Architecture | 7,501 | 3 |
 | [[02-创建Kubernetes集群]] | Creating Kubernetes Clusters | 9,900 | 6 |
 | [[03-高可用性与可靠性]] | High Availability and Reliability | 11,216 | 9 |
