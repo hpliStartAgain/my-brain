@@ -20,15 +20,12 @@ const config: QuartzConfig = {
     ignorePatterns: ["private", "templates", ".obsidian", "工作管理", "Template"],
     defaultDateType: "modified",
     theme: {
-      fontOrigin: "localFonts",
+      fontOrigin: "googleFonts",
       cdnCaching: true,
       typography: {
-        // 霞鹜文楷等宽 TC — 中英文统一字体
-        // 兼顾汉字手写感与等宽代码排版，繁体中文优先
-        // 仅有 Regular(400) / Bold(700) 两个字重
-        header: { name: "LXGW WenKai Mono TC", weights: [400, 700], includeItalic: false },
-        body:   { name: "LXGW WenKai Mono TC", weights: [400, 700], includeItalic: false },
-        code:   { name: "LXGW WenKai Mono TC", weights: [400, 700], includeItalic: false },
+        header: "Noto Sans SC",
+        body: "Noto Sans SC",
+        code: "Noto Sans SC",
       },
       colors: {
         // Claude 博客象牙色系 — 从 claude.com/blog CSS 精确提取
