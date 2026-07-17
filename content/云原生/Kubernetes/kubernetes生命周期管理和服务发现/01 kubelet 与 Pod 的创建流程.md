@@ -350,6 +350,20 @@ K8s 1.26+ 引入了 **Evented PLEG**——基于 CRI 的事件流（而非轮询
 
 这是一个"鸡生蛋"的问题——API Server 还没启动时，无法通过 API Server 创建 Pod。kubelet 的静态 Pod 机制解决了这个自举问题——kubelet 不依赖 API Server 就能创建 Pod，因此可以用来启动 API Server 本身。
 
+### 6.4 静态 Pod 的生产实践
+
+静态 Pod 在生产中主要用于控制平面组件的部署（kubeadm 部署的集群）。它的几个关键行为：
+
+| 行为 | 说明 |
+|------|------|
+| **镜像 Pod 只读** | 不能通过 kubectl 修改静态 Pod |
+| **配置文件变更触发重建** | kubelet Watch 文件变化，自动重建 Pod |
+| **文件删除触发删除** | 移除 YAML 文件，静态 Pod 被终止 |
+| **不计入控制器管理** | 不受 Deployment/ReplicaSet 管理 |
+
+> [!warning] 生产避坑：不要用静态 Pod 部署业务应用
+> 静态 Pod 是为控制平面自举设计的——不是业务应用的部署方式。业务应用用 Deployment/StatefulSet 部署，通过 API Server 管理。用静态 Pod 部署业务应用的问题：(1) 无法通过 kubectl 管理（镜像 Pod 只读）；(2) 无法滚动更新（需手动改文件）；(3) 无法跨节点调度（绑定到特定节点）；(4) 无法用 Helm/Kustomize 管理。静态 Pod 只用于控制平面组件。
+
 ---
 
 ## 第 7 章 总结
@@ -362,6 +376,7 @@ K8s 1.26+ 引入了 **Evented PLEG**——基于 CRI 的事件流（而非轮询
 - **CRI**：标准化的容器运行时接口，kubelet 通过 gRPC 与 containerd 交互
 - **PLEG**：主动轮询容器状态，生成生命周期事件。Evented PLEG 是性能优化方向
 - **静态 Pod**：kubelet 直接管理的 Pod，用于自举控制平面组件
+- **生产建议**：静态 Pod 只用于控制平面，业务应用用 Deployment/StatefulSet
 
 下一篇 [[02 Pod 生命周期深度解析]] 将深入 Pod 的状态机——Phase、Container State、Restart Policy 如何协作定义 Pod 的完整生命周期。
 
@@ -382,3 +397,4 @@ K8s 1.26+ 引入了 **Evented PLEG**——基于 CRI 的事件流（而非轮询
 > 1. Init Container 在主容器之前按顺序执行——用于初始化工作（如等待依赖服务就绪、下载配置文件、修改文件系统权限）。Init Container 共享 Volume 但不共享网络 Namespace（在 Kubernetes 1.28+ 可以共享）。在什么场景下你需要 Init Container 而非在主容器的启动脚本中完成初始化？
 > 2. PreStop Hook 在容器被终止前执行——典型用途是优雅关闭（如停止接受新请求、完成正在处理的请求）。但 PreStop 有超时限制（`terminationGracePeriodSeconds` 默认 30 秒）——超时后容器被 SIGKILL 强制杀死。在需要 60 秒以上优雅关闭的场景中（如处理长连接、完成大事务），你如何调整？
 > 3. Pod 的终止流程：1) Pod 被标记为 Terminating → 2) PreStop Hook 执行 → 3) SIGTERM 发送给容器 → 4) 等待 `terminationGracePeriodSeconds` → 5) SIGKILL。但同时 Endpoints Controller 从 Service 中移除 Pod IP——这个操作与步骤 1 是并行的。如果 Service 的移除比 Pod 终止慢——正在终止的 Pod 仍然收到新请求。你如何通过 PreStop Hook 中的 `sleep 5` 来等待 Endpoints 更新？
+> 4. 静态 Pod 的镜像 Pod 在 API Server 中是只读的——但 kubelet 会持续同步静态 Pod 的实际状态到镜像 Pod 的 status。如果节点网络故障导致 kubelet 无法连接 API Server，镜像 Pod 的 status 会怎样？节点恢复后如何同步？

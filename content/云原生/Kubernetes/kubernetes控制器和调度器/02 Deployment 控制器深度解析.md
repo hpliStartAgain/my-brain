@@ -365,6 +365,42 @@ spec:
       maxUnavailable: 0
 ```
 
+### 6.4 progressDeadlineSeconds：更新超时检测
+
+`spec.progressDeadlineSeconds`（默认 600 秒）定义了"多久没有进展就标记为失败"。Deployment Controller 定期检查——如果超过这个时间没有任何 Pod 变为 Ready，将 Deployment 的 `status.conditions` 中的 `Progressing` 条件设为 `False`，reason 为 `ProgressDeadlineExceeded`。
+
+```yaml
+spec:
+  progressDeadlineSeconds: 300  # 5 分钟无进展标记失败
+  minReadySeconds: 30
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+```
+
+> [!warning] 生产避坑：progressDeadlineSeconds 是"进展"超时，不是"完成"超时
+> progressDeadlineSeconds 检测的是"是否有进展"（新 Pod 变 Ready），不是"整个滚动更新是否完成"。如果有新 Pod 持续变 Ready（即使很慢），不会超时。只有完全停滞（无新 Ready Pod）才超时。这区分了"慢但正常"和"卡住不动"两种情况——慢不报错，卡住才报错。
+
+### 6.5 revisionHistoryLimit：历史版本保留数
+
+`spec.revisionHistoryLimit`（默认 10）定义了保留多少个旧 ReplicaSet（副本数为 0 的）用于回滚。超过此数量的旧 RS 被 Garbage Collector 清理。
+
+```yaml
+spec:
+  revisionHistoryLimit: 5  # 只保留 5 个历史版本
+```
+
+| 场景 | 推荐值 | 理由 |
+|------|--------|------|
+| **频繁发布** | 10（默认） | 保留更多回滚选项 |
+| **存储敏感** | 3-5 | 减少 etcd 中的 RS 对象 |
+| **不回滚** | 1-2 | 最小保留 |
+
+> [!info] 核心概念：旧 ReplicaSet 保留用于回滚
+> 滚动更新后，旧 ReplicaSet 的副本数缩为 0 但不删除——保留作为回滚的"快照"。`kubectl rollout undo deployment/web --revision=2` 将 Deployment 回滚到 revision 2 的 ReplicaSet 配置。如果旧 RS 已被 revisionHistoryLimit 清理，回滚到该版本会失败——只能用 `kubectl rollout undo` 回滚到上一个可用版本。
+
 ---
 
 ## 第 7 章 总结

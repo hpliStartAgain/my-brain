@@ -361,6 +361,20 @@ apiserver_storage_db_total_size_in_bytes
 
 通过负载均衡器的路由规则（如基于客户端证书的 CN）将不同来源的请求路由到不同的 API Server 实例——防止某类流量的突增影响其他流量。
 
+### 6.4 API Server 的水平扩展实践
+
+在大规模集群中，单个 API Server 实例的吞吐量可能不足。API Server 是无状态的（状态在 etcd），可以水平扩展：
+
+| 集群规模 | API Server 实例数 | 说明 |
+|---------|-----------------|------|
+| 小（<100 节点） | 1-2 | 单实例够用，2 实例高可用 |
+| 中（100-500 节点） | 3 | 标准高可用 |
+| 大（500-2000 节点） | 3-5 | 增加吞吐量 |
+| 超大（2000+ 节点） | 5+ + 流量隔离 | 分实例处理不同流量 |
+
+> [!warning] 生产避坑：API Server 水平扩展受 etcd 限制
+> API Server 无状态可水平扩展，但所有实例共享同一 etcd——etcd 的吞吐量是 API Server 的上限。当 etcd 成为瓶颈时，增加 API Server 实例不能提升吞吐量。监控 etcd 的 `etcd_disk_wal_fsync_duration_seconds`——如果 P99 >10ms，etcd 是瓶颈，需要升级 etcd 硬件（SSD→NVMe）或优化 etcd 配置，而非增加 API Server。
+
 ---
 
 ## 第 7 章 总结

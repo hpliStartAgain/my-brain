@@ -1,0 +1,24 @@
+{
+  "id": "conv-1781582502982-1817mxlk1",
+  "providerId": "claude",
+  "title": "hi",
+  "titleGenerationStatus": "failed",
+  "createdAt": 1781582502983,
+  "updatedAt": 1781582695714,
+  "lastResponseAt": 1781582637105,
+  "sessionId": "10ea2515-892a-4b26-a10e-b14d6edd83be",
+  "providerState": {
+    "providerSessionId": "10ea2515-892a-4b26-a10e-b14d6edd83be"
+  },
+  "currentNote": "大数据/安全与认证/02 Kerberos 协议深度解析：TGT、ST 与票据体系.md",
+  "usage": {
+    "model": "sonnet",
+    "inputTokens": 1,
+    "cacheCreationInputTokens": 24466,
+    "cacheReadInputTokens": 28055,
+    "contextWindow": 200000,
+    "contextTokens": 52522,
+    "percentage": 26,
+    "contextWindowIsAuthoritative": true
+  }
+}

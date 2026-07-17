@@ -1,11 +1,11 @@
 {
   "id": "conv-1776654933199-a2x97xa23",
   "providerId": "claude",
-  "title": "Start work session",
-  "titleGenerationStatus": "success",
+  "title": "hi",
+  "titleGenerationStatus": "failed",
   "createdAt": 1776654933200,
-  "updatedAt": 1776825630716,
-  "lastResponseAt": 1776825630715,
+  "updatedAt": 1781582499068,
+  "lastResponseAt": 1781582489607,
   "sessionId": "8c10ce51-6d79-4d13-b6b9-157694d0f49d",
   "providerState": {
     "providerSessionId": "8c10ce51-6d79-4d13-b6b9-157694d0f49d"
