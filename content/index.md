@@ -4,10 +4,12 @@ title: 汀的知识碎片
 
 <div class="homepage-header">
   <h1>关于我</h1>
-  <p><strong>Data Infra SRE</strong> — 探索系统底层的运转逻辑，从内核调优到分布式计算引擎的核心原理，构建稳如磐石的基础设施。</p>
+  <p><strong>Data Infra SRE</strong> — 在大数据基础设施上搬砖，顺带把每一块砖的纹理都记录下来。从 Linux 内核调度到分布式共识协议，从 Spark Shuffle 到 K8s 控制器循环，凡是踩过的坑、读过的源码、翻过的事故，都沉淀在这里。</p>
 </div>
 
-欢迎来到这片不断生长的赛博空间。这里的知识没有严格的线性顺序，你可以通过左侧的资源管理器自由探索，或者通过全局搜索直达目标，也可以通过顶部的随机碎片功能拾取随机的知识碎片。
+这不是一个教程站，也不是一个搬运笔记的仓库。它是我自己的知识图谱——每篇文章都是我先吃透一个东西，再用自己的话讲一遍的产物。写的时候遵循一个朴素的判断标准：如果三年后的自己回来看，还能不能看懂？如果能，就留下；如果连自己都觉得糊弄，就删掉重写。
+
+左侧的资源管理器按目录折叠，全局搜索在右上角，顶部有随机碎片入口可以碰碰运气。下面按领域把主要专栏列出来，方便你直接跳到感兴趣的地方。
 
 ---
 
@@ -18,81 +20,103 @@ title: 汀的知识碎片
 
 <div class="knowledge-card">
 <h3>操作系统与底层原理</h3>
-<div class="card-desc">内核调度、内存分配机制与协议栈的深度剖析</div>
+<div class="card-desc">内核机制与系统级性能工程</div>
 
 - [[Linux/进程管理/00 专栏导览|进程生命周期与调度器]]
 - [[Linux/内存管理/00 专栏导览|虚拟内存与 Slab 分配器]]
 - [[Linux/文件系统/00 专栏导览|VFS、Page Cache 与 IO]]
 - [[Linux/网络协议栈与IO/00 专栏导览|TCP/IP 协议栈与 epoll]]
 - [[Linux/性能优化/00 专栏导览|Linux 性能优化体系]]
+- [[Linux/系统性能工程实战/00 专栏导览|系统性能工程实战 · 15 篇]]
 
 </div>
 
 <div class="knowledge-card">
 <h3>编程语言与并发原理</h3>
-<div class="card-desc">底层机制与高并发工程实践</div>
+<div class="card-desc">底层运行时机制与高并发工程实践</div>
 
 - [[Golang/Go并发编程/00 专栏导览|Go GMP 调度与 Channel]]
 - [[Golang/Go语言核心/00 专栏导览|Go 内存分配器与 GC]]
 - [[Java/JVM/00 专栏导览|JVM 内存模型与 GC 算法]]
 - [[Java/并发编程/00 专栏导览|JMM 与 AQS 并发锁原理]]
+- [[数据结构与算法/排序与查找/00 专栏导览|数据结构与算法专栏]]
 
 </div>
 
 <div class="knowledge-card">
-<h3>中间件存储引擎</h3>
-<div class="card-desc">数据存储与高可用架构核心</div>
+<h3>中间件与存储引擎</h3>
+<div class="card-desc">数据存储、复制与高可用架构核心</div>
 
 - [[中间件/MySQL/MySQL架构与底层原理/00 专栏导览|MySQL InnoDB 与 MVCC]]
 - [[中间件/Redis/Redis设计与实现/00 专栏导览|Redis 数据结构与 Cluster]]
 - [[中间件/Kafka/00 专栏导览|Kafka 分区机制与副本协议]]
 - [[中间件/ETCD/00 专栏导览|ETCD 与 Raft 共识算法]]
+- [[中间件/Clickhouse/00 专栏导览|ClickHouse 列式存储引擎]]
+- [[中间件/Elasticsearch/00 专栏导览|Elasticsearch 倒排索引与集群]]
 
 </div>
 
 <div class="knowledge-card">
-<h3>分布式与大数据系统</h3>
-<div class="card-desc">计算引擎与海量数据处理架构</div>
+<h3>分布式架构与大数据</h3>
+<div class="card-desc">计算引擎、数据湖与分布式理论</div>
 
-- [[分布式/分布式系统原理与协议/00 专栏导览|Paxos、Raft 与一致性模型]]
+- [[分布式架构/分布式系统原理与协议/00 专栏导览|Paxos、Raft 与一致性模型]]
+- [[分布式架构/数据密集型系统架构实战/00 专栏导览|数据密集型系统架构实战 · 15 篇]]
 - [[大数据/Spark/Spark-RDD核心原理解析/00 专栏导览|Spark 核心原理与调优]]
 - [[大数据/Flink/Flink原理深度解析与性能优化/00 专栏导览|Flink 状态管理与计算框架]]
-- [[中间件/Clickhouse/00 专栏导览|ClickHouse 列式存储引擎]]
+- [[大数据/Hadoop/HDFS/00 专栏导览|HDFS NameNode 与数据节点]]
+- [[大数据/数据湖/Iceberg/00 专栏导览|数据湖：Iceberg / Hudi / Paimon]]
 
 </div>
 
 <div class="knowledge-card">
-<h3>云原生与可观测性</h3>
-<div class="card-desc">容器编排、流量治理与系统画像</div>
+<h3>云原生与容器编排</h3>
+<div class="card-desc">K8s 架构、服务网格与容器运行时</div>
 
-- [[云原生/Kubernetes/kubernetes架构原则和对象设计/00 专栏导览|Kubernetes 架构与调度器]]
+- [[云原生/Kubernetes/Kubernetes架构深度剖析/00 专栏导览|K8s 架构深度剖析 · 18 篇]]
+- [[云原生/Kubernetes/kubernetes架构原则和对象设计/00 专栏导览|K8s 架构原则与对象设计]]
+- [[云原生/Kubernetes/kubernetes之API Server/00 专栏导览|K8s API Server 深度解析]]
+- [[云原生/Kubernetes/kubernetes控制器和调度器/00 专栏导览|K8s 控制器与调度器]]
+- [[云原生/Kubernetes/kubernetes网络原理与插件/00 专栏导览|K8s 网络模型与 CNI 插件]]
 - [[云原生/服务网格/00 专栏导览|Istio 服务网格与数据面]]
+- [[云原生/Docker/00 专栏导览|Docker 容器与运行时]]
+
+</div>
+
+<div class="knowledge-card">
+<h3>可观测性与 SRE</h3>
+<div class="card-desc">监控、追踪、剖析与生产故障复盘</div>
+
+- [[可观测/00 可观测性全景导览|可观测性全景导览]]
 - [[可观测/指标/00 专栏导览|Prometheus 指标体系与 TSDB]]
-- [[可观测/Profiler/00 专栏导览|eBPF 持续性能剖析 (Profiling)]]
+- [[可观测/链路追踪/00 专栏导览|分布式链路追踪]]
+- [[可观测/Profiler/00 专栏导览|eBPF 持续性能剖析]]
+- [[可观测/AIOps与可观测性实战/00 专栏导览|AIOps 与可观测性实战]]
+- [[SRE/故障排查与复盘/00 故障排查索引|故障排查与复盘索引]]
+
+</div>
+
+<div class="knowledge-card">
+<h3>LLM 与 AI 工程</h3>
+<div class="card-desc">大模型原理、Agent 开发与 AiOps 实践</div>
+
+- [[LLM/LLM原理/00 专栏导览|大模型原理与架构]]
+- [[LLM/大模型日常使用/00 专栏导览|大模型日常使用]]
+- [[LLM/Agent开发技术/00 专栏导览|AI Agent 开发技术]]
+- [[LLM/AiOps/00 专栏导览：大数据集群 SRE 的 AiOps 工程实践|AiOps 工程实践]]
 
 </div>
 
 <div class="knowledge-card">
 <h3>译书与精读</h3>
-<div class="card-desc">英文技术书翻译、结构化精读与主题化检索</div>
+<div class="card-desc">英文技术书翻译、结构化精读与主题检索</div>
 
 - [[译书/00 译书索引|译书书架总览]]
 - [[译书/Linux/性能之巅/00 专览导读|Systems Performance / 性能之巅]]
 - [[译书/Java/JVM-Performance-Engineering/_index|JVM Performance Engineering]]
 - [[译书/云原生/Mastering-Kubernetes/_index|Mastering Kubernetes]]
 - [[译书/分布式/Designing Data-Intensive Applications, 2nd Edition/1 数据系统架构中的权衡|Designing Data-Intensive Applications]]
-
-</div>
-
-<div class="knowledge-card">
-<h3>硬核故障排查与 AI</h3>
-<div class="card-desc">真实生产事故复盘与前沿工程</div>
-
-- [[SRE/故障排查与复盘/00 故障排查索引|故障排查与复盘索引]]
-- [[SRE/故障排查与复盘/NameNode长GC事故深度分析：JVM内存管理与Linux Swap的致命交互|NameNode JVM x Swap 致命交互]]
-- [[SRE/故障排查与复盘/HiveServer2 Kerberos 认证故障深度分析报告|Kerberos 票据过期认证故障]]
-- [[SRE/故障排查与复盘/Flink Savepoint 磁盘打满事故分析与最佳实践|Flink Savepoint 磁盘爆满分析]]
-- [[LLM/Agent开发技术/00 专栏导览|AI Agent 开发技术与应用]]
+- [[译书/SRE/97 Things Every SRE Should Know/00 前言|97 Things Every SRE Should Know]]
 
 </div>
 
@@ -101,60 +125,22 @@ title: 汀的知识碎片
 
 ---
 
-## 知识拓扑概览
+## 知识架构全景
 
-如果按系统的生命周期来划分我的知识体系，它大概呈现如下的拓扑结构：
+如果按系统的依赖关系把整个知识体系画成一张图，大概长这样。自底向上四层：底层操作系统和编程语言是地基，中间件和分布式理论是数据基础设施，大数据和云原生是计算与编排层，最上面是可观测、故障复盘和 AI。译书书架作为知识源贯穿中上层——很多专栏的灵感就来自翻译时反复读到的某一段。
 
-```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#faf9f5', 'primaryTextColor': '#30302e', 'lineColor': '#c96442', 'secondaryColor': '#f5f4ed'}}}%%
-graph TD
-    classDef os fill:#fef3c7,stroke:#b45309,color:#30302e
-    classDef lang fill:#dbeafe,stroke:#2563eb,color:#30302e
-    classDef middleware fill:#f3e8ff,stroke:#7c3aed,color:#30302e
-    classDef bigdata fill:#dcfce7,stroke:#16a34a,color:#30302e
-    classDef cloud fill:#e0f2fe,stroke:#0284c7,color:#30302e
-    classDef obs fill:#fce7f3,stroke:#db2777,color:#30302e
-    classDef ai fill:#fef9c3,stroke:#ca8a04,color:#30302e
-    classDef book fill:#f1f5f9,stroke:#64748b,color:#30302e
+![汀的知识碎片 · 知识架构全景](knowledge-architecture.png)
 
-    Linux["Linux 内核</br>(进程/内存/文件/网络)"]
-    Go["Go 语言</br>(核心/并发/工程)"]
-    Java["Java 体系</br>(JVM/并发/Spring/Netty)"]
-    MW["中间件</br>(MySQL/Redis/Kafka/ES/ETCD)"]
-    Dist["分布式理论</br>(共识/事务/锁)"]
-    BD["大数据</br>(Hadoop/Spark/Flink/数据湖)"]
-    Docker["Docker 容器"]
-    K8s["Kubernetes</br>(架构/API/控制器/网络)"]
-    Mesh["服务网格</br>(Istio/Envoy)"]
-    Obs["可观测性</br>(指标/追踪/日志/Profiler)"]
-    AI["AI & LLM</br>(原理/Agent/RAG)"]
-    Books["译书书架</br>(技术书翻译/精读)"]
+> 图中实线箭头表示主依赖方向（下层是上层的运行时基础），紫色箭头是 AI 对运维的赋能，灰色虚线是译书作为知识源对各领域的供给。每个色块对应一个责任域，颜色语义见底部图例。
 
-    Linux --> Go
-    Linux --> Java
-    Linux --> Docker
-    Go --> MW
-    Java --> MW
-    MW --> Dist
-    MW --> BD
-    Docker --> K8s
-    K8s --> Mesh
-    K8s --> BD
-    Mesh --> Obs
-    BD --> Obs
-    AI -.->|"赋能运维"| Obs
-    Books -.-> Linux
-    Books -.-> Java
-    Books -.-> Dist
-    Books -.-> BD
-    Books -.-> K8s
+---
 
-    class Linux os
-    class Go,Java lang
-    class MW,Dist middleware
-    class BD bigdata
-    class Docker,K8s,Mesh cloud
-    class Obs obs
-    class AI ai
-    class Books book
-```
+## 怎么逛
+
+这个知识库没有严格的阅读顺序，但如果你刚进来不知道从哪开始，可以试试这几条路线：
+
+- **想看底层**：从 [[Linux/进程管理/00 专栏导览|进程管理]] 入手，顺着调度器 → 内存 → 文件系统 → 网络协议栈往下走，最后用 [[Linux/系统性能工程实战/00 专栏导览|系统性能工程实战]] 把它们串起来
+- **想看分布式**：先读 [[分布式架构/分布式系统原理与协议/00 专栏导览|分布式系统原理与协议]] 打底，再进 [[分布式架构/数据密集型系统架构实战/00 专栏导览|数据密集型系统架构实战]] 看工程权衡
+- **想看 K8s**：直接从 [[云原生/Kubernetes/Kubernetes架构深度剖析/00 专栏导览|K8s 架构深度剖析]] 的第一篇开始，18 篇按从设计哲学到生产化管理的顺序铺开
+- **想看事故复盘**：去 [[SRE/故障排查与复盘/00 故障排查索引|故障排查索引]]，三个真实生产事故的完整复盘都在那
+- **随便逛**：顶部菜单有随机碎片入口，碰上什么看什么

@@ -7,7 +7,7 @@ aliases: []
 
 ## 摘要
 
-本文记录了一套真实运转的 AI 驱动工程师工作管理系统。系统以 [[Obsidian]] 为载体、[[Dataview]] 为查询引擎、[[Kanban]] 插件为看板视图，在此基础上通过 [[Claude Code]] 的 Skill 机制注入三个可复用的 AI Agent 行为：每日日报生成（`daily-report`）、每周任务初始化（`weekly-init`）、半年度 OKR 生成（`write-OKR`）。
+本文记录了一套真实运转的 AI 驱动工程师系统。系统以 [[Obsidian]] 为载体、[[Dataview]] 为查询引擎、[[Kanban]] 插件为看板视图，在此基础上通过 [[Claude Code]] 的 Skill 机制注入三个可复用的 AI Agent 行为：每日日报生成（`daily-report`）、每周任务初始化（`weekly-init`）、半年度 OKR 生成（`write-OKR`）。
 
 文章不是方法论推销，而是系统设计的完整解剖：为什么这样分层、每一层解决什么问题、AI 在哪个环节创造了价值、在哪个环节反而有害。目标读者是有一定 Obsidian 使用经验、希望通过 AI 工具降低「启动阻力」而非「外包决策」的工程师。
 
@@ -47,7 +47,7 @@ OKR 文档在一个地方，日常任务在另一个地方，周报在第三个�
 Jira 为软件工程团队协作设计，Linear 为产品团队设计，Notion 为通用知识管理设计。这些工具没有一个是为「独立大数据 SRE」设计的——一个同时承担运维、研发、调研、文档写作的角色，且大量工作上下文在本地而非云端。
 
 > [!note]
-> 这里不是说 Jira 不好用，而是说它解决的问题和工程师个人工作管理的问题不重合。组织协作和个人执行是两个层次的问题，需要两套工具。
+> 这里不是说 Jira 不好用，而是说它解决的问题和工程师个人的问题不重合。组织协作和个人执行是两个层次的问题，需要两套工具。
 
 ### 1.2 Obsidian + Dataview 的工程师任务管理哲学
 
@@ -240,7 +240,7 @@ TABLE
   domain AS "任务域",
   "<progress value='" + progress + "' max='100'></progress> " + progress + "%" AS "推进状态",
   deadline AS "DDL"
-FROM "工作管理/Inbox-Task池"
+FROM "/Inbox-Task池"
 WHERE type = "task"
 AND started_date != null
 AND started_date <= this.date
@@ -257,7 +257,7 @@ SORT priority ASC, deadline ASC
 
 #### 2.3.1 日记文件结构
 
-每天的日记文件路径为 `工作管理/日记/YYYY/MM/YYYY-MM-DD.md`，由 Obsidian Core Templates 插件根据模板自动创建。文件分为两个主要区块：
+每天的日记文件路径为 `/日记/YYYY/MM/YYYY-MM-DD.md`，由 Obsidian Core Templates 插件根据模板自动创建。文件分为两个主要区块：
 
 **晨间 Init（上午启动时填写）**：
 - `🎯 今日进行中`：Dataview 动态查询进行中任务，无需手动维护
@@ -325,10 +325,10 @@ CC 通过 `CLAUDE.md` 机制解决了持久上下文问题；通过文件工具�
 在本系统中，有两级 `CLAUDE.md`：
 
 - **项目级**（`my-brain/CLAUDE.md`）：描述整个知识库的架构，Quartz 框架配置，内容组织方式
-- **目录级**（`工作管理/CLAUDE.md`）：描述工作管理系统的目录结构、frontmatter 规范、看板分工、技术背景（所用的技术栈：Hadoop、VictoriaMetrics、Foxeye、Loki 等）
+- **目录级**（`/CLAUDE.md`）：描述系统的目录结构、frontmatter 规范、看板分工、技术背景（所用的技术栈：Hadoop、VictoriaMetrics、Foxeye、Loki 等）
 
 > [!info]
-> 两级 `CLAUDE.md` 是继承关系。工作在 `工作管理/` 目录下时，CC 会同时读取两个文件，下层文件的内容可以覆盖或补充上层文件的描述。对于工作管理场景，几乎所有有用的上下文都在 `工作管理/CLAUDE.md` 中。
+> 两级 `CLAUDE.md` 是继承关系。工作在 `/` 目录下时，CC 会同时读取两个文件，下层文件的内容可以覆盖或补充上层文件的描述。对于场景，几乎所有有用的上下文都在 `/CLAUDE.md` 中。
 
 #### 3.1.4 权限控制和安全边界
 
@@ -338,7 +338,7 @@ CC 有明确的权限模型。默认情况下：
 - 可以写入文件，但会在写入前展示 diff 请求确认
 - Shell 命令执行需要明确授权
 
-在任务管理场景中，Skill 的操作范围应该明确限定在 `工作管理/` 目录内，不应该触及其他目录（如代码仓库、系统配置文件等）。这个边界通过 Skill 文件中的路径约定来约束，不是系统级隔离——依赖的是 Skill 设计的自律性，而不是技术强制。
+在任务管理场景中，Skill 的操作范围应该明确限定在 `/` 目录内，不应该触及其他目录（如代码仓库、系统配置文件等）。这个边界通过 Skill 文件中的路径约定来约束，不是系统级隔离——依赖的是 Skill 设计的自律性，而不是技术强制。
 
 ### 3.2 Skill 体系：可复用的 Agent 行为模式
 
@@ -535,7 +535,7 @@ flowchart LR
 
 ---
 
-## 第 4 章 打造你自己的 AI 工作管理系统
+## 第 4 章 打造你自己的 AI 系统
 
 ### 4.1 设计原则：让 AI 读懂你的工作
 
@@ -576,7 +576,7 @@ started_date: 2026-03-10
 
 AI 能做好工作的另一个前提是它理解你的工作环境。`CLAUDE.md` 是你向 AI 描述工作上下文的地方。
 
-工作管理目录的 `CLAUDE.md` 包含以下核心信息：
+目录的 `CLAUDE.md` 包含以下核心信息：
 
 - **目录定位**：这个目录是什么，服务什么角色，覆盖什么场景
 - **目录结构与职责**：每个子目录的用途
@@ -638,7 +638,7 @@ Inbox-Task池/
 
 #### Step 3：创建 CLAUDE.md
 
-在工作管理目录下创建 `CLAUDE.md`，包含以下内容：
+在目录下创建 `CLAUDE.md`，包含以下内容：
 
 ```markdown
 # CLAUDE.md
@@ -695,7 +695,7 @@ Skill 必须明确告诉 AI 读哪些文件，不能留给 AI 自己猜测。
 ```markdown
 ### Step 2：扫描 OKR 确认本周重点
 
-读取 `工作管理/OKR/OKR-new/` 下所有 OKR 文档，提取本周应推进的任务节点：
+读取 `/OKR/OKR-new/` 下所有 OKR 文档，提取本周应推进的任务节点：
 - 对照甘特图和任务明细表，找出时间节点覆盖本周的任务条目
 ```
 
@@ -735,10 +735,10 @@ CC 读取 `CLAUDE.md` 的规则：从当前工作目录向上递归，直到找�
 
 ```
 my-brain/CLAUDE.md          ← 项目级：描述 Quartz 框架和整体知识库结构
-└── 工作管理/CLAUDE.md       ← 目录级：描述工作管理系统的具体约定
+└── /CLAUDE.md       ← 目录级：描述系统的具体约定
 ```
 
-当在 `工作管理/` 目录内使用 CC 时，两个文件都会被读取。项目级文件描述的是 Quartz 和内容组织，对工作管理场景参考价值有限；目录级文件才是工作管理场景的核心上下文。
+当在 `/` 目录内使用 CC 时，两个文件都会被读取。项目级文件描述的是 Quartz 和内容组织，对场景参考价值有限；目录级文件才是场景的核心上下文。
 
 如果两个文件对同一概念有不同描述，下层（目录级）文件优先。
 
@@ -790,7 +790,7 @@ claude --print "/skill:daily-report"
 crontab -e
 
 # 添加以下行（工作日 18:00 自动生成日报）
-0 18 * * 1-5 cd /path/to/my-brain/content/工作管理 && claude --print "/skill:daily-report" >> /tmp/daily-report.log 2>&1
+0 18 * * 1-5 cd /path/to/my-brain/content/ && claude --print "/skill:daily-report" >> /tmp/daily-report.log 2>&1
 ```
 
 几个注意点：
@@ -1020,7 +1020,7 @@ flowchart TD
 
 **场景**：今天集群告警数量和昨天相比是否异常？当前 YARN 队列利用率如何？
 
-**为什么不适合**：CC 只能访问本地文件系统，无法查询 VictoriaMetrics、Grafana、Zabbix 或任何外部系统。把实时监控数据查询混入 Skill 的期望是一个架构错误——这类工作应该用专门的监控工具（Foxeye 大盘、PagerDuty）处理，不是 AI 工作管理工具的职责范围。
+**为什么不适合**：CC 只能访问本地文件系统，无法查询 VictoriaMetrics、Grafana、Zabbix 或任何外部系统。把实时监控数据查询混入 Skill 的期望是一个架构错误——这类工作应该用专门的监控工具（Foxeye 大盘、PagerDuty）处理，不是 AI 工具的职责范围。
 
 > [!note]
 > 边界清晰是这套系统能长期稳定运行的关键。每次想「能不能让 AI 也做 X？」时，先问自己：X 是信息聚合/格式化/模板填充，还是决策/判断/实时数据？前者适合，后者不适合。
@@ -1046,15 +1046,15 @@ OKR 文档的价值类似。工程师通常拖到 deadline 前才写 OKR，因�
 
 | 文件 | 路径 | 用途 |
 |------|------|------|
-| 工作管理系统上下文 | `工作管理/CLAUDE.md` | CC 工作区上下文，每次会话自动读取 |
-| 每日日报 Skill | `工作管理/.claude/skills/daily-report/SKILL.md` | 日报生成逻辑 |
-| 每周初始化 Skill | `工作管理/.claude/skills/weekly-init/SKILL.md` | 周度任务盘点逻辑 |
+| 系统上下文 | `/CLAUDE.md` | CC 工作区上下文，每次会话自动读取 |
+| 每日日报 Skill | `/.claude/skills/daily-report/SKILL.md` | 日报生成逻辑 |
+| 每周初始化 Skill | `/.claude/skills/weekly-init/SKILL.md` | 周度任务盘点逻辑 |
 | 任务模板 | `templates/engineer.md` | 新建 Inbox 任务文件的基础模板 |
-| 架构交付看板 | `工作管理/架构演进与交付.md` | 中大型交付任务看板 |
-| 运维看板 | `工作管理/日常运维与琐事.md` | 日常运维任务看板 |
-| 技术预研看板 | `工作管理/技术攻坚与前瞻研究.md` | 技术预研任务看板 |
-| OKR 历史文档 | `工作管理/OKR/OKR-old/` | 历史 OKR 和调研报告 |
-| OKR 当期文档 | `工作管理/OKR/OKR-new/` | 当前 H1 OKR 文档 |
+| 架构交付看板 | `/架构演进与交付.md` | 中大型交付任务看板 |
+| 运维看板 | `/日常运维与琐事.md` | 日常运维任务看板 |
+| 技术预研看板 | `/技术攻坚与前瞻研究.md` | 技术预研任务看板 |
+| OKR 历史文档 | `/OKR/OKR-old/` | 历史 OKR 和调研报告 |
+| OKR 当期文档 | `/OKR/OKR-new/` | 当前 H1 OKR 文档 |
 
 ## 附录 B：Dataview 常用查询
 
@@ -1062,7 +1062,7 @@ OKR 文档的价值类似。工程师通常拖到 deadline 前才写 OKR，因�
 
 ```dataview
 TABLE status, deadline, domain
-FROM "工作管理/Inbox-Task池"
+FROM "/Inbox-Task池"
 WHERE type = "task" AND priority = "P0" AND status != "done"
 SORT deadline ASC
 ```
@@ -1071,7 +1071,7 @@ SORT deadline ASC
 
 ```dataview
 TABLE status, priority, domain, deadline
-FROM "工作管理/Inbox-Task池"
+FROM "/Inbox-Task池"
 WHERE type = "task" AND status != "done"
 AND deadline >= date(today) AND deadline <= date(today) + dur(7 days)
 SORT priority ASC, deadline ASC
@@ -1081,7 +1081,7 @@ SORT priority ASC, deadline ASC
 
 ```dataview
 TABLE rows.file.name AS "任务列表", length(rows) AS "数量"
-FROM "工作管理/Inbox-Task池"
+FROM "/Inbox-Task池"
 WHERE type = "task" AND status != "done"
 GROUP BY domain
 ```
@@ -1090,7 +1090,7 @@ GROUP BY domain
 
 ```dataview
 TABLE status, priority, deadline, domain
-FROM "工作管理/Inbox-Task池"
+FROM "/Inbox-Task池"
 WHERE type = "task" AND status != "done" AND deadline < date(today)
 SORT deadline ASC
 ```
