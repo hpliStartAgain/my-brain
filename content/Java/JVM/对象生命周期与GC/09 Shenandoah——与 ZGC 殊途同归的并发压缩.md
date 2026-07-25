@@ -1,15 +1,14 @@
 ---
 title: "Shenandoah——与 ZGC 殊途同归的并发压缩"
 date: 2026-03-05
-tags: [Brooks Pointer, GC, Java, JDK12, JVM, RedHat, Shenandoah, 低延迟, 写屏障, 并发疏散, 读屏障]
-aliases: []
+tags: [Brooks Pointer, GC, Java, JDK12, JDK13, JDK14, JVM, RedHat, Shenandoah, 低延迟, 写屏障, 并发疏散, 读屏障, Load Reference Barrier, 分代Shenandoah, 转发指针]
+aliases: [Shenandoah GC, Brooks Pointer, LRB, Load Reference Barrier]
 ---
 
 # 09 Shenandoah——与 ZGC 殊途同归的并发压缩
 
-**摘要：**
-
-Shenandoah 是由 Red Hat 开发、JDK 12 引入的低延迟垃圾回收器，与 ZGC 有着高度相似的设计目标：**让 GC 停顿时间与堆大小无关，控制在亚毫秒到几毫秒级别**。然而，Shenandoah 和 ZGC 在实现并发对象转移这一核心问题上，选择了截然不同的技术路线：ZGC 利用 64 位地址高位的**着色指针**和**读屏障**，Shenandoah 则在每个对象前放置一个额外的**转发指针（Brooks Pointer）**，并同时使用**读屏障和写屏障**。两条路线各有优劣，在不同场景下表现出不同的特征。本文深入剖析 Shenandoah 的 Brooks Pointer 设计、并发疏散（Concurrent Evacuation）机制、GC 阶段划分、与 ZGC 的技术路线对比，以及 Shenandoah 2.0（JDK 17+ 引入的新一代架构）的改进方向。理解 Shenandoah，不仅是学习一个具体的 GC，更是理解"并发转移"这一关键技术的另一种解法——两种解法的对比，深刻揭示了工程中"没有最好的设计，只有最合适的权衡"。
+> [!abstract] 摘要
+> Shenandoah 是由 Red Hat 主导开发、JDK 12 引入 OpenJDK 主线的低延迟垃圾回收器，与 [[对象生命周期与GC/08 ZGC——亚毫秒停顿的着色指针与读屏障|ZGC]] 有着高度相似的设计目标：**让 GC 停顿时间与堆大小无关，控制在亚毫秒到几毫秒级别**。然而，Shenandoah 和 ZGC 在实现"并发对象转移"这一核心工程问题上，选择了截然不同的技术路线：ZGC 把状态信息编码进 64 位地址的高位比特（着色指针），Shenandoah 则在对象前放置一个额外的**转发指针（Brooks Pointer）**，让所有访问经过一层间接寻址。本文不满足于停留在"两者都很快"的表面结论，而是深入拆解 Brooks Pointer 的内存布局与内存代价、Shenandoah 从 JDK 12 的原始 Brooks Pointer 方案，到 JDK 13 **Load Reference Barrier（LRB）**、再到 JDK 14 彻底消除转发指针字的完整架构演进史；系统对比 ZGC"转发表 + 染色指针"与 Shenandoah"对象内嵌转发指针"两条路线在内存开销、CPU 缓存行为、平台兼容性上的根本取舍；并结合 Red Hat 在 OpenJDK 社区推动 Shenandoah 落地的历史背景，以及 Outbrain 用 Shenandoah 压低 Cassandra 尾延迟的真实生产案例，还原一个技术选型背后完整的工程决策链条。理解 Shenandoah，不仅是学习一个具体的 GC，更是理解"并发转移"这一关键技术问题的另一种解法——两种解法的对比，深刻揭示了工程中"没有最好的设计，只有最合适的权衡"。
 
 ---
 
@@ -17,19 +16,39 @@ Shenandoah 是由 Red Hat 开发、JDK 12 引入的低延迟垃圾回收器，�
 
 ### 1.1 Red Hat 的动机
 
-ZGC 由 Oracle 开发，Shenandoah 由 Red Hat 独立开发，两者在 JDK 12 和 JDK 11 相继发布，方向几乎一致——这并非巧合，而是 Java 生态在那个时期对"停顿时间可预测的低延迟 GC"的共同需求驱动的。
+ZGC 由 Oracle 开发，Shenandoah 由 Red Hat 独立开发，两者相继在 JDK 11（Shenandoah 以 `-XX:+UseShenandoahGC` 的形式先落地在 Red Hat 自家的 OpenJDK 11 发行版）和 JDK 12（作为实验特性进入 OpenJDK 主线，[[对象生命周期与GC/08 ZGC——亚毫秒停顿的着色指针与读屏障|ZGC]] 同期在 JDK 11 主线以实验特性形式落地）发布，方向几乎一致——这并非巧合，而是 Java 生态在那个时间窗口对"停顿时间可预测的低延迟 GC"的共同需求驱动的。
 
-Red Hat 在企业软件领域有大量的客户运行着对延迟极为敏感的 Java 应用（金融中间件、电信系统、实时数据处理）。这些应用运行在 Red Hat Enterprise Linux 上，服务于大量用户，G1 的几百毫秒停顿在峰值时段会直接造成用户可感知的卡顿。Red Hat 希望有一个不依赖 Oracle 技术路线、由自己掌控的低延迟 GC 实现。
+Red Hat 在企业软件领域有大量运行着对延迟极为敏感的 Java 应用（金融中间件、电信计费系统、实时数据处理管道、缓存与消息中间件）的客户。这些应用大多运行在 Red Hat Enterprise Linux 之上，服务于大量并发用户，[[对象生命周期与GC/06 经典垃圾回收器——Serial、Parallel、CMS 深度剖析|CMS]] 已被官方标记为废弃路线（JEP 291），而 [[对象生命周期与GC/07 G1 收集器——Region 化内存与混合回收|G1]] 的停顿目标虽然可配置，但本质上仍是"STW 复制"式的对象转移，堆一旦膨胀到几十 GB 以上，即使调优得再精细，峰值时段的停顿也会从几十毫秒滑向几百毫秒，直接造成用户可感知的卡顿。Red Hat 需要一个不完全依赖 Oracle 技术路线、由自己主导演进节奏的低延迟 GC 实现，这是 Shenandoah 项目立项的直接商业动机。
 
 ### 1.2 核心设计问题
 
 Shenandoah 和 ZGC 面对的核心工程问题是相同的：**如何在用户线程正在使用对象的同时，安全地将对象从旧地址移动到新地址（并发疏散/并发转移）？**
 
-这个问题的难点在于：移动对象的过程中，旧地址仍然有效（用户线程持有旧指针），新地址刚刚分配（对象正在复制中），如何保证用户线程读取到的是一致、正确的对象状态？
+这个问题的难点在于：移动对象的过程中，旧地址仍然有效（用户线程可能持有旧指针），新地址刚刚分配（对象正在复制中），必须保证用户线程读取到的是一致、正确的对象状态，同时不能因为并发写入导致数据丢失或对象状态撕裂（tearing）。
 
-ZGC 的答案是：**把元数据编码进指针（着色指针），在读取时检查并修正（读屏障）**。
+ZGC 的答案是：**把元数据编码进指针（着色指针），在读取时检查并修正（读屏障）**——这是"信息放在指针里"的思路。
 
-Shenandoah 的答案是：**在对象本身里放一个额外的间接层（Brooks Pointer），让所有对对象的访问都经过这个间接层**。
+Shenandoah 的答案是：**在对象本身里放一个额外的间接层（转发指针），让所有对对象的访问都经过这个间接层**——这是"信息放在对象里"的思路。
+
+两种思路孰优孰劣，并没有一个放之四海而皆准的答案，第 4 章会展开系统对比。这里先建立一个直觉：**Shenandoah 的方案在概念上更朴素**——熟悉转发指针（Forwarding Pointer）这一经典 GC 技术的工程师，几乎不需要理解任何新的硬件特性就能推导出它的正确性；而 ZGC 的着色指针方案需要理解虚拟地址空间的多重映射、指针高位比特的语义分层，学习曲线更陡峭，但一旦跨过学习曲线，运行时代价（尤其是内存开销）会更低。这种"实现直觉的简单性"与"运行时代价的最优性"之间的取舍，贯穿了本文接下来的所有对比。
+
+如果完全不做任何并发疏散——也就是退回到 [[对象生命周期与GC/07 G1 收集器——Region 化内存与混合回收|G1]] 式的"STW 期间复制"策略——问题反而是最容易解决的：STW 期间没有用户线程在跑，谈不上"旧地址仍然有效"的并发一致性问题，对象复制、指针更新可以按任意顺序串行完成，正确性证明是平凡的。这也解释了为什么 G1、Parallel 这类传统分代收集器完全不需要 Brooks Pointer 或着色指针这类精巧的设计——它们是用**牺牲停顿时间**换取了**实现的简单性**。Shenandoah 和 ZGC 的全部复杂度，本质上都是为了在保留"并发"这个约束的前提下，重新构造出一套能够替代"STW 天然提供的串行化保证"的机制。理解这一点，才能真正理解 Brooks Pointer 和着色指针不是"炫技"，而是并发疏散问题在数学上几乎必然要付出的复杂度代价。
+
+### 1.3 从实验室论文到 OpenJDK 主线：Shenandoah 的十年长跑
+
+> [!info] 核心概念：一个 GC 从构想到默认可用，往往要走十年
+> Shenandoah 不是某次版本发布时突然出现的新特性，它的时间线跨越了近十年，期间经历了从内部原型、独立 IcedTea 分支、正式 JEP 立项、到最终并入 OpenJDK 主线、再持续演进架构的完整过程。理解这条时间线，能帮助我们建立一个重要认知：**大型 JVM 特性的落地速度，往往受限于社区共识与基础设施的成熟度，而不仅仅是算法本身的难度**。
+
+Shenandoah 项目的起点可以追溯到 2014 年初。Red Hat 的 Christine H. Flood（此前参与过 G1 与 Parallel GC 的开发）和 Roman Kennke 在 2014 年 1 月向 OpenJDK 社区提交了 **JEP 189：Shenandoah: A Low-Pause-Time Garbage Collector**，明确提出了"停顿时间与堆大小无关"的目标——这个目标比 ZGC 的立项（JEP 333，2017 年）早了三年。JEP 189 早期在 Red Hat 内部以及 IcedTea 项目（OpenJDK 的一个第三方集成分支）中原型验证，先后产出了可用于 OpenJDK 8 和 OpenJDK 9 的实现。
+
+Shenandoah 真正进入 OpenJDK 主线之前，还依赖另一个关键的基础设施性 JEP——**JEP 304：Garbage Collector Interface**（JDK 10 交付）。在 JEP 304 之前，HotSpot 内部的 GC 实现与共享代码高度耦合，新增一个 GC 算法往往需要侵入式修改大量共享基础设施代码，审查和合并成本极高。JEP 304 抽象出了统一的 `CollectedHeap` 接口，让每个 GC 实现可以相对独立地插入或移除，**这直接为 Shenandoah（以及随后的 ZGC）降低了进入主线的技术门槛**。这也解释了为什么 Shenandoah 虽然 2014 年就立项，却直到 2019 年（JDK 12）才真正作为实验特性进入 OpenJDK 主线——中间的五年里，社区花了大量精力先把"地基"打好。
+
+2015 年，Christine Flood 正式向 OpenJDK 提交了 Project Shenandoah 的项目创建请求，Hotspot Group 作为其赞助方，这标志着 Shenandoah 从"内部实验"升级为"OpenJDK 官方子项目"。2019 年，JEP 189 在 JDK 12 中以实验特性（`-XX:+UnlockExperimentalVMOptions -XX:+UseShenandoahGC`）落地主线，同一年 Oracle 的 ZGC（JEP 333）也在 JDK 11 落地——两者几乎同步进入 OpenJDK，形成了"低延迟 GC 双雄"的格局。
+
+> [!note] 设计哲学：Oracle JDK 与 OpenJDK 的分野
+> 值得注意的历史细节是，Oracle 官方发行的 Oracle JDK 长期不包含 Shenandoah（这是 Oracle 与 Red Hat 在商业策略上的分歧，而非技术分歧），Shenandoah 只存在于 OpenJDK 各家发行版（Red Hat build of OpenJDK、Eclipse Temurin、Amazon Corretto、Azul Zulu 等）中。这意味着如果你的生产环境锁定使用 Oracle JDK，Shenandoah 从一开始就不在可选项之内，ZGC 反而是两边都支持的公约数选择。这一分野在 7.1 节的选型建议中还会再次出现。
+
+这种分野也反过来影响了两个项目的社区治理风格：ZGC 的核心决策权集中在 Oracle 内部团队手中，路线图与 Oracle JDK 的发布节奏高度绑定；Shenandoah 则完全通过 OpenJDK 公开邮件列表（hotspot-gc-dev）和 JBS（Java Bug System）issue track 推进，每一次架构级改动（包括第 5 章要展开的 LRB 重构）都留下了完整的公开讨论记录，这也是本文能够引用大量一手邮件列表与官方博客资料还原其演进细节的原因。
 
 ---
 
@@ -37,7 +56,7 @@ Shenandoah 的答案是：**在对象本身里放一个额外的间接层（Broo
 
 ### 2.1 什么是 Brooks Pointer
 
-**Brooks Pointer**（得名于 Rodney A. Brooks，其在 1984 年的论文中提出了这种转发指针技术）是 Shenandoah 在**每个 Java 对象头之前**额外插入的一个机器字（word，8 字节），它始终指向该对象的"当前有效地址"：
+**Brooks Pointer**（得名于 Rodney A. Brooks，其 1984 年发表于 ACM LFP 的论文《Trading data space for reduced time and code space in real-time garbage collection on stock hardware》首次提出了这种转发指针技术，原始动机是在没有特殊硬件支持的"普通机器"上实现实时垃圾回收）是 Shenandoah 在**每个 Java 对象头之前**额外插入的一个机器字（word，8 字节），它始终指向该对象的"当前有效地址"：
 
 ```
 普通对象的内存布局（HotSpot，无 Shenandoah）：
@@ -49,7 +68,7 @@ Shenandoah 的答案是：**在对象本身里放一个额外的间接层（Broo
 │  实例数据...                │
 └─────────────────────────────┘
 
-Shenandoah 下对象的内存布局：
+Shenandoah 1.0（JDK 12）下对象的内存布局：
 ┌─────────────────────────────┐  ← 对象的真实起始地址（对外暴露的是这里 - 8 字节）
 │  Brooks Pointer（8 字节）   │  ← 指向当前有效地址（正常情况下指向自身）
 ├─────────────────────────────┤  ← 传统意义上对象头的起始（Mark Word 在这里）
@@ -64,8 +83,8 @@ Shenandoah 下对象的内存布局：
 **正常状态（未转移）**：Brooks Pointer 指向对象**自身**（`brooksPt → this`）。这时 Brooks Pointer 像一个"冗余"的自引用，没有实际作用。
 
 **转移进行中**：当 GC 线程将对象从旧地址复制到新地址时，将**旧对象的 Brooks Pointer 更新为指向新地址**（`oldBrooksPt → newObj`）。此后：
-- 用户线程若通过旧指针访问对象，先读 Brooks Pointer，发现它指向新地址，自动转向新地址
-- 用户线程若通过新指针（已被 GC 直接更新）访问对象，Brooks Pointer 指向自身，直接访问
+- 用户线程若通过旧指针访问对象，先读 Brooks Pointer，发现它指向新地址，自动转向新地址；
+- 用户线程若通过新指针（已被 GC 直接更新）访问对象，Brooks Pointer 指向自身，直接访问。
 
 ```
 转移过程示意：
@@ -94,21 +113,41 @@ GC 复制到新地址后，更新旧对象的 Brooks Ptr：
            └─────────────────────┘
 ```
 
+这种设计的精妙之处在于：**转发的正确性不依赖任何特殊硬件特性，一次内存读取加一个条件判断就能完成**。这正是 Brooks 在 1984 年论文里强调的"stock hardware"（普通商用硬件）约束——他希望实时 GC 能在没有专用垂直整合硬件的通用计算机上运行，这个约束在 40 年后的今天依然成立，也解释了为什么 Shenandoah 相比 ZGC 更容易移植到各种平台（详见 4.3 节）。
+
+值得一提的是，转发指针技术并非 Shenandoah 首创应用于生产级 GC——早期的一些 Lisp 机和 Smalltalk 虚拟机的实时垃圾回收器就采用过类似思路，Brooks 本人 1984 年的论文正是这一脉络下的理论总结。Shenandoah 的贡献在于把这个已经存在了三十多年的经典技术，第一次系统性地应用到 HotSpot 这样一个面向海量企业级生产负载、必须兼顾正确性、可维护性与工程可验证性的商业级 JVM 实现中，并配合 3.1 节描述的 Region 化内存模型和 SATB 并发标记，构造出一套完整可用的并发压缩式垃圾回收器。
+
 ### 2.2 Brooks Pointer 的读/写屏障
 
-为了让所有对象访问都经过 Brooks Pointer 的间接层，Shenandoah 需要在所有对象访问处插入屏障：
+为了让所有对象访问都经过 Brooks Pointer 的间接层，Shenandoah 1.0 需要在几乎所有对象访问处插入屏障：
 
-**读屏障（Read/Load Barrier）**：每次读取一个对象引用后，如果该引用指向一个处于转移集合中的对象，读屏障通过 Brooks Pointer 找到新地址并返回。
+**读屏障（Read/Load Barrier）**：每次读取一个对象引用后，如果该引用指向一个处于疏散集合中的对象，读屏障通过 Brooks Pointer 找到新地址并返回。
 
-**写屏障（Write Barrier / Store Barrier）**：每次向对象引用字段写入时，同样需要检查目标对象是否需要通过 Brooks Pointer 转发，确保写入的是新对象而非旧对象的副本。
+**写屏障（Write Barrier / Store Barrier）**：每次向对象引用字段写入时，同样需要检查目标对象是否需要通过 Brooks Pointer 转发，确保写入的是新对象而非旧对象的副本。此外，写入的**值**本身如果也是一个对象引用，还需要先对这个值做一次读屏障，确保堆里永远不会写入一个指向旧地址（from-space）的引用——这是 Shenandoah 1.0 屏障模型里一个容易被忽视但极其关键的细节，也是它比 ZGC 早期方案更"重"的直接原因。
 
-**对比 ZGC**：ZGC 只有读屏障（Load Barrier），没有写屏障。Shenandoah 同时有读屏障和写屏障，屏障覆盖范围更广，理论上开销更大。但 Shenandoah 的屏障逻辑相对简单（只是追随 Brooks Pointer），而 ZGC 的读屏障逻辑更复杂（颜色检查、慢速路径重映射）。两者的实际开销因应用特征而异，很难一概而论地说哪个更重。
+**对比 ZGC**：ZGC 只有读屏障（Load Barrier），没有写屏障。Shenandoah 1.0 同时有读屏障、写屏障，甚至还需要对象比较屏障（equals barrier，用于处理两个指针可能分别指向同一对象的新旧副本、逐字节比较会得到错误结果的问题）与原语读写屏障（primitive barrier，因为原语字段的读写同样可能发生在一个"半转移"的对象上）。屏障覆盖范围远比 ZGC 广，这也是 Shenandoah 1.0 长期被社区诟病"屏障太重"的根源，这个问题在 JDK 13 的架构调整中被系统性解决（见 5.2 节）。
 
-### 2.3 Brooks Pointer 的内存开销
+### 2.3 Brooks Pointer 的内存开销——一次量化分析
 
-每个对象额外增加 8 字节（一个机器字）的 Brooks Pointer 开销。这是 Shenandoah 与 ZGC 相比一个明显的劣势——ZGC 的着色指针利用了指针中现有的未用高位，**没有任何额外内存开销**；Shenandoah 的 Brooks Pointer 是额外增加到每个对象头中的，使堆内存中每个对象都增大了 8 字节。
+每个对象额外增加 8 字节（一个机器字）的 Brooks Pointer，这是 Shenandoah 1.0（JDK 12）与 ZGC 相比一个明显的劣势——ZGC 的着色指针复用了指针中现有的未用高位，**没有任何额外内存开销**；Shenandoah 1.0 的 Brooks Pointer 是额外增加到每个对象头中的，堆内存中每个对象都因此增大了 8 字节。
 
-对于对象数量极多（数以亿计的小对象）的应用，这额外的 8 字节 × N 个对象可能是几 GB 的额外内存消耗。这也是 Shenandoah 2.0（分代 Shenandoah）着力优化的方向之一。
+这个"8 字节"听起来微不足道，但它的相对代价，取决于对象本身有多大——对象越小，额外一个字带来的相对膨胀率就越高。下面用几种典型对象大小做一个具体的量化对比（假设 64 位 JVM，默认对象头 12～16 字节，已开启 CompressedOops）：
+
+| 对象类型 | 原始大小（含对齐填充） | +8 字节 Brooks Pointer 后 | 相对膨胀率 |
+| :--- | :--- | :--- | :--- |
+| 空对象 `new Object()` | 16 字节 | 24 字节 | **50%** |
+| 单个 `int` 字段对象 | 16 字节 | 24 字节 | **50%** |
+| 典型小型 POJO（3～4 个字段） | 32 字节 | 40 字节 | **25%** |
+| `java.lang.Integer` 缓存对象 | 16 字节 | 24 字节 | **50%** |
+| 短 `String`（含 `byte[]` 内部数组，约 40 字节） | 40 字节 | 48 字节 | **20%** |
+| 中等对象（8～10 个字段，约 64 字节） | 64 字节 | 72 字节 | **12.5%** |
+
+可以看到，对于 JVM 堆中占比往往最大的"小对象"（缓存 Key、包装类型、集合的内部节点如 `HashMap.Node`、大量短生命周期的业务 DTO），Brooks Pointer 带来的相对内存膨胀可以高达 **20%～50%**。如果把视角从单个对象放大到整个堆：假设一个服务的存活对象数量级是 10 亿（对高并发缓存服务、图数据结构处理服务而言并不罕见），单纯 Brooks Pointer 一项就会带来 `1,000,000,000 × 8 字节 ≈ 7.45 GB` 的额外内存开销——这还没算上因为对象膨胀导致 Region 提前打满、GC 触发更频繁带来的连锁效应。
+
+> [!warning] 生产避坑：Brooks Pointer 开销不是一次性的，是持续的
+> 与 [[对象生命周期与GC/07 G1 收集器——Region 化内存与混合回收|G1]] 的 Remembered Set（一次性的元数据结构，大小取决于跨 Region 引用密度，通常占堆 5%～20%）不同，Brooks Pointer 的开销是**每个存活对象持续背负的固定税**，与对象引用密度无关，只与对象数量有关。这意味着在小对象密集型应用（如大量使用 `Integer`/`Long` 包装类型、小字符串、链表节点的应用）中，Brooks Pointer 的相对开销反而比 RSet 更难通过调优规避。
+
+这一开销分析对应的是 **Shenandoah 1.0（JDK 12 落地时的原始架构）**。第 5 章会详细展开：从 JDK 13 起，Red Hat 通过重构屏障模型，在 JDK 14 彻底消除了这个独立的转发指针字，把上表中"膨胀率"这一列的绝大部分数字修正为接近 0。这是理解 Shenandoah 演进史时最容易被过时资料误导的一点——很多中文技术资料至今仍在重复"Shenandoah 每个对象多 8 字节"的说法，这个说法只对 JDK 12 成立，对 JDK 14 及以后的版本已经不再准确。
 
 ---
 
@@ -122,23 +161,23 @@ Shenandoah 的 GC 周期同样分为三大阶段，每个阶段各有 STW 和并
 %%{init: {'theme': 'dark', 'themeVariables': {'primaryColor': '#6272a4', 'primaryTextColor': '#f8f8f2', 'primaryBorderColor': '#bd93f9', 'lineColor': '#ff79c6', 'secondaryColor': '#44475a', 'tertiaryColor': '#282a36'}}}%%
 graph LR
     subgraph "标记阶段"
-        A["初始标记\nSTW 极短"]
-        B["并发标记\n与用户线程并发"]
-        C["最终标记\nSTW 极短"]
+        A["初始标记<br/>STW 极短"]
+        B["并发标记<br/>与用户线程并发"]
+        C["最终标记<br/>STW 极短"]
         A --> B --> C
     end
 
     subgraph "疏散阶段"
-        D["并发清理\n回收全空 Region"]
-        E["初始疏散\nSTW 极短"]
-        F["并发疏散\n与用户线程并发"]
+        D["并发清理<br/>回收全空 Region"]
+        E["初始疏散<br/>STW 极短"]
+        F["并发疏散<br/>与用户线程并发"]
         D --> E --> F
     end
 
     subgraph "更新引用阶段"
-        G["初始更新引用\nSTW 极短"]
-        H["并发更新引用\n与用户线程并发"]
-        I["最终更新引用\nSTW 极短"]
+        G["初始更新引用<br/>STW 极短"]
+        H["并发更新引用<br/>与用户线程并发"]
+        I["最终更新引用<br/>STW 极短"]
         G --> H --> I
     end
 
@@ -153,23 +192,25 @@ graph LR
 
 **阶段一：标记（Marking）**
 
-- **初始标记（Initial Mark）—— STW，极短**：STW 扫描所有 GC Roots，标记其直接可达对象，将这些对象加入标记工作队列。
-- **并发标记（Concurrent Mark）—— 并发**：从工作队列出发，并发遍历整个对象图，通过三色标记标记所有可达对象。Shenandoah 使用 SATB（原始快照）处理并发期间的引用变化，与 G1 相同。
-- **最终标记（Final Mark）—— STW，极短**：处理 SATB 队列中的剩余对象，完成最终标记，同时确定"疏散集合"（Evacuation Set）——垃圾最多的那些 Region。
+- **初始标记（Initial Mark）—— STW，极短**：STW 扫描所有 [[对象生命周期与GC/04 垃圾回收基础——可达性分析、安全点与安全区域|GC Roots]]，标记其直接可达对象，将这些对象加入标记工作队列。
+- **并发标记（Concurrent Mark）—— 并发**：从工作队列出发，并发遍历整个对象图，通过三色标记标记所有可达对象。Shenandoah 使用 SATB（原始快照，Snapshot-At-The-Beginning）处理并发期间的引用变化，与 G1 相同——这也是 `-XX:ShenandoahGCMode=satb` 这个默认模式名字的来源。
+- **最终标记（Final Mark）—— STW，极短**：处理 SATB 队列中的剩余对象，完成最终标记，同时依据每个 Region 的存活率数据，确定"疏散集合"（Evacuation Set）——垃圾最多、回收性价比最高的那些 Region。
 
 **阶段二：疏散（Evacuation）**
 
-- **并发清理（Concurrent Cleanup）—— 并发**：回收标记阶段结束后存活率为 0%（全部是垃圾）的 Region，这些 Region 直接变为 Free，无需复制任何对象。
-- **初始疏散（Initial Evacuation）—— STW，极短**：疏散 GC Roots 直接引用的、位于疏散集合中的对象，确保 GC Roots 指向的对象有确定的新地址。
-- **并发疏散（Concurrent Evacuation）—— 并发**：将疏散集合中所有 Region 的存活对象**并发地**复制到新 Region，同时更新旧对象的 Brooks Pointer 指向新地址，用户线程通过 Brooks Pointer 透明地访问已移动的对象。
+- **并发清理（Concurrent Cleanup）—— 并发**：回收标记阶段结束后存活率为 0%（全部是垃圾）的 Region，这些 Region 直接变为 Free，无需复制任何对象，这是一次"免费"的回收。
+- **初始疏散（Initial Evacuation）—— STW，极短**：疏散 GC Roots 直接引用的、位于疏散集合中的对象，确保 GC Roots 指向的对象有确定的新地址，避免根集合本身出现悬空转发。
+- **并发疏散（Concurrent Evacuation）—— 并发**：将疏散集合中所有 Region 的存活对象**并发地**复制到新 Region，同时用 CAS 原子更新旧对象的转发指针指向新地址，用户线程通过转发指针透明地访问已移动的对象。
 
 **阶段三：更新引用（Update References）**
 
-Shenandoah 在疏散阶段结束后，堆中仍然存在大量指向旧地址的引用字段（只有 Brooks Pointer 保持了透明转发，但旧指针仍然存在）。更新引用阶段负责将所有这些旧指针统一更新为新地址：
+Shenandoah 在疏散阶段结束后，堆中仍然存在大量指向旧地址的引用字段（只有转发指针保证了透明转发，但字段里存储的旧指针值本身并未被修正）。更新引用阶段负责将所有这些旧指针统一更新为新地址：
 
 - **初始更新引用（Initial Update References）—— STW，极短**：仅更新 GC Roots 中的引用，工作量极小。
-- **并发更新引用（Concurrent Update References）—— 并发**：遍历整个堆，将所有指向已移动对象的引用字段更新为新地址（通过 Brooks Pointer 查找）。完成后，Brooks Pointer 的转发使命结束，所有指针直接指向新地址，旧 Region 可以安全释放。
-- **最终更新引用（Final Update References）—— STW，极短**：更新最后剩余的 GC Roots 引用（并发阶段可能遗漏的），完成清理。
+- **并发更新引用（Concurrent Update References）—— 并发**：遍历整个堆，将所有指向已移动对象的引用字段更新为新地址（通过转发指针查找）。完成后，转发指针的转发使命结束，所有指针直接指向新地址，旧 Region 可以安全释放。
+- **最终更新引用（Final Update References）—— STW，极短**：更新最后剩余的 GC Roots 引用（并发阶段可能遗漏的），完成本轮回收周期。
+
+并发疏散阶段有一个容易被忽视但极为关键的竞争条件：GC 线程正在把旧对象的数据复制到新地址（写新对象），用户线程可能同时在写旧对象的字段（写旧对象），如果不加同步，两者的写入顺序不确定，可能导致用户线程的写操作被 GC 的复制覆盖而"丢失"。Shenandoah 通过 **CAS（Compare-And-Swap）** 原子操作更新转发指针来解决竞争——只有第一个成功执行 CAS 的线程（无论是 GC 线程还是触发了写屏障慢路径的用户线程）"赢得"疏散权，其余尝试疏散同一对象的线程会发现 CAS 失败，转而直接使用已经赢家产生的新副本地址。这保证了同一对象只会存在一份"权威"的新副本，不会出现两份并发写入互相打架的情况。
 
 ### 3.2 与 ZGC GC 流程的对比
 
@@ -181,7 +222,18 @@ Shenandoah 在疏散阶段结束后，堆中仍然存在大量指向旧地址的
 | **STW 次数** | 3 次（初始标记、最终标记、初始转移）| 5 次（初始标记、最终标记、初始疏散、初始更新引用、最终更新引用）|
 | **每次 STW 时间** | < 1ms | < 1ms（但次数更多）|
 
-Shenandoah 有 5 次 STW 停顿，ZGC 只有 3 次。虽然每次都很短，但频繁的 STW 在某些对停顿次数敏感的场景（如实时系统）仍然是劣势。
+Shenandoah 有 5 次 STW 停顿，ZGC 只有 3 次。虽然每次都很短，但频繁的 STW 在某些对停顿次数敏感的场景（如高频交易、实时音视频处理）仍然是劣势——即使每次停顿都小于 1ms，5 次停顿累积起来的"抖动窗口"也比 3 次更容易被链路追踪系统捕获为可感知的延迟毛刺。
+
+### 3.3 退化 GC 与 Full GC——并发失败时的兜底机制
+
+前面描述的并发标记、并发疏散都建立在一个隐含前提上：**并发 GC 线程的处理速度追得上应用线程的分配速度**。一旦这个前提被打破——分配速率过高、堆碎片过于严重、或者并发阶段本身遭遇了无法在并发状态下安全处理的异常——Shenandoah 需要一套兜底机制，这就是**退化 GC（Degenerated GC）**。
+
+退化 GC 的触发逻辑是：当前正在进行的并发 GC 周期被取消（`cancelled_gc`标志被置位，最常见的原因是分配失败，即用户线程尝试分配内存时发现堆已经没有空闲 Region），Shenandoah 不会直接推倒重来，而是把**当前周期已经完成的工作保留下来，从被中断的那个阶段起，切换成 STW 方式继续完成剩余工作**。举例来说，如果并发标记已经完成一大半，此时因为分配失败被取消，退化 GC 会从"标记"这个阶段接手，用 STW 的方式把剩余标记工作跑完，而不是从零开始——这本质上是"能省则省"的增量降级策略，代价通常是几十到几百毫秒的一次性停顿，比彻底的 Full GC 轻得多。
+
+如果连续多次退化 GC 都没有取得"足够的进展"（即回收到的空闲空间没有达到预期比例），Shenandoah 会进一步升级为 **Full GC**——这是最后的兜底手段，采用完全 STW、单线程或多线程并行（视具体实现路径）的标记-整理算法，一次性把整个堆压缩到最紧凑的状态。Full GC 的停顿时间与堆大小重新变得正相关，在几十 GB 的堆上可能达到秒级，这也是本文反复强调"Shenandoah/ZGC 是尽力而为的低延迟，不是理论上限的保证"这一结论的具体落脚点。
+
+> [!warning] 生产避坑：GC 日志中反复出现 "Degenerated GC" 是重要信号
+> 如果 GC 日志中偶尔出现一次 Degenerated GC，通常是正常的自适应调节（比如一次分配脉冲刚好赶上并发周期的尾部）。但如果日志显示**连续多次**退化 GC，且伴随 "bad progress"（回收进展不佳）的诊断信息，几乎可以确定应用的分配速率已经系统性地超过了并发 GC 的处理能力——此时唯一治本的做法是加大堆容量、增加 `ConcGCThreads`，或者（更根本地）从应用层面降低分配速率，而不是指望调整启发式参数就能解决问题。7.3 节 Outbrain 的案例中"缩小 Memtable 存活集"正是这种"从应用层面治本"思路的典型体现。
 
 ---
 
@@ -191,98 +243,202 @@ Shenandoah 有 5 次 STW 停顿，ZGC 只有 3 次。虽然每次都很短，但
 
 **ZGC（着色指针）**：元数据在**指针**上。GC 状态信息编码在指针的高位比特中，每次通过指针访问对象时，读屏障检查颜色，按需修正。"对象本身不变，指针携带状态"。
 
-**Shenandoah（Brooks Pointer）**：元数据在**对象**上。每个对象前额外存储一个转发指针，所有对对象的访问都经过这个间接层。"指针不变，对象本身提供转发"。
+**Shenandoah（转发指针）**：元数据在**对象**上。每个对象前存储一个转发指针，所有对对象的访问都经过这个间接层。"指针不变，对象本身提供转发"。
 
 ### 4.2 并发疏散时的行为差异
 
-**ZGC**：GC 移动对象后，通过**转发表**记录旧→新地址映射。用户线程持有旧指针，下次读取时读屏障发现颜色不对，查转发表，更新指针，返回新地址。
+**ZGC**：GC 移动对象后，通过着色指针的"已重映射（Remapped）"颜色位与一张**转发表（Forwarding Table，按 Region 维护，Region 回收后转发表随之释放）**记录旧→新地址映射。用户线程持有旧指针，下次读取时读屏障发现颜色不对（指向的是"已转移但尚未重映射"的状态），查转发表，把指针自身修正为新地址后再返回——这意味着**指针一旦被读屏障"治愈"过一次，后续同一位置的再次读取就不再需要查表**，这是 ZGC 论文里强调的"自愈指针（Self-Healing Pointer）"特性。
 
-**Shenandoah**：GC 移动对象后，更新**旧对象的 Brooks Pointer**指向新地址。用户线程持有旧指针，读取对象时通过 Brooks Pointer 透明跳转到新地址（就算没有意识到对象已移动，也能访问到最新数据）。
+**Shenandoah**：GC 移动对象后，更新**旧对象的转发指针**指向新地址。用户线程持有旧指针，读取对象时通过转发指针透明跳转到新地址（就算没有意识到对象已移动，也能访问到最新数据），但**存储在字段里的那个旧指针值本身并未被修改**，必须等到"更新引用"阶段扫描到这个字段时才会被真正修正。也就是说，同一个旧指针如果被多次间接跳转访问，在更新引用阶段完成之前，每一次访问都要重新走一次转发指针这层间接寻址，不存在 ZGC 式的"自愈"。
 
-**一个关键竞争条件**：并发疏散时，GC 线程和用户线程可能同时尝试向被转移的对象写数据——GC 线程在将旧对象复制到新地址（正在写新对象），用户线程也在更新旧对象的字段（写旧对象）。如果没有同步，写操作可能丢失。
-
-**Shenandoah 的解决方案**：GC 线程在更新旧对象 Brooks Pointer 时使用 **CAS（Compare-And-Swap）** 原子操作。同时，写屏障确保用户线程对位于疏散集合中的对象的写操作，能够被"转发"到新对象。
+这个差异在 4.4 节会转化为一个可以量化的性能特征：ZGC 用一次性的指针修正换取长期的直接访问，Shenandoah 用持续的间接寻址换取更简单的正确性证明。这正是 Brooks 在 1984 年论文中权衡的核心——用固定的"空间/时间税"换取避免复杂重映射逻辑的"实现简单性"。
 
 ### 4.3 平台兼容性
 
 **ZGC 的着色指针依赖 64 位地址空间的高位比特**，要求：
-- 64 位操作系统
-- 不能开启 CompressedOops（压缩指针会占用着色指针所需的地址位）
-- 需要操作系统支持多重虚拟地址映射（Linux/macOS 支持，某些较旧的 Windows 版本有限制）
+- 64 位操作系统；
+- 不能开启 CompressedOops（压缩指针会占用着色指针所需的地址位）；
+- 需要操作系统支持多重虚拟地址映射（Multi-Mapping，Linux/macOS 支持较好，早期 Windows 版本对此支持有限，这也是 ZGC 在 Windows 上落地时间晚于 Linux 的原因之一）。
 
-**Shenandoah 的 Brooks Pointer 是通用方案**：
-- 兼容 32 位系统（虽然实际中 32 位系统已经很少）
-- 不依赖特殊的地址空间布局
-- 更容易移植到不同的 JVM 实现和平台
+**Shenandoah 的转发指针是通用方案**：
+- 理论上兼容 32 位系统（虽然实际中 32 位服务端 JVM 已经非常少见）；
+- 不依赖特殊的地址空间布局或操作系统级多重映射特性；
+- 更容易移植到不同的 CPU 架构（Red Hat 官方声明支持 x86_64 与 aarch64，社区也维护了向 32 位平台和其他架构移植的分支）。
 
-这是 Shenandoah 相比 ZGC 在可移植性上的优势——它可以更容易地被移植到 OpenJDK 的各种发行版中，而不受平台的限制。
+这是 Shenandoah 相比 ZGC 在可移植性上的长期优势——它可以更容易地被移植到 OpenJDK 的各种发行版和边缘设备中，而不受平台特性的限制。这也部分解释了为什么 Cassandra 这样仍在 JDK 8 上运行的老牌项目（见 7.3 节），能通过社区维护的 JDK 8 backport 用上 Shenandoah，而 ZGC 从设计上就无法向 JDK 8 回溯移植。
+
+### 4.4 转发表 vs 染色指针——根本取舍的量化透视
+
+把 4.1～4.3 的对比再往下钻一层，可以看到两条路线在四个维度上呈现出近乎对称的取舍关系：
+
+| 维度 | ZGC（染色指针 + 转发表） | Shenandoah（转发指针 + LRB） |
+| :--- | :--- | :--- |
+| **元数据存储位置** | 指针本身（高位比特） | 对象头旁的额外字 / 复用的 Mark Word |
+| **每对象常驻内存开销** | 0（复用指针闲置位） | JDK 12：固定 +8 字节；JDK 14 起：接近 0（见 5.3 节） |
+| **地址空间/堆容量约束** | 受限于指针可用比特数（早期版本堆容量上限较低，后续版本通过调整颜色位布局逐步放宽） | 无此类约束，堆容量理论上只受物理内存限制 |
+| **重复访问的均摊代价** | 首次访问后指针"自愈"，后续直接访问无需再查表 | 每次经间接层访问都要多一次内存读取，不具备自愈特性 |
+| **CPU 缓存友好度** | 指针本身大小不变，缓存行为与传统指针接近 | 额外的转发指针字增加了对象头的缓存行读取范围 |
+| **JIT 编译期优化空间** | 颜色检查可被 JIT 提升到循环外，但分支预测和多重内存屏障插入点较多 | LRB 之后屏障统一收敛到"载入定义点"，更利于 JIT 做公共子表达式消除 |
+| **对操作系统的依赖** | 依赖多重虚拟地址映射能力 | 无特殊操作系统依赖 |
+| **实现与验证复杂度** | 较高（需要维护地址空间多重映射、颜色位状态机） | 较低（转发指针的正确性证明只依赖 CAS 语义） |
+
+这张表格背后是一个更本质的工程哲学分歧：**ZGC 选择向底层硬件/操作系统特性"借空间"**（借用指针里本来就存在但从未被使用过的高位比特），代价是牺牲了一部分平台无关性和地址空间的灵活性；**Shenandoah 选择向每个对象"收税"**（每个对象掏出一个字用于转发），代价是持续的内存膨胀和无法自愈的间接访问，但换来的是完全不依赖任何特殊硬件/操作系统假设的可移植性。没有一种取舍是全局最优的——这也是为什么 Oracle（拥有对底层硬件平台特性做更激进假设的资源和意愿）选择了染色指针路线，而 Red Hat（更看重跨平台兼容性和实现可验证性，服务对象是保守的企业级客户）选择了转发指针路线。
+
+### 4.5 边界与反例：两条路线各自的"不舒适区"
+
+任何技术路线的优势都是有边界的，脱离场景谈"哪个更好"没有意义。
+
+**ZGC 不舒适的场景**：一是**极端受限的运行环境**——嵌入式设备、部分容器化的极简操作系统镜像，如果底层不支持多重虚拟地址映射，ZGC 根本无法启动；二是**必须使用较旧 JDK 版本的存量系统**——ZGC 最早在 JDK 11 才以实验特性出现，无法像 Shenandoah 那样通过社区 backport 用到 JDK 8，这对大量仍运行在 JDK 8 上的存量中间件（如 4.3 节提到的 Cassandra 3.11）是硬约束；三是**32 位平台**——尽管 2024 年后的生产环境已极少使用 32 位 JVM，但只要存在这类需求，着色指针方案在架构上就完全不可行，因为 32 位地址空间根本没有足够的闲置高位比特可供编码状态信息。
+
+**Shenandoah 不舒适的场景**：一是 7.4 节讨论的**分配/释放节奏剧烈波动的场景**（典型如带驱逐策略的分布式缓存）——非分代架构下，无论存活集大小如何变化，每轮 GC 都要通盘处理，缺乏"只处理最近分配的年轻代"这种针对性优化，直到分代 Shenandoah（JEP 404/521/535）默认化之前，这类场景中 G1 往往表现更稳定；二是**极端高频写入的场景**——即便 LRB 已经把屏障收敛到载入定义点，只要应用存在大量"读一个引用后立刻高频修改其字段"的模式（比如构建器模式下连续 setter 调用、批量修改容器内部状态），LRB 相比 ZGC 纯读屏障仍然多了一层"写路径必须依赖前置 load 保证有效性"的隐性心智负担，具体到 JIT 优化效果，需要用真实压测数据验证，不能只凭理论直觉下结论。
+
+工程实践中判断"该用哪条路线"，比记住一张对比表更重要的是：先搞清楚自己的应用属于哪一类分配/存活模式，再去查对应路线在该模式下是否有已知的公开案例（如 7.3、7.4 两节），而不是先入为主地认定"更新的技术一定更好"。
 
 ---
 
-## 第 5 章 Shenandoah 2.0——新一代架构
+## 第 5 章 Shenandoah 的架构演进——从 1.0 到 LRB 再到分代化
 
-### 5.1 Shenandoah 1.0 的短板
+### 5.1 Shenandoah 1.0（JDK 12）的短板
 
-原始的 Shenandoah（以下称 Shenandoah 1.0）与早期 ZGC 一样，是**非分代的**——每次 GC 都扫描和处理整个堆。与非分代 ZGC 一样，Shenandoah 1.0 违背了分代假说，对短命对象和长命对象使用相同的处理策略，吞吐量因此受到影响。
+原始的 Shenandoah（本文称为 Shenandoah 1.0，对应 JDK 12 的落地版本）与早期 ZGC 一样是**非分代的**——每次 GC 都要扫描和处理整个堆，违背了 [[对象生命周期与GC/05 垃圾回收算法——标记清除、复制、标记整理与分代假说|分代假说]]，对短命对象和长命对象使用相同的处理策略，吞吐量因此受到影响。
 
-此外，Brooks Pointer 每个对象增加 8 字节，在对象数量极多的应用中内存开销不可忽视。
+叠加 2.2～2.3 节分析的双屏障（读屏障+写屏障+对象比较屏障+原语屏障）和固定 8 字节转发指针字的开销，Shenandoah 1.0 在社区评测中给人留下了"停顿确实低，但吞吐代价不小"的第一印象。这个印象在很长一段时间里成为 Shenandoah 被质疑的主要理由,直到 Red Hat 在 JDK 13 上做了一次架构级的重构。
 
-### 5.2 分代 Shenandoah 的探索
+### 5.2 JDK 13：Load Reference Barrier（LRB）架构革命
 
-Red Hat 的工程师在社区积极推进**分代 Shenandoah** 的开发，目标与 JDK 21 分代 ZGC 相似：引入新生代/老年代的区分，让短命对象更快被回收，减少每次 GC 需要处理的数据量，提升吞吐量。
+2019 年，Roman Kennke 在 OpenJDK 邮件列表提交了 **JDK-8221766：Load-reference barriers for Shenandoah**，这是 Shenandoah 项目历史上最重要的一次架构调整,并在同年随 JDK 13 交付。
 
-分代 Shenandoah 的实现比分代 ZGC 更复杂（因为 Brooks Pointer 在每个对象前，分代 GC 需要处理更多的跨代引用场景），但技术路线已经明确，相关 JEP 正在推进中。
+在 LRB 之前（Shenandoah 1.0），Shenandoah 需要保证一个**弱到空间不变式（Weak To-Space Invariant）**：读取可以来自旧副本或新副本，但写入必须发生在新副本上。为了同时满足这个不变式，Shenandoah 必须在**每一次读操作**和**每一次写操作**的使用点（use-site）都插入相应屏障——包括对原语字段的读写、对象相等性比较等边缘场景都需要特殊处理，屏障散落在代码里大量的"热点"位置，优化难度极高。
 
-### 5.3 与 ZGC 的竞争格局
+LRB 的核心洞察是：**只要在对象引用被"载入"（load）的那一刻就把它修正到新副本，后续所有基于这个引用的读写操作自然而然都发生在新副本上**，不再需要在每个使用点重复检查。这把 Shenandoah 的一致性保证从"弱到空间不变式"升级为**强到空间不变式（Strong To-Space Invariant）**——写入只可能发生在新副本，读取也只可能发生在新副本，因为任何进入到使用点的引用，在其定义点（definition-site，也就是被 load 出来的地方）就已经被修正过。
 
-目前在 OpenJDK 生态中，ZGC 和 Shenandoah 是两个并行存在的低延迟 GC 选项：
+用 Red Hat 工程师 Roman Kennke 在官方博客里给出的伪代码可以直观感受这次改造的收益：
 
-- **ZGC**：由 Oracle 维护，更激进（纯读屏障，无写屏障，无额外内存开销），分代版本（JDK 21）已正式发布，是 Oracle JDK 的主推方向
-- **Shenandoah**：由 Red Hat 维护，更保守（Brooks Pointer 简单直接，兼容性更广），是 Red Hat 系发行版（如 OpenJDK Fedora/RHEL 版本）的内置选项
+```java
+// LRB 之前：屏障散落在每个使用点，读、写都要单独处理
+void example(Foo foo) {
+    Bar b1 = readBarrier(foo).bar;              // 读时修正
+    while (...) {
+        Baz baz = readBarrier(b1).baz;           // 读时再修正一次
+        X value = makeSomeValue(baz);
+        writeBarrier(b1).x = readBarrier(value); // 写之前修正 + 写入值本身还要修正
+    }
+}
+
+// LRB 之后：屏障只出现在引用被载入的定义点，一次修正，全程有效
+void example(Foo foo) {
+    Bar b1prime = loadReferenceBarrier(foo.bar); // 只在 load 处修正一次
+    while (...) {
+        Baz baz = loadReferenceBarrier(b1prime.baz);
+        X value = makeSomeValue(baz);
+        b1prime.x = value;                       // 写入不再需要屏障，因为 b1prime 已保证有效
+    }
+}
+```
+
+这次重构带来的收益是系统性的：**不再需要原语读写屏障**（因为原语字段本身不是引用，不存在转发问题，但之前的模型出于统一性做了过度保护）、**不再需要对象相等性比较屏障**、**不再需要"resolve"这类专门用于 intrinsic 方法的特殊屏障**，屏障总数大幅收窄，且所有屏障统一出现在"定义点"而不是分散在"使用点"，这让 JIT 编译器做屏障提升（hoist out of loop）和公共子表达式消除变得容易得多——之前需要编译器花大力气把散落在热点循环体内部的屏障"搬"到循环外，现在屏障天然就出现在循环外的定义点。
+
+### 5.3 JDK 14：转发指针字的消除
+
+LRB 落地之后，Red Hat 紧接着解决了 Shenandoah 长期以来最受争议的"每个对象多 8 字节"问题。**JDK-8224584 / JDK-8225831（Shenandoah: Eliminate forwarding pointer word）** 在 JDK 14 交付，核心洞察是：
+
+> 一旦一个对象被疏散到新地址，它的旧副本除了充当"转发目标的指示牌"之外，已经没有任何其他用途——既不会再被加锁，也不会再被当作哈希码来源。既然旧副本的 Mark Word 已经"废弃"，为什么还要额外准备一个字来存转发指针，直接把转发指针**写进旧副本的 Mark Word** 不就够了？
+
+具体的编码方式是：转发指针写入旧副本的 Mark Word 时，强制把最低 2 个比特置为 `0b11`——这是一个在正常 Mark Word 编码中绝不会出现的比特组合（正常 Mark Word 的低比特要么表示锁状态，要么表示哈希/GC 年龄信息，`0b11` 被保留为"已转发"的标志位）。这样，GC 只需要检查对象 Mark Word 的最低 2 位，就能立刻区分"这是一个正常对象的 Mark Word"还是"这是一个指向新副本的转发指针"，无需再依赖对象前的独立字段。
+
+这一改动直接把 2.3 节表格里 20%～50% 的相对内存膨胀率修正为**接近 0**——对象头的物理布局回归到与不使用 Shenandoah 时几乎一致的样子，只是 Mark Word 在对象被疏散期间临时"客串"了一次转发指针的角色。唯一的复杂度增量出现在 Full GC 路径：因为 Full GC（Shenandoah 在极端内存压力下退化的兜底策略）不存在"旧副本/新副本"的概念，此时 Mark Word 必须保留其原始语义，Shenandoah 为此专门增加了在 Full GC 期间暂存原始 Mark Word 的逻辑，复用了 G1、Parallel GC 等收集器早已存在的通用基础设施。
+
+> [!note] 设计哲学：Shenandoah 2.0 这个称呼的真正含义
+> 业界（包括 Aleksey Shipilev 本人在 2019 年 JUG 大会上的演讲标题）习惯把 JDK 13～14 这次融合了 LRB 与转发指针字消除的架构升级称为"**Shenandoah 2.0**"，与之相对的"Shenandoah 1.0"专指 JDK 12 的原始实现。需要澄清的是，这个"2.0"指的是**屏障与内存布局层面的架构革新**，与后文 5.4 节讨论的**分代化**是两条独立的演进线——不少中文资料把"Shenandoah 2.0"和"分代 Shenandoah"混为一谈,这是不准确的。JDK 17 及以后的版本用户实际使用的都是"2.0 架构"（LRB + 无独立转发字），分代能力则是更晚才启动的另一条工作线。
+
+### 5.4 分代 Shenandoah：走向"兼顾吞吐量"的最后一步
+
+Shenandoah 2.0 解决了内存开销和屏障复杂度问题,但"非分代"这个更根本的架构短板一直保留到很晚才被系统性解决。Red Hat 的 William Kemper 主导的**分代 Shenandoah**工作，经历了三个连续的 JEP：
+
+- **JEP 404：Generational Shenandoah（Experimental）**——在 JDK 24 中交付，提供实验性的分代模式，需要显式通过 `-XX:+UnlockExperimentalVMOptions -XX:ShenandoahGCMode=generational` 启用，此时堆被划分为新生代与老年代，GC 优先回收新生代以降低平均回收成本，同时不影响默认非分代模式的现有用户。
+- **JEP 521：Generational Shenandoah**——把分代模式从实验特性提升为正式的产品特性（Product Feature），但**默认模式仍然保持非分代**，用户仍需显式指定 `ShenandoahGCMode=generational` 才能启用。
+- **JEP 535：Shenandoah GC: Generational Mode by Default**——计划把 `ShenandoahGCMode` 的默认值从非分代的 `satb` 切换为 `generational`，并将非分代模式标记为弃用（deprecated for removal）。
+
+这条演进路径与分代 ZGC（JDK 21 默认转向分代）的时间线几乎错位了三年，这背后一部分原因正是 Shenandoah 的转发指针天然嵌在对象布局里，分代模式下需要处理更复杂的跨代引用场景（年轻代对象被老年代对象引用时，转发指针的更新时机和写屏障的记忆集维护逻辑都要重新设计），实现复杂度显著高于分代 ZGC。
+
+分代 Shenandoah 的实现团队在推进过程中也暴露出一些值得关注的工程细节：例如社区在开发过程中发现，退化 GC（3.3 节）在分代模式下如果"进展不佳"就立刻升级为 Full GC，会造成不必要的长停顿——因为分代场景下，浮动垃圾（floating garbage，指并发周期结束时来不及回收、遗留到下一轮的垃圾对象）大多堆积在新生代，只需要针对新生代再跑一次开销小得多的退化周期（通常几百毫秒）就能回收干净，没必要直接祭出可能耗时数秒的全堆 Full GC。这类"先尝试更轻量的兜底手段，再逐级升级"的设计思路，与 G1 从"Evacuation Failure"到"Full GC"的分级退化策略高度相似，也说明不同 GC 团队在面对相似的工程约束时，往往会独立收敛到相似的解法——这是垂直领域工程实践的一种典型现象。
+
+### 5.5 与 ZGC 的竞争格局
+
+目前在 OpenJDK 生态中，ZGC 和 Shenandoah 是两个并行存在、由不同厂商主导的低延迟 GC 选项：
+
+- **ZGC**：由 Oracle 维护，技术路线更激进（纯读屏障，无写屏障，无额外内存开销），分代版本在 JDK 21 已成为默认模式，是 Oracle JDK 的主推方向；
+- **Shenandoah**：由 Red Hat 维护，技术路线更保守（转发指针简单直接，兼容性更广），2.0 架构（LRB）已经是 JDK 14 及以后各版本的标配，分代能力仍处于实验/产品化过渡阶段（JEP 404/521/535），是 Red Hat 系发行版（如 Red Hat build of OpenJDK）的内置选项。
 
 ---
 
 ## 第 6 章 Shenandoah、ZGC 与 G1 的全面对比
 
-| 维度 | G1 | ZGC（分代，JDK 21）| Shenandoah |
+下面这张表格把前五章分散讨论的所有维度收拢到一起。阅读时建议按行而非按列去理解：**同一行内三个收集器的差异，本质上都能追溯到"是否并发转移对象"和"如果并发转移，靠什么机制保证一致性"这两个根本问题的不同答案**——G1 因为选择 STW 转移，几乎所有行的表现都直接与堆大小挂钩；ZGC 和 Shenandoah 因为选择了并发转移，才在停顿相关的行里表现出与堆大小无关的特征，代价则分别体现在"平台兼容性"和"内存开销/吞吐量"两行上。
+
+| 维度 | G1 | ZGC（分代，JDK 21 起默认）| Shenandoah（2.0 架构，JDK 14+）|
 | :--- | :--- | :--- | :--- |
 | **STW 停顿目标** | 几十~几百 ms | < 1ms | < 1ms（但停顿次数多）|
 | **STW 次数/GC 周期** | 2（初始标记+重新标记）| 3 | 5 |
 | **停顿与堆大小的关系** | 正相关 | 无关（常数）| 无关（常数）|
-| **对象转移方式** | STW 期间复制 | 并发转移（着色指针+读屏障）| 并发疏散（Brooks Pointer+读写屏障）|
-| **内存开销** | RSet（5%~20%）| 极低（着色指针无额外内存）| Brooks Pointer（每对象+8字节）|
-| **吞吐量** | 最高 | 分代版本接近 G1 | 略低于 G1（Brooks Pointer + 双屏障）|
-| **平台兼容性** | 全平台 | 64位，需多重内存映射支持 | 全平台（兼容性最好）|
+| **对象转移方式** | STW 期间复制 | 并发转移（染色指针+读屏障+转发表）| 并发疏散（转发指针+LRB）|
+| **每对象常驻内存开销** | 无（RSet 是全局元数据，非按对象计费）| 极低（着色指针无额外内存）| JDK 12：+8 字节/对象；JDK 14 起：接近 0 |
+| **全局内存开销** | RSet（约堆的 5%~20%）| 极低 | 极低（JDK 14 后）|
+| **吞吐量** | 最高 | 分代版本接近 G1 | 略低于 G1（双屏障历史遗留 + 目前默认仍非分代）|
+| **平台兼容性** | 全平台 | 64 位，需操作系统支持多重内存映射 | 全平台（兼容性最好，可回溯至 JDK 8）|
 | **适用堆大小** | 4GB~数十 GB | 几百 MB ~ 16TB | 几百 MB ~ 数百 GB |
 | **JDK 默认版本** | JDK 9~（服务端默认）| 非默认（需显式启用）| 非默认（需显式启用）|
-| **分代支持** | 完整分代 | JDK 21 分代 ZGC | 开发中 |
+| **分代支持** | 完整分代 | JDK 21 起默认分代 | JEP 404/521/535 推进中，默认仍非分代 |
 | **维护方** | Oracle | Oracle | Red Hat |
 
 ---
 
-## 第 7 章 Shenandoah 的适用场景与配置
+## 第 7 章 Shenandoah 的适用场景、配置与生产实践
 
 ### 7.1 最适合 Shenandoah 的场景
 
-**对停顿时间极度敏感但对吞吐量要求不是最苛刻的应用**：Shenandoah 在停顿时间上与 ZGC 相当（都是亚毫秒级），但吞吐量通常略低于 ZGC 分代版本，适合那些停顿敏感但吞吐量允许有一定余量的场景。
+**对停顿时间极度敏感、且分配/回收节奏相对平稳的应用**：Shenandoah 在停顿时间上与 ZGC 相当（都是亚毫秒级），但由于当前默认仍是非分代模式，每次 GC 都要处理全堆存活对象，如果应用的分配速率剧烈波动（大量随机分配又大量随机释放），非分代 Shenandoah 会因为无法只聚焦新生代而显得吞吐效率偏低（详见 7.4 节的反例）。
 
-**使用 Red Hat OpenJDK 发行版的环境**：Shenandoah 在 Red Hat 发行的 OpenJDK 版本中有深度优化和长期支持，如果基础设施是 RHEL/Fedora，Shenandoah 是更受支持的选择。
+**使用 Red Hat 系 OpenJDK 发行版的环境**：Shenandoah 在 Red Hat build of OpenJDK 中有深度优化和长期支持承诺，如果基础设施是 RHEL/OpenShift，Shenandoah 是官方文档明确背书、更受支持的选择。
 
-**需要跨平台兼容的低延迟 GC**：在某些不完全支持 ZGC 着色指针技术（如特殊的操作系统或硬件）的环境中，Shenandoah 的 Brooks Pointer 方案兼容性更好。
+**需要跨平台兼容、或需要在较老 JDK 版本上使用低延迟 GC 的场景**：ZGC 完全无法回溯移植到 JDK 8，而 Shenandoah 由社区维护了 JDK 8 的 backport（[[对象生命周期与GC/06 经典垃圾回收器——Serial、Parallel、CMS 深度剖析|CMS]] 用户想要脱离 CMS 但又暂时无法升级大版本时，这是一个现实的过渡方案）。
+
+**锁定 Oracle JDK 的场景需要排除 Shenandoah**：如 1.3 节所述，Oracle 官方发行的 Oracle JDK 不包含 Shenandoah，只有各家 OpenJDK 发行版才有，选型前必须先确认基础设施允许切换发行版。
 
 ### 7.2 Shenandoah 关键参数
 
 | 参数 | 含义 | 建议 |
 | :--- | :--- | :--- |
-| `-XX:+UseShenandoahGC` | 启用 Shenandoah | JDK 12+ |
-| `-XX:ShenandoahGCMode` | GC 模式（`normal`/`iu`/`passive`）| 默认 `normal`，`iu` 是 Incremental Update 实验性模式 |
+| `-XX:+UseShenandoahGC` | 启用 Shenandoah | JDK 12+，需配合发行版支持 |
+| `-XX:ShenandoahGCMode` | GC 模式（`satb`/`iu`/`passive`/`generational`）| 默认 `satb`（原 `normal`），`generational` 为分代实验/产品特性（JDK 24+，需 `-XX:+UnlockExperimentalVMOptions`，具体是否仍需解锁取决于所用 JDK 版本对应的 JEP 404/521/535 落地进度）|
 | `-XX:ShenandoahGCHeuristics` | 启发式策略（`adaptive`/`static`/`compact`）| 默认 `adaptive`（自适应），生产推荐 |
 | `-XX:ShenandoahAllocationThreshold` | 触发 GC 的分配速率阈值 | 默认 10%，分配慢可调高 |
 | `-XX:ShenandoahInitFreeThreshold` | 初始空闲堆比例触发并发 GC | 默认 70% |
 | `-XX:ShenandoahMinFreeThreshold` | 最低空闲比例触发紧急 GC | 默认 10% |
+| `-XX:ConcGCThreads` | 并发 GC 线程数 | 生产经验值约为可用硬件线程数的 1/4，过多会挤占应用线程的 CPU 资源（见 7.3 案例）|
 
 > [!warning] 生产避坑
-> Shenandoah 的 `compact` 启发式模式会尽可能积极地压缩堆（回收后尽量缩小堆大小），适合内存受限的环境，但会增加 GC 频率。不要在高吞吐量场景中使用 `compact` 模式，否则 GC 过于频繁会反而影响性能。生产环境推荐使用默认的 `adaptive` 模式，配合 `-Xms=-Xmx` 固定堆大小。
+> Shenandoah 的 `compact` 启发式模式会尽可能积极地压缩堆（回收后尽量缩小堆大小），适合内存受限的环境，但会增加 GC 频率。不要在高吞吐量场景中使用 `compact` 模式，否则 GC 过于频繁会反而影响性能。生产环境推荐使用默认的 `adaptive` 模式，配合 `-Xms=-Xmx` 固定堆大小，避免堆动态伸缩带来的额外抖动。
+
+### 7.3 生产案例一：Outbrain 用 Shenandoah 压低 Cassandra 尾延迟
+
+Outbrain（一家内容推荐平台）在其工程博客中公开分享过一次真实的 Shenandoah 落地案例，具有很强的参考价值。他们大量使用 Cassandra 存储，此前 Cassandra 集群统一使用 G1，在流量高峰期频繁出现 **100～300ms 的停顿**，直接影响读写请求的尾延迟 SLA。团队此前已经在自己的一些微服务里验证过 Shenandoah 的效果，于是决定评估 Shenandoah 能否用于 Cassandra。
+
+技术上有一个现实约束：他们使用的 Cassandra 3.11 不支持 JDK 8 以上的版本，而**ZGC 从设计上无法回溯移植到 JDK 8**（这正是 4.3 节讨论的平台兼容性差异在生产环境的直接体现），团队因此从一开始就排除了 ZGC，转而使用社区维护的、面向 JDK 8 的 Shenandoah backport。
+
+初期配置为：双路 CPU、24 个硬件线程、`-Xmx 16GB`、`-XX:ConcGCThreads=6`（约为线程总数的 1/4）。上线后观察发现：在低负载时段，Cassandra 每分钟大约有 20 秒的时间被并发 GC 占用，这意味着一旦流量升高，Shenandoah 持续背景运行的并发标记与并发疏散线程会与应用线程激烈争抢 CPU，导致整体吞吐下降。
+
+团队进一步分析发现，根因在于**非分代**这一架构限制——由于 Shenandoah（此时尚处于 1.0/2.0 非分代阶段）每次 GC 都要扫描处理 Cassandra 的整个存活集（包括常驻内存的大量 `Memtable` 数据结构），存活集越大，每轮 GC 的并发工作量就越大。解决思路不是继续加大并发 GC 线程数（这只会进一步挤占应用 CPU），而是**从源头缩小存活集**——把 Cassandra 的 `memtable_heap_space_in_mb`（堆内 Memtable 空间限制）从 4GB 降到 1GB，直接减少了 Shenandoah 每轮 GC 需要处理的存活对象总量。调整后，Shenandoah 的并发 GC 负担显著下降,最终 Outbrain 把全部 Cassandra 集群迁移到了 Shenandoah,停顿时间从 G1 的 100～300ms 降到了亚毫秒级别。
+
+这个案例印证了两个本文反复强调的结论：第一,非分代 GC 的表现高度依赖存活集大小,调优的关键往往不在 GC 参数本身,而在于**从应用层面主动降低存活对象的规模**；第二,4.3 节讨论的平台兼容性差异不是纯理论问题——它直接决定了"老项目能否用上低延迟 GC"这类现实决策。
+
+值得补充的是，Outbrain 团队在博客中也坦率地指出，这次调优并不是"一次配置就一劳永逸"，而是经历了多轮观察 GC 日志、逐步收窄存活集、再验证吞吐是否达标的迭代过程——这与本文 3.3 节强调的"GC 日志中的退化 GC 频率是重要诊断信号"的实践建议完全吻合。任何关于 Shenandoah（或 ZGC）"效果如何"的结论，脱离了具体应用的分配行为和存活集规模，都只是空谈；反过来，一旦把存活集规模和分配节奏这两个变量控制住，非分代 Shenandoah 完全可以在生产环境里稳定跑出亚毫秒级的停顿效果，Outbrain 最终把全部集群迁移过去这一事实本身就是最有力的证明。
+
+### 7.4 生产案例二的反例：Red Hat 官方对 Data Grid 的告警
+
+作为一个对照,Red Hat 官方在 Data Grid（分布式缓存/数据网格产品）与 OpenShift 结合使用的调优文档中,明确给出了与 7.3 节相反方向的建议:**非分代 Shenandoah（以及非分代 ZGC）通常不适合涉及大量随机内存分配与释放的工作负载**，例如缓存的驱逐（eviction）和过期（expiration）机制天然会产生不规律、大批次的内存分配释放脉冲，而不是持续、渐进的分配节奏。Red Hat 的建议是：除非应用场景是"持续稳定的分配节奏"（这恰恰是 Data Grid 类缓存产品通常不具备的特征），否则应优先选择 G1（分代、聚焦新生代回收）而非 Shenandoah 或 ZGC。
+
+把 7.3 和 7.4 两个案例并置来看,可以得到一个更有工程意义的选型准则：**决定 Shenandoah 是否适用的关键变量,不是"延迟要求有多苛刻"，而是"存活集与分配节奏是否稳定"**。Cassandra 的 Memtable 在调优后是相对平稳增长的存活集，适合非分代 Shenandoah 持续背景处理；而缓存类产品的驱逐/过期行为是剧烈波动的分配脉冲,非分代 GC 会在这种场景下持续处于"追赶"状态，反而不如 G1 的分代结构更从容。这也是为什么 5.4 节讨论的分代 Shenandoah（JEP 404/521/535）被视为 Shenandoah 补齐能力短板的关键一步——一旦默认转向分代，7.4 节描述的这类反例场景将大幅收窄。
 
 ---
 
@@ -292,11 +448,13 @@ Shenandoah 和 ZGC 代表了解决"并发对象转移"这一核心问题的两�
 
 **当一个技术问题没有明显最优解时，不同团队会基于各自的约束和偏好，走出不同但各自合理的路**。
 
-**ZGC 路线**（着色指针 + 读屏障）：将 GC 状态信息编码进指针本身，利用 64 位地址空间的富余位数，零额外内存开销，只需读屏障。代价：依赖 64 位平台特性，技术实现复杂（多重虚拟地址映射）。
+**ZGC 路线**（着色指针 + 读屏障 + 转发表）：将 GC 状态信息编码进指针本身，利用 64 位地址空间的富余比特，零额外内存开销，只需读屏障，指针具备"自愈"特性。代价：依赖 64 位平台特性和操作系统级多重虚拟地址映射，无法回溯到旧版 JDK。
 
-**Shenandoah 路线**（Brooks Pointer + 读写屏障）：在对象前增加一个转发指针，提供简单透明的间接访问层，平台兼容性好。代价：每个对象增加 8 字节内存开销，同时需要读屏障和写屏障，屏障覆盖面更广。
+**Shenandoah 路线**（转发指针 + LRB）：在对象前（Shenandoah 1.0）或复用 Mark Word（Shenandoah 2.0）提供一个透明的间接访问层，平台兼容性极好，可回溯移植到 JDK 8。代价：Shenandoah 1.0 时代每对象额外 8 字节内存开销与更重的双屏障模型（JDK 14 后已大幅缓解），当前默认仍非分代，对分配节奏剧烈波动的工作负载不够友好。
 
-两条路最终都实现了亚毫秒级停顿。ZGC 在内存开销和平台现代化方面更优，Shenandoah 在兼容性和实现直觉上更简单。Oracle 主推 ZGC，Red Hat 主推 Shenandoah，Java 生态由此拥有了两个高质量的低延迟 GC 选项。
+两条路最终都实现了亚毫秒级停顿。ZGC 在内存开销、指针自愈能力和分代化进度上更领先，Shenandoah 在平台兼容性、可回溯性和实现直觉的简单性上更有优势。Oracle 主推 ZGC，Red Hat 主推 Shenandoah，Java 生态由此拥有了两个技术路线迥异但目标一致的低延迟 GC 选项，用户可以根据自己的发行版锁定情况、平台约束和工作负载特征，选择更契合的一方。
+
+回顾全文，Shenandoah 的故事其实提供了一个比"如何实现并发压缩"更普遍的工程启示：一项复杂技术从实验室论文（1.3 节里 1984 年的 Brooks 论文）到生产级落地，中间往往需要跨越多个独立的基础设施门槛（JEP 304 的 GC 接口抽象）、经历至少一次痛苦的架构重构（5.2～5.3 节的 LRB 与转发字消除），并且在正式交付之后仍会持续演进多年（5.4 节仍在推进中的分代化）。工程师在评估一项新技术是否"成熟可用"时，不能只看它是否已经合入主线，还要看它经历了几次架构级重构、社区对其已知短板是否有公开透明的讨论——这也是本文花大量篇幅梳理 Shenandoah 版本演进史，而不是只描述"最终形态"的原因。
 
 **GC 演进总结**：
 
@@ -305,8 +463,9 @@ Serial（单线程，STW）
   → Parallel（多线程并行，STW 时间缩短，但与堆大小正相关）
     → CMS（并发标记，老年代停顿降至 100ms 级别，但碎片化）
       → G1（Region 化，可预测停顿，解决碎片，停顿 10ms~200ms）
-        → ZGC/Shenandoah（并发转移，亚毫秒停顿，与堆大小解耦）
-            → 分代 ZGC/分代 Shenandoah（兼顾亚毫秒停顿 + 高吞吐量）
+        → ZGC/Shenandoah 1.0（并发转移，亚毫秒停顿，与堆大小解耦，但有各自的内存/屏障代价）
+          → Shenandoah 2.0（LRB + 消除转发字，代价大幅收窄）/ 分代 ZGC（JDK 21 默认分代）
+            → 分代 Shenandoah（JEP 404/521/535，兼顾亚毫秒停顿 + 高吞吐量，仍在推进中）
 ```
 
 下一篇 [[类加载器/10 类加载机制——双亲委派模型与打破它的场景]] 将离开 GC 的领域，转向另一个核心子系统——类加载器，深入剖析 JVM 如何将 `.class` 字节码转化为可运行的类型表示，以及双亲委派模型为何被设计出来、在哪些场景下又不得不被打破。
@@ -316,16 +475,24 @@ Serial（单线程，STW）
 ## 参考文献
 
 1. Aleksey Shipilev, "Shenandoah: The Garbage Collector That Could", 2015 Red Hat Summit
-2. Erin Schnabel & Christine Flood, "Shenandoah GC in OpenJDK", FOSDEM 2018
-3. Roman Kennke, "Shenandoah Status Update 2020", OpenJDK Blog
-4. Rodney A. Brooks, "Trading data space for reduced time and code space in real-time garbage collection on stock hardware", ACM LFP 1984（Brooks Pointer 原始论文）
-5. 周志明, 《深入理解 Java 虚拟机（第三版）》, 第 3.8 章：低延迟垃圾收集器
-6. JEP 189: Shenandoah: A Low-Pause-Time Garbage Collector (JDK 12)
-7. OpenJDK Wiki, "Shenandoah GC", wiki.openjdk.org/display/shenandoah
+2. Aleksey Shipilev, "Shenandoah GC - Version 2.0", JUG 大会演讲, 2019（提出"Shenandoah 2.0"这一分期方式，涵盖 LRB 与转发指针字消除）
+3. Roman Kennke, "Shenandoah GC in JDK 13, Part 1: Load reference barriers", Red Hat Developer Blog, 2019
+4. Roman Kennke, "Shenandoah GC in JDK 13, Part 2: Eliminating the forward pointer word", Red Hat Developer Blog, 2019
+5. Erin Schnabel & Christine Flood, "Shenandoah GC in OpenJDK", FOSDEM 2018
+6. Roman Kennke, "Shenandoah Status Update 2020", OpenJDK Blog
+7. Rodney A. Brooks, "Trading data space for reduced time and code space in real-time garbage collection on stock hardware", ACM LFP 1984（转发指针原始论文）
+8. 周志明, 《深入理解 Java 虚拟机（第三版）》, 第 3.8 章：低延迟垃圾收集器
+9. JEP 189: Shenandoah: A Low-Pause-Time Garbage Collector (JDK 12)
+10. JEP 304: Garbage Collector Interface (JDK 10)
+11. JEP 404 / JEP 521 / JEP 535: Generational Shenandoah 系列 JEP
+12. OpenJDK Wiki, "Shenandoah GC", wiki.openjdk.org/display/shenandoah
+13. Outbrain Engineering, "Leveraging Shenandoah to cut Cassandra's tail latency", Medium, 2019
+14. Red Hat Developer, "JVM tuning for Red Hat Data Grid on Red Hat OpenShift 4", 2025
 
 ---
 
 > [!note] 思考题
-> 1. Shenandoah 使用'Brooks Pointer'（间接指针/转发指针）实现并发压缩——每个对象多一个指针字段指向自身，GC 移动对象后更新转发指针。与 ZGC 的着色指针方案相比，Brooks Pointer 的内存开销和运行时开销各有什么不同？在什么工作负载下 Shenandoah 会优于 ZGC？
-> 2. Shenandoah 和 ZGC 都声称实现了亚毫秒级 STW 停顿。但 Shenandoah 的并发阶段使用'写屏障'（类似 G1），而 ZGC 使用'读屏障'。两种屏障对应用吞吐量的影响模式有什么差异？在'读远多于写'的缓存服务场景中，哪种 GC 的吞吐量损失更小？
-> 3. Shenandoah 由 Red Hat 主导开发，但 Oracle 的 JDK 发行版不包含 Shenandoah（只有 OpenJDK 包含）。在生产环境选型时，如果你的公司使用 Oracle JDK，低延迟 GC 的唯一选择是 ZGC。你如何评估从 Oracle JDK 迁移到 OpenJDK 的风险和成本？
+> 1. Shenandoah 使用转发指针（Brooks Pointer）实现并发压缩——早期版本每个对象多一个指针字段指向自身，GC 移动对象后更新转发指针；JDK 14 之后这个字段被消除，改为复用旧副本的 Mark Word。与 ZGC 的着色指针方案相比，两个版本的 Brooks Pointer 方案在内存开销和运行时开销上各有什么不同？在什么工作负载下 Shenandoah 会优于 ZGC？
+> 2. Shenandoah 和 ZGC 都声称实现了亚毫秒级 STW 停顿。但 Shenandoah 2.0 使用"载入引用屏障（LRB）"，本质上仍是一种写屏障风格的机制，只是移到了载入定义点；而 ZGC 使用纯读屏障，且具备指针自愈能力。两种机制对应用吞吐量的影响模式有什么差异？在"读远多于写"的缓存服务场景中，哪种 GC 的吞吐量损失更小？
+> 3. Shenandoah 由 Red Hat 主导开发，但 Oracle 的 Oracle JDK 发行版不包含 Shenandoah（只有各家 OpenJDK 发行版才包含）。在生产环境选型时，如果你的公司使用 Oracle JDK，低延迟 GC 的唯一选择是 ZGC。你如何评估从 Oracle JDK 迁移到某个 OpenJDK 发行版的风险和成本？
+> 4. 结合 7.3 与 7.4 两个生产案例：Outbrain 的 Cassandra 通过缩小 Memtable 存活集成功用上了非分代 Shenandoah，而 Red Hat 官方建议 Data Grid 这类缓存产品避免使用非分代 Shenandoah/ZGC。如果分代 Shenandoah（JEP 404/521/535）全面默认化，这两个案例的结论是否还会成立？为什么？
