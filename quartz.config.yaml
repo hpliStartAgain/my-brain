@@ -243,8 +243,11 @@ plugins:
     enabled: true
     options: {}
     order: 50
+  # 注意：note-properties 同时是 frontmatter 解析器(transformer)和属性面板组件(component)。
+  # 必须启用才能解析 YAML frontmatter(title/date/tags等)，否则整站 frontmatter 失效。
+  # hidePropertiesView: true 仅隐藏可视化属性面板 UI（v4 没有这个面板），不影响解析。
   - source: "@quartz-community/note-properties"
-    enabled: false
+    enabled: true
     options:
       includeAll: false
       includedProperties:
@@ -252,7 +255,7 @@ plugins:
         - tags
         - aliases
       excludedProperties: []
-      hidePropertiesView: false
+      hidePropertiesView: true
       delimiters: ---
       language: yaml
     order: 5
