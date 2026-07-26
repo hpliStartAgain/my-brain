@@ -189,7 +189,7 @@ plugins:
     enabled: true
     options:
       title: 随机碎片
-      showCount: 15
+      showCount: 6
     layout:
       position: beforeBody
       priority: 5
