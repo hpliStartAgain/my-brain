@@ -23,12 +23,27 @@ export interface ArticleCarouselOptions {
   filter: (f: ArticleCarouselPluginData) => boolean;
 }
 
+/**
+ * True for Quartz tag-index slugs: `tags`, `tags/index`, or `tags/<anything>`.
+ * Tag pages are virtual pages synthesized by the tag-page plugin — Quartz's
+ * core pageType dispatcher gives every virtual page a synthetic
+ * `frontmatter.title` (the tag name itself), so without this check tag pages
+ * would leak into the carousel as fake "articles".
+ */
+function isTagPageSlug(slug: string | undefined): boolean {
+  if (!slug) return false;
+  return slug === "tags" || slug === "tags/index" || slug.startsWith("tags/");
+}
+
 const defaultOptions = (): ArticleCarouselOptions => ({
   title: "随机碎片",
   showCount: 4,
   filter: (f) => {
     const slug = (f.slug as string) ?? "";
-    return !slug.endsWith("index") && !!f.frontmatter?.title;
+    if (slug.endsWith("index")) return false;
+    if (isTagPageSlug(slug)) return false;
+    if ((f as Record<string, unknown>).unlisted === true) return false;
+    return !!f.frontmatter?.title;
   },
 });
 

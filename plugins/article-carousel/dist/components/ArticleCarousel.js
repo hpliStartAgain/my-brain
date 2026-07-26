@@ -96,12 +96,19 @@ function u2(e2, t2, n2, o2, i2, u3) {
 }
 
 // src/components/ArticleCarousel.tsx
+function isTagPageSlug(slug2) {
+  if (!slug2) return false;
+  return slug2 === "tags" || slug2 === "tags/index" || slug2.startsWith("tags/");
+}
 var defaultOptions = () => ({
   title: "\u968F\u673A\u788E\u7247",
   showCount: 4,
   filter: (f3) => {
     const slug2 = f3.slug ?? "";
-    return !slug2.endsWith("index") && !!f3.frontmatter?.title;
+    if (slug2.endsWith("index")) return false;
+    if (isTagPageSlug(slug2)) return false;
+    if (f3.unlisted === true) return false;
+    return !!f3.frontmatter?.title;
   }
 });
 function resolveDefaultDateType(data, cfg) {
