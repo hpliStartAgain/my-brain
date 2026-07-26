@@ -1,0 +1,208 @@
+{
+  "source_pdf": "content/电子书/性能工程/JVM Performance Engineering (Monica Beckwith) (z-library.sk, 1lib.sk, z-lib.sk).pdf",
+  "total_words": 115269,
+  "target_dir": "content/Java/JVM-Performance-Engineering/",
+  "chapters": [
+    {
+      "num": 0,
+      "title_en": "Preface",
+      "title_zh": "前言",
+      "lines": [
+        582,
+        1090
+      ],
+      "word_count": 5434,
+      "figure_count": 0,
+      "table_count": 0,
+      "status": "arbitrated",
+      "output_file": "00-前言.md",
+      "arbitration": {
+        "passed": true,
+        "score": 100,
+        "issues": []
+      }
+    },
+    {
+      "num": 1,
+      "title_en": "The Performance Evolution of Java: The Language and the Virtual Machine",
+      "title_zh": "Java语言与虚拟机的性能演进",
+      "lines": [
+        1091,
+        3088
+      ],
+      "word_count": 14440,
+      "figure_count": 10,
+      "table_count": 0,
+      "status": "arbitrated",
+      "output_file": "01-Java语言与虚拟机的性能演进.md",
+      "arbitration": {
+        "passed": true,
+        "score": 90,
+        "issues": [
+          "Figure 1.1/1.2 词云图无法 Mermaid 化"
+        ]
+      }
+    },
+    {
+      "num": 2,
+      "title_en": "Performance Implications of Java's Type System Evolution",
+      "title_zh": "Java类型系统演进的性能影响",
+      "lines": [
+        3089,
+        4448
+      ],
+      "word_count": 8272,
+      "figure_count": 7,
+      "table_count": 4,
+      "status": "arbitrated",
+      "output_file": "02-Java类型系统演进的性能影响.md",
+      "arbitration": {
+        "passed": true,
+        "score": 95,
+        "issues": [
+          "代码占比高导致比例 1.14x 略低于阈值"
+        ]
+      }
+    },
+    {
+      "num": 3,
+      "title_en": "From Monolithic to Modular Java: A Retrospective and Ongoing Evolution",
+      "title_zh": "从单体到模块化Java：回顾与持续演进",
+      "lines": [
+        4449,
+        5988
+      ],
+      "word_count": 7935,
+      "figure_count": 18,
+      "table_count": 0,
+      "status": "arbitrated",
+      "output_file": "03-从单体到模块化Java：回顾与持续演进.md",
+      "arbitration": {
+        "passed": true,
+        "score": 100,
+        "issues": []
+      }
+    },
+    {
+      "num": 4,
+      "title_en": "The Unified Java Virtual Machine Logging Interface",
+      "title_zh": "统一JVM日志接口",
+      "lines": [
+        5989,
+        6831
+      ],
+      "word_count": 5658,
+      "figure_count": 0,
+      "table_count": 0,
+      "status": "arbitrated",
+      "output_file": "04-统一JVM日志接口.md",
+      "arbitration": {
+        "passed": true,
+        "score": 100,
+        "issues": []
+      }
+    },
+    {
+      "num": 5,
+      "title_en": "End-to-End Java Performance Optimization: Engineering Techniques and Microbenchmarking with JMH",
+      "title_zh": "端到端Java性能优化：工程技术与JMH微基准测试",
+      "lines": [
+        6832,
+        9910
+      ],
+      "word_count": 22858,
+      "figure_count": 25,
+      "table_count": 3,
+      "status": "arbitrated",
+      "output_file": "05-端到端Java性能优化：工程技术与JMH微基准测试.md",
+      "arbitration": {
+        "passed": true,
+        "score": 100,
+        "issues": []
+      }
+    },
+    {
+      "num": 6,
+      "title_en": "Advanced Memory Management and Garbage Collection in OpenJDK",
+      "title_zh": "OpenJDK高级内存管理与垃圾回收",
+      "lines": [
+        9911,
+        12003
+      ],
+      "word_count": 14907,
+      "figure_count": 37,
+      "table_count": 0,
+      "status": "arbitrated",
+      "output_file": "06-OpenJDK高级内存管理与垃圾回收.md",
+      "arbitration": {
+        "passed": true,
+        "score": 95,
+        "issues": [
+          "Figure 6.6 暂停直方图无 Mermaid 等效图"
+        ]
+      }
+    },
+    {
+      "num": 7,
+      "title_en": "Runtime Performance Optimizations: A Focus on Strings, Locks, and Beyond",
+      "title_zh": "运行时性能优化：聚焦字符串、锁及其他",
+      "lines": [
+        12004,
+        14453
+      ],
+      "word_count": 14218,
+      "figure_count": 69,
+      "table_count": 10,
+      "status": "arbitrated",
+      "output_file": "07-运行时性能优化：聚焦字符串、锁及其他.md",
+      "arbitration": {
+        "passed": true,
+        "score": 90,
+        "issues": [
+          "13 个 IDE/分析器截图无法 Mermaid 化"
+        ]
+      }
+    },
+    {
+      "num": 8,
+      "title_en": "Accelerating Time to Steady State with OpenJDK HotSpot VM",
+      "title_zh": "加速OpenJDK HotSpot VM稳态时间",
+      "lines": [
+        14454,
+        15869
+      ],
+      "word_count": 10319,
+      "figure_count": 26,
+      "table_count": 0,
+      "status": "arbitrated",
+      "output_file": "08-加速OpenJDK HotSpot VM稳态时间.md",
+      "arbitration": {
+        "passed": true,
+        "score": 100,
+        "issues": []
+      }
+    },
+    {
+      "num": 9,
+      "title_en": "Harnessing Exotic Hardware: The Future of JVM Performance Engineering",
+      "title_zh": "驾驭异构硬件：JVM性能工程的未来",
+      "lines": [
+        15870,
+        17352
+      ],
+      "word_count": 11228,
+      "figure_count": 13,
+      "table_count": 0,
+      "status": "arbitrated",
+      "output_file": "09-驾驭异构硬件：JVM性能工程的未来.md",
+      "arbitration": {
+        "passed": true,
+        "score": 97,
+        "issues": [
+          "缺失 Vector API H4 子标题（已修复）"
+        ]
+      }
+    }
+  ],
+  "status": "completed"
+}

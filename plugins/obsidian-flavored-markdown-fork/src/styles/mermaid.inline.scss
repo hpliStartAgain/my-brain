@@ -1,0 +1,146 @@
+.expand-button {
+  position: absolute;
+  display: flex;
+  float: right;
+  padding: 0.45rem;
+  margin: 0.4rem;
+  right: 0; // NOTE: right will be set in mermaid.inline.ts
+  color: var(--gray);
+  background-color: color-mix(in srgb, var(--light) 80%, transparent);
+  border: 1.5px solid var(--lightgray);
+  border-radius: 999px;
+  box-shadow: var(--shadow-soft);
+  backdrop-filter: blur(6px);
+  opacity: 0;
+  transition: all 0.25s ease;
+
+  & > svg {
+    fill: var(--secondary);
+    filter: none;
+  }
+
+  &:hover {
+    cursor: pointer;
+    border-color: var(--secondary);
+    transform: scale(1.05);
+    box-shadow: var(--shadow-float);
+  }
+
+  &:active {
+    transform: scale(0.95);
+  }
+
+  &:focus {
+    outline: 0;
+  }
+}
+
+pre {
+  &:hover > .expand-button {
+    opacity: 1;
+    transition: 0.2s;
+  }
+}
+
+#mermaid-container {
+  position: fixed;
+  contain: layout;
+  z-index: 999;
+  left: 0;
+  top: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  display: none;
+  backdrop-filter: blur(4px);
+  background: rgba(0, 0, 0, 0.5);
+
+  &.active {
+    display: inline-block;
+  }
+
+  & > #mermaid-space {
+    border: 1px solid var(--lightgray);
+    background-color: var(--light);
+    border-radius: 1.5rem;
+    box-shadow: var(--shadow-deep);
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    height: 80vh;
+    width: 80vw;
+    overflow: hidden;
+
+    & > .mermaid-content {
+      position: relative;
+      transform-origin: 0 0;
+      transition: transform 0.1s ease;
+      overflow: visible;
+      min-height: 200px;
+      min-width: 200px;
+
+      pre {
+        margin: 0;
+        border: none;
+      }
+
+      svg {
+        max-width: none;
+        height: auto;
+      }
+    }
+
+    & > .mermaid-controls {
+      position: absolute;
+      bottom: 24px;
+      right: 24px;
+      display: flex;
+      gap: 10px;
+      padding: 10px;
+      background: color-mix(in srgb, var(--light) 80%, transparent);
+      border: 1.5px solid var(--lightgray);
+      border-radius: 999px;
+      box-shadow: var(--shadow-float);
+      backdrop-filter: blur(8px);
+      z-index: 2;
+
+      .mermaid-control-button {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        height: 36px;
+        padding: 0;
+        border: 1.5px solid var(--lightgray);
+        background: var(--light);
+        color: var(--dark);
+        border-radius: 50%;
+        cursor: pointer;
+        font-size: 16px;
+        font-family: var(--bodyFont);
+        font-weight: 700;
+        transition: all 0.2s ease;
+
+        &:hover {
+          background: var(--secondary);
+          color: var(--light);
+          border-color: var(--secondary);
+          transform: scale(1.06);
+        }
+
+        &:active {
+          transform: scale(0.94);
+        }
+
+        // Reset button is wider pill
+        &:nth-child(2) {
+          width: auto;
+          padding: 0 14px;
+          font-size: 13px;
+          border-radius: 999px;
+        }
+      }
+    }
+  }
+}

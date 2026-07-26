@@ -1,0 +1,91 @@
+{
+  "name": "@my-brain/article-carousel",
+  "version": "0.1.0",
+  "description": "Random articles carousel component for Quartz - displays N random articles with refresh button",
+  "type": "module",
+  "license": "MIT",
+  "author": "my-brain",
+  "keywords": [
+    "quartz",
+    "quartz-plugin",
+    "article-carousel",
+    "component"
+  ],
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./components": {
+      "types": "./dist/components/ArticleCarousel.d.ts",
+      "import": "./dist/components/ArticleCarousel.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "preact": "^10.0.0"
+  },
+  "peerDependenciesMeta": {
+    "preact": {
+      "optional": false
+    }
+  },
+  "dependencies": {
+    "@quartz-community/types": "^0.2.1",
+    "@quartz-community/utils": "^0.1.0"
+  },
+  "devDependencies": {
+    "@types/hast": "^3.0.4",
+    "@types/node": "^24.10.0",
+    "preact": "^10.28.2",
+    "sass": "^1.97.3",
+    "sass-embedded": "^1.97.3",
+    "tsup": "^8.5.0",
+    "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=22",
+    "npm": ">=10.9.2"
+  },
+  "quartz": {
+    "name": "article-carousel",
+    "displayName": "Article Carousel",
+    "category": "component",
+    "version": "1.0.0",
+    "quartzVersion": ">=5.0.0",
+    "dependencies": [],
+    "defaultOrder": 50,
+    "defaultEnabled": false,
+    "defaultOptions": {
+      "title": "随机碎片",
+      "showCount": 4
+    },
+    "components": {
+      "ArticleCarousel": {
+        "displayName": "Article Carousel",
+        "defaultPosition": "beforeBody",
+        "defaultPriority": 5
+      }
+    },
+    "optionSchema": {
+      "title": {
+        "type": "string"
+      },
+      "showCount": {
+        "type": "number"
+      }
+    }
+  }
+}

@@ -1,3 +1,514 @@
 @use "./variables.scss" as *;
 
 // put your custom CSS here!
+
+// ============================================================
+// Custom Theme — Claude Blog (Anthropic inspired)
+// ----------------------------------------------------------
+// Visual DNA:
+//   * 温暖象牙色基调 + 陶土色 (clay) 强调色
+//   * 柔和圆润的几何形状（更大圆角）
+//   * 精致的排版：衬线标题 + 人文无衬线正文
+//   * 克制的装饰、简约的信息层级
+//   * 温暖的灰度色板，从不使用纯黑/纯白
+// ============================================================
+
+:root {
+  // Claude 圆角系统 — 比 Vercel 更圆润
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-pill: 9999px;
+
+  // 柔和温暖阴影
+  --shadow-soft: 0 4px 14px 0 rgba(20, 20, 19, 0.04);
+  --shadow-float: 0 6px 24px 0 rgba(20, 20, 19, 0.06), 0 0 0 1px rgba(20, 20, 19, 0.02);
+  --shadow-deep: 0 12px 32px 0 rgba(20, 20, 19, 0.08), 0 0 0 1px rgba(20, 20, 19, 0.03);
+
+  // 边框
+  --border-soft: 1px solid var(--lightgray);
+
+  // ── 字体 fallback 链 ──────────────────────────────────────────
+  // 霞鹜文楷等宽 TC：中英文统一，手写感等宽，繁体中文优先
+  // 系统字体兜底防止无字形显示
+  --bodyFont:   "LXGW WenKai Mono TC", ui-monospace, "Cascadia Code", monospace;
+  --headerFont: "LXGW WenKai Mono TC", ui-monospace, "Cascadia Code", monospace;
+  --codeFont:   "LXGW WenKai Mono TC", ui-monospace, "Cascadia Code", monospace;
+}
+
+[saved-theme="dark"] {
+  --shadow-soft: 0 4px 14px 0 rgba(0, 0, 0, 0.25);
+  --shadow-float: 0 6px 24px 0 rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(250, 249, 245, 0.04);
+  --shadow-deep: 0 12px 32px 0 rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(250, 249, 245, 0.06);
+}
+
+// ----------------------------------------------------------
+// Mermaid 调色板 — 象牙色暖色系
+// ----------------------------------------------------------
+:root {
+  --mm-bg: transparent;
+  --mm-node-bg: #f5f4ed;       // Claude gray-100
+  --mm-node-border: #d1cfc5;   // Claude gray-300
+  --mm-text: #30302e;          // Claude gray-750
+  --mm-line: #b0aea5;          // Claude gray-400
+  --mm-cluster-bg: #faf9f5;    // Claude gray-050
+  --mm-cluster-border: #e8e6dc; // Claude gray-200
+  --mm-note-bg: #fef3e2;       // 温暖黄色调
+  --mm-note-border: #d97757;   // Claude clay
+  --mm-actor-bg: #f5f4ed;
+  --mm-actor-border: #d1cfc5;
+  --mm-active-bg: rgba(201, 100, 66, 0.1); // 陶土色 tint
+  --mm-active-border: #c96442;
+  --mm-edge-label-bg: #faf9f5;
+}
+
+[saved-theme="dark"] {
+  --mm-bg: transparent;
+  --mm-node-bg: #1f1e1d;       // Claude gray-850
+  --mm-node-border: #4d4c48;   // Claude gray-650
+  --mm-text: #dedcd1;          // Claude gray-250
+  --mm-line: #5e5d59;          // Claude gray-600
+  --mm-cluster-bg: #141413;    // Claude gray-950
+  --mm-cluster-border: #3d3d3a; // Claude gray-700
+  --mm-note-bg: #3d2a1a;       // 深暖色调
+  --mm-note-border: #c96442;
+  --mm-actor-bg: #262624;      // Claude gray-800
+  --mm-actor-border: #5e5d59;
+  --mm-active-bg: rgba(217, 119, 87, 0.15);
+  --mm-active-border: #d97757;
+  --mm-edge-label-bg: #141413;
+}
+
+// ----------------------------------------------------------
+// 全局基础
+// ----------------------------------------------------------
+html {
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  line-height: 1.7;
+  letter-spacing: 0em;
+  background-color: var(--light);
+  color: var(--darkgray);
+}
+
+// ----------------------------------------------------------
+// 文章排版 — Claude 博客简约风格
+// ----------------------------------------------------------
+article {
+  p {
+    margin-top: 0;
+    margin-bottom: 1.5rem;
+    line-height: 1.7;
+  }
+
+  blockquote {
+    margin: 2rem 0;
+    padding: 1rem 1.4rem;
+    border-left: 3px solid var(--secondary);
+    background: color-mix(in srgb, var(--secondary) 4%, transparent);
+    border-radius: 0 var(--radius-md) var(--radius-md) 0;
+    color: var(--darkgray);
+    font-style: italic;
+  }
+
+  img {
+    border-radius: var(--radius-lg);
+    margin: 2rem 0;
+    transition: opacity 0.3s ease;
+  }
+
+  hr {
+    margin: 3rem auto;
+    border: none;
+    height: 1px;
+    background: var(--lightgray);
+    width: 100%;
+  }
+}
+
+// ----------------------------------------------------------
+// 标题 — 衬线字体，优雅克制
+// ----------------------------------------------------------
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--headerFont);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--dark);
+}
+
+h1 {
+  font-size: 2rem;
+  margin-top: 3rem;
+  margin-bottom: 1rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+h2 {
+  font-size: 1.5rem;
+  margin-top: 2.5rem;
+  margin-bottom: 0.8rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--lightgray);
+  line-height: 1.3;
+}
+
+h3 {
+  font-size: 1.25rem;
+  margin-top: 2rem;
+  margin-bottom: 0.6rem;
+  line-height: 1.4;
+}
+
+// ----------------------------------------------------------
+// 代码块 — Claude 风格简洁代码块
+// ----------------------------------------------------------
+code {
+  font-size: 0.85em;
+  padding: 0.15em 0.35em;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--lightgray) 50%, transparent);
+  color: var(--darkgray); // Claude 风格：内联代码不用强调色
+}
+
+pre {
+  border-radius: var(--radius-lg);
+  border: var(--border-soft);
+  background: color-mix(in srgb, var(--lightgray) 25%, var(--light)) !important;
+  margin: 2rem 0;
+  padding: 1.2rem;
+  position: relative;
+  overflow-x: auto;
+
+  & > code {
+    font-size: 0.85rem;
+    line-height: 1.6;
+    background: transparent;
+    border: none;
+    padding: 0;
+    color: var(--darkgray);
+  }
+
+  &:hover {
+    border-color: color-mix(in srgb, var(--secondary) 30%, var(--lightgray));
+  }
+  transition: border-color 0.3s ease;
+}
+
+[saved-theme="dark"] pre {
+  background: color-mix(in srgb, var(--lightgray) 20%, transparent) !important;
+}
+
+// ----------------------------------------------------------
+// 链接 — Claude 下划线风格
+// ----------------------------------------------------------
+a {
+  color: var(--secondary);
+  text-decoration: none;
+  transition: color 0.15s ease-out, text-decoration-color 0.15s ease-out;
+
+  &.internal {
+    background-color: transparent;
+    border-radius: 0;
+    padding: 0;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    text-decoration-color: color-mix(in srgb, var(--secondary) 35%, transparent);
+    color: var(--secondary);
+
+    &:hover {
+      text-decoration-color: var(--secondary);
+      background-color: transparent;
+    }
+  }
+}
+
+// ----------------------------------------------------------
+// Glassmorphism — 温暖的半透明效果
+// ----------------------------------------------------------
+.popover {
+  border-radius: var(--radius-lg) !important;
+  box-shadow: var(--shadow-float) !important;
+  border: 1px solid color-mix(in srgb, var(--lightgray) 80%, transparent) !important;
+  background-color: color-mix(in srgb, var(--light) 90%, transparent) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+button.search-button {
+  background: color-mix(in srgb, var(--lightgray) 30%, transparent) !important;
+  border-radius: var(--radius-md) !important;
+  border: 1px solid transparent !important;
+  transition: all 0.2s ease;
+  padding: 0.5rem 1rem !important;
+
+  &:hover {
+    background: color-mix(in srgb, var(--lightgray) 55%, transparent) !important;
+    border-color: var(--lightgray) !important;
+  }
+}
+
+.search > #search-container > #search-space > #search-layout {
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-deep) !important;
+  border: 1px solid color-mix(in srgb, var(--lightgray) 80%, transparent);
+  background: color-mix(in srgb, var(--light) 85%, transparent) !important;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+// ----------------------------------------------------------
+// 侧边栏 / Explorer
+// ----------------------------------------------------------
+.page-title {
+  font-family: var(--headerFont);
+  font-size: 1.3rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+
+  a {
+    color: var(--dark);
+    text-decoration: none;
+    border-bottom: none;
+    -webkit-text-fill-color: unset;
+    background: none;
+    -webkit-background-clip: unset;
+    background-clip: unset;
+    transition: color 0.2s ease;
+
+    &:hover {
+      color: var(--secondary);
+    }
+  }
+}
+
+.explorer-content {
+  ul li > a {
+    font-size: 0.88rem;
+    padding: 0.3rem 0.6rem;
+    border-radius: var(--radius-md);
+    transition: all 0.2s ease;
+    border-bottom: none;
+    text-decoration: none;
+    opacity: 0.8;
+
+    &:hover {
+      opacity: 1;
+      background: color-mix(in srgb, var(--lightgray) 40%, transparent);
+      transform: translateX(2px);
+    }
+
+    &.active {
+      opacity: 1;
+      font-weight: 600;
+      color: var(--secondary);
+      background: color-mix(in srgb, var(--secondary) 8%, transparent);
+    }
+  }
+
+  .folder-container {
+    div > button span, div > a {
+      font-size: 0.9rem;
+      font-weight: 600;
+    }
+  }
+}
+
+// ----------------------------------------------------------
+// 右侧 TOC — 简洁指示器
+// ----------------------------------------------------------
+.toc {
+  position: relative;
+  &::before {
+    content: "";
+    position: absolute;
+    left: -1rem;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: var(--lightgray);
+  }
+}
+
+ul.toc-content.overflow > li > a {
+  font-size: 0.85rem;
+  padding: 0.2rem 0.5rem;
+  color: var(--gray);
+  border-radius: var(--radius-sm);
+  transition: all 0.2s ease;
+
+  &:hover {
+    color: var(--darkgray);
+    background: color-mix(in srgb, var(--lightgray) 40%, transparent);
+  }
+
+  &.in-view {
+    color: var(--secondary);
+    font-weight: 600;
+    background: color-mix(in srgb, var(--secondary) 6%, transparent);
+    position: relative;
+    
+    &::before {
+      content: "";
+      position: absolute;
+      left: -1rem;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      background: var(--secondary);
+      border-radius: var(--radius-sm);
+    }
+  }
+}
+
+// ----------------------------------------------------------
+// Tags / Pills — 温暖的陶土色
+// ----------------------------------------------------------
+.tag-link {
+  font-size: 0.8rem;
+  background: color-mix(in srgb, var(--lightgray) 40%, transparent);
+  color: var(--darkgray);
+  padding: 0.25rem 0.6rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--lightgray);
+  transition: all 0.2s ease;
+  margin: 0 0.3rem 0.3rem 0;
+
+  &::before { content: "#"; opacity: 0.4; margin-right: 0.1em; }
+
+  &:hover {
+    background: var(--secondary);
+    color: var(--light);
+    border-color: var(--secondary);
+    box-shadow: var(--shadow-soft);
+  }
+}
+
+// ----------------------------------------------------------
+// 首页简约样式 — Claude 博客风格
+// ----------------------------------------------------------
+
+// 首页标题区域
+.homepage-header {
+  margin-bottom: 2.5rem;
+  padding-bottom: 2rem;
+  border-bottom: 1px solid var(--lightgray);
+
+  h1 {
+    font-size: 2.2rem;
+    margin-top: 0;
+    margin-bottom: 0.8rem;
+    font-weight: 700;
+    color: var(--dark);
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+  }
+
+  p {
+    font-size: 1.1rem;
+    color: var(--gray);
+    line-height: 1.6;
+    max-width: 600px;
+    margin-bottom: 0;
+  }
+}
+
+// 知识领域卡片 — 简约列表风格（替代 Bento Grid）
+.knowledge-section {
+  margin-bottom: 2.5rem;
+
+  h2 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--gray);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: none;
+    padding-bottom: 0;
+    margin-bottom: 1.5rem;
+    font-family: var(--bodyFont);
+  }
+}
+
+.knowledge-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1px;
+  background: var(--lightgray);
+  border: 1px solid var(--lightgray);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.knowledge-card {
+  background: var(--light);
+  padding: 1.5rem;
+  transition: background-color 0.2s ease;
+
+  &:hover {
+    background: color-mix(in srgb, var(--lightgray) 20%, var(--light));
+  }
+
+  h3 {
+    margin-top: 0;
+    margin-bottom: 0.8rem;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--dark);
+    border-bottom: none;
+    line-height: 1.3;
+  }
+
+  .card-desc {
+    font-size: 0.9rem;
+    color: var(--gray);
+    margin-bottom: 0.8rem;
+    line-height: 1.5;
+  }
+
+  ul {
+    list-style: none;
+    padding-left: 0;
+    margin-bottom: 0;
+    
+    li {
+      margin-bottom: 0.35rem;
+      font-size: 0.9rem;
+      
+      a {
+        display: inline-block;
+        padding: 0.15rem 0;
+        color: var(--secondary);
+        text-decoration: underline;
+        text-underline-offset: 3px;
+        text-decoration-color: color-mix(in srgb, var(--secondary) 30%, transparent);
+        border: none;
+        background: none;
+        
+        &:hover {
+          text-decoration-color: var(--secondary);
+          color: var(--tertiary);
+        }
+      }
+    }
+  }
+}
+
+// ----------------------------------------------------------
+// 移动端 Explorer 修复 — 防止滚动锁定
+// ----------------------------------------------------------
+@media all and (max-width: 800px) {
+  .explorer {
+    overflow: visible !important;
+  }
+  .explorer .explorer-content {
+    position: fixed !important;
+  }
+}

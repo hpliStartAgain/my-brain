@@ -1,0 +1,86 @@
+[
+  {
+    "id": "chapter-001",
+    "title": "1 站点可靠性工程简介",
+    "start_page": 31,
+    "end_page": 49,
+    "description": "SRE 的历史背景、角色职责、技能要求、职业发展路径，以及 DevOps 文化"
+  },
+  {
+    "id": "chapter-002",
+    "title": "2 从 DevOps 到站点可靠性工程",
+    "start_page": 50,
+    "end_page": 80,
+    "description": "从 DevOps 演进到 SRE 的历程、团队结构、参与模型、策略采纳、挑战与最佳实践"
+  },
+  {
+    "id": "chapter-003",
+    "title": "3 监控",
+    "start_page": 81,
+    "end_page": 109,
+    "description": "监控的需求、四大支柱（延迟、流量、错误、饱和度）、阈值监控、可观测性与应用监控"
+  },
+  {
+    "id": "chapter-004",
+    "title": "4 事件管理与风险缓解",
+    "start_page": 110,
+    "end_page": 134,
+    "description": "事件管理的目的、优先级划分、严重级别、响应计划、风险分析与缓解最佳实践"
+  },
+  {
+    "id": "chapter-005",
+    "title": "5 错误预算",
+    "start_page": 135,
+    "end_page": 153,
+    "description": "错误预算的目的、定义、计算公式、与 SLI/SLO 的关系、超出预算的应对措施"
+  },
+  {
+    "id": "chapter-006",
+    "title": "6 SLI / SLO / SLA",
+    "start_page": 154,
+    "end_page": 181,
+    "description": "服务水平管理概述、SLI 类型与选择、SLO 设定、SLA 创建与谈判、落地实施与案例研究"
+  },
+  {
+    "id": "chapter-007",
+    "title": "7 容量规划",
+    "start_page": 182,
+    "end_page": 215,
+    "description": "容量规划的重要性、资源需求分析、容量分析方法、扩缩容策略、云环境与灾难恢复规划"
+  },
+  {
+    "id": "chapter-008",
+    "title": "8 值班与一线响应",
+    "start_page": 216,
+    "end_page": 240,
+    "description": "值班轮换类型、一线响应流程、事件沟通、事后复盘，以及 Google/Amazon/Atlassian/Netflix 案例"
+  },
+  {
+    "id": "chapter-009",
+    "title": "9 RCA 与事后复盘",
+    "start_page": 241,
+    "end_page": 258,
+    "description": "根因分析流程与方法（5W、鱼骨图、故障树）、事后复盘实践、无责备文化与未来趋势"
+  },
+  {
+    "id": "chapter-010",
+    "title": "10 混沌工程",
+    "start_page": 259,
+    "end_page": 287,
+    "description": "混沌工程原则、在 SRE 中的角色、关键概念、实验设计、工具（Chaos Monkey/Gremlin）与案例"
+  },
+  {
+    "id": "chapter-011",
+    "title": "11 人工智能驱动的站点可靠性工程",
+    "start_page": 288,
+    "end_page": 314,
+    "description": "AI 在 SRE 中的角色：自动化测试、智能调试、预测性维护、代码生成、性能优化、异常检测、NLP 等"
+  },
+  {
+    "id": "chapter-012",
+    "title": "12 案例研究",
+    "start_page": 315,
+    "end_page": 337,
+    "description": "Google、Netflix、Spotify、LinkedIn、Amazon 等公司的 SRE 实践与经验"
+  }
+]

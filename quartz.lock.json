@@ -1,0 +1,17 @@
+{
+  "version": "1.0.0",
+  "plugins": {
+    "article-carousel": {
+      "source": "./plugins/article-carousel",
+      "resolved": "C:\\Users\\19682\\Documents\\my-brain\\plugins\\article-carousel",
+      "commit": "local",
+      "installedAt": "2026-07-26T05:16:12.096Z"
+    },
+    "obsidian-flavored-markdown-fork": {
+      "source": "./plugins/obsidian-flavored-markdown-fork",
+      "resolved": "C:\\Users\\19682\\Documents\\my-brain\\plugins\\obsidian-flavored-markdown-fork",
+      "commit": "local",
+      "installedAt": "2026-07-26T05:16:12.094Z"
+    }
+  }
+}
