@@ -15,12 +15,24 @@
   }
 
   .random-articles-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
     font-size: 0.75rem;
     font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.06em;
     color: var(--gray);
     font-family: var(--bodyFont);
+
+    &::before {
+      content: "";
+      width: 6px;
+      height: 6px;
+      border-radius: 1.5px;
+      background: var(--secondary);
+      opacity: 0.85;
+    }
   }
 
   .random-articles-refresh {
@@ -55,11 +67,7 @@
   .random-articles-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    gap: 1px;
-    background: var(--lightgray);
-    border: 1px solid var(--lightgray);
-    border-radius: 0.5rem;
-    overflow: hidden;
+    gap: 0.75rem;
 
     &.fade-in {
       animation: randomFadeIn 0.3s ease;
@@ -71,33 +79,65 @@
   }
 
   .random-article-card {
-    background: var(--light);
-    padding: 1rem 1.2rem;
+    position: relative;
+    background: transparent;
+    border: 1px solid var(--lightgray);
+    border-radius: 0.65rem;
+    padding: 0.95rem 1.1rem 0.85rem;
     display: flex;
     flex-direction: column;
-    gap: 0.35rem;
+    gap: 0.5rem;
     text-decoration: none !important;
-    transition: background-color 0.15s ease;
+    transition:
+      border-color 0.2s ease,
+      transform 0.2s ease,
+      box-shadow 0.2s ease;
+
+    // 左侧陶土色点缀条，hover 时浮现
+    &::before {
+      content: "";
+      position: absolute;
+      left: -1px;
+      top: 0.9rem;
+      bottom: 0.9rem;
+      width: 3px;
+      border-radius: 3px;
+      background: var(--secondary);
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
 
     &:hover {
-      background: color-mix(in srgb, var(--lightgray) 20%, var(--light));
+      border-color: color-mix(in srgb, var(--secondary) 45%, var(--lightgray));
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-float, 0 6px 16px rgba(20, 20, 19, 0.07));
+
+      &::before {
+        opacity: 1;
+      }
+
+      .random-article-title {
+        color: var(--secondary);
+      }
     }
   }
 
   .random-article-title {
     font-family: var(--bodyFont);
-    font-size: 0.88rem;
-    font-weight: 500;
+    font-size: 0.9rem;
+    font-weight: 550;
     color: var(--darkgray);
-    line-height: 1.35;
+    line-height: 1.45;
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
+    transition: color 0.2s ease;
   }
 
   .random-article-date {
-    font-size: 0.72rem;
+    font-size: 0.7rem;
+    letter-spacing: 0.03em;
     color: var(--gray);
     margin-top: auto;
   }
@@ -108,6 +148,7 @@
     opacity: 0.3;
     transform: translateY(4px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
