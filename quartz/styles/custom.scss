@@ -30,11 +30,11 @@
   --border-soft: 1px solid var(--lightgray);
 
   // ── 字体 fallback 链 ──────────────────────────────────────────
-  // 霞鹜文楷等宽 TC：中英文统一，手写感等宽，繁体中文优先
-  // 系统字体兜底防止无字形显示
-  --bodyFont:   "LXGW WenKai Mono TC", ui-monospace, "Cascadia Code", monospace;
-  --headerFont: "LXGW WenKai Mono TC", ui-monospace, "Cascadia Code", monospace;
-  --codeFont:   "LXGW WenKai Mono TC", ui-monospace, "Cascadia Code", monospace;
+  // 标题：Noto Serif SC 衬线（claude.com 的 serif display DNA）
+  // 正文/代码：霞鹜文楷等宽 TC，保留站点手写感身份
+  --bodyFont: "LXGW WenKai Mono TC", ui-monospace, "Cascadia Code", monospace;
+  --headerFont: "Noto Serif SC", "Songti SC", "SimSun", serif;
+  --codeFont: "LXGW WenKai Mono TC", ui-monospace, "Cascadia Code", monospace;
 }
 
 [saved-theme="dark"] {
@@ -48,14 +48,14 @@
 // ----------------------------------------------------------
 :root {
   --mm-bg: transparent;
-  --mm-node-bg: #f5f4ed;       // Claude gray-100
-  --mm-node-border: #d1cfc5;   // Claude gray-300
-  --mm-text: #30302e;          // Claude gray-750
-  --mm-line: #b0aea5;          // Claude gray-400
-  --mm-cluster-bg: #faf9f5;    // Claude gray-050
+  --mm-node-bg: #f5f4ed; // Claude gray-100
+  --mm-node-border: #d1cfc5; // Claude gray-300
+  --mm-text: #30302e; // Claude gray-750
+  --mm-line: #b0aea5; // Claude gray-400
+  --mm-cluster-bg: #faf9f5; // Claude gray-050
   --mm-cluster-border: #e8e6dc; // Claude gray-200
-  --mm-note-bg: #fef3e2;       // 温暖黄色调
-  --mm-note-border: #d97757;   // Claude clay
+  --mm-note-bg: #fef3e2; // 温暖黄色调
+  --mm-note-border: #d97757; // Claude clay
   --mm-actor-bg: #f5f4ed;
   --mm-actor-border: #d1cfc5;
   --mm-active-bg: rgba(201, 100, 66, 0.1); // 陶土色 tint
@@ -65,15 +65,15 @@
 
 [saved-theme="dark"] {
   --mm-bg: transparent;
-  --mm-node-bg: #1f1e1d;       // Claude gray-850
-  --mm-node-border: #4d4c48;   // Claude gray-650
-  --mm-text: #dedcd1;          // Claude gray-250
-  --mm-line: #5e5d59;          // Claude gray-600
-  --mm-cluster-bg: #141413;    // Claude gray-950
+  --mm-node-bg: #1f1e1d; // Claude gray-850
+  --mm-node-border: #4d4c48; // Claude gray-650
+  --mm-text: #dedcd1; // Claude gray-250
+  --mm-line: #5e5d59; // Claude gray-600
+  --mm-cluster-bg: #141413; // Claude gray-950
   --mm-cluster-border: #3d3d3a; // Claude gray-700
-  --mm-note-bg: #3d2a1a;       // 深暖色调
+  --mm-note-bg: #3d2a1a; // 深暖色调
   --mm-note-border: #c96442;
-  --mm-actor-bg: #262624;      // Claude gray-800
+  --mm-actor-bg: #262624; // Claude gray-800
   --mm-actor-border: #5e5d59;
   --mm-active-bg: rgba(217, 119, 87, 0.15);
   --mm-active-border: #d97757;
@@ -98,13 +98,48 @@ body {
 }
 
 // ----------------------------------------------------------
+// 选中文本染色 — claude.com 标志性细节
+// ----------------------------------------------------------
+::selection {
+  background: rgba(201, 100, 66, 0.22);
+  color: var(--dark);
+}
+
+[saved-theme="dark"] ::selection {
+  background: rgba(217, 119, 87, 0.35);
+}
+
+// ----------------------------------------------------------
+// 自定义滚动条 — 细窄暖灰
+// ----------------------------------------------------------
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--lightgray) 80%, transparent);
+  border-radius: var(--radius-pill);
+
+  &:hover {
+    background: var(--gray);
+  }
+}
+
+// ----------------------------------------------------------
 // 文章排版 — Claude 博客简约风格
 // ----------------------------------------------------------
 article {
+  font-size: 1.05rem;
+
   p {
     margin-top: 0;
     margin-bottom: 1.5rem;
-    line-height: 1.7;
+    line-height: 1.75;
   }
 
   blockquote {
@@ -135,7 +170,12 @@ article {
 // ----------------------------------------------------------
 // 标题 — 衬线字体，优雅克制
 // ----------------------------------------------------------
-h1, h2, h3, h4, h5, h6 {
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
   font-family: var(--headerFont);
   font-weight: 600;
   letter-spacing: -0.01em;
@@ -187,7 +227,7 @@ pre {
   position: relative;
   overflow-x: auto;
 
-  & > code {
+  &>code {
     font-size: 0.85rem;
     line-height: 1.6;
     background: transparent;
@@ -199,6 +239,7 @@ pre {
   &:hover {
     border-color: color-mix(in srgb, var(--secondary) 30%, var(--lightgray));
   }
+
   transition: border-color 0.3s ease;
 }
 
@@ -255,7 +296,7 @@ button.search-button {
   }
 }
 
-.search > #search-container > #search-space > #search-layout {
+.search>#search-container>#search-space>#search-layout {
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-deep) !important;
   border: 1px solid color-mix(in srgb, var(--lightgray) 80%, transparent);
@@ -290,7 +331,7 @@ button.search-button {
 }
 
 .explorer-content {
-  ul li > a {
+  ul li>a {
     font-size: 0.88rem;
     padding: 0.3rem 0.6rem;
     border-radius: var(--radius-md);
@@ -314,7 +355,9 @@ button.search-button {
   }
 
   .folder-container {
-    div > button span, div > a {
+
+    div>button span,
+    div>a {
       font-size: 0.9rem;
       font-weight: 600;
     }
@@ -326,6 +369,7 @@ button.search-button {
 // ----------------------------------------------------------
 .toc {
   position: relative;
+
   &::before {
     content: "";
     position: absolute;
@@ -337,7 +381,7 @@ button.search-button {
   }
 }
 
-ul.toc-content.overflow > li > a {
+ul.toc-content.overflow>li>a {
   font-size: 0.85rem;
   padding: 0.2rem 0.5rem;
   color: var(--gray);
@@ -354,7 +398,7 @@ ul.toc-content.overflow > li > a {
     font-weight: 600;
     background: color-mix(in srgb, var(--secondary) 6%, transparent);
     position: relative;
-    
+
     &::before {
       content: "";
       position: absolute;
@@ -381,7 +425,11 @@ ul.toc-content.overflow > li > a {
   transition: all 0.2s ease;
   margin: 0 0.3rem 0.3rem 0;
 
-  &::before { content: "#"; opacity: 0.4; margin-right: 0.1em; }
+  &::before {
+    content: "#";
+    opacity: 0.4;
+    margin-right: 0.1em;
+  }
 
   &:hover {
     background: var(--secondary);
@@ -477,11 +525,11 @@ ul.toc-content.overflow > li > a {
     list-style: none;
     padding-left: 0;
     margin-bottom: 0;
-    
+
     li {
       margin-bottom: 0.35rem;
       font-size: 0.9rem;
-      
+
       a {
         display: inline-block;
         padding: 0.15rem 0;
@@ -491,7 +539,7 @@ ul.toc-content.overflow > li > a {
         text-decoration-color: color-mix(in srgb, var(--secondary) 30%, transparent);
         border: none;
         background: none;
-        
+
         &:hover {
           text-decoration-color: var(--secondary);
           color: var(--tertiary);
@@ -508,7 +556,171 @@ ul.toc-content.overflow > li > a {
   .explorer {
     overflow: visible !important;
   }
+
   .explorer .explorer-content {
     position: fixed !important;
+  }
+}
+
+// ----------------------------------------------------------
+// 文章头部 — claude 文章页结构：分类 → 衬线大标题 → 日期
+// （tag-list 已通过 config 挪到标题上方，此处弱化样式）
+// ----------------------------------------------------------
+.page-header {
+  ul.tags {
+    padding-left: 0;
+    margin: 0 0 0.4rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+
+    li {
+      list-style: none;
+    }
+
+    a.tag-link {
+      background: transparent;
+      border: none;
+      padding: 0;
+      margin: 0;
+      font-size: 0.78rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--secondary);
+      text-decoration: none;
+      box-shadow: none;
+
+      &::before {
+        content: none;
+      }
+
+      &:hover {
+        background: transparent;
+        color: var(--tertiary);
+        border-color: transparent;
+        box-shadow: none;
+      }
+    }
+  }
+
+  h1.article-title {
+    font-size: 2.4rem;
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+    margin: 0.2rem 0 0.6rem;
+  }
+
+  .content-meta {
+    color: var(--gray);
+    font-size: 0.9rem;
+    margin-top: 0;
+  }
+}
+
+// ----------------------------------------------------------
+// 文章列表卡片化 — 模仿 claude blog 列表行
+// 日期（灰小字）→ 衬线标题 → 标签，hover 整行反馈
+// ----------------------------------------------------------
+ul.section-ul {
+  list-style: none;
+  padding-left: 0;
+}
+
+li.section-li {
+  border-top: 1px solid var(--lightgray);
+  border-radius: var(--radius-md);
+  transition: background-color 0.2s ease;
+  margin-bottom: 0;
+
+  // Quartz 默认 tags 右对齐，改回标题下方左对齐
+  .section>ul.tags {
+    justify-content: flex-start;
+    padding-left: 0;
+    margin-top: 0.5rem;
+  }
+
+  &:last-child {
+    border-bottom: 1px solid var(--lightgray);
+  }
+
+  &:hover {
+    background: color-mix(in srgb, var(--lightgray) 22%, transparent);
+  }
+
+  .section {
+    // Quartz 默认 grid 布局会把日期和标题放同一行，改为纵向：日期在上、标题在下
+    display: flex;
+    flex-direction: column;
+    padding: 1.1rem 0.9rem;
+
+    .meta {
+      color: var(--gray);
+      font-size: 0.82rem;
+      margin: 0 0 0.25rem;
+    }
+
+    .desc h3 {
+      border-bottom: none;
+      padding-bottom: 0;
+      margin-top: 0;
+
+      a.internal {
+        font-family: var(--headerFont);
+        font-size: 1.25rem;
+        font-weight: 600;
+        line-height: 1.35;
+        color: var(--dark);
+        text-decoration: none;
+
+        &:hover {
+          color: var(--secondary);
+        }
+      }
+    }
+  }
+}
+
+// ----------------------------------------------------------
+// 标签筛选 pill — 插件 CSS 在 @layer quartz-base 内，
+// 会被本文件 unlayered 的 a.internal 覆盖，故在此覆写
+// ----------------------------------------------------------
+.tag-pills a.tag-pill {
+  color: var(--darkgray);
+  text-decoration: none;
+  background: transparent;
+
+  &:hover {
+    color: var(--secondary);
+    background: color-mix(in srgb, var(--secondary) 6%, transparent);
+    text-decoration: none;
+  }
+}
+
+// ----------------------------------------------------------
+// 首页知识卡片 hover 上浮
+// ----------------------------------------------------------
+.knowledge-card {
+  transition: background-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-float);
+    position: relative;
+    z-index: 1;
+  }
+}
+
+// ----------------------------------------------------------
+// 移动端顶栏 — claude 移动端 sticky header
+// 注：实测半透明 + blur 在正文文字上方遮盖力不足，用实色背景
+// ----------------------------------------------------------
+@media all and (max-width: 800px) {
+  .left.sidebar {
+    position: sticky;
+    top: 0;
+    z-index: 90;
+    background: var(--light);
+    border-bottom: 1px solid var(--lightgray);
   }
 }

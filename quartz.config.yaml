@@ -18,27 +18,27 @@ configuration:
     fontOrigin: googleFonts
     cdnCaching: true
     typography:
-      header: Noto Sans SC
+      header: Noto Serif SC
       body: Noto Sans SC
       code: Noto Sans SC
     colors:
       # Claude 博客象牙色系 — 从 claude.com/blog CSS 精确提取
       lightMode:
-        light: "#faf9f5"    # 象牙白背景 (Claude gray-050)
+        light: "#faf9f5" # 象牙白背景 (Claude gray-050)
         lightgray: "#e8e6dc" # 温暖灰边框 (Claude gray-200)
-        gray: "#87867f"     # 柔和次要文字 (Claude gray-500)
+        gray: "#87867f" # 柔和次要文字 (Claude gray-500)
         darkgray: "#30302e" # 温暖主体文字 (Claude gray-750)
-        dark: "#141413"     # 深色标题 (Claude gray-950)
+        dark: "#141413" # 深色标题 (Claude gray-950)
         secondary: "#c96442" # 陶土交互色 (Claude clay-interactive)
         tertiary: "#d97757" # 陶土装饰色 (Claude clay)
         highlight: rgba(201, 100, 66, 0.08)
         textHighlight: rgba(201, 100, 66, 0.15)
       darkMode:
-        light: "#141413"    # 温暖深色背景 (Claude gray-950)
+        light: "#141413" # 温暖深色背景 (Claude gray-950)
         lightgray: "#3d3d3a" # 暗灰边框 (Claude gray-700)
-        gray: "#73726c"     # 次要文字 (Claude gray-550)
+        gray: "#73726c" # 次要文字 (Claude gray-550)
         darkgray: "#dedcd1" # 浅暖灰主体文字 (Claude gray-250)
-        dark: "#faf9f5"     # 象牙白标题 (Claude gray-050)
+        dark: "#faf9f5" # 象牙白标题 (Claude gray-050)
         secondary: "#d97757" # 亮陶土色 (Claude clay)
         tertiary: "#c96442" # 深陶土色 (Claude clay-interactive)
         highlight: rgba(217, 119, 87, 0.15)
@@ -103,8 +103,13 @@ plugins:
   - source: "@quartz-community/roam"
     enabled: false
     order: 92
+  # quartz-fonts 用自己的默认值硬编码 h1-h6 字体（默认 Schibsted Grotesk），
+  # 必须显式配置 header，否则 theme.typography 不生效
   - source: "@quartz-community/quartz-fonts"
     enabled: true
+    options:
+      header: Noto Serif SC
+      title: Noto Serif SC
   - source: "@quartz-themes/core"
     enabled: false
     options:
@@ -178,11 +183,23 @@ plugins:
       position: beforeBody
       priority: 20
       condition: not-index
+  # tag-list 挪到标题上方，作为 claude 风格的"分类标签"
   - source: "@quartz-community/tag-list"
     enabled: true
     layout:
       position: beforeBody
-      priority: 30
+      priority: 8
+      condition: not-index
+  # 阅读进度条 + 复制正文按钮 — claude.com/blog 风格
+  - source: ./plugins/article-tools
+    enabled: true
+    options:
+      showProgress: true
+      showCopy: true
+      copyLabel: 复制正文
+    layout:
+      position: beforeBody
+      priority: 40
       condition: not-index
   # 首页文章轮播 — 仅首页显示
   - source: ./plugins/article-carousel
@@ -194,6 +211,24 @@ plugins:
       position: beforeBody
       priority: 5
       condition: index-only
+  # 首页标签筛选 pill 栏 — 模仿 claude blog 顶部分类筛选
+  - source: ./plugins/tag-pills
+    enabled: true
+    options:
+      title: 按标签逛逛
+      maxTags: 14
+      showAllLink: true
+    layout:
+      position: beforeBody
+      priority: 6
+      condition: index-only
+  # 滚动渐显 — 首页卡片 / 列表行 fade-in-up
+  - source: ./plugins/scroll-reveal
+    enabled: true
+    layout:
+      position: afterBody
+      priority: 90
+      display: all
   - source: "@quartz-community/page-title"
     enabled: true
     layout:

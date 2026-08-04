@@ -1,0 +1,71 @@
+{
+  "name": "@my-brain/tag-pills",
+  "version": "0.1.0",
+  "description": "Tag pills for Quartz - top tags as filter pills (claude.com/blog category filter inspired)",
+  "type": "module",
+  "license": "MIT",
+  "author": "my-brain",
+  "keywords": [
+    "quartz",
+    "quartz-plugin",
+    "tag-pills",
+    "component"
+  ],
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./components": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@quartz-community/types": "^0.2.1",
+    "@quartz-community/utils": "^0.1.0"
+  },
+  "quartz": {
+    "name": "tag-pills",
+    "displayName": "Tag Pills",
+    "category": "component",
+    "version": "1.0.0",
+    "quartzVersion": ">=5.0.0",
+    "dependencies": [],
+    "defaultOrder": 50,
+    "defaultEnabled": false,
+    "defaultOptions": {
+      "title": "按标签逛逛",
+      "maxTags": 14,
+      "showAllLink": true
+    },
+    "components": {
+      "TagPills": {
+        "displayName": "Tag Pills",
+        "defaultPosition": "beforeBody",
+        "defaultPriority": 6
+      }
+    },
+    "optionSchema": {
+      "title": {
+        "type": "string"
+      },
+      "maxTags": {
+        "type": "number"
+      },
+      "showAllLink": {
+        "type": "boolean"
+      }
+    }
+  }
+}

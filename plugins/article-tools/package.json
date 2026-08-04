@@ -1,0 +1,70 @@
+{
+  "name": "@my-brain/article-tools",
+  "version": "0.1.0",
+  "description": "Article tools for Quartz - reading progress bar + copy article button (claude.com/blog inspired)",
+  "type": "module",
+  "license": "MIT",
+  "author": "my-brain",
+  "keywords": [
+    "quartz",
+    "quartz-plugin",
+    "article-tools",
+    "component"
+  ],
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./components": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@quartz-community/types": "^0.2.1"
+  },
+  "quartz": {
+    "name": "article-tools",
+    "displayName": "Article Tools",
+    "category": "component",
+    "version": "1.0.0",
+    "quartzVersion": ">=5.0.0",
+    "dependencies": [],
+    "defaultOrder": 50,
+    "defaultEnabled": false,
+    "defaultOptions": {
+      "showProgress": true,
+      "showCopy": true,
+      "copyLabel": "复制正文"
+    },
+    "components": {
+      "ArticleTools": {
+        "displayName": "Article Tools",
+        "defaultPosition": "beforeBody",
+        "defaultPriority": 40
+      }
+    },
+    "optionSchema": {
+      "showProgress": {
+        "type": "boolean"
+      },
+      "showCopy": {
+        "type": "boolean"
+      },
+      "copyLabel": {
+        "type": "string"
+      }
+    }
+  }
+}
