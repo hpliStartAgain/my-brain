@@ -418,7 +418,7 @@ AutoGPT 的演进路径揭示了一个重要趋势：**从"开放式自主循环
 
 **约束三：工具接口设计的认知友好性**。Coding Agent 的工具接口（Tool Schema）需要为 LLM 的认知模式优化，而不是为人类优化。Devin 团队提出的 ACI（Agent Computer Interface）概念（本专栏第 8 篇）专门研究这个问题——同样的 LLM，用不同的工具接口设计，性能可以从接近零提升到 SOTA。
 
-**约束四：沙箱隔离的安全需求**。Coding Agent 执行的代码可能来自用户、可能来自 LLM 生成、甚至可能来自被 Prompt Injection 污染的恶意指令。Agent 必须在隔离的沙箱中执行代码，防止逃逸危害宿主系统。这是姊妹专栏 [[云原生/Agent沙箱与隔离技术/00 专栏导览|Agent 沙箱与隔离技术]] 的主题。
+**约束四：沙箱隔离的安全需求**。Coding Agent 执行的代码可能来自用户、可能来自 LLM 生成、甚至可能来自被 Prompt Injection 污染的恶意指令。Agent 必须在隔离的沙箱中执行代码，防止逃逸危害宿主系统。这是姊妹专栏 [[LLM/Agent沙箱技术/00 专栏导览|Agent 沙箱技术]] 的主题。
 
 ### 6.2 Coding Agent 的范式选择
 

@@ -91,7 +91,7 @@ OpenHands 的 Runtime 是其与 Claude Code/Aider 最大的区别——它使用
 | **LocalRuntime** | 无 Docker 环境 | 直接在本地运行（无沙箱隔离） |
 
 > [!info] 核心概念：Docker 沙箱是 OpenHands 的安全基石
-> OpenHands 选择 Docker 作为默认 Runtime，核心原因是安全隔离——Agent 执行的任意代码都在容器内运行，不会影响宿主机。这呼应了 [[云原生/Agent沙箱与隔离技术/00 专栏导览|Agent 沙箱专栏]]的主题。但 Docker 容器隔离不是绝对安全的——容器逃逸攻击仍然可能（详见沙箱专栏第 11 篇）。对于需要更强隔离的场景，可以使用 RemoteRuntime 连接 Kata Containers 或 gVisor 等更强隔离的沙箱。
+> OpenHands 选择 Docker 作为默认 Runtime，核心原因是安全隔离——Agent 执行的任意代码都在容器内运行，不会影响宿主机。这呼应了 [[LLM/Agent沙箱技术/00 专栏导览|Agent 沙箱技术专栏]]的主题。但 Docker 容器隔离不是绝对安全的——容器逃逸攻击仍然可能（详见 [[LLM/Agent沙箱技术/生产化/14 沙箱安全体系——三层防护、短期凭据与多租户|沙箱专栏第 14 篇]]）。对于需要更强隔离的场景，可以使用 RemoteRuntime 连接 Kata Containers 或 gVisor 等更强隔离的沙箱。
 
 ### 1.4 AgentSkills
 
@@ -324,4 +324,4 @@ Aider 的 repo map 不是静态的——它根据当前聊天状态动态调整�
 
 2. **Aider 的 Repo Map 用 PageRank 排序文件重要性。但 PageRank 假设"被重要节点链接的节点也重要"——在代码库中，这个假设成立吗？被很多文件 import 的文件一定"重要"吗？有没有反例？** 提示：考虑"工具函数文件"——一个 `utils.py` 可能被整个项目 import，但它的重要性可能不如一个只被少数文件引用的核心业务逻辑文件。PageRank 的"被引用=重要"假设在代码库中可能不完全成立。
 
-3. **OpenHands 用 Docker 做沙箱，Aider 不做沙箱。如果 Aider 想增加沙箱能力但又不引入 Docker 的重量级开销，有什么轻量级替代方案？** 提示：考虑 [[云原生/Agent沙箱与隔离技术/00 专栏导览|Agent 沙箱专栏]]讨论的技术——namespaces + seccomp 可以在不启动完整容器的情况下提供进程级隔离；或者用 Bubblewrap（Flatpak 的沙箱工具）做轻量级沙箱。
+3. **OpenHands 用 Docker 做沙箱，Aider 不做沙箱。如果 Aider 想增加沙箱能力但又不引入 Docker 的重量级开销，有什么轻量级替代方案？** 提示：考虑 [[LLM/Agent沙箱技术/00 专栏导览|Agent 沙箱技术专栏]]讨论的技术——namespaces + seccomp 可以在不启动完整容器的情况下提供进程级隔离；或者用 Bubblewrap（Flatpak 的沙箱工具）做轻量级沙箱。

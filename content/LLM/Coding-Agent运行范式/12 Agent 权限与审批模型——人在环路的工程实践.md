@@ -428,7 +428,7 @@ MCP 规范对 Elicitation 的 Schema 做了安全限制——**禁止请求密�
 ### 8.3 专栏关联
 
 > [!info] 专栏导航
-> 本文是 [[00 专栏导览|Coding Agent 运行范式专栏]] 的第 12 篇，也是收官篇。本专栏的姊妹篇 [[云原生/Agent沙箱与隔离技术/00 专栏导览|Agent 沙箱与隔离技术]] 解决"Agent 在哪安全运行"的问题——从 Linux namespaces/cgroups/seccomp 到 gVisor/Kata/Firecracker 到 E2B/Daytona，深入 Agent 运行环境的隔离与安全。两个专栏共同覆盖了"Agent 怎么工作"和"Agent 在哪安全运行"两个核心问题。
+> 本文是 [[00 专栏导览|Coding Agent 运行范式专栏]] 的第 12 篇，也是收官篇。本专栏的姊妹篇 [[LLM/Agent沙箱技术/00 专栏导览|Agent 沙箱技术]] 解决"Agent 在哪安全运行"的问题——从 Linux namespaces/cgroups/seccomp 到 gVisor/Kata/Firecracker 到 E2B/OpenSandbox 平台，深入 Agent 运行环境的隔离与安全。两个专栏共同覆盖了"Agent 怎么工作"和"Agent 在哪安全运行"两个核心问题。
 
 ---
 

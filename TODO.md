@@ -224,3 +224,45 @@
 - Q2：批次 8（算法专栏）是否需要本次一起处理，还是先聚焦技术深度专栏？
 - Q3：Tier 3 中标记"边缘"的专栏（如 Java/SpringCore、Golang/Go语言核心、Linux/文件系统、中间件/Milvus）字数已接近均线，是否需要一并处理，还是可以暂缓？
 
+
+---
+
+# Agent 沙箱技术专栏创作（LLM/Agent沙箱技术）
+
+> status: done
+> updated: 2026-08-15
+> tier: COMPLEX
+> branch: main
+
+## 1. 需求理解
+
+基于 work-management-1/30-知识库/技术学习/agent-sandbox 的调研与实操素材（60+ 篇文档，覆盖威胁模型、隔离原语、虚拟化技术、OpenSandbox 架构/PoC/生产化、行业共识），分析 Agent 沙箱技术的框架体系与理论逻辑演进，整理/补充/扩写为符合本仓库交付标准（JVM 范文：篇均 13000 字/500+ 行）的专栏，统一放 content/LLM/Agent沙箱技术/（一个大专栏 + 子目录）。
+
+## 2. 设计方案
+
+- 结构：根目录（00 导览、01 全景）+ 4 个子目录（隔离原语 4 篇、平台与协议 4 篇、工程实践 3 篇、生产化 3 篇），共 15 篇
+- 逻辑主线：威胁模型 → 隔离原语 → 虚拟化技术 → 平台分层 → OpenSandbox 深度解析 → PoC 验证 → 生产化深水区 → 行业共识
+- 素材：agent-sandbox 调研笔记 + 网上 2026 一手资料（OpenSandbox 官方架构、sigs agent-sandbox CRD、行业 benchmark）
+- 旧专栏 content/云原生/Agent沙箱与隔离技术 精华并入后删除（老板已确认）
+
+## 3. 阶段划分
+
+- [x] Phase A：01 全景 + 隔离原语/ 02-05（15 篇全部完成，均 500+ 行）
+- [x] Phase B：平台与协议/ 06-09
+- [x] Phase C：工程实践/ 10-12
+- [x] Phase D：生产化/ 13-15
+- [x] 收尾：删旧专栏、更新互链、CHANGELOG
+
+## 4. 文件级任务
+
+| 文件 | 动作 | 说明 |
+|------|------|------|
+| content/LLM/Agent沙箱技术/** | NEW | 15 篇文章 + 导览 |
+| content/云原生/Agent沙箱与隔离技术 | DELETE | 精华并入后删除（老板确认） |
+| content/LLM/Coding-Agent运行范式/00 专栏导览.md | MODIFY | 更新姊妹篇链接指向 |
+| CHANGELOG.md | NEW/MODIFY | 仓库无 CHANGELOG，视情况创建 |
+
+## 5. 待确认问题
+
+- Q1: 大纲确认（见 00 专栏导览）✅ 已确认（一个大专栏+子目录；删旧专栏；命名 Agent沙箱技术）
+

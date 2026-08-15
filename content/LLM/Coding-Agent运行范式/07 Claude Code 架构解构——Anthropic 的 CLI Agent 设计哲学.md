@@ -253,7 +253,7 @@ bypassPermissions 跳过所有权限检查——包括受保护路径的检查�
 组织管理员可以通过 managed settings 的 `disableBypassPermissionsMode: "disable"` 禁用此模式——防止团队成员在非隔离环境中使用。
 
 > [!warning] 生产避坑：bypassPermissions 的安全风险
-> bypassPermissions 模式让 Claude Code 可以执行**任何**操作——包括 `rm -rf /`、`git push --force`、读取 `~/.ssh/` 下的私钥并写入网络。在有真实凭证和真实文件系统的工作站上使用这个模式是极其危险的——一次 Prompt Injection 攻击就可能导致密钥泄露或数据销毁。正确使用场景仅限于：1）Docker 容器（文件系统隔离）；2）临时 VM（可随时销毁）；3）CI/CD 临时环境（无敏感凭证）。即使在这些环境中，也应该配合 Egress 网络过滤（[[云原生/Agent沙箱与隔离技术/00 专栏导览|Agent 沙箱专栏]]第 10 篇的主题）防止数据外泄。
+> bypassPermissions 模式让 Claude Code 可以执行**任何**操作——包括 `rm -rf /`、`git push --force`、读取 `~/.ssh/` 下的私钥并写入网络。在有真实凭证和真实文件系统的工作站上使用这个模式是极其危险的——一次 Prompt Injection 攻击就可能导致密钥泄露或数据销毁。正确使用场景仅限于：1）Docker 容器（文件系统隔离）；2）临时 VM（可随时销毁）；3）CI/CD 临时环境（无敏感凭证）。即使在这些环境中，也应该配合 Egress 网络过滤（[[LLM/Agent沙箱技术/00 专栏导览|Agent 沙箱技术专栏]]第 08 篇的主题）防止数据外泄。
 
 ### 5.5 权限规则的评估顺序
 
