@@ -20,7 +20,7 @@ configuration:
     typography:
       header: Noto Serif SC
       body: Noto Sans SC
-      code: Noto Sans SC
+      code: JetBrains Mono
     colors:
       # Claude 博客象牙色系 — 从 claude.com/blog CSS 精确提取
       lightMode:

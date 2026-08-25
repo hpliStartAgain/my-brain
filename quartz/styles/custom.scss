@@ -31,10 +31,10 @@
 
   // ── 字体 fallback 链 ──────────────────────────────────────────
   // 标题：Noto Serif SC 衬线（claude.com 的 serif display DNA）
-  // 正文/代码：霞鹜文楷等宽 TC，保留站点手写感身份
-  --bodyFont: "LXGW WenKai Mono TC", ui-monospace, "Cascadia Code", monospace;
+  // 正文：微软雅黑；代码：JetBrains Mono
+  --bodyFont: "Microsoft YaHei", "微软雅黑", Arial, sans-serif;
   --headerFont: "Noto Serif SC", "Songti SC", "SimSun", serif;
-  --codeFont: "LXGW WenKai Mono TC", ui-monospace, "Cascadia Code", monospace;
+  --codeFont: "JetBrains Mono", "Cascadia Code", ui-monospace, monospace;
 }
 
 [saved-theme="dark"] {
