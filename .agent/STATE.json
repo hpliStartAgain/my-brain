@@ -1,0 +1,25 @@
+{
+  "task_id": "sysperf-column-rewrite",
+  "tier": "COMPLEX",
+  "current_phase": "done",
+  "next_action": "无（系统性能工程实战专栏 01-14 重写完成，等待老板下一步指示）",
+  "blockers": [],
+  "do_not": [
+    "严禁启用子代理（老板确认 Devin 子代理有内存泄漏 bug）",
+    "不虚构年份、版本号、性能数字",
+    "不搬运原书观点/案例/比喻原句",
+    "不创建 Git commit 除非老板显式要求"
+  ],
+  "last_commit": "none",
+  "branch": "main",
+  "open_files": [],
+  "verified_passing": [
+    "14 篇全部 12000-15442 字 / 600-1008 行",
+    "14 篇 frontmatter 完整（title/date/tags/aliases）",
+    "14 篇 Mermaid 统一 dracula 主题",
+    "14 篇参考资料+思考题全覆盖（00 导览除外）",
+    "wiki 链接有效"
+  ],
+  "todo_md": "TODO.md（系统性能工程实战专栏重写段，status: done）",
+  "changelog": "CHANGELOG.md 2026-09-06 段已追加"
+}

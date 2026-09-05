@@ -848,5 +848,20 @@ sysctl -w net.ipv4.tcp_no_metrics_save=1        # 不缓存上次连接的指标
 
 ---
 
-> [!quote] 专栏下一站
-> 本文拆解了网络协议栈从应用到网卡的完整延迟链路。下一篇将从网络延伸到存储 I/O 子系统——磁盘 I/O 是分布式系统的另一个性能维度，其延迟模型与网络有相似之处（都有队列、调度、buffer），但增加了持久化、fsync、写放大等独特挑战。专栏将继续保持"从硬件到应用"的完整分析链路。
+## 参考资料
+
+1. Brendan Gregg, *Systems Performance*, 2nd Edition, Addison-Wesley, 2020. 第 10 章 "Networking"
+2. Linux 内核文档, Networking, https://www.kernel.org/doc/html/latest/networking/
+3. Jim Gettys, "Bufferbloat: Dark Buffers in the Internet", IEEE Internet Computing, 2011（Bufferbloat 问题）
+4. Kathleen Nichols, Van Jacobson, "Controlling Queue Delay", ACM Queue, 2012（CoDel 算法）
+5. Neal Cardwell 等, "BBR: Congestion-Based Congestion Control", ACM Queue, 2016（BBR 算法）
+6. RFC 3168: The Addition of Explicit Congestion Notification (ECN) to IP
+7. [[08 网络：协议栈、Buffer 与 RPC 延迟]] 相关工具：tcprtt、softirqs（BCC）
+
+---
+
+> [!note] 思考题
+> 1. 一个服务的 RPC P99 从 2ms 飙到 50ms，P50 正常。列出你的诊断顺序：先看什么、用什么工具、每一步的预期信号。
+> 2. 为什么"调大 socket buffer"可能让延迟更差？从 Bufferbloat 的机制解释，并说明什么情况下调大 buffer 才是正确的。
+> 3. 数据中心内一次 TCP 丢包为什么可能导致 200ms 的延迟尖刺？给出从丢包到尖刺的完整机制链。
+> 4. 中断绑核与 NUMA 的交叉问题是什么？为什么"网卡中断绑到远端 NUMA node 的核"会让吞吐下降 20-30%？
