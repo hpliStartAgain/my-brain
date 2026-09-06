@@ -1,0 +1,11 @@
+feat: 扩写 Golang 专栏 13 篇至 12000 字目标并纠正灌水参考资料
+
+- Go语言核心 01-10：扩写至 12000-13000 字
+- Go并发编程 01-04：扩写至 12000+ 字
+  - 01/02/03：删除灌水参考资料（134/246/158 条），改用高频面试题补充
+  - 04：新增 30 道高频面试题
+- 所有文章参考资料数量回归合理（20-32 条）
+
+Generated with [Devin](https://devin.ai)
+
+Co-Authored-By: Devin <158243242+devin-ai-integration[bot]@users.noreply.github.com>
