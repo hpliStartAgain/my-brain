@@ -1,3 +1,58 @@
+# Netty 专栏全量重写（content/Java/Netty/ 11 篇）
+
+---
+status: done
+branch: main
+owner: devin
+updated: 2026-09-08 20:00
+tier: COMPLEX
+---
+
+## 1. 需求理解
+
+按 skill `writing-technical-article`（凤凰架构 DNA）与 AGENTS.md 交付标准，将 `content/Java/Netty/` 下 11 篇（00 导览 + 01-10 正文）全量重写。技术资产（代码/mermaid/表格/链接/思考题）也重构，叙述与技术资产都按凤凰架构风格重新组织。串行执行，一篇一篇写。
+
+## 2. 设计方案
+
+- 风格：凤凰架构六层 DNA（L1 长句多逗号/笔者/譬如/但；L2 历史锚点开场/叙事弧/四式结尾；L3 历史先行→问题→标准与实现分离；L4 年份锚点+比喻+权威序列；L5 权衡取舍/因地制宜；L6 加粗1-2处/千字+dracula mermaid+Markdown表格）
+- 篇幅目标：技术深度专栏 12000-16000 中文字 / 500+ 行
+- 论述五问：是什么→为什么出现→不这样会怎样→如何落地→边界与反例
+- 格式：frontmatter（title/date/tags/aliases）、摘要段、`## 第 N 章` 编号、dracula mermaid、Obsidian callout、文末参考资料+思考题
+
+## 3. 文件级任务
+
+| 文件 | 动作 | 说明 |
+|------|------|------|
+| 01 Java NIO基础 | REWRITE | NIO 三大组件，从 BIO 到 NIO 的范式革命 |
+| 02 Netty全局架构 | REWRITE | BossGroup/WorkerGroup/ChannelPipeline 全景 |
+| 03 EventLoop与线程模型 | REWRITE | Reactor 模式落地、单线程化设计 |
+| 04 ByteBuf | REWRITE | 引用计数、池化、零拷贝 |
+| 05 ChannelPipeline与Handler | REWRITE | 责任链、入站出站传播 |
+| 06 编解码器 | REWRITE | 粘包拆包、LengthFieldBasedFrameDecoder |
+| 07 Netty内存管理 | REWRITE | jemalloc 在 Java 中的实现 |
+| 08 Netty高性能之道 | REWRITE | FastThreadLocal/HashedWheelTimer/MpscQueue |
+| 09 RPC框架设计 | REWRITE | 序列化、路由、连接管理 |
+| 10 开源项目应用 | REWRITE | Dubbo/RocketMQ/Elasticsearch |
+| 00 专栏导览 | REWRITE | 最后更新，引用各篇新内容 |
+
+## 4. 进度
+
+- [x] 01 Java NIO基础（525行/12065字）
+- [x] 02 Netty全局架构（530行/12000字）
+- [x] 03 EventLoop与线程模型（518行/12019字）
+- [x] 04 ByteBuf（599行/12008字）
+- [x] 05 ChannelPipeline与Handler（512行/12005字）
+- [x] 06 编解码器（1009行/12026字）
+- [x] 07 Netty内存管理（704行/12018字）
+- [x] 08 Netty高性能之道（786行/14557字）
+- [x] 09 RPC框架设计（755行/12805字）
+- [x] 10 开源项目应用（678行/12629字）
+- [x] 00 专栏导览（108行/1730字）
+- [x] 统一验证（11篇全量通过：篇幅/frontmatter/Mermaid/wiki死链0/code fence）
+- [x] CHANGELOG 记录（已追加 2026-09-08 记录）
+
+---
+
 # content 专栏 Tags 标签规范化项目
 
 ## 1. 需求理解
