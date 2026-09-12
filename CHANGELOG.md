@@ -2,6 +2,18 @@
 
 本文件记录 my-brain 数字花园的重大内容变更。
 
+## 2026-09-12
+
+### 脱敏：SRE 故障排查与复盘专栏全量脱敏（content/SRE/故障排查与复盘/ 共 14 篇）
+
+对目录下全部 Markdown 文件做统一脱敏替换，映射全文保持一致：
+
+- 主机名：`dnn130160/161`→`nn-01/nn-02`、`dnn136021`→`kdc-01`、`dnn014xxx/ddn*`→`dn-xxx`、`ecdn138011`→`ecdn-011`、`ht100185/100040`→`ats-01/02`、`yz-100-109`→`exporter-01`、`hs1/hs2`→`hs-01/02`
+- IP：按子网映射到 RFC5737 文档网段（`10.18.100.x`→`192.0.2.x`、`10.18.130.x`→`198.51.100.x`、其余→`203.0.113.x`），保留末位以维持同网段语义
+- 域名/Realm：`venus.sohurdc.com`→`hadoop.example.com`、`VENUS.SOHURDC.COM`→`HADOOP.EXAMPLE.COM`、`com.sohu.*`→`com.example.*`
+- 其他：`auth_pass` 真实口令→`********`、YARN 用户 `mbadp`→`appuser`、`ambari-server-ec`→`ambari-server`、署名 `lihaopeng`→`SRE 团队`、集群名 `H3/h3offline` 去除、fstab 磁盘 UUID 匿名化
+- 文件改名：`dnn014018-THP-khugepaged-死锁-根因分析-20260506.md`→`dn-018-...`，`images/` 下两张同名截图同步改名，索引与 SOP 内链接已更新
+
 ## 2026-09-06
 
 ### 重写：Golang 专栏全量重写（content/Golang/ 三个专栏共 25 篇）

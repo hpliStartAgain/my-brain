@@ -8,7 +8,7 @@
 ### 告警详情
 - **告警指标**：NodeManager（NM）节点本地磁盘存储使用率在短时间内急剧上升。
 - **数据表现**：在1小时内，单块磁盘的可用空间减少**15%**，累计消耗超过**800GB**。
-- **问题定位**：通过排查，在YARN的 `usercache` 目录下发现异常巨大的临时文件，路径为 `/data_i/hadoop/yarn/local/usercache/mbadp/appcache/application_1724243239726_2684`，总大小达到**1.3TB**。
+- **问题定位**：通过排查，在YARN的 `usercache` 目录下发现异常巨大的临时文件，路径为 `/data_i/hadoop/yarn/local/usercache/appuser/appcache/application_1724243239726_2684`，总大小达到**1.3TB**。
 
 ### 现场还原
 - **文件特征**：问题目录下存在大量名为 `temp-00000000` 格式的临时文件，每个文件大小约为11GB，并且在监控期间持续生成。

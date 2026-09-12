@@ -21,13 +21,13 @@ severity: P1-潜在
 坏盘事件
     │
     ▼
-/dev/sdm (UUID=0605c900-...) 物理磁盘故障，无备件暂不更换
+/dev/sdm (UUID=11111111-...) 物理磁盘故障，无备件暂不更换
     │
     ▼
 主机重启（进程重启 or 物理重启）
     │
     ▼
-内核 fstab 挂载阶段：UUID 0605c900-... 未找到（磁盘已死）
+内核 fstab 挂载阶段：UUID 11111111-... 未找到（磁盘已死）
 nofail → 挂载失败，静默跳过，系统正常启动 ✅
     │
     ▼
@@ -107,11 +107,11 @@ HDFS 的 `DiskChecker`（`dfs.datanode.disk.check.interval.ms` 默认每分钟�
 
 ---
 
-## 三、当前 fstab 配置分析（以 ddn013176 为例）
+## 三、当前 fstab 配置分析（以 dn-176 为例）
 
 ```ini
 # 数据盘（/data_b ~ /data_m）全部使用 UUID + nofail：
-UUID=0605c900-4903-4c79-a5a6-8f6eb4698e2e /data_m xfs \
+UUID=11111111-2222-3333-4444-555555555555 /data_m xfs \
   defaults,noatime,nodiratime,nobarrier,nodiscard,\
   allocsize=256m,logbufs=8,attr2,logbsize=256k,nofail 0 0
 ```
@@ -138,9 +138,9 @@ df -h | grep data_m    # 无输出则确认
 
 # 步骤 3：同步注释 fstab 中该行（防止后续混淆）
 # 在 /etc/fstab 中将 /data_m 行注释掉
-# UUID=0605c900-... /data_m xfs ... nofail 0 0
+# UUID=11111111-... /data_m xfs ... nofail 0 0
 # ↓ 改为
-# #UUID=0605c900-... /data_m xfs ... nofail 0 0  # DISK FAILED 2026-05-20
+# #UUID=11111111-... /data_m xfs ... nofail 0 0  # DISK FAILED 2026-05-20
 ```
 
 > [!warning] Ambari 推配置时的全局重启风险
@@ -302,7 +302,7 @@ UserParameter=datanode.mount.status,/usr/local/bin/datanode-mount-guard.sh > /de
 
     ▼
 ④ 注释 fstab 对应行（2min）
-    sed -i "s|^UUID=0605c900.*data_m.*|# &  # DISK FAILED $(date '+%Y-%m-%d')|" /etc/fstab
+    sed -i "s|^UUID=11111111.*data_m.*|# &  # DISK FAILED $(date '+%Y-%m-%d')|" /etc/fstab
 
     ▼
 ⑤ 验证（2min）

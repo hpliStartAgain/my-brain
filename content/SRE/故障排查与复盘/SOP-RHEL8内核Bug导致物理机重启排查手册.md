@@ -362,5 +362,5 @@ ansible all -m shell -a "journalctl -k --since '1 week ago' | grep 'refcount_t o
 
 ---
 
-**维护人**：lihaopeng  
+**维护人**：SRE 团队  
 **最后更新**：2026-04-21

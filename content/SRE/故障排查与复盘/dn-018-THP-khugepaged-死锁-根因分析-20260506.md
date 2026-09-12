@@ -1,5 +1,5 @@
 ---
-title: dnn014018 THP khugepaged 死锁导致系统级 D 状态雪崩根因分析
+title: dn-018 THP khugepaged 死锁导致系统级 D 状态雪崩根因分析
 date: 2026-05-07
 tags: [alloy, cgroups, deadlock, incident, khugepaged, linux-kernel, THP, 故障排查]
 domain: 集群日常运维
@@ -7,13 +7,13 @@ severity: P0
 status: resolved
 ---
 
-# dnn014018 THP khugepaged 死锁 — 根因分析报告
+# dn-018 THP khugepaged 死锁 — 根因分析报告
 
 ## 一、事件概要
 
 | 字段     | 内容                                                                                            |
 | ------ | --------------------------------------------------------------------------------------------- |
-| 故障主机   | dnn014018.venus.sohurdc.com（H3 离线集群，HiveServer2 / HBase 节点）                                   |
+| 故障主机   | dn-018.hadoop.example.com（离线集群，HiveServer2 / HBase 节点）                                   |
 | 内核版本   | 4.18.0-425.3.1.el8.x86\_64（RHEL 8）                                                            |
 | 故障开始   | 2026-05-06 约 19:00                                                                            |
 | 故障结束   | 2026-05-07，通过 `echo b > /proc/sysrq-trigger` 强制重启恢复                                           |
@@ -173,7 +173,7 @@ alloy 在内存中持有一个约 **93MB** 大小的、等待重试发送到 Lok
 
 **这个 93MB 的 batch 来自哪里？**
 
-来自 `hiveserver2-gc.log.0.current`（89MB）。alloy 采集该文件时，每次检测到文件被循环截断（`Re-opening truncated file`），就从 position 0 重新读取整个文件内容。由于 `h3offline_hs2_gc` job 没有配置 multiline，alloy 将整个文件内容合并为**一条 93MB 的超大日志条目**送入 pipeline。
+来自 `hiveserver2-gc.log.0.current`（89MB）。alloy 采集该文件时，每次检测到文件被循环截断（`Re-opening truncated file`），就从 position 0 重新读取整个文件内容。由于 `offline_hs2_gc` job 没有配置 multiline，alloy 将整个文件内容合并为**一条 93MB 的超大日志条目**送入 pipeline。
 
 **为什么 batch 一直留在内存中不释放？**
 

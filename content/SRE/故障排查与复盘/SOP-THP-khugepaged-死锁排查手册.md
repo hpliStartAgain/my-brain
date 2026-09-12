@@ -8,7 +8,7 @@ tags: [cgroups, deadlock, khugepaged, linux-kernel, SOP, THP, 故障排查]
 
 > **适用场景**：节点出现大量进程 D 状态、load 异常升高、`ps`/`top` 挂死，但 SSH 仍可登录，且怀疑与 THP / khugepaged / cgroup 内存 / 内核锁相关。
 >
-> 本 SOP 基于 dnn014018 2026-05-06 故障提炼，详见关联 RCA：[dnn014018-THP-khugepaged-死锁-根因分析-20260506.md](dnn014018-THP-khugepaged-死锁-根因分析-20260506.md)
+> 本 SOP 基于 dn-018 2026-05-06 故障提炼，详见关联 RCA：[dn-018-THP-khugepaged-死锁-根因分析-20260506.md](dn-018-THP-khugepaged-死锁-根因分析-20260506.md)
 
 ---
 
@@ -416,5 +416,5 @@ Go runtime 在分配堆内存时调用 `madvise(MADV_HUGEPAGE)`，将整个 Go h
 
 ---
 
-*文档版本：v2.0 | 作者：lihaopeng | 基于 dnn014018 2026-05-06 故障提炼*
-*关联 RCA：[dnn014018-THP-khugepaged-死锁-根因分析-20260506.md](dnn014018-THP-khugepaged-死锁-根因分析-20260506.md)*
+*文档版本：v2.0 | 作者：SRE 团队 | 基于 dn-018 2026-05-06 故障提炼*
+*关联 RCA：[dn-018-THP-khugepaged-死锁-根因分析-20260506.md](dn-018-THP-khugepaged-死锁-根因分析-20260506.md)*

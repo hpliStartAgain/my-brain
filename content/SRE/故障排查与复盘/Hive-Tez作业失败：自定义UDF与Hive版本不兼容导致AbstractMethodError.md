@@ -122,13 +122,13 @@ DESCRIBE FUNCTION EXTENDED parse_phone_no;
 
 ```bash
 javap -p -classpath hive-udf-1.0-jar-with-dependencies.jar \
-  com.sohu.huyou.ParsePhoneNo | head -3
+  com.example.udf.ParsePhoneNo | head -3
 ```
 
 输出：
 
 ```
-public class com.sohu.huyou.ParsePhoneNo
+public class com.example.udf.ParsePhoneNo
   extends org.apache.hadoop.hive.ql.exec.UDF {
 ```
 
@@ -137,7 +137,7 @@ public class com.sohu.huyou.ParsePhoneNo
 ### 3.4 梳理 jar 内所有自定义 UDF
 
 ```bash
-jar tf hive-udf-1.0-jar-with-dependencies.jar | grep "\.class$" | grep "sohu"
+jar tf hive-udf-1.0-jar-with-dependencies.jar | grep "\.class$" | grep "example"
 ```
 
 jar 内所有业务 UDF 类及其继承关系：
@@ -284,7 +284,7 @@ public class ParsePhoneNo extends GenericUDF {
 ```sql
 DROP FUNCTION IF EXISTS msns.parse_phone_no;
 CREATE FUNCTION msns.parse_phone_no
-    AS 'com.sohu.huyou.ParsePhoneNo'
+    AS 'com.example.udf.ParsePhoneNo'
     USING JAR 'hdfs:///path/to/udf-new.jar';
 ```
 
@@ -299,8 +299,8 @@ CREATE FUNCTION msns.parse_phone_no
 # Ambari → Hive → Configs → hive.jar.directory
 hdfs dfs -ls <hive.jar.directory>/ | grep hive-exec
 
-hdfs dfs -get <path>/hive-exec-*.jar /tmp/hive-exec-hs2.jar
-javap -classpath /tmp/hive-exec-hs2.jar \
+hdfs dfs -get <path>/hive-exec-*.jar /tmp/hive-exec-hs-02.jar
+javap -classpath /tmp/hive-exec-hs-02.jar \
   org.apache.hadoop.hive.ql.udf.generic.GenericUDF | grep initializeAndFoldConstants
 ```
 

@@ -9,7 +9,7 @@ severity: P1
 
 ## 故障现象
 
-物理机 `dnn014023`（Inspur SA5212M5）于 2026-04-21 17:05 发生重启。`/var/crash/` 目录生成了 kdump crash dump，`vmcore-dmesg.txt` 末尾显示内核 NULL 指针解引用 panic。
+物理机 `dn-023`（Inspur SA5212M5）于 2026-04-21 17:05 发生重启。`/var/crash/` 目录生成了 kdump crash dump，`vmcore-dmesg.txt` 末尾显示内核 NULL 指针解引用 panic。
 
 ```log
 [45897053.291296] BUG: unable to handle kernel NULL pointer dereference at 0000000000000000
@@ -183,7 +183,7 @@ dmesg / journalctl -k          /var/log/messages (rsyslog)      /var/crash/vmcor
                                     正常运行时写入，但会 logrotate       ❌ panic 瞬间的 BUG: 行不会写入
 ```
 
-**实际验证**（dnn014023 `/var/log/messages`）：
+**实际验证**（dn-023 `/var/log/messages`）：
 - `17:05:07` 最后一条正常日志 → `17:10:50` 重启后的第一条内核日志
 - 中间没有任何 `kernel:` 报错行 —— panic 时 rsyslog 无法写盘
 - `vmcore-dmesg.txt` 中 160+ 条 `refcount_t overflow` 和 `BUG:` 行全部由 kdump 捕获
@@ -306,7 +306,7 @@ chmod +x /tmp/check_refcount.sh && bash /tmp/check_refcount.sh
 
 ### 待办：Loki 实际查询验证
 
-> ⚠️ 当前 SRE Copilot 后端（`10.2.217.250:8080`）需要登录认证，无法直接通过 API 查询 Loki。待认证问题解决后，执行以下 LogQL 统计集群 refcount 溢出情况：
+> ⚠️ 当前 SRE Copilot 后端（`203.0.113.250:8080`）需要登录认证，无法直接通过 API 查询 Loki。待认证问题解决后，执行以下 LogQL 统计集群 refcount 溢出情况：
 >
 > ```logql
 > sum by(hostname) (count_over_time({service_name="linux-system"} |= "refcount_t overflow" [24h]))
@@ -323,5 +323,5 @@ chmod +x /tmp/check_refcount.sh && bash /tmp/check_refcount.sh
 ---
 
 **故障时间**：2026-04-21 17:05
-**影响范围**：单机 dnn014023（Inspur SA5212M5）
+**影响范围**：单机 dn-023（Inspur SA5212M5）
 **最终方案**：升级内核至 4.18.0-477+

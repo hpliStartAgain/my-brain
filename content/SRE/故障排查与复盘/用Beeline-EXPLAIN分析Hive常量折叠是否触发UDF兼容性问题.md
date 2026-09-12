@@ -99,7 +99,7 @@ EOF
 ## 第二步：执行 EXPLAIN 并保存输出
 
 ```bash
-HS2="jdbc:hive2://hs1.venus.sohurdc.com:10015/default"
+HS2="jdbc:hive2://hs-01.hadoop.example.com:10015/default"
 USER="your_username"
 
 beeline -u "$HS2" -n "$USER" -f /tmp/explain_fail.sql 2>/dev/null \

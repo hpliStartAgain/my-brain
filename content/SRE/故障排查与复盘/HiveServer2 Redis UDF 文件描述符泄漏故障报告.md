@@ -25,7 +25,7 @@
   
 ### 1.2 根本原因  
 
-  >[!FAIL] **自定义 UDF `com.sohu.adp.redis.AbstractRedisUDF` 存在严重的资源管理缺陷**：  
+  >[!FAIL] **自定义 UDF `com.example.adp.redis.AbstractRedisUDF` 存在严重的资源管理缺陷**：  
   >
   >1. **非单例连接池设计**: `redisClients` 被声明为**实例变量**而非静态变量  
 > 2. **编译期频繁实例化**: Hive 优化器在常量折叠/传播阶段会创建大量临时 UDF 实例  
@@ -394,7 +394,7 @@ public abstract class AbstractRedisUDF extends GenericUDF {
 2026-01-29T19:53:58 - Could not retrieve canonical hostname  
 2026-01-29T19:53:58 - Failed to connect to the MetaStore Server  
 2026-01-29T19:56:39 - java.net.SocketException: Too many open files  
-2026-01-29T19:57:26 - java.net.UnknownHostException: dnn014013  
+2026-01-29T19:57:26 - java.net.UnknownHostException: dn-013  
 ```  
   
 ### 8.2 JMX MBean 证据  

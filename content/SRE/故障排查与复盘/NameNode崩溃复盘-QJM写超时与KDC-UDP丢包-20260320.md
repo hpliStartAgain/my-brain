@@ -7,13 +7,13 @@ aliases: ["NN1崩溃", "QJM写超时", "KDC UDP丢包"]
 
 ## 摘要
 
-2026-03-20 02:37，NN1（dnn130160）因 HDFS QJM（QuorumJournalManager）写超时触发 `ExitUtil.terminate(1)`，ZKFC 随即将 NN2（dnn130161）切换为 Active。
+2026-03-20 02:37，NN1（nn-01）因 HDFS QJM（QuorumJournalManager）写超时触发 `ExitUtil.terminate(1)`，ZKFC 随即将 NN2（nn-02）切换为 Active。
 
 排查耗时约一周，先后排除了 JournalNode 异常、NameNode JVM GC STW 两个假设，最终通过 KDC 日志时序与 authtime 字段分析，将根因锁定为：
 
 > **Active NN 每日执行一次 Kerberos `reloginFromKeytab()`（fresh kinit）。3月20日 02:36:43，NN1 的 AS_REQ UDP 包被 KDC recv buffer 丢弃——NN1 无法完成 TGT 获取，所有 JournalNode 的 SASL 握手全部阻塞，20 秒内无响应触发 QJM 超时，NN1 崩溃。根本背景是 KDC 主机 UDP 接收缓冲区长期仅 208KB（Linux 默认最小值），累计 5072 万次溢出丢包。**
 
-此外，事后分析发现一个**加剧因素**：部署在 yz-100-109（10.18.100.109）上的 [[hadoop-exporter]] 存在两处实现缺陷——每次 Prometheus scrape 时对所有 DataNode 无并发限制地同时发起 TGS_REQ，且每次 scrape 都重建 Kerberos 客户端丢弃 ticket 缓存——导致其在崩溃前 **02:35:43 的 10 秒窗口内向 KDC 集中发出 1309 条请求**（正常背景流量的 54 倍），将 UDP recv buffer 打满，为 NN1 的 AS_REQ 被丢弃创造了直接条件。该行为自 2026-01-31 开始出现，是 1 月底以来 KDC 负载暴增约 3 倍的根本原因。
+此外，事后分析发现一个**加剧因素**：部署在 exporter-01（192.0.2.109）上的 [[hadoop-exporter]] 存在两处实现缺陷——每次 Prometheus scrape 时对所有 DataNode 无并发限制地同时发起 TGS_REQ，且每次 scrape 都重建 Kerberos 客户端丢弃 ticket 缓存——导致其在崩溃前 **02:35:43 的 10 秒窗口内向 KDC 集中发出 1309 条请求**（正常背景流量的 54 倍），将 UDP recv buffer 打满，为 NN1 的 AS_REQ 被丢弃创造了直接条件。该行为自 2026-01-31 开始出现，是 1 月底以来 KDC 负载暴增约 3 倍的根本原因。
 
 ---
 
@@ -74,10 +74,10 @@ Hadoop UGI 的 `checkTGTAndReloginFromKeytab()` 在每次 IPC 调用前被动检
 
 | NN 角色                  | 主机                  | kinit 间隔                   | 触发路径                  |
 | ---------------------- | ------------------- | -------------------------- | --------------------- |
-| **Active**（Mar 1~20）   | dnn130160 (NN1)     | ~24h（+49s/天漂移）             | 近期满检查，IPC 热路径驱动       |
-| **Standby**（Mar 1~20）  | dnn130161 (NN2)     | **19h12m ± 30s**（23次，极其精确） | 80% 窗口，后台刷新线程驱动       |
-| **Active**（Mar 20~24）  | dnn130161 (NN2，接管后） | ~24h（从 01:41 基准续延）         | 接管后切换为近期满检查           |
-| **Standby**（Mar 20~24） | dnn130160 (NN1，重启后） | **19h12m**（重启后立即切回）        | 退回 Standby 后切回 80% 路径 |
+| **Active**（Mar 1~20）   | nn-01 (NN1)     | ~24h（+49s/天漂移）             | 近期满检查，IPC 热路径驱动       |
+| **Standby**（Mar 1~20）  | nn-02 (NN2)     | **19h12m ± 30s**（23次，极其精确） | 80% 窗口，后台刷新线程驱动       |
+| **Active**（Mar 20~24）  | nn-02 (NN2，接管后） | ~24h（从 01:41 基准续延）         | 接管后切换为近期满检查           |
+| **Standby**（Mar 20~24） | nn-01 (NN1，重启后） | **19h12m**（重启后立即切回）        | 退回 Standby 后切回 80% 路径 |
 
 > [!note] 角色驱动路径切换
 > Active NN 处理密集 IPC 写请求，`checkTGTAndReloginFromKeytab()` 被频繁调用，最终由"剩余 < 60s"触发，时间点随执行开销每日后移约 49s。Standby NN 的某个后台刷新线程（`DelegationTokenRenewer` 或 Spnego filter）使用 80% 逻辑，间隔精确固定为 19h12m00s。**角色切换后间隔模式立即跟随切换，与物理主机无关。**
@@ -93,7 +93,7 @@ Hadoop UGI 的 `checkTGTAndReloginFromKeytab()` 在每次 IPC 调用前被动检
 | ------------------- | ----------------------------------------------------------------- |
 | Mar 1 ~ Mar 19      | NN1 每日 02:20~02:36 出现 JN 写 WARN（1~5s），与 KDC AS_REQ 时间完全吻合        |
 | Mar 20 01:41:27     | NN2（Standby）正常 AS_REQ，KDC ISSUE 成功，TGT 刷新                        |
-| Mar 20 **02:35:43** | **yz-100-109（hadoop-exporter）触发 Prometheus scrape，在 10s 内向 KDC 集中发出 1309 条 TGS_REQ**（正常背景流量 ~24 条/秒 的 54 倍）；其中 946 条因用裸 IP 构造 SPN（`HTTP/10.18.x.x`）而 `LOOKING_UP_SERVER`，363 条成功；UDP recv buffer 被打满 |
+| Mar 20 **02:35:43** | **exporter-01（hadoop-exporter）触发 Prometheus scrape，在 10s 内向 KDC 集中发出 1309 条 TGS_REQ**（正常背景流量 ~24 条/秒 的 54 倍）；其中 946 条因用裸 IP 构造 SPN（`HTTP/192.0.2.x`）而 `LOOKING_UP_SERVER`，363 条成功；UDP recv buffer 被打满 |
 | Mar 20 **02:36:43** | NN1 触发 `reloginFromKeytab()`，AS_REQ (UDP) 发出；**KDC recv buffer 仍满，包被内核丢弃，无 ISSUE 记录** |
 | Mar 20 02:36:43~    | Java Kerberos 库 UDP timeout → TCP fallback → 同样超时；无 TGT，SASL 握手无法建立 |
 | Mar 20 02:36:49     | `Waited 6001ms for sendEdits. No responses yet.`（首条 INFO）         |
@@ -222,9 +222,9 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    participant NN as "NN1 (dnn130160)"
+    participant NN as "NN1 (nn-01)"
     participant UGI as "Hadoop UGI"
-    participant KDC as "KDC (dnn136021)"
+    participant KDC as "KDC (kdc-01)"
     participant JNs as "3x JournalNode"
 
     Note over UGI,KDC: 02:36:43 reloginFromKeytab() 触发
@@ -259,11 +259,11 @@ sequenceDiagram
 ## 4. KDC UDP 接收缓冲区溢出——系统级隐患
 
 ```
-[@dnn136021 /var/log]# netstat -su | grep -iE "packet receive errors|receive buffer errors"
+[@kdc-01 /var/log]# netstat -su | grep -iE "packet receive errors|receive buffer errors"
     50720417 packet receive errors
     50720417 receive buffer errors
 
-[@dnn136021 /var/log]# sysctl net.core.rmem_max net.core.rmem_default
+[@kdc-01 /var/log]# sysctl net.core.rmem_max net.core.rmem_default
 net.core.rmem_max = 212992      # 208 KB — Linux 内核默认最小值
 net.core.rmem_default = 212992
 ```
@@ -291,24 +291,24 @@ MIT Kerberos 默认使用 **UDP 端口 88** 通信。客户端先发 UDP 请求�
 
 平时：AS_REQ 成功（或偶发 UDP 丢包后 TCP fallback 成功）→ 拿到 TGT → TGS_REQ 成功 → SASL + sendEdits 总耗时 1~5s，超过 1000ms 阈值但不致崩溃。
 
-3月20日：KDC 在 02:36:43 时刻对 NN1 的 AS_REQ（UDP + TCP 均）无响应超过 20s。**KDC 日志在 02:36:43~02:37:03 期间，没有任何 NN1(130160) 的 AS_REQ ISSUE 记录**，而 NN2 在崩溃后 2s（02:37:05）的 AS_REQ 立即成功——说明是 02:36:43 特定时刻的瞬时不可用，而非持续故障。
+3月20日：KDC 在 02:36:43 时刻对 NN1 的 AS_REQ（UDP + TCP 均）无响应超过 20s。**KDC 日志在 02:36:43~02:37:03 期间，没有任何 NN1(nn-01) 的 AS_REQ ISSUE 记录**，而 NN2 在崩溃后 2s（02:37:05）的 AS_REQ 立即成功——说明是 02:36:43 特定时刻的瞬时不可用，而非持续故障。
 
 **加剧因素：retry storm 维持 KDC 高压**
 
-KDC 日志显示，从 130160 发出的 `ambari-server-ec@` AS_REQ 在 02:48~02:49 的 1 分钟内出现 30+ 条密集请求——这是 Kerberos 客户端 retry storm：KDC 无响应 → 快速重试 → 每次重试再占一个 UDP buffer slot → 加剧溢出 → 更多超时 → 更多重试。dnn130160 上运行多个服务进程（`hdfs@`、`HTTP/`、`jhs/`、`ambari-server-ec@`、`nn/` 等），各自维护独立 TGT，并发 kinit 风暴是 208KB 缓冲区长期处于临界状态的直接成因。
+KDC 日志显示，从 nn-01 发出的 `ambari-server@` AS_REQ 在 02:48~02:49 的 1 分钟内出现 30+ 条密集请求——这是 Kerberos 客户端 retry storm：KDC 无响应 → 快速重试 → 每次重试再占一个 UDP buffer slot → 加剧溢出 → 更多超时 → 更多重试。nn-01 上运行多个服务进程（`hdfs@`、`HTTP/`、`jhs/`、`ambari-server@`、`nn/` 等），各自维护独立 TGT，并发 kinit 风暴是 208KB 缓冲区长期处于临界状态的直接成因。
 
 ---
 
 ## 4.1 加剧因素：hadoop-exporter 并发 TGS_REQ 雷群效应
 
-KDC 日志在崩溃前 **02:35:43** 的 10 秒窗口内，记录到来自 **10.18.100.109（yz-100-109，hadoop-exporter 部署主机）** 的 1309 条 TGS_REQ，是同期正常背景流量（~24 条/秒）的 **54 倍**。
+KDC 日志在崩溃前 **02:35:43** 的 10 秒窗口内，记录到来自 **192.0.2.109（exporter-01，hadoop-exporter 部署主机）** 的 1309 条 TGS_REQ，是同期正常背景流量（~24 条/秒）的 **54 倍**。
 
 **行为特征**：
 
 | 类型 | 数量 | 原因 |
 |---|---|---|
-| 成功（ISSUE） | 363 条 | `HTTP/ddn130120`、`HTTP/ecdn138011` 等 hostname 形式，KDC 正常处理 |
-| 失败（LOOKING_UP_SERVER） | 946 条 | `HTTP/10.18.138.156` 等裸 IP 形式，KDC 无对应 principal |
+| 成功（ISSUE） | 363 条 | `HTTP/dn-120`、`HTTP/ecdn-011` 等 hostname 形式，KDC 正常处理 |
+| 失败（LOOKING_UP_SERVER） | 946 条 | `HTTP/203.0.113.156` 等裸 IP 形式，KDC 无对应 principal |
 
 **两处代码缺陷**共同导致了这次雷群效应：
 
@@ -316,7 +316,7 @@ KDC 日志在崩溃前 **02:35:43** 的 10 秒窗口内，记录到来自 **10.1
 
 **缺陷二：每次 scrape 丢弃 ticket 缓存**。`Collect()` 每次新建 `Scraper` → 新建 `http.Client` → 新建 `SPNEGOTransport` → 新建 `krb5Client`。gokrb5 的 service ticket 缓存存在 `krb5Client` 的内存 sessions map 中，对象销毁缓存即消失。每 60 秒 scrape 一次 = 每 60 秒重申请 200+ 张 TGS_REQ，而非 ticket 过期（10h）才重申请。
 
-**缺陷三：SPNEGO SPN 使用裸 IP**。NameNode `NameNodeInfo` JMX 返回的 `LiveNodes` 列表中，未配置 `dfs.datanode.hostname` 的 DataNode 以 IP 形式注册。`SPNEGOTransport.RoundTrip()` 直接取 `req.URL.Hostname()` 构造 SPN，`HTTP/10.18.x.x` 在 KDC 无对应 principal → `LOOKING_UP_SERVER`，这 946 条无效请求占用了大量 KDC UDP buffer 处理能力。
+**缺陷三：SPNEGO SPN 使用裸 IP**。NameNode `NameNodeInfo` JMX 返回的 `LiveNodes` 列表中，未配置 `dfs.datanode.hostname` 的 DataNode 以 IP 形式注册。`SPNEGOTransport.RoundTrip()` 直接取 `req.URL.Hostname()` 构造 SPN，`HTTP/192.0.2.x` 在 KDC 无对应 principal → `LOOKING_UP_SERVER`，这 946 条无效请求占用了大量 KDC UDP buffer 处理能力。
 
 **该行为自 2026-01-31 开始出现**（与集群可观测建设新增 DataNode 采集时间吻合），是 1 月底以来 KDC TGS_REQ 负载暴增约 3 倍的根本原因，也是使 208KB recv buffer 长期处于溢出临界状态的持续压力来源。
 
@@ -343,7 +343,7 @@ KDC 日志在崩溃前 **02:35:43** 的 10 秒窗口内，记录到来自 **10.1
 
 ### 5.2 根治 KDC UDP 丢包问题
 
-**调大 KDC 主机的 UDP 接收缓冲区**（在 dnn136021 上执行）：
+**调大 KDC 主机的 UDP 接收缓冲区**（在 kdc-01 上执行）：
 
 ```bash
 # 临时生效（立即）
@@ -394,7 +394,7 @@ export SCRAPE_MAX_CONCURRENCY=20
 
 **修复三：SPNEGO SPN IP→hostname 反向解析**
 
-`SPNEGOTransport.RoundTrip()` 在构造 SPN 前检测 IP，自动执行 `net.LookupAddr()` 反向解析，将 `HTTP/10.18.138.156` 纠正为 `HTTP/ddn130120`，消除 `LOOKING_UP_SERVER` 错误。
+`SPNEGOTransport.RoundTrip()` 在构造 SPN 前检测 IP，自动执行 `net.LookupAddr()` 反向解析，将 `HTTP/203.0.113.156` 纠正为 `HTTP/dn-120`，消除 `LOOKING_UP_SERVER` 错误。
 
 > 根治方案：在所有 DataNode 的 `hdfs-site.xml` 中显式配置 `dfs.datanode.hostname`，从源头保证 NameNode 返回 hostname 而非 IP。
 
@@ -424,10 +424,10 @@ cat /var/kerberos/krb5kdc/kpropd.acl
 
 ```ini
 [realms]
-  VENUS.SOHURDC.COM = {
-    kdc = dnn136021.venus.sohurdc.com    # Primary
+  HADOOP.EXAMPLE.COM = {
+    kdc = kdc-01.hadoop.example.com    # Primary
     kdc = <slave-kdc-hostname>            # Slave（从 kpropd.acl 查得）
-    admin_server = dnn136021.venus.sohurdc.com
+    admin_server = kdc-01.hadoop.example.com
   }
 ```
 
@@ -503,80 +503,80 @@ ls -lh /var/log/krb5kdc.log*
 ```bash
 # 提取 NN1 的 nn/ principal AS_REQ 完整序列
 ionice -c 3 nice -n 19 grep "AS_REQ" /var/log/krb5kdc.log \
-  | grep "nn/dnn130160"
+  | grep "nn/nn-01"
 
 # 验证 Mar 20 崩溃窗口无 AS_REQ（关键证据）
 ionice -c 3 nice -n 19 grep "AS_REQ" /var/log/krb5kdc.log \
-  | grep "nn/dnn130160" \
+  | grep "nn/nn-01" \
   | grep "Mar 20"
 # 预期：仅 02:51:45 和 02:52:46（崩溃后重启），无 02:36:xx 记录
 
 # 对比 NN2 Standby 期间 19h12m 间隔规律
 ionice -c 3 nice -n 19 grep "AS_REQ" /var/log/krb5kdc.log \
-  | grep "nn/dnn130161" \
+  | grep "nn/nn-02" \
   | awk '{print $1,$2,$3}'
 ```
 
 **结果输出**：
 
 ```bash
-[@dnn136021.venus.sohurdc.com /var/log]#  ionice -c 3 nice -n 19 grep "AS_REQ" /var/log/krb5kdc.log   | grep "10\.18\.130\.160"   | grep "nn/dnn130160"
-Mar 02 02:22:26 dnn136021.venus.sohurdc.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 10.18.130.160: ISSUE: authtime 1772389346, etypes {rep=18 tkt=18 ses=18}, nn/dnn130160.venus.sohurdc.com@VENUS.SOHURDC.COM for krbtgt/VENUS.SOHURDC.COM@VENUS.SOHURDC.COM
-Mar 03 02:23:48 dnn136021.venus.sohurdc.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 10.18.130.160: ISSUE: authtime 1772475828, etypes {rep=18 tkt=18 ses=18}, nn/dnn130160.venus.sohurdc.com@VENUS.SOHURDC.COM for krbtgt/VENUS.SOHURDC.COM@VENUS.SOHURDC.COM
-Mar 04 02:25:23 dnn136021.venus.sohurdc.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 10.18.130.160: ISSUE: authtime 1772562323, etypes {rep=18 tkt=18 ses=18}, nn/dnn130160.venus.sohurdc.com@VENUS.SOHURDC.COM for krbtgt/VENUS.SOHURDC.COM@VENUS.SOHURDC.COM
-Mar 05 02:26:53 dnn136021.venus.sohurdc.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 10.18.130.160: ISSUE: authtime 1772648813, etypes {rep=18 tkt=18 ses=18}, nn/dnn130160.venus.sohurdc.com@VENUS.SOHURDC.COM for krbtgt/VENUS.SOHURDC.COM@VENUS.SOHURDC.COM
-Mar 06 02:27:32 dnn136021.venus.sohurdc.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 10.18.130.160: ISSUE: authtime 1772735252, etypes {rep=18 tkt=18 ses=18}, nn/dnn130160.venus.sohurdc.com@VENUS.SOHURDC.COM for krbtgt/VENUS.SOHURDC.COM@VENUS.SOHURDC.COM
-Mar 07 02:27:57 dnn136021.venus.sohurdc.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 10.18.130.160: ISSUE: authtime 1772821677, etypes {rep=18 tkt=18 ses=18}, nn/dnn130160.venus.sohurdc.com@VENUS.SOHURDC.COM for krbtgt/VENUS.SOHURDC.COM@VENUS.SOHURDC.COM
-Mar 08 02:28:53 dnn136021.venus.sohurdc.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 10.18.130.160: ISSUE: authtime 1772908133, etypes {rep=18 tkt=18 ses=18}, nn/dnn130160.venus.sohurdc.com@VENUS.SOHURDC.COM for krbtgt/VENUS.SOHURDC.COM@VENUS.SOHURDC.COM
-Mar 09 02:30:02 dnn136021.venus.sohurdc.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 10.18.130.160: ISSUE: authtime 1772994602, etypes {rep=18 tkt=18 ses=18}, nn/dnn130160.venus.sohurdc.com@VENUS.SOHURDC.COM for krbtgt/VENUS.SOHURDC.COM@VENUS.SOHURDC.COM
-Mar 10 02:30:23 dnn136021.venus.sohurdc.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 10.18.130.160: ISSUE: authtime 1773081023, etypes {rep=18 tkt=18 ses=18}, nn/dnn130160.venus.sohurdc.com@VENUS.SOHURDC.COM for krbtgt/VENUS.SOHURDC.COM@VENUS.SOHURDC.COM
-Mar 11 02:30:57 dnn136021.venus.sohurdc.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 10.18.130.160: ISSUE: authtime 1773167457, etypes {rep=18 tkt=18 ses=18}, nn/dnn130160.venus.sohurdc.com@VENUS.SOHURDC.COM for krbtgt/VENUS.SOHURDC.COM@VENUS.SOHURDC.COM
-Mar 12 02:31:39 dnn136021.venus.sohurdc.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 10.18.130.160: ISSUE: authtime 1773253899, etypes {rep=18 tkt=18 ses=18}, nn/dnn130160.venus.sohurdc.com@VENUS.SOHURDC.COM for krbtgt/VENUS.SOHURDC.COM@VENUS.SOHURDC.COM
-Mar 13 02:32:16 dnn136021.venus.sohurdc.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 10.18.130.160: ISSUE: authtime 1773340336, etypes {rep=18 tkt=18 ses=18}, nn/dnn130160.venus.sohurdc.com@VENUS.SOHURDC.COM for krbtgt/VENUS.SOHURDC.COM@VENUS.SOHURDC.COM
-Mar 14 02:32:22 dnn136021.venus.sohurdc.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 10.18.130.160: ISSUE: authtime 1773426742, etypes {rep=18 tkt=18 ses=18}, nn/dnn130160.venus.sohurdc.com@VENUS.SOHURDC.COM for krbtgt/VENUS.SOHURDC.COM@VENUS.SOHURDC.COM
-Mar 15 02:32:57 dnn136021.venus.sohurdc.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 10.18.130.160: ISSUE: authtime 1773513177, etypes {rep=18 tkt=18 ses=18}, nn/dnn130160.venus.sohurdc.com@VENUS.SOHURDC.COM for krbtgt/VENUS.SOHURDC.COM@VENUS.SOHURDC.COM
-Mar 16 02:33:06 dnn136021.venus.sohurdc.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 10.18.130.160: ISSUE: authtime 1773599586, etypes {rep=18 tkt=18 ses=18}, nn/dnn130160.venus.sohurdc.com@VENUS.SOHURDC.COM for krbtgt/VENUS.SOHURDC.COM@VENUS.SOHURDC.COM
-Mar 17 02:34:33 dnn136021.venus.sohurdc.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 10.18.130.160: ISSUE: authtime 1773686073, etypes {rep=18 tkt=18 ses=18}, nn/dnn130160.venus.sohurdc.com@VENUS.SOHURDC.COM for krbtgt/VENUS.SOHURDC.COM@VENUS.SOHURDC.COM
-Mar 18 02:36:12 dnn136021.venus.sohurdc.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 10.18.130.160: ISSUE: authtime 1773772572, etypes {rep=18 tkt=18 ses=18}, nn/dnn130160.venus.sohurdc.com@VENUS.SOHURDC.COM for krbtgt/VENUS.SOHURDC.COM@VENUS.SOHURDC.COM
-Mar 19 02:36:21 dnn136021.venus.sohurdc.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 10.18.130.160: ISSUE: authtime 1773858981, etypes {rep=18 tkt=18 ses=18}, nn/dnn130160.venus.sohurdc.com@VENUS.SOHURDC.COM for krbtgt/VENUS.SOHURDC.COM@VENUS.SOHURDC.COM
-Mar 20 02:51:45 dnn136021.venus.sohurdc.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 10.18.130.160: ISSUE: authtime 1773946305, etypes {rep=18 tkt=18 ses=18}, nn/dnn130160.venus.sohurdc.com@VENUS.SOHURDC.COM for krbtgt/VENUS.SOHURDC.COM@VENUS.SOHURDC.COM
-Mar 20 02:52:46 dnn136021.venus.sohurdc.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 10.18.130.160: ISSUE: authtime 1773946366, etypes {rep=18 tkt=18 ses=18}, nn/dnn130160.venus.sohurdc.com@VENUS.SOHURDC.COM for krbtgt/VENUS.SOHURDC.COM@VENUS.SOHURDC.COM
-Mar 20 22:04:12 dnn136021.venus.sohurdc.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 10.18.130.160: ISSUE: authtime 1774015452, etypes {rep=18 tkt=18 ses=18}, nn/dnn130160.venus.sohurdc.com@VENUS.SOHURDC.COM for krbtgt/VENUS.SOHURDC.COM@VENUS.SOHURDC.COM
-Mar 21 17:16:40 dnn136021.venus.sohurdc.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 10.18.130.160: ISSUE: authtime 1774084600, etypes {rep=18 tkt=18 ses=18}, nn/dnn130160.venus.sohurdc.com@VENUS.SOHURDC.COM for krbtgt/VENUS.SOHURDC.COM@VENUS.SOHURDC.COM
-Mar 22 12:29:07 dnn136021.venus.sohurdc.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 10.18.130.160: ISSUE: authtime 1774153747, etypes {rep=18 tkt=18 ses=18}, nn/dnn130160.venus.sohurdc.com@VENUS.SOHURDC.COM for krbtgt/VENUS.SOHURDC.COM@VENUS.SOHURDC.COM
-Mar 23 07:41:38 dnn136021.venus.sohurdc.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 10.18.130.160: ISSUE: authtime 1774222898, etypes {rep=18 tkt=18 ses=18}, nn/dnn130160.venus.sohurdc.com@VENUS.SOHURDC.COM for krbtgt/VENUS.SOHURDC.COM@VENUS.SOHURDC.COM
-Mar 24 02:54:06 dnn136021.venus.sohurdc.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 10.18.130.160: ISSUE: authtime 1774292046, etypes {rep=18 tkt=18 ses=18}, nn/dnn130160.venus.sohurdc.com@VENUS.SOHURDC.COM for krbtgt/VENUS.SOHURDC.COM@VENUS.SOHURDC.COM
-[@dnn136021.venus.sohurdc.com /var/log]#  ionice -c 3 nice -n 19 grep "AS_REQ" /var/log/krb5kdc.log   | grep "10\.18\.130\.161"   | grep "nn/dnn130161"
-Mar 01 15:55:42 dnn136021.venus.sohurdc.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 10.18.130.161: ISSUE: authtime 1772351742, etypes {rep=18 tkt=18 ses=18}, nn/dnn130161.venus.sohurdc.com@VENUS.SOHURDC.COM for krbtgt/VENUS.SOHURDC.COM@VENUS.SOHURDC.COM
-Mar 02 11:08:13 dnn136021.venus.sohurdc.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 10.18.130.161: ISSUE: authtime 1772420893, etypes {rep=18 tkt=18 ses=18}, nn/dnn130161.venus.sohurdc.com@VENUS.SOHURDC.COM for krbtgt/VENUS.SOHURDC.COM@VENUS.SOHURDC.COM
-Mar 03 06:20:43 dnn136021.venus.sohurdc.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 10.18.130.161: ISSUE: authtime 1772490043, etypes {rep=18 tkt=18 ses=18}, nn/dnn130161.venus.sohurdc.com@VENUS.SOHURDC.COM for krbtgt/VENUS.SOHURDC.COM@VENUS.SOHURDC.COM
-Mar 04 01:33:09 dnn136021.venus.sohurdc.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 10.18.130.161: ISSUE: authtime 1772559189, etypes {rep=18 tkt=18 ses=18}, nn/dnn130161.venus.sohurdc.com@VENUS.SOHURDC.COM for krbtgt/VENUS.SOHURDC.COM@VENUS.SOHURDC.COM
-Mar 04 20:45:12 dnn136021.venus.sohurdc.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 10.18.130.161: ISSUE: authtime 1772628312, etypes {rep=18 tkt=18 ses=18}, nn/dnn130161.venus.sohurdc.com@VENUS.SOHURDC.COM for krbtgt/VENUS.SOHURDC.COM@VENUS.SOHURDC.COM
-Mar 05 15:57:59 dnn136021.venus.sohurdc.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 10.18.130.161: ISSUE: authtime 1772697479, etypes {rep=18 tkt=18 ses=18}, nn/dnn130161.venus.sohurdc.com@VENUS.SOHURDC.COM for krbtgt/VENUS.SOHURDC.COM@VENUS.SOHURDC.COM
-Mar 06 11:10:28 dnn136021.venus.sohurdc.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 10.18.130.161: ISSUE: authtime 1772766628, etypes {rep=18 tkt=18 ses=18}, nn/dnn130161.venus.sohurdc.com@VENUS.SOHURDC.COM for krbtgt/VENUS.SOHURDC.COM@VENUS.SOHURDC.COM
-Mar 07 06:22:59 dnn136021.venus.sohurdc.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 10.18.130.161: ISSUE: authtime 1772835779, etypes {rep=18 tkt=18 ses=18}, nn/dnn130161.venus.sohurdc.com@VENUS.SOHURDC.COM for krbtgt/VENUS.SOHURDC.COM@VENUS.SOHURDC.COM
-Mar 08 01:35:27 dnn136021.venus.sohurdc.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 10.18.130.161: ISSUE: authtime 1772904927, etypes {rep=18 tkt=18 ses=18}, nn/dnn130161.venus.sohurdc.com@VENUS.SOHURDC.COM for krbtgt/VENUS.SOHURDC.COM@VENUS.SOHURDC.COM
-Mar 08 20:47:57 dnn136021.venus.sohurdc.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 10.18.130.161: ISSUE: authtime 1772974077, etypes {rep=18 tkt=18 ses=18}, nn/dnn130161.venus.sohurdc.com@VENUS.SOHURDC.COM for krbtgt/VENUS.SOHURDC.COM@VENUS.SOHURDC.COM
-Mar 09 16:00:02 dnn136021.venus.sohurdc.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 10.18.130.161: ISSUE: authtime 1773043202, etypes {rep=18 tkt=18 ses=18}, nn/dnn130161.venus.sohurdc.com@VENUS.SOHURDC.COM for krbtgt/VENUS.SOHURDC.COM@VENUS.SOHURDC.COM
-Mar 10 11:12:47 dnn136021.venus.sohurdc.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 10.18.130.161: ISSUE: authtime 1773112367, etypes {rep=18 tkt=18 ses=18}, nn/dnn130161.venus.sohurdc.com@VENUS.SOHURDC.COM for krbtgt/VENUS.SOHURDC.COM@VENUS.SOHURDC.COM
-Mar 11 06:25:18 dnn136021.venus.sohurdc.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 10.18.130.161: ISSUE: authtime 1773181518, etypes {rep=18 tkt=18 ses=18}, nn/dnn130161.venus.sohurdc.com@VENUS.SOHURDC.COM for krbtgt/VENUS.SOHURDC.COM@VENUS.SOHURDC.COM
-Mar 12 01:37:23 dnn136021.venus.sohurdc.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 10.18.130.161: ISSUE: authtime 1773250643, etypes {rep=18 tkt=18 ses=18}, nn/dnn130161.venus.sohurdc.com@VENUS.SOHURDC.COM for krbtgt/VENUS.SOHURDC.COM@VENUS.SOHURDC.COM
-Mar 12 20:50:19 dnn136021.venus.sohurdc.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 10.18.130.161: ISSUE: authtime 1773319819, etypes {rep=18 tkt=18 ses=18}, nn/dnn130161.venus.sohurdc.com@VENUS.SOHURDC.COM for krbtgt/VENUS.SOHURDC.COM@VENUS.SOHURDC.COM
-Mar 13 16:02:50 dnn136021.venus.sohurdc.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 10.18.130.161: ISSUE: authtime 1773388970, etypes {rep=18 tkt=18 ses=18}, nn/dnn130161.venus.sohurdc.com@VENUS.SOHURDC.COM for krbtgt/VENUS.SOHURDC.COM@VENUS.SOHURDC.COM
-Mar 14 11:15:03 dnn136021.venus.sohurdc.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 10.18.130.161: ISSUE: authtime 1773458103, etypes {rep=18 tkt=18 ses=18}, nn/dnn130161.venus.sohurdc.com@VENUS.SOHURDC.COM for krbtgt/VENUS.SOHURDC.COM@VENUS.SOHURDC.COM
-Mar 15 06:27:48 dnn136021.venus.sohurdc.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 10.18.130.161: ISSUE: authtime 1773527268, etypes {rep=18 tkt=18 ses=18}, nn/dnn130161.venus.sohurdc.com@VENUS.SOHURDC.COM for krbtgt/VENUS.SOHURDC.COM@VENUS.SOHURDC.COM
-Mar 16 01:40:19 dnn136021.venus.sohurdc.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 10.18.130.161: ISSUE: authtime 1773596419, etypes {rep=18 tkt=18 ses=18}, nn/dnn130161.venus.sohurdc.com@VENUS.SOHURDC.COM for krbtgt/VENUS.SOHURDC.COM@VENUS.SOHURDC.COM
-Mar 16 20:52:50 dnn136021.venus.sohurdc.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 10.18.130.161: ISSUE: authtime 1773665570, etypes {rep=18 tkt=18 ses=18}, nn/dnn130161.venus.sohurdc.com@VENUS.SOHURDC.COM for krbtgt/VENUS.SOHURDC.COM@VENUS.SOHURDC.COM
-Mar 17 16:04:54 dnn136021.venus.sohurdc.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 10.18.130.161: ISSUE: authtime 1773734694, etypes {rep=18 tkt=18 ses=18}, nn/dnn130161.venus.sohurdc.com@VENUS.SOHURDC.COM for krbtgt/VENUS.SOHURDC.COM@VENUS.SOHURDC.COM
-Mar 18 11:17:03 dnn136021.venus.sohurdc.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 10.18.130.161: ISSUE: authtime 1773803823, etypes {rep=18 tkt=18 ses=18}, nn/dnn130161.venus.sohurdc.com@VENUS.SOHURDC.COM for krbtgt/VENUS.SOHURDC.COM@VENUS.SOHURDC.COM
-Mar 19 06:29:17 dnn136021.venus.sohurdc.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 10.18.130.161: ISSUE: authtime 1773872957, etypes {rep=18 tkt=18 ses=18}, nn/dnn130161.venus.sohurdc.com@VENUS.SOHURDC.COM for krbtgt/VENUS.SOHURDC.COM@VENUS.SOHURDC.COM
-Mar 20 01:41:27 dnn136021.venus.sohurdc.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 10.18.130.161: ISSUE: authtime 1773942087, etypes {rep=18 tkt=18 ses=18}, nn/dnn130161.venus.sohurdc.com@VENUS.SOHURDC.COM for krbtgt/VENUS.SOHURDC.COM@VENUS.SOHURDC.COM
-Mar 20 02:37:05 dnn136021.venus.sohurdc.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 10.18.130.161: ISSUE: authtime 1773945425, etypes {rep=18 tkt=18 ses=18}, nn/dnn130161.venus.sohurdc.com@VENUS.SOHURDC.COM for krbtgt/VENUS.SOHURDC.COM@VENUS.SOHURDC.COM
-Mar 21 01:41:36 dnn136021.venus.sohurdc.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 10.18.130.161: ISSUE: authtime 1774028496, etypes {rep=18 tkt=18 ses=18}, nn/dnn130161.venus.sohurdc.com@VENUS.SOHURDC.COM for krbtgt/VENUS.SOHURDC.COM@VENUS.SOHURDC.COM
-Mar 22 01:42:10 dnn136021.venus.sohurdc.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 10.18.130.161: ISSUE: authtime 1774114930, etypes {rep=18 tkt=18 ses=18}, nn/dnn130161.venus.sohurdc.com@VENUS.SOHURDC.COM for krbtgt/VENUS.SOHURDC.COM@VENUS.SOHURDC.COM
-Mar 23 01:42:55 dnn136021.venus.sohurdc.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 10.18.130.161: ISSUE: authtime 1774201375, etypes {rep=18 tkt=18 ses=18}, nn/dnn130161.venus.sohurdc.com@VENUS.SOHURDC.COM for krbtgt/VENUS.SOHURDC.COM@VENUS.SOHURDC.COM
-Mar 24 01:42:55 dnn136021.venus.sohurdc.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 10.18.130.161: ISSUE: authtime 1774287775, etypes {rep=18 tkt=18 ses=18}, nn/dnn130161.venus.sohurdc.com@VENUS.SOHURDC.COM for krbtgt/VENUS.SOHURDC.COM@VENUS.SOHURDC.COM
-[@dnn136021.venus.sohurdc.com /var/log]# 
+[@kdc-01.hadoop.example.com /var/log]#  ionice -c 3 nice -n 19 grep "AS_REQ" /var/log/krb5kdc.log   | grep "10\.18\.130\.160"   | grep "nn/nn-01"
+Mar 02 02:22:26 kdc-01.hadoop.example.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 198.51.100.160: ISSUE: authtime 1772389346, etypes {rep=18 tkt=18 ses=18}, nn/nn-01.hadoop.example.com@HADOOP.EXAMPLE.COM for krbtgt/HADOOP.EXAMPLE.COM@HADOOP.EXAMPLE.COM
+Mar 03 02:23:48 kdc-01.hadoop.example.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 198.51.100.160: ISSUE: authtime 1772475828, etypes {rep=18 tkt=18 ses=18}, nn/nn-01.hadoop.example.com@HADOOP.EXAMPLE.COM for krbtgt/HADOOP.EXAMPLE.COM@HADOOP.EXAMPLE.COM
+Mar 04 02:25:23 kdc-01.hadoop.example.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 198.51.100.160: ISSUE: authtime 1772562323, etypes {rep=18 tkt=18 ses=18}, nn/nn-01.hadoop.example.com@HADOOP.EXAMPLE.COM for krbtgt/HADOOP.EXAMPLE.COM@HADOOP.EXAMPLE.COM
+Mar 05 02:26:53 kdc-01.hadoop.example.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 198.51.100.160: ISSUE: authtime 1772648813, etypes {rep=18 tkt=18 ses=18}, nn/nn-01.hadoop.example.com@HADOOP.EXAMPLE.COM for krbtgt/HADOOP.EXAMPLE.COM@HADOOP.EXAMPLE.COM
+Mar 06 02:27:32 kdc-01.hadoop.example.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 198.51.100.160: ISSUE: authtime 1772735252, etypes {rep=18 tkt=18 ses=18}, nn/nn-01.hadoop.example.com@HADOOP.EXAMPLE.COM for krbtgt/HADOOP.EXAMPLE.COM@HADOOP.EXAMPLE.COM
+Mar 07 02:27:57 kdc-01.hadoop.example.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 198.51.100.160: ISSUE: authtime 1772821677, etypes {rep=18 tkt=18 ses=18}, nn/nn-01.hadoop.example.com@HADOOP.EXAMPLE.COM for krbtgt/HADOOP.EXAMPLE.COM@HADOOP.EXAMPLE.COM
+Mar 08 02:28:53 kdc-01.hadoop.example.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 198.51.100.160: ISSUE: authtime 1772908133, etypes {rep=18 tkt=18 ses=18}, nn/nn-01.hadoop.example.com@HADOOP.EXAMPLE.COM for krbtgt/HADOOP.EXAMPLE.COM@HADOOP.EXAMPLE.COM
+Mar 09 02:30:02 kdc-01.hadoop.example.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 198.51.100.160: ISSUE: authtime 1772994602, etypes {rep=18 tkt=18 ses=18}, nn/nn-01.hadoop.example.com@HADOOP.EXAMPLE.COM for krbtgt/HADOOP.EXAMPLE.COM@HADOOP.EXAMPLE.COM
+Mar 10 02:30:23 kdc-01.hadoop.example.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 198.51.100.160: ISSUE: authtime 1773081023, etypes {rep=18 tkt=18 ses=18}, nn/nn-01.hadoop.example.com@HADOOP.EXAMPLE.COM for krbtgt/HADOOP.EXAMPLE.COM@HADOOP.EXAMPLE.COM
+Mar 11 02:30:57 kdc-01.hadoop.example.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 198.51.100.160: ISSUE: authtime 1773167457, etypes {rep=18 tkt=18 ses=18}, nn/nn-01.hadoop.example.com@HADOOP.EXAMPLE.COM for krbtgt/HADOOP.EXAMPLE.COM@HADOOP.EXAMPLE.COM
+Mar 12 02:31:39 kdc-01.hadoop.example.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 198.51.100.160: ISSUE: authtime 1773253899, etypes {rep=18 tkt=18 ses=18}, nn/nn-01.hadoop.example.com@HADOOP.EXAMPLE.COM for krbtgt/HADOOP.EXAMPLE.COM@HADOOP.EXAMPLE.COM
+Mar 13 02:32:16 kdc-01.hadoop.example.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 198.51.100.160: ISSUE: authtime 1773340336, etypes {rep=18 tkt=18 ses=18}, nn/nn-01.hadoop.example.com@HADOOP.EXAMPLE.COM for krbtgt/HADOOP.EXAMPLE.COM@HADOOP.EXAMPLE.COM
+Mar 14 02:32:22 kdc-01.hadoop.example.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 198.51.100.160: ISSUE: authtime 1773426742, etypes {rep=18 tkt=18 ses=18}, nn/nn-01.hadoop.example.com@HADOOP.EXAMPLE.COM for krbtgt/HADOOP.EXAMPLE.COM@HADOOP.EXAMPLE.COM
+Mar 15 02:32:57 kdc-01.hadoop.example.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 198.51.100.160: ISSUE: authtime 1773513177, etypes {rep=18 tkt=18 ses=18}, nn/nn-01.hadoop.example.com@HADOOP.EXAMPLE.COM for krbtgt/HADOOP.EXAMPLE.COM@HADOOP.EXAMPLE.COM
+Mar 16 02:33:06 kdc-01.hadoop.example.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 198.51.100.160: ISSUE: authtime 1773599586, etypes {rep=18 tkt=18 ses=18}, nn/nn-01.hadoop.example.com@HADOOP.EXAMPLE.COM for krbtgt/HADOOP.EXAMPLE.COM@HADOOP.EXAMPLE.COM
+Mar 17 02:34:33 kdc-01.hadoop.example.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 198.51.100.160: ISSUE: authtime 1773686073, etypes {rep=18 tkt=18 ses=18}, nn/nn-01.hadoop.example.com@HADOOP.EXAMPLE.COM for krbtgt/HADOOP.EXAMPLE.COM@HADOOP.EXAMPLE.COM
+Mar 18 02:36:12 kdc-01.hadoop.example.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 198.51.100.160: ISSUE: authtime 1773772572, etypes {rep=18 tkt=18 ses=18}, nn/nn-01.hadoop.example.com@HADOOP.EXAMPLE.COM for krbtgt/HADOOP.EXAMPLE.COM@HADOOP.EXAMPLE.COM
+Mar 19 02:36:21 kdc-01.hadoop.example.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 198.51.100.160: ISSUE: authtime 1773858981, etypes {rep=18 tkt=18 ses=18}, nn/nn-01.hadoop.example.com@HADOOP.EXAMPLE.COM for krbtgt/HADOOP.EXAMPLE.COM@HADOOP.EXAMPLE.COM
+Mar 20 02:51:45 kdc-01.hadoop.example.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 198.51.100.160: ISSUE: authtime 1773946305, etypes {rep=18 tkt=18 ses=18}, nn/nn-01.hadoop.example.com@HADOOP.EXAMPLE.COM for krbtgt/HADOOP.EXAMPLE.COM@HADOOP.EXAMPLE.COM
+Mar 20 02:52:46 kdc-01.hadoop.example.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 198.51.100.160: ISSUE: authtime 1773946366, etypes {rep=18 tkt=18 ses=18}, nn/nn-01.hadoop.example.com@HADOOP.EXAMPLE.COM for krbtgt/HADOOP.EXAMPLE.COM@HADOOP.EXAMPLE.COM
+Mar 20 22:04:12 kdc-01.hadoop.example.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 198.51.100.160: ISSUE: authtime 1774015452, etypes {rep=18 tkt=18 ses=18}, nn/nn-01.hadoop.example.com@HADOOP.EXAMPLE.COM for krbtgt/HADOOP.EXAMPLE.COM@HADOOP.EXAMPLE.COM
+Mar 21 17:16:40 kdc-01.hadoop.example.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 198.51.100.160: ISSUE: authtime 1774084600, etypes {rep=18 tkt=18 ses=18}, nn/nn-01.hadoop.example.com@HADOOP.EXAMPLE.COM for krbtgt/HADOOP.EXAMPLE.COM@HADOOP.EXAMPLE.COM
+Mar 22 12:29:07 kdc-01.hadoop.example.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 198.51.100.160: ISSUE: authtime 1774153747, etypes {rep=18 tkt=18 ses=18}, nn/nn-01.hadoop.example.com@HADOOP.EXAMPLE.COM for krbtgt/HADOOP.EXAMPLE.COM@HADOOP.EXAMPLE.COM
+Mar 23 07:41:38 kdc-01.hadoop.example.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 198.51.100.160: ISSUE: authtime 1774222898, etypes {rep=18 tkt=18 ses=18}, nn/nn-01.hadoop.example.com@HADOOP.EXAMPLE.COM for krbtgt/HADOOP.EXAMPLE.COM@HADOOP.EXAMPLE.COM
+Mar 24 02:54:06 kdc-01.hadoop.example.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 198.51.100.160: ISSUE: authtime 1774292046, etypes {rep=18 tkt=18 ses=18}, nn/nn-01.hadoop.example.com@HADOOP.EXAMPLE.COM for krbtgt/HADOOP.EXAMPLE.COM@HADOOP.EXAMPLE.COM
+[@kdc-01.hadoop.example.com /var/log]#  ionice -c 3 nice -n 19 grep "AS_REQ" /var/log/krb5kdc.log   | grep "10\.18\.130\.161"   | grep "nn/nn-02"
+Mar 01 15:55:42 kdc-01.hadoop.example.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 198.51.100.161: ISSUE: authtime 1772351742, etypes {rep=18 tkt=18 ses=18}, nn/nn-02.hadoop.example.com@HADOOP.EXAMPLE.COM for krbtgt/HADOOP.EXAMPLE.COM@HADOOP.EXAMPLE.COM
+Mar 02 11:08:13 kdc-01.hadoop.example.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 198.51.100.161: ISSUE: authtime 1772420893, etypes {rep=18 tkt=18 ses=18}, nn/nn-02.hadoop.example.com@HADOOP.EXAMPLE.COM for krbtgt/HADOOP.EXAMPLE.COM@HADOOP.EXAMPLE.COM
+Mar 03 06:20:43 kdc-01.hadoop.example.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 198.51.100.161: ISSUE: authtime 1772490043, etypes {rep=18 tkt=18 ses=18}, nn/nn-02.hadoop.example.com@HADOOP.EXAMPLE.COM for krbtgt/HADOOP.EXAMPLE.COM@HADOOP.EXAMPLE.COM
+Mar 04 01:33:09 kdc-01.hadoop.example.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 198.51.100.161: ISSUE: authtime 1772559189, etypes {rep=18 tkt=18 ses=18}, nn/nn-02.hadoop.example.com@HADOOP.EXAMPLE.COM for krbtgt/HADOOP.EXAMPLE.COM@HADOOP.EXAMPLE.COM
+Mar 04 20:45:12 kdc-01.hadoop.example.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 198.51.100.161: ISSUE: authtime 1772628312, etypes {rep=18 tkt=18 ses=18}, nn/nn-02.hadoop.example.com@HADOOP.EXAMPLE.COM for krbtgt/HADOOP.EXAMPLE.COM@HADOOP.EXAMPLE.COM
+Mar 05 15:57:59 kdc-01.hadoop.example.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 198.51.100.161: ISSUE: authtime 1772697479, etypes {rep=18 tkt=18 ses=18}, nn/nn-02.hadoop.example.com@HADOOP.EXAMPLE.COM for krbtgt/HADOOP.EXAMPLE.COM@HADOOP.EXAMPLE.COM
+Mar 06 11:10:28 kdc-01.hadoop.example.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 198.51.100.161: ISSUE: authtime 1772766628, etypes {rep=18 tkt=18 ses=18}, nn/nn-02.hadoop.example.com@HADOOP.EXAMPLE.COM for krbtgt/HADOOP.EXAMPLE.COM@HADOOP.EXAMPLE.COM
+Mar 07 06:22:59 kdc-01.hadoop.example.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 198.51.100.161: ISSUE: authtime 1772835779, etypes {rep=18 tkt=18 ses=18}, nn/nn-02.hadoop.example.com@HADOOP.EXAMPLE.COM for krbtgt/HADOOP.EXAMPLE.COM@HADOOP.EXAMPLE.COM
+Mar 08 01:35:27 kdc-01.hadoop.example.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 198.51.100.161: ISSUE: authtime 1772904927, etypes {rep=18 tkt=18 ses=18}, nn/nn-02.hadoop.example.com@HADOOP.EXAMPLE.COM for krbtgt/HADOOP.EXAMPLE.COM@HADOOP.EXAMPLE.COM
+Mar 08 20:47:57 kdc-01.hadoop.example.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 198.51.100.161: ISSUE: authtime 1772974077, etypes {rep=18 tkt=18 ses=18}, nn/nn-02.hadoop.example.com@HADOOP.EXAMPLE.COM for krbtgt/HADOOP.EXAMPLE.COM@HADOOP.EXAMPLE.COM
+Mar 09 16:00:02 kdc-01.hadoop.example.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 198.51.100.161: ISSUE: authtime 1773043202, etypes {rep=18 tkt=18 ses=18}, nn/nn-02.hadoop.example.com@HADOOP.EXAMPLE.COM for krbtgt/HADOOP.EXAMPLE.COM@HADOOP.EXAMPLE.COM
+Mar 10 11:12:47 kdc-01.hadoop.example.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 198.51.100.161: ISSUE: authtime 1773112367, etypes {rep=18 tkt=18 ses=18}, nn/nn-02.hadoop.example.com@HADOOP.EXAMPLE.COM for krbtgt/HADOOP.EXAMPLE.COM@HADOOP.EXAMPLE.COM
+Mar 11 06:25:18 kdc-01.hadoop.example.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 198.51.100.161: ISSUE: authtime 1773181518, etypes {rep=18 tkt=18 ses=18}, nn/nn-02.hadoop.example.com@HADOOP.EXAMPLE.COM for krbtgt/HADOOP.EXAMPLE.COM@HADOOP.EXAMPLE.COM
+Mar 12 01:37:23 kdc-01.hadoop.example.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 198.51.100.161: ISSUE: authtime 1773250643, etypes {rep=18 tkt=18 ses=18}, nn/nn-02.hadoop.example.com@HADOOP.EXAMPLE.COM for krbtgt/HADOOP.EXAMPLE.COM@HADOOP.EXAMPLE.COM
+Mar 12 20:50:19 kdc-01.hadoop.example.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 198.51.100.161: ISSUE: authtime 1773319819, etypes {rep=18 tkt=18 ses=18}, nn/nn-02.hadoop.example.com@HADOOP.EXAMPLE.COM for krbtgt/HADOOP.EXAMPLE.COM@HADOOP.EXAMPLE.COM
+Mar 13 16:02:50 kdc-01.hadoop.example.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 198.51.100.161: ISSUE: authtime 1773388970, etypes {rep=18 tkt=18 ses=18}, nn/nn-02.hadoop.example.com@HADOOP.EXAMPLE.COM for krbtgt/HADOOP.EXAMPLE.COM@HADOOP.EXAMPLE.COM
+Mar 14 11:15:03 kdc-01.hadoop.example.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 198.51.100.161: ISSUE: authtime 1773458103, etypes {rep=18 tkt=18 ses=18}, nn/nn-02.hadoop.example.com@HADOOP.EXAMPLE.COM for krbtgt/HADOOP.EXAMPLE.COM@HADOOP.EXAMPLE.COM
+Mar 15 06:27:48 kdc-01.hadoop.example.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 198.51.100.161: ISSUE: authtime 1773527268, etypes {rep=18 tkt=18 ses=18}, nn/nn-02.hadoop.example.com@HADOOP.EXAMPLE.COM for krbtgt/HADOOP.EXAMPLE.COM@HADOOP.EXAMPLE.COM
+Mar 16 01:40:19 kdc-01.hadoop.example.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 198.51.100.161: ISSUE: authtime 1773596419, etypes {rep=18 tkt=18 ses=18}, nn/nn-02.hadoop.example.com@HADOOP.EXAMPLE.COM for krbtgt/HADOOP.EXAMPLE.COM@HADOOP.EXAMPLE.COM
+Mar 16 20:52:50 kdc-01.hadoop.example.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 198.51.100.161: ISSUE: authtime 1773665570, etypes {rep=18 tkt=18 ses=18}, nn/nn-02.hadoop.example.com@HADOOP.EXAMPLE.COM for krbtgt/HADOOP.EXAMPLE.COM@HADOOP.EXAMPLE.COM
+Mar 17 16:04:54 kdc-01.hadoop.example.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 198.51.100.161: ISSUE: authtime 1773734694, etypes {rep=18 tkt=18 ses=18}, nn/nn-02.hadoop.example.com@HADOOP.EXAMPLE.COM for krbtgt/HADOOP.EXAMPLE.COM@HADOOP.EXAMPLE.COM
+Mar 18 11:17:03 kdc-01.hadoop.example.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 198.51.100.161: ISSUE: authtime 1773803823, etypes {rep=18 tkt=18 ses=18}, nn/nn-02.hadoop.example.com@HADOOP.EXAMPLE.COM for krbtgt/HADOOP.EXAMPLE.COM@HADOOP.EXAMPLE.COM
+Mar 19 06:29:17 kdc-01.hadoop.example.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 198.51.100.161: ISSUE: authtime 1773872957, etypes {rep=18 tkt=18 ses=18}, nn/nn-02.hadoop.example.com@HADOOP.EXAMPLE.COM for krbtgt/HADOOP.EXAMPLE.COM@HADOOP.EXAMPLE.COM
+Mar 20 01:41:27 kdc-01.hadoop.example.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 198.51.100.161: ISSUE: authtime 1773942087, etypes {rep=18 tkt=18 ses=18}, nn/nn-02.hadoop.example.com@HADOOP.EXAMPLE.COM for krbtgt/HADOOP.EXAMPLE.COM@HADOOP.EXAMPLE.COM
+Mar 20 02:37:05 kdc-01.hadoop.example.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 198.51.100.161: ISSUE: authtime 1773945425, etypes {rep=18 tkt=18 ses=18}, nn/nn-02.hadoop.example.com@HADOOP.EXAMPLE.COM for krbtgt/HADOOP.EXAMPLE.COM@HADOOP.EXAMPLE.COM
+Mar 21 01:41:36 kdc-01.hadoop.example.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 198.51.100.161: ISSUE: authtime 1774028496, etypes {rep=18 tkt=18 ses=18}, nn/nn-02.hadoop.example.com@HADOOP.EXAMPLE.COM for krbtgt/HADOOP.EXAMPLE.COM@HADOOP.EXAMPLE.COM
+Mar 22 01:42:10 kdc-01.hadoop.example.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 198.51.100.161: ISSUE: authtime 1774114930, etypes {rep=18 tkt=18 ses=18}, nn/nn-02.hadoop.example.com@HADOOP.EXAMPLE.COM for krbtgt/HADOOP.EXAMPLE.COM@HADOOP.EXAMPLE.COM
+Mar 23 01:42:55 kdc-01.hadoop.example.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 198.51.100.161: ISSUE: authtime 1774201375, etypes {rep=18 tkt=18 ses=18}, nn/nn-02.hadoop.example.com@HADOOP.EXAMPLE.COM for krbtgt/HADOOP.EXAMPLE.COM@HADOOP.EXAMPLE.COM
+Mar 24 01:42:55 kdc-01.hadoop.example.com krb5kdc[123563](info): AS_REQ (2 etypes {18 17}) 198.51.100.161: ISSUE: authtime 1774287775, etypes {rep=18 tkt=18 ses=18}, nn/nn-02.hadoop.example.com@HADOOP.EXAMPLE.COM for krbtgt/HADOOP.EXAMPLE.COM@HADOOP.EXAMPLE.COM
+[@kdc-01.hadoop.example.com /var/log]# 
 ```
 ---
 

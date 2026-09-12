@@ -9,28 +9,28 @@ severity: P1
 
 ## 故障现象
 
-测试环境 ATS HA 集群（ht100185/ht100040）Keepalived 日志持续刷屏 `(VI_ATS) received an invalid passwd!`，并出现短暂的 MASTER/BACKUP 状态抖动。
+测试环境 ATS HA 集群（ats-01/ats-02）Keepalived 日志持续刷屏 `(VI_ATS) received an invalid passwd!`，并出现短暂的 MASTER/BACKUP 状态抖动。
 
 ```log
-Mar 31 14:07:26 ht100185 Keepalived_vrrp[1860191]: (VI_ATS) received an invalid passwd!
-Mar 31 14:07:59 ht100185 Keepalived_vrrp[1860191]: (VI_ATS) Receive advertisement timeout
-Mar 31 14:07:59 ht100185 Keepalived_vrrp[1860191]: (VI_ATS) Entering MASTER STATE
-Mar 31 14:07:59 ht100185 Keepalived_vrrp[1860191]: (VI_ATS) Master received advert from 10.18.100.40 with higher priority 100, ours 70
-Mar 31 14:07:59 ht100185 Keepalived_vrrp[1860191]: (VI_ATS) Entering BACKUP STATE
+Mar 31 14:07:26 ats-01 Keepalived_vrrp[1860191]: (VI_ATS) received an invalid passwd!
+Mar 31 14:07:59 ats-01 Keepalived_vrrp[1860191]: (VI_ATS) Receive advertisement timeout
+Mar 31 14:07:59 ats-01 Keepalived_vrrp[1860191]: (VI_ATS) Entering MASTER STATE
+Mar 31 14:07:59 ats-01 Keepalived_vrrp[1860191]: (VI_ATS) Master received advert from 192.0.2.40 with higher priority 100, ours 70
+Mar 31 14:07:59 ats-01 Keepalived_vrrp[1860191]: (VI_ATS) Entering BACKUP STATE
 ```
 
 ## 根因分析
 
 ### 直接原因
 
-同网段内存在 **VRID 冲突**：`10.18.100.93` 与本集群使用了相同的 `virtual_router_id 51`，但认证密码不同。
+同网段内存在 **VRID 冲突**：`192.0.2.93` 与本集群使用了相同的 `virtual_router_id 51`，但认证密码不同。
 
 **tcpdump 抓包证据**：
 
 ```bash
-[@ht100185 ~]# tcpdump -i eth0 vrrp -nn
-14:27:10.024840 IP 10.18.100.93 > 224.0.0.18: VRRPv2, Advertisement, vrid 51, prio 80, authtype simple, intvl 1s, length 20
-14:27:10.738427 IP 10.18.100.40 > 10.18.100.185: VRRPv2, Advertisement, vrid 51, prio 100, authtype simple, intvl 1s, length 20
+[@ats-01 ~]# tcpdump -i eth0 vrrp -nn
+14:27:10.024840 IP 192.0.2.93 > 224.0.0.18: VRRPv2, Advertisement, vrid 51, prio 80, authtype simple, intvl 1s, length 20
+14:27:10.738427 IP 192.0.2.40 > 192.0.2.185: VRRPv2, Advertisement, vrid 51, prio 100, authtype simple, intvl 1s, length 20
 ```
 
 ### 技术原理
@@ -44,11 +44,11 @@ Mar 31 14:07:59 ht100185 Keepalived_vrrp[1860191]: (VI_ATS) Entering BACKUP STAT
 **故障触发链路**：
 
 ```
-10.18.100.93 发送 VRRP 报文 (vrid=51, 密码X)
+192.0.2.93 发送 VRRP 报文 (vrid=51, 密码X)
     ↓
-ht100185 收到报文，VRID 匹配
+ats-01 收到报文，VRID 匹配
     ↓
-使用本地密码 "atsHAuse" 校验 → 失败
+使用本地密码 "********" 校验 → 失败
     ↓
 丢弃报文 + 日志报错 "invalid passwd"
     ↓
@@ -78,7 +78,7 @@ systemctl restart keepalived
 
 彻底避免组播干扰，改为点对点通信。
 
-**ht100185 配置**：
+**ats-01 配置**：
 
 ```conf
 vrrp_instance VI_ATS {
@@ -88,20 +88,20 @@ vrrp_instance VI_ATS {
     priority 90
 
     # 单播配置
-    unicast_src_ip 10.18.100.185
+    unicast_src_ip 192.0.2.185
     unicast_peer {
-        10.18.100.40
+        192.0.2.40
     }
 
     authentication {
         auth_type PASS
-        auth_pass atsHAuse
+        auth_pass ********
     }
     # ... 其他配置
 }
 ```
 
-**ht100040 配置**：
+**ats-02 配置**：
 
 ```conf
 vrrp_instance VI_ATS {
@@ -111,14 +111,14 @@ vrrp_instance VI_ATS {
     priority 100
 
     # 单播配置（IP 对调）
-    unicast_src_ip 10.18.100.40
+    unicast_src_ip 192.0.2.40
     unicast_peer {
-        10.18.100.185
+        192.0.2.185
     }
 
     authentication {
         auth_type PASS
-        auth_pass atsHAuse
+        auth_pass ********
     }
     # ... 其他配置
 }
@@ -131,7 +131,7 @@ vrrp_instance VI_ATS {
 systemctl restart keepalived
 
 # 验证状态
-ip addr show eth0 | grep 10.18.100.80
+ip addr show eth0 | grep 192.0.2.80
 journalctl -u keepalived -f
 ```
 
@@ -151,8 +151,8 @@ tcpdump -i eth0 vrrp -nn
 cat -A /etc/keepalived/keepalived.conf | grep auth_
 
 # 对比两端配置
-diff <(ssh ht100185 'grep -A 3 authentication /etc/keepalived/keepalived.conf') \
-     <(ssh ht100040 'grep -A 3 authentication /etc/keepalived/keepalived.conf')
+diff <(ssh ats-01 'grep -A 3 authentication /etc/keepalived/keepalived.conf') \
+     <(ssh ats-02 'grep -A 3 authentication /etc/keepalived/keepalived.conf')
 ```
 
 ### 3. 监控状态切换

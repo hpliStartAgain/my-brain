@@ -51,8 +51,8 @@ timeline
 
 **关键报错日志**：
 ```java
-ERROR [TGT Renewer for hive/hs2.venus.sohurdc.com@VENUS.SOHURDC.COM]: security.UserGroupInformation - TGT is destroyed. Aborting renew thread for hive/hs2.venus.sohurdc.com@VENUS.SOHURDC.COM.
-org.apache.hadoop.security.KerberosAuthException: Login failure for user: hive/hs2.venus.sohurdc.com@VENUS.SOHURDC.COM 
+ERROR [TGT Renewer for hive/hs-02.hadoop.example.com@HADOOP.EXAMPLE.COM]: security.UserGroupInformation - TGT is destroyed. Aborting renew thread for hive/hs-02.hadoop.example.com@HADOOP.EXAMPLE.COM.
+org.apache.hadoop.security.KerberosAuthException: Login failure for user: hive/hs-02.hadoop.example.com@HADOOP.EXAMPLE.COM 
 javax.security.auth.login.LoginException: java.lang.IllegalArgumentException: The renewable period end time cannot be null for renewable tickets.
     at javax.security.auth.kerberos.KerberosTicket.init(KerberosTicket.java:317)
     ...
@@ -83,7 +83,7 @@ ERROR ... Peer indicated failure: GSS initiate failed
 
 **Thread Dump 证据**：
 ```text
-3 Blocked by 81 (hiveserver2-web-81-acceptor-3...)
+3 Blocked by 81 (hiveserver2-web-01-acceptor-3...)
 792 Blocked by 3718368 (HiveServer2-Handler-Pool: Thread-3718368)
 
 Stack trace:
