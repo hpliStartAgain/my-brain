@@ -2,68 +2,97 @@
 title: "Cilium深度解析——eBPF驱动的下一代网络与可观测性"
 date: 2026-03-05
 tags: [BPF Map, Cilium, eBPF, Hubble, kube-proxy, Kubernetes, NetworkPolicy, TC, XDP, 云原生, 可观测性]
-aliases: []
+aliases: [Cilium深度解析, Cilium eBPF]
 ---
 
 # Cilium深度解析——eBPF驱动的下一代网络与可观测性
 
-## 摘要
+**摘要：**
 
-Cilium 是 Kubernetes 网络领域近年来最具颠覆性的 CNI 插件。它将 eBPF（extended Berkeley Packet Filter）从一个"内核调试工具"提升为完整的网络数据面，在 XDP、TC、Socket 等内核 Hook 点部署 eBPF 程序，完全替代了 iptables 和 kube-proxy 的角色。本文深入 eBPF 在网络栈中的 Hook 体系，解析 Cilium 的 BPF Map 数据结构设计，还原 Service 流量的 eBPF 转发路径，剖析 L7 NetworkPolicy 的实现原理，并详解 Hubble 可观测平台如何在不修改任何应用代码的前提下，提供完整的网络流量可见性。**理解 Cilium，是理解下一代云原生网络基础设施的入口。**
-
----
-
-## 第 1 章 eBPF 的前世今生——从包过滤器到网络数据面
-
-### 1.1 BPF 的起源：网络包过滤
-
-1992 年，Steven McCanne 和 Van Jacobson 在 USENIX 论文《The BSD Packet Filter: A New Architecture for User-level Packet Capture》中提出了 **BPF（Berkeley Packet Filter）**。BPF 的初始目标非常具体：让 `tcpdump` 之类的工具能在内核中高效过滤数据包，而不是将所有数据包都复制到用户态再过滤——因为后者的开销极大。
-
-BPF 的设计是一个运行在内核中的虚拟机（VM），接受用户态传入的过滤程序（一段字节码），对每个数据包执行这段程序，决定是否保留该包。这个设计的关键优势：过滤在内核中完成，只有通过过滤的包才被复制到用户态。
-
-BPF 在 Linux 内核 2.2（1998 年）中被引入，并在此后十多年以原始形式（称为 **cBPF，classic BPF**）存在，主要用于 `tcpdump` 和 `seccomp` 系统调用过滤。
-
-### 1.2 eBPF 的革命性扩展
-
-2014 年，Alexei Starovoitov 向 Linux 内核提交了一个重大的扩展：**eBPF（extended BPF）**。eBPF 对 cBPF 做了根本性的重新设计：
-
-**寄存器扩展**：从 cBPF 的 2 个 32 位寄存器，扩展为 11 个 64 位寄存器（r0-r10），与 x86-64 的寄存器模型对齐，使得 eBPF 字节码可以被 JIT 编译器直接翻译为高效的原生机器码。
-
-**Map 数据结构**：引入了 **BPF Map**——内核中的持久化数据结构（Hash Map、Array、LRU、Ring Buffer 等），允许 eBPF 程序存储状态，也允许用户态程序与内核 eBPF 程序共享数据。这是 eBPF 能够做复杂工作的基础。
-
-**Helper 函数系统**：eBPF 程序不能直接调用任意内核函数（否则会破坏内核稳定性），但可以调用内核暴露的 **BPF Helper 函数**（如 `bpf_map_lookup_elem`、`bpf_skb_store_bytes`、`bpf_redirect`），这些函数构成了 eBPF 与内核交互的稳定 ABI。
-
-**验证器（Verifier）**：eBPF 程序在加载进内核时，必须通过严格的**验证器**检查：确保程序能够在有限步骤内终止（没有无限循环）、不访问越界内存、不调用非法函数。只有通过验证的程序才能被加载，这保证了 eBPF 程序的安全性——运行 eBPF 程序不会使内核崩溃。
-
-**多样的 Hook 点**：eBPF 程序可以附着（attach）到内核的多个 Hook 点，在这些 Hook 点被触发时执行：网络包收发（XDP、TC）、系统调用（Tracepoint、Kprobe）、Socket 操作、cgroups 策略等。
-
-> [!info] 核心概念
-> eBPF 和 cBPF 的区别类比于 Java 虚拟机（JVM）和早期的字节码解释器：cBPF 是一个简单的解释器，只能做基本的包过滤；eBPF 是一个完整的沙箱 VM，带有 JIT 编译、持久化状态、内核 API 调用能力，几乎可以在内核中实现任意（安全的）逻辑。
-
-### 1.3 eBPF 为什么能颠覆 Kubernetes 网络
-
-Kubernetes 网络的传统实现依赖 iptables（kube-proxy）和 Linux bridge。这两者都是上世纪 90 年代末到 2000 年代初设计的，**针对的是单机防火墙和简单网络的场景，而非数千节点、数万 Pod 的云原生集群**。
-
-**iptables 的根本性能问题**：
-- **线性规则匹配**：iptables 规则链是链表，每个数据包需要从链头遍历匹配规则，O(N) 复杂度，N 是规则数
-- **不支持增量更新**：修改任何规则都需要重新加载整个规则集（iptables-restore），在有数万条规则时，这个操作本身需要持有内核锁，耗时可达数秒
-- **状态分散**：不同 Chain 之间的规则分散在内核的多个数据结构中，难以追踪和调试
-
-**eBPF 的优势**：
-- **O(1) 查找**：BPF Hash Map 支持 O(1) 的键值查找，无论有多少 Service，查找时间恒定
-- **原子增量更新**：BPF Map 的单条记录可以原子更新，不需要"先删后建"整个规则集
-- **可编程**：eBPF 程序是代码，而非静态规则，可以实现 iptables 完全无法做到的逻辑（如 L7 协议解析）
-- **可观测**：eBPF Ring Buffer 可以将内核中的网络事件高效传递给用户态，实现几乎零开销的流量观测
+当 Calico 们还在用 BGP 与 iptables 这些上世纪的构件拼装容器网络时，Cilium 做了一件更激进的事——它把整个网络数据面搬到了 eBPF 这台内核虚拟机上，让"每个报文经过网络栈时该做什么"从一张静态规则表变成了一段可按需编程的内核代码。这一选择的回报是 O(1) 的 Service 查找、与 IP 解耦的安全身份、L7 协议级策略与近乎零开销的全流量观测；代价则是对内核版本的硬约束与一套全新的排障知识体系。本文沿着"eBPF 如何把 Linux 内核变成可编程数据面"这条主线，先回溯 BPF 从 1992 年报文过滤器到 2014 年内核虚拟机的三十年进化，再拆解 XDP/TC/Socket 三级 Hook 点的卡位逻辑与 BPF Map 的状态承载方式，继而深入 Cilium 的三大设计内核——Security Identity、连接期负载均衡与透明代理式 L7 策略，最后审视 Hubble 可观测体系与 Cluster Mesh 的扩展形态，并对"eBPF 能否取代 Sidecar"这场未完的争论给出应有的留白。本文旨在回答两个问题：eBPF 究竟凭什么让网络数据面获得了一次范式级升级，以及 Cilium 把哪些复杂性留在了使用者的账单上。
 
 ---
 
-## 第 2 章 eBPF 在网络栈中的 Hook 点体系
+## 第 1 章 前史：从 tcpdump 的字节码到内核虚拟机
 
-### 2.1 Linux 网络栈的处理路径
+### 1.1 1992 年：一台为过滤而生的内核虚拟机
 
-在深入 Cilium 的 eBPF 使用方式之前，需要理解 Linux 网络栈的处理路径，以及 eBPF Hook 点在哪里介入。
+eBPF 的源头要追溯到一个朴素得多的问题。1992 年，Steven McCanne 与 Van Jacobson 在 USENIX 冬季会议上发表了论文《The BSD Packet Filter: A New Architecture for User-level Packet Capture》，要解决的是 `tcpdump` 这类抓包工具的效率困境：若把网卡上的每一个报文都复制到用户态再做过滤，绝大多数将被丢弃的报文白白付出了内存拷贝的代价。BPF 的方案是在内核里放一台极简虚拟机，用户态上传一段字节码，内核对每个报文就地执行、就地裁决，只有通过的报文才值得复制上去。
 
-一个数据包从网卡到达应用程序的完整路径：
+这个"把裁决程序下沉到事件发生处"的思想在此后三十年里只做过两件小事：Linux 2.2（1998 年）将其引入作为 cBPF（classic BPF），服务 `tcpdump`；之后又被复用到 `seccomp` 里过滤系统调用——seccomp-BPF 至今仍是容器默认安全配置的一部分。它安静地存在着，等待一个把"包过滤"重新理解为"内核编程"的人。回头看，1992 年那篇论文里其实已经把今天 eBPF 的两条命脉写明白了：其一，用户态可以向内核提交程序，且程序的执行边界由内核严格圈定；其二，filter 的结果驱动资源的分配——只有值得看的报文才值得付出拷贝代价。三十年后，这两条原封不动地长成了 Cilium 的 Verifier 与 Hook 体系。
+
+### 1.2 2014 年：Starovoitov 的再造与 eBPF 的成年礼
+
+2014 年，当时在 PLUMgrid 的 Alexei Starovoitov 向内核提交了名为 eBPF（extended BPF）的重构补丁集——这次扩展之大，使 eBPF 事实上与祖先 cBPF 只剩名字上的血缘（社区后来干脆宣布"eBPF 不再是一个缩写词"，以免"包过滤器"的字面含义继续误导世人）。这次重构一口气做了五件事：
+
+- **执行引擎换代**：寄存器从 2 个 32 位扩为 11 个 64 位，调用约定向 x86-64 对齐，字节码可被内核 JIT 编译为接近原生的机器码——eBPF 程序跑起来的成本与原生内核代码相差无几；
+- **状态载体 Map**：新增 **BPF Map** 一族内核数据结构，让程序可以跨触发记住东西，也让用户态能与内核态程序共享同一份数据；
+- **能力边界 ABI**：新增 **Helper 函数**——eBPF 程序不能直接调用任意内核函数，只能通过这组约两百个的受控接口（查表、改包、重定向、取随机数）与内核交换能力；
+- **安全闸门 Verifier**：加载前的静态验证器，证明程序有限步内终止、内存访问不越界——内核里跑用户提交的代码而不失控的全部信心都来自它；
+- **挂载点泛化**：钩子从报文扩到内核的几乎任意事件——XDP/TC 网络收发、kprobe/tracepoint 探针、cgroup/sockops 套接字生命周期、LSM 安全钩子。
+
+2016 年随 Linux 4.8 合入的 XDP（eXpress Data Path）把 eBPF 程序推到了网卡收包路径的最前端；几乎同一时期，曾任 Linux 内核网络子系统长期贡献者的 Thomas Graf 创立了 Isovalent，并在 2018 年发布 Cilium 1.0——一个从第一天起就把 eBPF 当作主数据面而非辅助工具的 CNI 插件。此后剧情一路加速：2021 年 Cilium 进入 CNCF 孵化，2023 年 10 月成为 CNCF 毕业项目中第一个以 eBPF 为底座的网络项目，2024 年 Isovalent 被思科收入麾下。eBPF 之于 Linux，正如社区那句流传甚广的评语——JavaScript 之于浏览器页面：它把一块原本静态的内核领地，变成了可编程的平台。
+
+### 1.3 为什么轮到网络数据面被重写
+
+回到本专栏的主场。前两篇已经反复看到，Kubernetes 网络的传统数据面建立在两个上世纪末的构件上：iptables 用线性链表做规则匹配，kube-proxy 靠整表重建做增量更新；Linux bridge 用洪泛学习维系转发表。它们的设计前提是单机、规则数有限、变化低频——而云原生集群的常态是数千节点、数万 Endpoint、每秒数千次的成员变更。构件没有错，是它们被用在了超出设计包线的负载上。
+
+算一笔细账更能看清坡度：一个 Service 对应若干条 KUBE-SERVICES 链规则加每条 Endpoint 一条 KUBE-SEP 规则，一万 Service、每 Service 三 Endpoint 的集群意味着四万条上下的规则；每个报文顺序过链，每次 Endpoint 变化整表重建。把同样的规模放到哈希表上，查找与更新都退化成常数级操作——eBPF 提供的就是另一条路：查找用哈希表而非链表，更新改一个 Map 元素而非重建规则集，逻辑是程序而非静态匹配项。Cilium 的全部架构，就是把这条路在云原生网络里走到底的答卷。
+
+还有一个行业维度值得记下：2021 年 Linux 基金会成立 **eBPF Foundation**（Isovalent、Meta、Google、Microsoft 等共同发起），把 eBPF 相关基础设施（编译工具链、运行时库、规范）升格为厂商中立的公共品。eBPF 从"几个内核黑客的聪明补丁"升级为行业级平台依赖，Cilium 是这趟列车上跑得最靠前的乘客之一。
+
+值得顺带一问的是：为什么"可编程内核"的红利最先兑现在网络上，而不是存储或调度上。原因其实藏在数据面的形状里——网络处理是一条极热、极窄、判决逻辑极规整的热路径：每个报文都要走同一条流水线，判决所需的输入（五元组、身份、表项）高度结构化，产出无非"放行/丢弃/改写/转向"寥寥几种。这样的负载恰恰是"小程序 + 快查找"模型最擅长啃的骨头；相比之下，调度器的决策上下文散漫、文件系统的语义层叠缠绕，都不具备这种规整性。理解了这一点，就能明白为什么 eBPF 的第一个大规模战利品是网络数据面，也能预判它下一个目标会是谁——观测与安全，正是后文 Hubble 与 Tetragon 的方向。
+
+---
+
+## 第 2 章 技术底座：Verifier、Map 与 Tail Call 的三角约束
+
+在展开 Cilium 之前，必须先把 eBPF 这台"内核虚拟机"的三块基石讲透——它们决定了 Cilium 所有设计的形状。
+
+**第一块是 Verifier，eBPF 的安全底线也是能力天花板。** 一段 eBPF 字节码被加载进内核前，必须通过静态验证：不允许无界循环、不允许越界内存访问、不允许调用白名单外的 Helper、必须能证明在有限步内终止。它的检查是逐寄存器、逐分支的符号执行——跟踪每个寄存器的类型与值域，推演所有可达路径上的内存访问是否合法、Map 引用是否泄漏、返回值是否被检查。早期内核对程序指令数限制在 4096 条，5.2 版本放宽到百万级，5.3 起允许有界循环。Verifier 保证了跑在内核里的这段代码不会崩溃、不会死循环拖垮调度——代价是你写不了"任意逻辑"，只能写"能被证明安全的逻辑"。
+
+**第二块是 BPF Map，eBPF 程序与世界的共享记忆。** eBPF 程序单次触发是无状态的，一切跨报文、跨程序、跨内核态/用户态的状态都存放在 Map 里。哈希表、数组、LRU 表、环形缓冲区各就其位，后文将看到 Cilium 如何用一张 Service Map 换下 iptables 的数万条规则。
+
+**第三块是 Tail Call 与 Helper，程序化的逃生舱。** 单程序指令数仍有限，于是 eBPF 提供 `bpf_tail_call` 允许一个程序"尾调用"跳转至下一个程序（跳转次数有界），把长流水线拆成程序链；Helper 函数（`bpf_map_lookup_elem`、`bpf_skb_store_bytes`、`bpf_redirect` 等约两百个）则构成 eBPF 与内核交互的稳定 ABI，报文改写、重定向、校验和重算都由它们完成。Cilium 的数据面程序正是由数十个经 tail call 串联的小程序织成的——这不是优雅癖好，而是被 Verifier 逼出来的工程形态：当一个策略执行流超过程序尺寸上限，就切一刀、跳到下一段，Verifier 对每段独立验证，整体流水线长度因此可以远超单程序极限。
+
+三个约束共同塑造了 eBPF 开发的行业气质：写 eBPF 不像写应用代码，更像在海关层层申报的表格里写代码——每一笔内存访问要有出处，每一次循环要能被证明收敛，每一个内核调用要走白名单。理解了这层约束，后文 Cilium 的一切"绕路"设计——为什么 L7 要借道 Envoy、为什么程序要拆成碎块——就都有了出处。
+
+这里还要补一笔对可移植性的回答：eBPF 程序读写内核数据结构，而内核结构体随版本漂移，一段为 5.4 编译的程序到 5.15 上可能字段偏移全错。社区给出的答案是 **BTF/CO-RE（BPF Type Format / Compile Once, Run Everywhere）**——编译产物携带类型信息，加载时按目标内核的实际布局重定位。这项技术也是 Cilium 能在不同内核版本上分发同一份数据面程序的前提，反过来解释了官方文档里"特性支持矩阵随内核版本展开"的现实。
+
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+graph LR
+    classDef prog fill:#ff79c6,stroke:#ff79c6,color:#282a36
+    classDef map fill:#44475a,stroke:#50fa7b,color:#f8f8f2
+    classDef ctl fill:#6272a4,stroke:#8be9fd,color:#f8f8f2
+
+    subgraph "内核态（eBPF 世界）"
+        P1["bpf_lxc: 策略/Service 裁决"] -->|tail_call| P2["Policy 程序"]
+        P1 -->|tail_call| P3["NAT/转发程序"]
+        P1 <-->|helper 读写| M1["BPF Maps<br/>Service/Policy/CT"]
+        P2 <--> M1
+        P3 <--> M1
+    end
+
+    subgraph "用户态"
+        Agent["Cilium Agent"] -->|"bpf() 系统调用加载/更新"| P1
+        Agent -->|"更新 Map 元素"| M1
+        Agent -->|"读取事件"| M2["Ring Buffer / Perf Map"]
+        P1 -->|"事件上报"| M2
+    end
+
+    class P1,P2,P3 prog
+    class M1,M2 map
+    class Agent ctl
+```
+
+---
+
+## 第 3 章 Hook 点体系：XDP、TC、Socket 的三级卡位
+
+### 3.1 一个报文的旅途与四个可介入点
+
+理解 Cilium 的挂载策略，先要还原一个报文在 Linux 里的完整旅途，并看清 eBPF 可以在哪几处设卡：
 
 ```mermaid
 %%{init: {'theme': 'dracula'}}%%
@@ -72,356 +101,236 @@ graph TD
     classDef kernel fill:#44475a,stroke:#50fa7b,color:#f8f8f2
     classDef user fill:#6272a4,stroke:#8be9fd,color:#f8f8f2
 
-    NIC["网卡 (NIC)"]
-    XDP["XDP Hook ← eBPF 介入点 1"]
-    Driver["网卡驱动层"]
-    TC_Ingress["TC Ingress Hook ← eBPF 介入点 2"]
-    Netfilter["Netfilter (iptables/nftables)"]
-    Routing["IP 路由决策"]
-    TC_Egress["TC Egress Hook ← eBPF 介入点 3"]
-    Socket["Socket 层 ← eBPF 介入点 4"]
-    App["用户态应用程序"]
+    NIC["网卡 NIC"] --> XDP["XDP 钩子（sk_buff 分配之前）"]
+    XDP --> Driver["驱动层 → sk_buff 封装"]
+    Driver --> TCi["TC Ingress 钩子"]
+    TCi --> Netfilter["Netfilter（iptables/nftables/conntrack）"]
+    Netfilter --> Routing["IP 路由决策"]
+    Routing --> TCe["TC Egress 钩子"]
+    TCe --> Socket["Socket/cgroup 钩子"]
+    Socket --> App["用户态进程"]
 
-    NIC --> XDP
-    XDP --> Driver
-    Driver --> TC_Ingress
-    TC_Ingress --> Netfilter
-    Netfilter --> Routing
-    Routing --> TC_Egress
-    TC_Egress --> Socket
-    Socket --> App
-
-    class XDP,TC_Ingress,TC_Egress,Socket hook
+    class XDP,TCi,TCe,Socket hook
     class Driver,Netfilter,Routing kernel
     class App user
 ```
 
-### 2.2 XDP：最早介入点，性能最高
+四个卡位的取舍一目了然：**XDP 最早但上下文最贫瘠**（报文尚未封装成 sk_buff，能读到的只是原始字节）；**TC 位置适中且上下文完整**（sk_buff 已成型，元数据齐全）；**Socket 最晚但最贴近应用**（直接与 socket 对象打交道）。Cilium 的答案是三级并用、各司其职，而不是押注单点。
 
-**XDP（eXpress Data Path）** 是 eBPF 在网络栈中最早的介入点——在网卡驱动层、甚至在网卡硬件上（offload 模式）执行，数据包尚未进入内核的 socket buffer（sk_buff）分配流程。
+这个"多级布防"背后其实是一条普适的设计原则：**每类工作应该发生在"信息刚够用、代价尚最小"的那个点上**。早弃类工作（黑名单、DDoS）信息需求少，就压到最靠前的 XDP；策略与转发需要完整报文上下文，就放在 TC；而同节点直连这种"发起时即已知结局"的优化，只有 connect 时刻的 Socket 层才有资格做。反过来理解：如果你把早弃规则放在 TC，就白白支付了 sk_buff 分配成本；把策略判决放在 XDP，又会发现读不到需要的上下文——挂载点的选择本质上是对"信息-代价"曲线的分段求解。
 
-XDP 程序的返回值决定数据包的命运：
-- `XDP_PASS`：放行，继续正常的内核网络处理
-- `XDP_DROP`：直接丢弃，内核零开销
-- `XDP_TX`：从同一网卡发送回去（U-Turn）
-- `XDP_REDIRECT`：重定向到另一个网卡或 CPU
+### 3.2 XDP：驱动层的极刑场
 
-**XDP 的典型用途**：
-- DDoS 防护：在 DDoS 攻击时，用 XDP DROP 以极低 CPU 开销丢弃恶意包，而不进入内核协议栈分配 sk_buff
-- 负载均衡：Cilium 的 NodePort 实现可以在 XDP 层直接做 DNAT，不进入内核协议栈
+XDP 在驱动收包路径上执行，早于 sk_buff 分配——报文此刻只是 DMA 缓冲区里的一段字节，程序直接读字节、改写节、定生死。返回值四种：`XDP_PASS` 放行入栈、`XDP_DROP` 就地丢弃、`XDP_TX` 从本卡原路弹回、`XDP_REDIRECT` 重定向他卡或他 CPU。
 
-**XDP 的性能数字**：Meta（Facebook）公开的测试显示，用 XDP 实现的负载均衡可以达到 **24 Mpps（每秒 2400 万包）**，而基于 iptables 的实现仅约 3 Mpps。差距在 8 倍以上。
+这个位置的意义在于"把代价消灭在发生之前"：丢弃一个报文不必先为它分配内核对象，DDoS 清洗、黑名单过滤的边际成本被压到极限。Meta 公开过其基于 XDP 的负载均衡器 Katran 的数据——单核千万级 PPS 的量级，数倍于 iptables 路径。Cilium 把 NodePort 的 DNAT、DSR 回包改写、主机级防火墙的早弃规则放在了这里。需要清醒认识的是 XDP 的代价面：它工作在 raw packet 上，拿不到 conntrack、协议栈元数据这些"加工过"的上下文，复杂裁决力有不逮——它适合当刀口，不适合当法官。
 
-> [!info] 核心概念
-> XDP 之所以性能极高，是因为它在 sk_buff 分配之前处理数据包。sk_buff（socket buffer）是 Linux 内核描述一个数据包的核心结构体，大约 232 字节，包含包的元数据、指向数据的指针、各种标志位等。分配和初始化 sk_buff 本身就有开销，XDP 完全跳过了这一步——数据包就是 DMA 内存中的一段原始字节，XDP 程序直接操作这段字节。
+XDP 本身还分三种挂载形态，性能与普适性各不相同：**native/driver 模式**要求网卡驱动支持，报文在驱动收包函数内被处理，是常态部署的主力；**offload 模式**把程序下推到支持的智能网卡（SmartNIC）上执行，CPU 完全不参与；**generic/SKB 模式**则是驱动不支持 XDP 时的兜底，报文已被封装成 sk_buff 后才跑程序，性能优势大打折扣——生产上确认驱动是否支持 native XDP，与确认内核版本一样，都是 Cilium 落地的入门体检项。
 
-### 2.3 TC：最灵活的 Hook 点
+### 3.3 TC：主战场
 
-**TC（Traffic Control）** 是 Cilium 最主要使用的 Hook 点。TC 在数据包已经进入内核协议栈（sk_buff 已分配）之后，在 IP 路由决策前后介入。
+TC（Traffic Control）是 Cilium 的默认主场：在每个 Pod 的 veth 宿主机端（`lxc*`）与物理网卡的 ingress/egress 双向挂载（经 `clsact` qdisc 挂载，不进入传统流控语义）。ingress 方向做入向策略裁决与 Service 反向还原，egress 方向做出向策略、ClusterIP DNAT 与转发决策。TC 上的报文已是完整 sk_buff，能取到五元组、网口索引、与 cgroup/网络命名空间的关联信息——足以支撑"这个包是谁发的、该去哪、放不放行"的全部判决，同时又早于 Netfilter 主链，让 iptables 的漫长旅程被整体绕过。
 
-TC 有两个方向的 Hook：
-- **TC Ingress**（进方向）：数据包刚进入网络接口，在 Netfilter/iptables 之前
-- **TC Egress**（出方向）：数据包即将从网络接口发出，在 Netfilter/iptables 之后
+TC 之所以而非 netfilter 钩子被选为主战场，原因有二：其一它天然挂在网络设备上，Pod 的每根 veth 都是独立挂载点，策略与接口的绑定关系清晰；其二它的双向性恰好映射策略的 ingress/egress 语义，一份声明两个挂载点，没有转译损耗。
 
-Cilium 在每个 Pod 的 veth 接口（ciliumXXXX 或 lxcXXXX）的 TC Ingress 和 TC Egress 上都挂载了 eBPF 程序，用于：
-- **Ingress**：处理进入 Pod 的流量——NetworkPolicy 检查、Service 的反向 NAT（SNAT 还原）
-- **Egress**：处理从 Pod 发出的流量——Service 的 DNAT（ClusterIP → Endpoint IP）、NetworkPolicy 出站检查
+### 3.4 Socket：同节点通信的近道
 
-**TC 程序的返回值**：
-- `TC_ACT_OK`：放行
-- `TC_ACT_SHOT`：丢弃
-- `TC_ACT_REDIRECT`：重定向到另一个接口（可以跳过内核协议栈的中间步骤）
+最深的优化藏在对 `connect()` 系调用拦下的 **cgroup/sockops 钩子**里：当 Pod A 发起连接、目标恰是本节点的 ClusterIP 或同节点 Pod 时，Socket 层程序直接把目标改写为对端 socket——两个 socket 内核内直连，连 veth 对和 TC 都跳过，同节点通信被压缩成近似 loopback 的开销。这套 **Socket-Level Load Balancing（亦称 host-reachable services）** 顺带接管了节点上主机进程访问 ClusterIP 的路径，后者在 kube-proxy 时代要靠 iptables 的 OUTPUT 链兜住。
 
-### 2.4 Socket Hook：同节点通信的终极优化
-
-对于同一节点上两个 Pod 之间的通信，Cilium 还可以在 **Socket 层** 介入，实现更彻底的优化。
-
-**传统路径（两个同节点 Pod 通信）**：
-```
-Pod A → eth0(veth内端) → veth外端(TC egress) → 路由 → veth外端(TC ingress) → eth0 → Pod B
-```
-数据包需要经过两次 veth pair 的上下文切换和两次 TC Hook。
-
-**Socket 层 eBPF 优化路径**：
-在 `connect()` 系统调用时，Cilium 的 Socket Hook 程序检测到目标 IP 是同节点的另一个 Pod，直接将目标地址重写为对端 Pod 的 Socket 地址。这样两个 Socket 直接通信，完全跳过网络协议栈——就像 localhost 通信一样，延迟接近零。
-
-这种优化被 Cilium 称为 **Socket-Level Load Balancing** 或 **Direct Routing via Socket**，是 Cilium 在同节点通信性能上远超 Flannel/Calico 的核心原因之一。
+值得点破的是这一层优化对"负载均衡发生时机"的重新定义：iptables DNAT 是**逐包**的——每个报文都要过一次规则匹配；Socket LB 与 Cilium 的连接跟踪协作，把负载均衡决策提前到 `connect()` 那一刻，之后的每个报文走的都是已确定的对端——从"每个包做一次选择题"变成"每条连接做一次选择题"，这是 eBPF 模型相对 netfilter 的又一处结构性优势。
 
 ---
 
-## 第 3 章 BPF Map——eBPF 程序的大脑
+## 第 4 章 BPF Map：把规则表换成数据结构
 
-### 3.1 为什么需要 BPF Map
+### 4.1 从"遍历规则"到"查询表项"的范式切换
 
-eBPF 程序是"无状态"的——每次被触发时，它只能访问当前数据包的信息和寄存器，无法在不同触发实例之间共享状态。但网络数据面需要大量"有状态"的操作：
+iptables 的根本瓶颈不在规则本身，而在组织形式：规则链是顺序链表，第 N 条规则命中前要先走完前 N-1 条，且任何变更必须以整表为单位原子替换。BPF Map 把这件事改成了数据结构问题——`BPF_MAP_TYPE_HASH` 的查找是 O(1)，一万个 Service 与一个 Service 的查找耗时相同，元素的增删改都是独立原子的；`LRU_HASH` 给连接跟踪装上自动淘汰；`RINGBUF`（内核 5.8+）为内核到用户态的事件流提供无锁多生产者管道；`SOCKHASH`/`SOCKMAP` 则让 socket 对象本身可以被索引导流。
 
-- Service 的 DNAT 需要查询 ClusterIP → Endpoint 的映射表
-- NetworkPolicy 需要查询允许哪些来源 IP 访问
-- conntrack（连接跟踪）需要记录每个 TCP 连接的 DNAT 映射，以便处理返回包
+这张数据结构清单值得按用途细读：`HASH` 是所有"键到值"映射的主力，`ARRAY` 以零哈希开销做配置与计数，`LRU_HASH` 用容量上限兜住 conntrack 这类不能无限增长的状态，`RINGBUF` 解决"内核想对用户态说话"的高效通道，`SOCKHASH` 解决"连接到 socket"的直达转发。每种 Map 都是在"查得快"与"特性约束"之间的不同取舍点，Cilium 的选型几乎是一份教科书级的演示。
 
-**BPF Map 正是为解决这个问题而设计的**。BPF Map 是存储在内核中的持久化数据结构，生命周期独立于任何单个 eBPF 程序。eBPF 程序可以通过 Helper 函数读写 BPF Map，用户态程序也可以通过文件描述符（通过 bpffs 挂载的虚拟文件系统）读写 BPF Map。这使得 eBPF 程序与用户态控制面之间可以高效共享状态。
+### 4.2 Cilium 的核心 Map 谱系
 
-### 3.2 Cilium 使用的核心 BPF Map 类型
+| Map | 类型 | 承载内容 |
+| :--- | :--- | :--- |
+| `cilium_lb4_services_v2` | HASH | ClusterIP:Port → Service 元数据 |
+| `cilium_lb4_backends_v3` | HASH | Backend ID → Endpoint IP:Port |
+| `cilium_lb4_reverse_nat` | HASH | 反向 NAT（回包还原）索引 |
+| `cilium_ct4_global` | LRU_HASH | 全局连接跟踪 |
+| `cilium_policy` | HASH | Identity → 允许的源 Identity 集 |
+| `cilium_ipcache` | HASH | IP → Security Identity 映射 |
+| `cilium_events` | RINGBUF/PERF | 流量事件（Hubble 的数据源） |
 
-**BPF_MAP_TYPE_HASH（哈希表）**：最常用的类型，O(1) 查找/插入/删除，用于存储 Service→Endpoint 映射、NetworkPolicy 规则等。内部使用内核的哈希表实现，支持并发访问（通过每个 bucket 的自旋锁保证原子性）。
+这张表揭示了 Cilium 架构的一个关键分工：**用户态的 cilium-agent 负责"世界应该是什么样"，内核里的 eBPF 程序与 Map 负责"报文此刻该怎么走"**。Service 增删、Pod 换 IP、策略变更，agent 只需改几个 Map 元素；数据面程序下次被触发时读到的就是新世界。没有整表重建，没有内核锁大迁移—— kube-proxy 那个被诟病了多年的更新模型，被降维成了一次哈希写。
 
-**BPF_MAP_TYPE_ARRAY（数组）**：固定大小的数组，通过整数下标访问，O(1)。查找速度比 Hash Map 更快（无哈希计算，直接内存偏移）。用于配置参数、计数器等。
+几个细节值得留意。其一，`cilium_ct4_global` 用的是 LRU 而非普通哈希——连接跟踪表面对 UDP 式无状态流量与扫描探测时有被撑爆的风险，LRU 让最久未活跃的条目自动让位，等效于一个内置的容量治理策略。其二，ipcache 这张"IP → Identity"映射表是 Identity 模型得以落地的物理载体：集群中每个 Pod IP、每个节点 IP、每个外部 CIDR 都被 agent 预先登记身份，数据面查到的不是"这个 IP 是谁"的枚举答案，而是"这个 IP 属于哪个身份"的归类答案——枚举随规模膨胀，归类不会。其三，所有这些 Map 都可以通过 `bpftool map` 与 `cilium bpf *` 族命令直接检视，排障时所见即所得，这是可调试性上相对 iptables 规则的意外红利。
 
-**BPF_MAP_TYPE_LRU_HASH（LRU 哈希表）**：带 LRU（最近最少使用）淘汰策略的哈希表，当表满时自动淘汰最久未使用的条目。Cilium 用于 conntrack 表——连接跟踪表不能无限增长，LRU 确保旧连接记录被自动清理。
+### 4.3 控制面解剖：agent、operator 与身份分配器
 
-**BPF_MAP_TYPE_RINGBUF（环形缓冲区，5.8+）**：高性能的内核→用户态数据流通道，eBPF 程序将网络事件写入 ring buffer，用户态的 Hubble 进程读取。相比旧的 perf_event_array，ring buffer 支持多生产者单消费者模型，且不会因用户态处理慢导致内核丢失事件（可以配置为阻塞或丢弃）。
+把 Map 当作"写入点"反推上去，Cilium 的控制面分层就清晰了。每节点 DaemonSet 的 **cilium-agent** 是控制面与数据面的缝合者：它 Watch Kubernetes API 获取 Pod/Service/Endpoint/Policy 事件，把"世界应该是什么样"翻译成 Map 元素的增删改，负责 eBPF 程序的编译、加载与挂载，并接待本节点 CNI 的 ADD/DEL 调用——CNI ADD 时由它创建 veth、注入 eBPF 程序、登记 Endpoint。集群级单副本的 **cilium-operator** 则处理需要全局视角的事务：IPAM 的地址池协调（Cluster Pool 模式）、Identity 的分配仲裁、EndpointSlice 等的同步与若干 GC。
 
-**BPF_MAP_TYPE_SOCKHASH（Socket 哈希表）**：存储 Socket 对象的哈希表，用于 Socket 层负载均衡——将目标 IP:Port 映射到实际的 Socket 对象，实现同节点通信的直接 Socket 转发。
-
-### 3.3 Cilium 的核心 BPF Map 实例
-
-Cilium 在节点上维护的关键 BPF Map（可通过 `bpftool map list` 查看）：
-
-| Map 名称 | 类型 | 内容 | 大小 |
-| :--- | :--- | :--- | :--- |
-| `cilium_lb4_services_v2` | HASH | Service ClusterIP:Port → Service 元数据 | 65536 条 |
-| `cilium_lb4_backends_v3` | HASH | Backend ID → Endpoint IP:Port | 65536 条 |
-| `cilium_lb4_reverse_nat` | HASH | Backend ID → 反向 SNAT 信息 | 65536 条 |
-| `cilium_ct4_global` | LRU_HASH | 连接跟踪（全局） | 256k 条 |
-| `cilium_ct4_any` | LRU_HASH | 连接跟踪（per-Pod） | 64k 条 |
-| `cilium_policy` | HASH | Pod Identity → 允许的源 Identity 集合 | 按策略数量 |
-| `cilium_ipcache` | HASH | IP → Security Identity | 512k 条 |
-| `cilium_events` | PERF_ARRAY | Cilium 事件通知（Hubble 使用） | 4096 条 |
-
-这些 Map 的生命周期由 Cilium agent 管理——当 Service 或 Pod 变化时，agent 更新对应的 BPF Map 条目，eBPF 程序在下次处理数据包时就能看到最新的配置。
-
-> [!info] 核心概念
-> BPF Map 是 eBPF 在 Kubernetes 网络中的核心创新点。传统 iptables 的"规则"是线性链表，Calico 维护数万条 iptables 规则时，每次数据包都要遍历这些规则。BPF Map 是哈希表，`cilium_lb4_services_v2` 中有 10000 个 Service 时，查找一个 ClusterIP 仍然只需要一次哈希计算，时间复杂度 O(1)。这就是 Cilium 在大规模集群下性能碾压 kube-proxy 的底层原因。
+Identity 的分配模式值得单独看：默认基于 **CRD** 把 Identity 分配记录存进 apiserver，简单但与 apiserver 共呼吸；大规模或隔离要求高的场景可切到 **kvstore**（独立 etcd）承载身份与集群状态——这与 Calico"KDD 还是独立 etcd"的分叉在精神上一致：共享存储省心，独立存储隔离爆炸半径。
 
 ---
 
-## 第 4 章 替代 kube-proxy——eBPF Service 实现
+## 第 5 章 Security Identity：把策略从 IP 解耦到标签
 
-### 4.1 kube-proxy 的工作方式回顾
+### 5.1 基于 IP 设防的原罪
 
-在进入 Cilium 的实现之前，先简要回顾 kube-proxy 的 iptables 模式是如何实现 Service 的（详细内容见第 6 篇）。
+传统 NetworkPolicy 的执行载体是 IP：选择器解析出 Pod IP 集合，再把 IP 写进 iptables 规则或 ipset。这在 Pod 短命的云原生世界埋着一个结构性摩擦——Pod 一重建 IP 就变，控制面必须赶在流量到来前把新 IP 灌进全网每个相关节点的规则里；集群越大、Pod 生灭越频繁，控制面越疲于奔命，规则与现实的错位窗口越难消除。Calico 用 ipset 缓解了这个问题的常数项（IP 变更只改集合成员而非规则），但集合更新本身仍然是一个随集群规模线性增长、按变更频率线性发生的控制面动作——问题在于"以易变物为锚"这件事本身。更进一步说，IP 在 Kubernetes 里同时扮演"定位符"与"身份符"两个角色：它既回答"这个包发给谁"，又被策略体系借用去回答"这个包是谁发的"。前者天生易变，后者理应稳定——把两种语义绑在同一个字段上，是一切同步摩擦的总根源。
 
-当一个请求访问 ClusterIP `10.96.100.1:80` 时，kube-proxy 预先在节点上写入的 iptables 规则链会将其 DNAT 为某个 Endpoint IP:Port（如 `10.244.0.5:8080`）：
+### 5.2 Identity：以标签为锚的稳定身份
 
-```
-PREROUTING → KUBE-SERVICES
-  → -d 10.96.100.1 -p tcp --dport 80 -j KUBE-SVC-XXXX
-    KUBE-SVC-XXXX（随机选 Endpoint）
-      → -j KUBE-SEP-1111（33% 概率）→ DNAT to 10.244.0.5:8080
-      → -j KUBE-SEP-2222（50% 概率）→ DNAT to 10.244.0.6:8080
-      → -j KUBE-SEP-3333（100% 概率）→ DNAT to 10.244.0.7:8080
-```
+Cilium 的破局点是把策略主语从 IP 换成 **Security Identity**：每个 Endpoint（Pod）按其标签集合算出一个集群内唯一的 32 位整数身份，标签相同即身份相同——`app=frontend` 的 Pod 无论重建多少次、换到哪个节点，身份恒定。`1-255` 为保留段，宿主（host）、外部世界（world）、集群实体等基础设施角色各占固定编号，用户工作负载从更高位段分配。
 
-负载均衡通过 `--statistic module random` 实现（概率性跳转），这种方式的问题是：规则数随 Service 和 Endpoint 数量线性增长，每条规则的匹配都是顺序遍历。
+身份分配本身是控制面的一次性动作：cilium-agent（及集群级 operator）在 Endpoint 创建时完成"标签集 → Identity"的计算与登记，Identity 一经分配即被写入该 Endpoint 的元数据与 ipcache，之后无论流量从哪个节点来、经由隧道还是直连，接收端拿到的都是同一个数字。这与 SPIFFE 等服务身份体系在概念上同构——用加密或元数据手段把"我是谁"从"我在哪"中解耦出来，只不过 Cilium 把它压进了 L3/L4 数据面的报文头字段里，做到逐包可验证。
 
-### 4.2 Cilium 的 eBPF Service 实现
+身份随报文旅行：VXLAN 模式下被编进 VNI 字段（Geneve 模式进 option），到达对端后由 eBPF 程序解出源 Identity，直接查 `cilium_policy`——"源身份 × 目的身份 × 端口"的一次哈希命中即完成策略判决。IP 到 Identity 的翻译则交给 `cilium_ipcache`。
 
-Cilium 用 BPF Map + eBPF 程序完全替代了这套 iptables 规则。整个 Service 的 DNAT 逻辑在 TC eBPF 程序中完成：
+> [!info] 这一层抽象换来了什么
+> 策略从"IP 集合的枚举"变成"身份对身份的判定"：Pod 重建不触发任何规则更新，策略查找与集群中 Pod 总数解耦，且判决被放在**接收端**执行——即使源节点被攻破伪造流量，目标侧的 Identity 校验依然成立。基于标签的身份，也让"同一身份跨集群"成为可能，这是第 9 章 Cluster Mesh 的地基。
 
-**步骤 1：查找 Service BPF Map**
+### 5.3 接收端执行与 Host Firewall
 
-数据包到达节点时，TC Ingress 程序提取目标 IP:Port（`10.96.100.1:80`），在 `cilium_lb4_services_v2` 中做哈希查找：
+"判决在接收端"这一安排值得单独拆解，因为它与 iptables 时代的直觉相反。传统实现里策略多在源侧或转发路径中段执行，被攻破的节点理论上可以伪造豁免流量；Cilium 把终裁权放在目的 Endpoint 的 `lxc` 接口上，报文携带来的源 Identity 无法由发送方单方面改写——接收端根据本地权威的策略 Map 判卷，发送端被攻陷也只能送来一个正确的"出身证明"，无法篡改判卷标准。这是把零信任模型中"永不信任、始终验证"原则落到了数据面报文级。
 
-```c
-// eBPF 程序伪代码（简化）
-struct lb4_key key = {
-    .address = 0x0A606401,  // 10.96.100.1
-    .dport   = htons(80),
-    .proto   = IPPROTO_TCP,
-};
-struct lb4_service *svc = bpf_map_lookup_elem(&cilium_lb4_services_v2, &key);
-```
+Identity 的保留段还支撑起另一类能力：**Host Firewall**。宿主机的协议栈在 ipcache 中登记为 `host` 身份，节点自身的入向/出向流量因此可以被 CiliumClusterwideNetworkPolicy 纳管——"节点只允许堡垒机 SSH"、"节点出网仅放行必要端口"这类诉求不再需要 iptables 手工规则兜底，与工作负载策略共用同一套声明语义。
 
-这一步 O(1)，无论有多少 Service。
+---
 
-**步骤 2：选择 Endpoint（负载均衡）**
+## 第 6 章 替代 kube-proxy：连接期负载均衡的完整实现
 
-从 Service 元数据中得到 backend 数量和当前轮询计数器（`svc->count`、`svc->rev_nat_index`），通过原子操作选择 Backend ID（Cilium 默认使用 maglev 哈希或 round-robin）：
+### 6.1 一次 ClusterIP 访问的 eBPF 之旅
+
+一个报文访问 `10.96.100.1:80` 时，TC 上的 eBPF 程序完成五步接力：先以 `(IP, Port, Proto)` 为键查 `lb4_services_v2`（O(1) 命中 Service）；再按负载均衡算法选 Backend——Cilium 默认的 **Maglev 一致性哈希**（Google 2014 年为其软件负载均衡器提出的算法）用连接五元组哈希查后端查找表，保证同一连接恒定落到同一后端，后端集合变动时只有极小比例的映射翻边；随后在 `ct4_global` 写入连接跟踪记录，把"这条连接的 DNAT 结论"存档备查；再调用 `bpf_skb_store_bytes`/`bpf_l3_csum_replace` 就地改写报文头完成 DNAT，校验和同步重算；回包则依 conntrack 记录把源地址还原为 ClusterIP 原路送回。整个过程对应用透明，对内核只是一次 Map 查询与几处字段改写。
 
 ```c
-// 使用 Maglev 一致性哈希（基于连接 5 元组）
-backend_id = cilium_lb4_backend_id(svc, flow_hash(skb));
+// 负载均衡选后端（示意）
+struct lb4_key key = { .address = daddr, .dport = dport, .proto = proto };
+struct lb4_service *svc = bpf_map_lookup_elem(&LB4_SERVICES_MAP_V2, &key);
+backend_id = select_backend_by_maglev(svc, flow_hash);   // 一致性哈希
 ```
 
-Cilium 支持三种负载均衡算法：
-- **Random**：随机选择
-- **Round Robin**：轮询（通过全局原子计数器）
-- **Maglev**：Google 提出的一致性哈希算法，确保相同的连接（5 元组哈希）总是路由到同一个 Backend，在 Backend 变化时只有少量连接需要重新路由
+Maglev 值得单独展开半句。它预生成一张定长的后端查找表，连接五元组哈希到表项即得后端 ID——后端增删时只需重排自己的表项份额，绝大多数既有映射保持稳定，这正是"一致性"二字的含义。对长连接场景（gRPC、数据库会话），后端扩缩容不再意味着成批连接被掀桌重连，这与 kube-proxy 概率跳转模型下"Endpoint 一变、映射全局洗牌"形成鲜明对照。
 
-**步骤 3：写入 conntrack 记录**
+把这段旅程画成时序图会更直观——注意所有判决都发生在内核态，控制面只在虚线之外工作：
 
-选定 Backend 后，在 `cilium_ct4_global` 中写入一条连接跟踪记录，记录 `(src_ip, src_port, dst_ip, dst_port, proto)` → `(Backend IP, Backend Port, rev_nat_id)`。这用于处理返回包的反向 SNAT。
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+sequenceDiagram
+    participant Pod as Pod A（发起方）
+    participant TC as TC egress（eBPF）
+    participant Svc as lb4_services Map
+    participant Ct as ct4_global Map
+    participant Net as 物理网络/隧道
+    participant PodB as Pod B（后端）
 
-**步骤 4：修改数据包（DNAT）**
-
-通过 BPF Helper 函数直接修改 sk_buff 中的目标 IP:Port：
-
-```c
-bpf_skb_store_bytes(skb, offsetof(struct iphdr, daddr), &backend_ip, 4, BPF_F_INVALIDATE_HASH);
-bpf_l4_csum_replace(skb, TCP_DPORT_OFF, old_dport, new_dport, sizeof(new_dport));
-// 更新 IP checksum
-bpf_l3_csum_replace(skb, IP_CSUM_OFF, old_daddr, new_daddr, sizeof(new_daddr));
+    Pod->>TC: SYN → ClusterIP:80
+    TC->>Svc: 查 (IP,Port,TCP)
+    Svc-->>TC: Service 元数据 + Backend 列表
+    TC->>TC: Maglev(五元组) → Backend ID
+    TC->>Ct: 写连接跟踪（DNAT 结论存档）
+    TC->>Net: DNAT 改写 dst=PodB，转发
+    Net->>PodB: 送达
+    PodB-->>Net: 回包 src=PodB
+    Net-->>TC: 回包到达
+    TC->>Ct: 查 conntrack
+    Ct-->>TC: 命中，取原始 ClusterIP
+    TC->>Pod: 反向 NAT 还原 src=ClusterIP:80
 ```
 
-**步骤 5：返回包的反向 NAT**
+对比 kube-proxy 的 iptables 模型——`--statistic random` 概率跳转、规则数随 Service×Endpoint 线性膨胀、每包顺序过链——两者在"万级 Service"这个标尺下的差距不再是优化幅度问题，而是复杂度类问题：O(N) 对 O(1)。会话亲和（sessionAffinity）在 eBPF 侧同样由连接跟踪与亲和 Map 天然支持，无需额外的规则拼贴。
 
-返回包到达时，TC Ingress 程序在 conntrack 表中查找原始的 `(src_ip, dst_ip)` 对，将返回包的源 IP:Port 从 Backend IP 还原为 ClusterIP，然后返回给客户端。
+### 6.2 不止 ClusterIP：NodePort、DSR 与回源保真
 
-整个过程对应用完全透明，应用只看到 ClusterIP，不知道实际的 Backend IP。
+外部流量进入集群的 NodePort 路径被压得更深：XDP 程序在驱动层直接完成 DNAT 并可选 `XDP_TX` 弹回，报文连协议栈都不必进。**DSR（Direct Server Return）** 模式让后端 Pod 所在节点将回包直发客户端、不再折返入口节点，配合 `externalTrafficPolicy: Local` 同时保住真实客户端 IP——这在 iptables 体系里是无法组合的"既要又要"：传统模式下要么 Cluster 级转发再跳一跳、源 IP 被 SNAT 掉，要么 Local 模式保住源 IP 但回包仍要绕入口节点。DSR 把入口节点从回程路径上摘除，东向带宽与尾延迟同时受益，代价是外层需要封装（Geneve 或 IPIP）把真实客户端 IP 捎给后端节点——路径优化的账永远有得算。
 
-### 4.3 Cilium kube-proxy 替换模式的部署
+### 6.3 平滑取代：kubeProxyReplacement 的工程姿势
 
-```bash
-# 安装 Cilium 并禁用 kube-proxy
-helm install cilium cilium/cilium \
-    --namespace kube-system \
-    --set kubeProxyReplacement=true \
-    --set k8sServiceHost=<API_SERVER_IP> \
-    --set k8sServicePort=6443
-
-# 禁用 kube-proxy DaemonSet
-kubectl patch ds kube-proxy -n kube-system \
-    -p '{"spec":{"template":{"spec":{"nodeSelector":{"non-cilium":"true"}}}}}'
-```
+启用方式只是 Helm 参数（`kubeProxyReplacement=true` + apiserver 地址），但工程姿势值得讲究：
 
 > [!warning] 生产避坑
-> 启用 `kubeProxyReplacement=true` 后，必须在 Cilium 完全就绪（所有 `cilium-node` DaemonSet Pod Running）之前，不能有其他网络操作依赖 kube-proxy。建议分阶段迁移：先在新节点启用 Cilium kube-proxy 替换，旧节点保留 kube-proxy，验证稳定后再全量切换。
+> 切换建议分灰度进行——新节点池先启用替换、旧节点池保留 kube-proxy，验证 Service 转发、conntrack 行为、`externalTrafficPolicy` 语义与既有 NetworkPolicy 的协作后再全量。尤其注意依赖 kube-proxy iptables 规则的旁路工具（某些监控或安全 agent 通过解析 KUBE-* 链做流量拓扑推断）会一并失效。
+
+还有几处与 kube-proxy 时代的语义差需要验收：`externalTrafficPolicy: Local` 在 eBPF 下不再损失源 IP 却也不再折返，DSR 与否决定了回包路径的跳数；sessionAffinity 的"按客户端 IP 粘滞"由亲和 Map 与 conntrack 协同实现，语义等价但缓存窗口与失效时机不同；而 NodePort 的 DNAT 发生在 XDP/TC，意味着主机 netfilter 里那些"先过一遍本地规则"的调试习惯从此失效——`iptables -t nat -L` 看到的是一片没有 KUBE-* 的空矿，排障直觉需要跟着换代。
 
 ---
 
-## 第 5 章 CiliumNetworkPolicy——L7 感知的网络策略
+## 第 7 章 CiliumNetworkPolicy：L7 感知的边界
 
-### 5.1 为什么需要 L7 NetworkPolicy
+### 7.1 L3/L4 的天花板
 
-传统的 NetworkPolicy（以及 Calico 的 GlobalNetworkPolicy）工作在 L3/L4 层——基于 IP 地址、端口、协议进行访问控制。这在许多场景下已经足够，但在微服务架构中存在一个根本性的不足：
+L3/L4 策略的判词只有五元组，这决定了它分辨不出同一端口上 `/api/orders` 与 `/api/admin` 的区别，也拦不住"把数据塞进 DNS TXT 记录往外带"这类正经协议里的邪门用途。微服务越细，"放通 8080"这条规则的语义就越粗——安全团队想要的往往是"放行 GET /api/*，拒绝 DELETE /api/admin/*"，而这超出了端口语义的表达极限。换一组场景同样成立：Kafka 集群希望按 Topic 而非按 Broker IP 授权，公网出口希望按域名而非按永远漂移的 CDN IP 收敛——它们共同指向同一件事：**策略的主语应该从传输层地址上升为应用层语义**。
 
-**L3/L4 策略无法区分同一端口上的不同 HTTP 路径**。
+### 7.2 透明代理：eBPF 做不到的部分交给 Envoy
 
-例如，你有一个用户服务（`/api/users/read`）和一个管理接口（`/api/admin/delete`），两者都监听 8080 端口。用 NetworkPolicy 允许前端访问 8080，那么前端既可以访问 `/api/users/read` 也可以访问 `/api/admin/delete`——你没办法在网络层面做区分，只能在应用层面做认证授权。
+诚实地说，L7 解析做不了纯 eBPF——HTTP 头部变长、Kafka 协议有状态，都超出 Verifier 的程序上限。Cilium 的姿态是把这层复杂性显式外包：命中 L7 规则的连接被 TPROXY 透明重定向到**每节点一个的共享 Envoy**，由后者解析协议、按 CiliumNetworkPolicy 下发下来的 L7 规则放行或返回 403，再放行回原路径。Pod 与服务端都感知不到这次借道——原始目的地址经 `SO_ORIGINAL_DST` 取回，四元组在两端的视角里保持原样。
 
-Cilium 的 L7 NetworkPolicy 解决了这个问题：**在内核中解析 HTTP（或 gRPC、Kafka 等协议）协议，基于 HTTP Method、Path、Header 进行访问控制**，完全在网络层实现，不需要应用代码做任何改动。
+这条流水线的控制面同样值得看一眼：CiliumNetworkPolicy 中的 L7 段由 agent 编译为 Envoy 的监听器与路由配置，经节点内 xDS 通道下发；数据面上 eBPF 负责"哪些连接需要过 Envoy"的初筛，Envoy 负责"过的时候怎么判"的终裁。两个可编程层各守其位——内核里跑不动的活，就交给一个被内核精确投喂的代理。
 
-### 5.2 Cilium 的 Identity 模型
+L7 的协议覆盖不止 HTTP：Kafka 可按 Topic 与 produce/consume 角色授权，DNS 可限定"只允许解析某域名的应答"，还有 gRPC、MySQL 等协议族渐次支持。另有一个容易被低估的运行态能力——**Policy Audit Mode**（策略审计模式）：把策略标记为审计态后，数据面照常放行但会记录"若该策略正式生效，哪些流量将被拒绝"，配合 Hubble 的 verdict 流可以在不改断任何连接的前提下完成策略灰度验证——网络策略终于也能像代码变更一样先观察再上线。
 
-在理解 L7 策略之前，需要先理解 Cilium 的 **Security Identity（安全身份）** 概念，这是 Cilium 策略引擎的核心创新。
+> [!note] 这里埋着后文的争议点
+> "每节点一个共享 Envoy"意味着 Cilium 的 L7 路径并非"零代理"，只是用节点级代理替代了 Sidecar 级代理。这个细节在评估"eBPF 消灭 Sidecar"的叙事时至关重要，第 10 章会回到这里。
 
-**传统 NetworkPolicy 的 IP-based 问题**：Pod 的 IP 是动态的，Pod 重启后 IP 变化，NetworkPolicy 引擎需要实时跟踪每个 Pod 的 IP 变化并更新 iptables 规则。在大规模频繁变化的集群中，这是 Felix 的主要 CPU 消耗来源。
-
-**Cilium 的 Identity 方案**：Cilium 为每个 Pod（或 Endpoint）分配一个**固定的 32 位 Security Identity**，这个 Identity 基于 Pod 的 **Labels**（而非 IP）计算得出——相同 Labels 的 Pod 具有相同的 Identity。
-
-```
-Identity 计算示例:
-  Labels: {app: frontend, env: prod} → Identity: 12345
-  Labels: {app: backend,  env: prod} → Identity: 67890
-```
-
-Identity 被编码在 **VXLAN 的 VNI 字段**（或 Geneve 协议的 option 字段）中，随数据包传递。当数据包到达目标节点时，eBPF 程序从数据包中读取源 Identity，查询 NetworkPolicy BPF Map（允许哪些 Identity 的流量），做出放行/拒绝决策。
-
-这种设计的优势：
-- **与 IP 解耦**：Pod 重启 IP 变化时，Identity 不变，策略无需更新
-- **O(1) 策略查找**：查询 `cilium_policy` BPF Map（`src_identity → 是否允许`），O(1) 完成，不随策略数量增长
-- **分布式验证**：策略检查在数据包的接收端（目标节点）执行，而非在发送端，即使发送端被攻陷，目标仍能强制执行策略
-
-### 5.3 L7 策略的实现：透明代理
-
-L7 策略无法完全在 eBPF 中实现——HTTP 协议解析太复杂，eBPF 验证器不允许无限制的循环（HTTP header 长度不固定）。Cilium 的解决方案是：**透明代理（Transparent Proxy）**。
-
-当一个连接被 L7 策略匹配时，Cilium 的 TC eBPF 程序将该连接**透明地重定向**（通过 `SO_TRANSPARENT` + `IP_TRANSPARENT` socket 选项）到本地运行的 **Envoy 进程**。Cilium 在每个节点运行一个 Envoy 实例（不是服务网格的 Sidecar，而是节点级别的共享代理）。
-
-```
-Pod A → L7 CiliumNetworkPolicy 匹配 → TC eBPF 重定向到 Envoy（本地）
-                                            ↓
-                              Envoy 解析 HTTP，检查 Method/Path/Header
-                                            ↓
-                              允许: Envoy 转发到真实目标
-                              拒绝: Envoy 返回 403
-```
-
-**对 Pod A 和目标服务透明**：Pod A 不知道流量经过了 Envoy，目标服务不知道流量来自 Envoy——eBPF 在两端都做了 IP 地址的透明替换，确保 TCP 连接的四元组从应用视角看是正确的。
-
-### 5.4 CiliumNetworkPolicy 示例
-
-**L3/L4 层策略（与 K8s NetworkPolicy 等价，但使用 Identity）**：
+### 7.3 三种典型的策略形态
 
 ```yaml
-apiVersion: cilium.io/v2
-kind: CiliumNetworkPolicy
-metadata:
-  name: allow-backend-from-frontend
-  namespace: default
+# L3/L4：等价原生 NetworkPolicy（但以 Identity 执行）
 spec:
-  endpointSelector:
-    matchLabels:
-      app: backend
+  endpointSelector: {matchLabels: {app: backend}}
   ingress:
-  - fromEndpoints:
-    - matchLabels:
-        app: frontend
-    toPorts:
-    - ports:
-      - port: "8080"
-        protocol: TCP
+  - fromEndpoints: [{matchLabels: {app: frontend}}]
+    toPorts: [{ports: [{port: "8080", protocol: TCP}]}]
 ```
 
-**L7 HTTP 策略（iptables 完全无法实现）**：
-
 ```yaml
-apiVersion: cilium.io/v2
-kind: CiliumNetworkPolicy
-metadata:
-  name: allow-get-api-only
-spec:
-  endpointSelector:
-    matchLabels:
-      app: backend
-  ingress:
-  - fromEndpoints:
-    - matchLabels:
-        app: frontend
+# L7 HTTP：iptables 永远写不出的规则
     toPorts:
-    - ports:
-      - port: "8080"
-        protocol: TCP
+    - ports: [{port: "8080", protocol: TCP}]
       rules:
         http:
-        - method: "GET"
-          path: "/api/v1/.*"   # 只允许 GET /api/v1/ 路径
-        - method: "POST"
-          path: "/api/v1/orders"  # 只允许 POST /api/v1/orders
+        - {method: GET,  path: "/api/v1/.*"}
+        - {method: POST, path: "/api/v1/orders"}
 ```
-
-**L7 Kafka 策略**：
 
 ```yaml
-toPorts:
-- ports:
-  - port: "9092"
-    protocol: TCP
-  rules:
-    kafka:
-    - role: produce
-      topic: "orders"    # 只允许写入 orders topic
-    - role: consume
-      topic: "events"    # 只允许消费 events topic
+# L7 DNS/FQDN：对"放行一切到公网"的精细替代
+  egress:
+  - toFQDNs:
+    - matchName: "api.stripe.com"
+    toPorts: [{ports: [{port: "443", protocol: TCP}]}]
 ```
 
-> [!note] 设计哲学
-> Cilium 的 L7 策略是云原生安全架构中的重大进步——它将原本只能在 API Gateway 层做的访问控制下沉到基础设施层，无需修改应用代码，无需部署 Sidecar。这是 Cilium 对"Zero Trust Networking"的具体实现：即使攻击者突破了服务间的 mTLS，也无法调用未被 L7 策略明确允许的 API 路径。
+```yaml
+# L7 Kafka：按 Topic 与角色授权
+    toPorts:
+    - ports: [{port: "9092", protocol: TCP}]
+      rules:
+        kafka:
+        - {role: produce, topic: "orders"}
+        - {role: consume, topic: "events"}
+```
+
+`toFQDNs` 一项值得单独停留：Cilium 的 DNS 代理旁路监听 Pod 的 DNS 应答，把域名到 IP 的映射实时记入 ipcache，使"只允许访问 `api.stripe.com`"这类以域名为主语的策略成为可能——在出口管控场景里，这是把"放行一个永远变化的 IP 列表"收敛为"放行一个名字"的质变。
+
+此外还有两类原生 API 没有的语义：**`CiliumDenyPolicy`/`deny` 规则**提供显式拒绝（在白名单模型里开口例外，譬如"放通前端整个段，但拒绝其中 `role=debug` 的 Pod"）；`CiliumClusterwideNetworkPolicy` 则把选择器作用域从单 Namespace 扩到全集群——与 Calico 的 GlobalNetworkPolicy 对同一诉求的两种拼写。
+
+### 7.4 Identity 与 L7 的合流
+
+至此 Cilium 的策略栈拼齐了：L3/L4 用 Identity 哈希判决，L7 借道节点级 Envoy，拒绝优先语义与 K8s 原生保持一致。同一套 `endpointSelector` 声明，向下编译为 Map 查表或 Envoy 配置——声明式的面子，可编程的里子。
+
+回望整条策略链路，Cilium 做对的一件事是把"表达"与"执行"彻底解耦：用户写的是标签与协议语义，数据面看到的却是数字与哈希键。这层翻译的存在，让策略表达可以无限贴近业务语言，而判决路径可以无限贴近机器效率——两边各自演进，互不拖累。
 
 ---
 
-## 第 6 章 Hubble——基于 eBPF 的网络可观测平台
+## 第 8 章 Hubble：可观测性作为副产品
 
-### 6.1 Hubble 是什么
+### 8.1 观测不该另起炉灶
 
-**Hubble** 是 Cilium 的可观测性组件，于 2019 年作为独立项目开源，后合并回 Cilium 生态。它利用 eBPF 在内核中以极低开销采集网络流量数据，提供：
+传统方案的流量观测都要在数据面之外另建一套采集设施：tcpdump 全量拷贝、NetFlow 抽样、iptables LOG 逐包记日志，要么开销不可承受，要么信息先天残缺。Hubble 的立场截然不同——数据面本来就是 eBPF 写的，让程序顺手把每条流的裁决结果与元数据写进 Ring Buffer，观测就成了转发的副产品。
 
-- **逐流可见性**：每个 TCP/UDP 连接的源/目标、协议、延迟、状态（允许/拒绝）
-- **HTTP/gRPC 细节**：URL、Method、Status Code、延迟分布
-- **服务依赖图**：自动发现微服务之间的调用关系，生成可视化拓扑
-- **安全事件**：NetworkPolicy 拒绝事件、告警
-
-### 6.2 Hubble 的技术架构
+一条 Flow 记录里沉淀的信息相当可观：源/目的 Endpoint 的 Pod 名、Namespace 与 Identity、五元组、方向（ingress/egress）、裁决（forwarded/dropped 及丢包原因）、关联的 NetworkPolicy 名、TCP 状态与重传等传输层信号，乃至经 Envoy 时的 L7 摘要。换句话说，Hubble 记录的不是"一个包"，而是"一条带身份的连接故事"——这解释了为什么它的排障效率远超裸抓包。
 
 ```mermaid
 %%{init: {'theme': 'dracula'}}%%
@@ -431,246 +340,169 @@ graph TD
     classDef server fill:#6272a4,stroke:#8be9fd,color:#f8f8f2
     classDef ui fill:#282a36,stroke:#bd93f9,color:#f8f8f2
 
-    eBPF["eBPF 程序 (TC Hook)"]
-    RingBuf["BPF Ring Buffer (cilium_events)"]
-    CiliumAgent["Cilium Agent (每节点)"]
-    HubbleObs["Hubble Observer (每节点 gRPC 服务)"]
-    HubbleRelay["Hubble Relay (集群级聚合)"]
-    HubbleUI["Hubble UI (可视化)"]
-    CLI["hubble CLI"]
+    eBPF["TC/XDP eBPF 程序"] -->|"流事件（约百字节/条）"| RB["cilium_events Ring Buffer"]
+    RB --> Obs["hubble-observer（每节点 gRPC）"]
+    Obs --> Relay["hubble-relay（集群级聚合）"]
+    Relay --> UI["hubble-ui 服务拓扑"]
+    Relay --> CLI["hubble CLI"]
+    Obs --> Prom["Prometheus 指标导出（hubble-metrics）"]
 
-    eBPF -->|"写入网络事件"| RingBuf
-    RingBuf -->|"读取事件"| CiliumAgent
-    CiliumAgent -->|"暴露 gRPC 流"| HubbleObs
-    HubbleObs -->|"聚合"| HubbleRelay
-    HubbleRelay -->|"查询"| HubbleUI
-    HubbleRelay -->|"查询"| CLI
-
-    class eBPF ebpf
-    class CiliumAgent,HubbleObs agent
-    class HubbleRelay server
-    class HubbleUI,CLI ui
-    class RingBuf ebpf
+    class eBPF,RB ebpf
+    class Obs agent
+    class Relay server
+    class UI,CLI,Prom ui
 ```
 
-**数据流路径**：
-1. Cilium 的 TC eBPF 程序在处理每个数据包时，将流量事件（src/dst、协议、policy decision）写入 `cilium_events` BPF Ring Buffer
-2. Cilium Agent 持续从 Ring Buffer 读取事件，重建为完整的 Flow 记录（一个 TCP 连接对应一个 Flow）
-3. 每个节点的 Hubble Observer（Cilium Agent 内嵌）通过 gRPC streaming 暴露这些 Flow
-4. Hubble Relay 聚合所有节点的 Flow 数据，对外提供统一的查询接口
-5. Hubble UI 和 hubble CLI 通过 Relay 查询和展示数据
+Ring Buffer 只记元数据（五元组、Identity、裁决、方向）而非报文内容，多条核并发写不同 slot，消费者跟不上就丢弃新事件而不是阻塞转发——这是"观测绝不反过来压垮被观测对象"的协议自觉。官方口径的额外开销在个位数 CPU 百分点、亚毫秒延迟量级。对比一下旧方案的分母就更清楚这份克制的分量：tcpdump 要为每个报文付出内核到用户态的整包拷贝，NetFlow 以采样换开销却注定漏掉被抽掉的那部分真相，iptables LOG 则把日志写放进了每个报文的成本里——三者都过不了万兆线速的关，而 Ring Buffer 记录一条流的代价只是写一百来个字节。
 
-### 6.3 Hubble 的零开销原理
+### 8.2 能回答的问题
 
-Hubble 的一个重要特性是：**对网络性能几乎零影响**。这得益于 eBPF Ring Buffer 的设计：
-
-**传统监控方案的 overhead**：
-- tcpdump：需要 copy 每个数据包的内容到用户态，大流量下 CPU 消耗显著
-- Netflow/IPFIX：在网络设备上采样，只能采样部分流量，信息不完整
-- iptables LOG：每个匹配的包都写一条 kernel log，高频下 log 本身成为瓶颈
-
-**eBPF Ring Buffer 的优势**：
-- eBPF 程序只写入流量的**元数据**（src/dst/port/protocol/verdict），而非数据包内容本身，每条记录约 100-200 bytes
-- Ring Buffer 是无锁的生产者-消费者模型（多个 CPU 核可以并发写入不同的 slot），写入 overhead 极低（微秒级）
-- 当消费者（Cilium Agent）处理较慢时，Ring Buffer 满了会丢弃新事件（而非阻塞 eBPF 程序），不影响数据包处理
-
-官方基准测试：在 10 Gbps 的流量下，Hubble 开启后，节点 CPU 使用率增加约 **1-2%**，延迟增加 < 0.1ms。
-
-### 6.4 实际使用 Hubble
+`hubble observe` 一行命令能实时回答的，恰是生产中最痛的几类问题：
 
 ```bash
-# 安装 Hubble CLI
-HUBBLE_VERSION=$(curl -s https://raw.githubusercontent.com/cilium/hubble/master/stable.txt)
-curl -L --remote-name-all https://github.com/cilium/hubble/releases/download/$HUBBLE_VERSION/hubble-linux-amd64.tar.gz
-tar xzvf hubble-linux-amd64.tar.gz && mv hubble /usr/local/bin
-
-# 启用 Hubble 端口转发
-cilium hubble port-forward&
-
-# 查看实时流量（所有命名空间）
-hubble observe --all-namespaces
-
-# 查看被 NetworkPolicy 拒绝的流量
-hubble observe --verdict DROPPED --all-namespaces
-
-# 查看特定 Pod 的流量
-hubble observe --pod default/nginx-xxx --all-namespaces
-
-# 查看 HTTP L7 流量详情
-hubble observe --protocol http --all-namespaces
-
-# 输出示例
-# Feb  5 10:23:41.123 default/frontend:42000 -> default/backend:8080
-#   TCP Flags: SYN
-#   HTTP GET /api/v1/users → 200 OK (latency: 3.2ms)
-#   Policy: ALLOW (identity: frontend→backend)
+hubble observe --verdict DROPPED -A          # 全集群被策略拒绝的流量
+hubble observe --pod default/nginx-xxx       # 某 Pod 的全部流
+hubble observe --protocol http -A            # L7 层细节
+# Feb 5 10:23:41 default/frontend:42000 -> default/backend:8080
+#   TCP SYN → HTTP GET /api/v1/users → 200 OK (3.2ms)  Policy: ALLOW
 ```
 
-### 6.5 Hubble UI 的服务拓扑可视化
+`--verdict DROPPED` 列出被策略拒绝的全部流量（NetworkPolicy 生效与否从玄学变成可查的事实）；按 Pod/Namespace/协议过滤出的流记录自带服务名与身份；L7 模式给出 HTTP 方法与路径；UI 则把全集群的服务依赖画成实时拓扑，每条边的速率、错误率、拒绝事件一目了然。hubble-metrics 还能把流事件聚合为 Prometheus 指标（按丢包原因、按源目的身份的吞吐与延迟分布），让"网络层发生了什么"进入与业务指标同一套看板体系。
 
-Hubble UI 提供了一个实时更新的服务依赖图，自动发现：
-- 哪些服务在相互调用
-- 每条连接的流量速率和错误率
-- NetworkPolicy 拒绝事件（以红色边标注）
-- HTTP 请求的延迟分布（P50/P95/P99）
-
-这种可见性在传统网络工具中需要在应用层部署分布式追踪（如 Jaeger/Zipkin），需要修改应用代码注入 trace header。Hubble 完全在网络层完成，对应用零侵入。
+架构上的分工同样值得一提：observer 是每节点的本地权威——它只消费本节点 Ring Buffer 的事件、只在内存里保留有限窗口的流历史，因此对流量的存储面是无状态的；relay 是集群级聚合器，把所有 observer 的流拼成统一视图供 UI 与 CLI 查询——流数据既不落盘也不中心化存储，Hubble 的"观测"更接近"实时窗口"而非"历史数据湖"。这个设计让它的开销模型极其轻，也规定了它的边界：要做跨时段的流量审计取证，仍需把 Flow 导出到外部存储。在"容器网络故障几乎无法抓包"这个老大难领域，Hubble 相当于把全网节点都变成了常开的、有身份上下文的嗅探器——这条能力线继续延伸就是运行时安全项目 Tetragon，用同样的 eBPF 底座观测进程与文件行为。
 
 ---
 
-## 第 7 章 Cilium 的部署与运维
+## 第 9 章 拓扑形态与集群外延伸
 
-### 7.1 内核版本要求
+### 9.1 数据面拓扑的自由度
 
-Cilium 对 Linux 内核版本有明确要求：
+与流行的误解相反，Cilium 并非绑定 Overlay：它支持 VXLAN/Geneve 隧道模式（默认，跨子网无门槛、顺带承载 Identity），也支持 **Native Routing**——Pod CIDR 直接路由，配 `auto-direct-node-routes` 或 BGP Control Plane 向物理网络通告，在支持的 Underlay 上拿到与 Calico 等价的零封包路径。隧道与路由不是阵营，是同一数据面上的两个旋钮。需要留意的是 Native Routing 的前提与 Calico 同源：节点间要么同二层域，要么物理网络能学到 Pod 路由；且直连模式下报文头里不再携带隧道字段，源 Identity 要靠对端节点用源 IP 反查 ipcache——身份保真与 Underlay 的关系又绕回了那个老问题：底层愿意为你做什么。
 
-| Cilium 功能 | 最低内核版本 | 推荐内核版本 |
+IPAM 一侧的选择同样自由：既可以用 Kubernetes 分配的 `spec.podCIDR`（每节点一段，最贴合 kubeadm 默认），也可以用 Cilium 自己的 Cluster Pool IPAM 从 CRD 定义的地址池统一分配，甚至在云上直接对接 ENI/IPAM（把云厂商 VPC 的弹性网卡地址分发给 Pod，实现 Pod IP 即 VPC 内可路由地址——EKS 上的常见生产形态）。选哪种，取决于你的 Underlay 到底愿意为你路由什么。
+
+### 9.2 加密与带宽管理
+
+节点间加密提供 WireGuard（内核 5.6+）与 IPsec 两条路径，对应用透明；加密与隧道、路由模式均可正交组合。**带宽管理器**则利用内核 5.1+ 的 EDT（Earliest Departure Time，最早出队时间）机制在 FQ 调度器上给每个 Pod 做精确限速——传统 HTB/令牌桶以丢包为反馈信号，EDT 改为给每个报文盖"最早允许发出"的时间戳，把节流从丢包惩罚换成了延迟整形，配合 BBR 这类基于速率的拥塞控制算法效果尤佳：业务侧感受到的是平滑排队而非突发丢包，TCP 也不必在丢包后才后知后觉地降窗。
+
+出向治理上还有一个常被问到的拼图——**Egress Gateway**：可以把指定 Pod 的集群外访问统一收拢到某个出口节点、以固定 SNAT IP 出网，让企业防火墙的"源地址白名单"不必追着一个会漂移的 Pod IP 集合。这个功能对"K8s 内的服务要访问 IDC 里带 ACL 的老系统"这种混合云常见叙事几乎是刚需，而它的实现同样不过是路由与 NAT 规则在数据面的一次确定性下发。
+
+### 9.3 Cluster Mesh：身份模型的跨集群兑现
+
+第 5 章埋的伏笔在这里兑现：**Cluster Mesh** 让多个集群共享一套 Identity 与 Service 语义——每个集群部署 `clustermesh-apiserver` 以 etcd 兼容接口暴露本集群的端点与身份状态，各集群互相订阅，跨集群的 Pod IP 在 ipcache 里被打上"所属集群"的身份维度；打上 `service.cilium.io/global` 注解的 Service 即成为全局服务，任何成员集群的客户端按名访问，流量被负载均衡到所有集群的健康后端，NetworkPolicy 以 Identity 跨集群生效。与多集群服务网格方案相比，它不引入额外网关层、服务发现语义零改造，代价是所有成员集群都要跑 Cilium、网络平面需要规划互通、以及状态同步对 clustermesh-apiserver 可用性的依赖——又一次"用对底层的更高要求换更薄的上层"。
+
+### 9.4 向服务网格张望
+
+以节点级 Envoy 为支点，Cilium 继续向上长出了 Ingress/Gateway API 支持与"无边车服务网格"的野心：既然每节点已有共享代理与 eBPF 重定向能力，把东西向流量按需引到节点代理，理论上也就能完成传统 Sidecar 的大部分工作。这条扩张路径与第 4 篇 Calico"纯三层"的克制形成有趣对照——Calico 把边界守在 L3/L4，把 L7 让给服务网格去卷；Cilium 则认定内核可编程层往上长一层是自然延伸，Ingress、Gateway、Service Mesh 都成了同一数据面上的功能选项而非另立项目。这条路能走多远，正是下一节的争议所在。
+
+### 9.5 一条完整的报文路径：把全部机制串一遍
+
+以跨节点 Pod 访问 ClusterIP 收尾本章，把前几章的机制串成一条链路。Pod A（Node A）发起 `curl http://backend`：
+
+```text
+Pod A connect()
+  → cgroup/sockops 钩子：目标是本节点 Pod？否，走正常路径
+Pod A eth0 → veth → Node A 的 lxc 接口 TC egress
+  → Service Map 查找：ClusterIP → Maglev 选后端（Pod B，Node B）
+  → Policy Map 查找：Identity(A→B) 被允许
+  → DNAT：dst 改写为 Pod B IP
+  → VXLAN 封装：外层 NodeA→NodeB，VNI 中编入 Identity(A)
+  → Node A eth0 → 物理网络
+Node B eth0 → TC ingress
+  → VXLAN 解封装，取出内层报文与源 Identity
+  → Policy Map 查找：源 Identity 是否被目的 Endpoint 放行
+  → conntrack 记录命中/写入
+  → 转发至 Pod B 的 lxc 接口 → Pod B
+回包反向：conntrack 还原 ClusterIP，路径对称
+```
+
+值得停下来看的是这条链路上**没有**出现的东西：没有 iptables 链、没有 conntrack 主表遍历、没有 kube-proxy——整趟旅程的每一个判决点都是一次 Map 查找或一段 eBPF 程序，且全部发生在内核态，没有一次进出用户态的往返。这就是"数据面重写"四个字在报文视角下的完整含义。
+
+### 9.6 一组量级的性能观感
+
+性能数字随测试环境浮动，以下量级（源自官方与第三方公开基准）只用于建立直觉而非选型依据：
+
+| 场景 | iptables kube-proxy | Cilium eBPF |
 | :--- | :--- | :--- |
-| 基础 CNI | 4.9 | 5.10+ |
-| kube-proxy 替换 | 5.3 | 5.10+ |
-| Host Reachable Services | 5.3 | 5.10+ |
-| Bandwidth Manager (EDT) | 5.1 | 5.10+ |
-| L7 NetworkPolicy | 5.3 | 5.10+ |
-| Socket-level LB | 5.4 | 5.10+ |
-| WireGuard 加密 | 5.6 | 5.10+ |
-| BPF Ring Buffer | 5.8 | 5.10+ |
-| XDP NodePort | 4.19 | 5.10+ |
-
-**推荐 Linux 5.10（LTS）或更新版本**，以获得所有特性支持和最佳稳定性。AWS EKS、GKE、AKS 的默认节点 AMI 通常满足这一要求。
-
-### 7.2 使用 Helm 安装 Cilium
-
-```bash
-helm repo add cilium https://helm.cilium.io/
-
-# 最小化安装（仅 CNI）
-helm install cilium cilium/cilium \
-    --version 1.15.0 \
-    --namespace kube-system \
-    --set ipam.mode=kubernetes
-
-# 生产推荐配置（启用全部高级特性）
-helm install cilium cilium/cilium \
-    --version 1.15.0 \
-    --namespace kube-system \
-    --set ipam.mode=kubernetes \
-    --set kubeProxyReplacement=true \
-    --set k8sServiceHost=<API_SERVER_IP> \
-    --set k8sServicePort=6443 \
-    --set hubble.enabled=true \
-    --set hubble.relay.enabled=true \
-    --set hubble.ui.enabled=true \
-    --set bandwidthManager.enabled=true \   # 基于 EDT 的带宽管理
-    --set encryption.enabled=true \          # WireGuard 透明加密
-    --set encryption.type=wireguard
-```
-
-### 7.3 常用诊断命令
-
-```bash
-# 查看 Cilium 整体状态
-cilium status
-
-# 查看某个 Pod 的 Endpoint 信息（Identity、NetworkPolicy、veth 接口）
-cilium endpoint list
-cilium endpoint get <ENDPOINT_ID>
-
-# 查看 BPF Map 内容（Service Map）
-cilium bpf lb list
-
-# 查看 NetworkPolicy 的 BPF 表示
-cilium bpf policy get <ENDPOINT_ID>
-
-# 查看 conntrack 表
-cilium bpf ct list global
-
-# 测试两个 Pod 之间的连通性（考虑 NetworkPolicy）
-cilium connectivity test
-
-# 查看节点上的 eBPF 程序
-bpftool prog list | grep cilium
-
-# 查看 BPF Map
-bpftool map list | grep cilium
-
-# 实时查看 Cilium 监控事件
-cilium monitor --type drop    # 只看丢包事件
-cilium monitor --type trace   # 查看完整数据包跟踪
-```
-
-> [!warning] 生产避坑
-> 在升级 Cilium 版本时，必须注意：Cilium 的 eBPF 程序存储在 bpffs（BPF 文件系统，挂载于 `/sys/fs/bpf`）中，跨版本升级时旧的 BPF 程序需要被新程序替换。如果升级过程中节点重启，可能出现新的 Cilium agent 无法识别旧版 BPF Map schema 的问题（Map 格式变更时）。Cilium 通过 "bpf map migration" 机制处理这个问题，但建议在升级前阅读对应版本的升级说明，并在测试环境验证。
+| Service 转发查找 | 随 Service 数线性变慢 | O(1)，规模无关 |
+| Service/Endpoint 变更生效 | 整表重建，秒级抖动 | Map 元素更新，毫秒级 |
+| 同节点 Pod 通信 | 完整网络栈 | Socket LB 近似 loopback |
+| NetworkPolicy 判决 | 逐链匹配 | Identity 一次哈希 |
+| 流可观测开销 | 外置采样/拷贝 | Ring Buffer 元数据，约个位数 % CPU |
 
 ---
 
-## 第 8 章 Cilium 的性能数字与横向对比
+## 第 10 章 边界与争议：把账单也摊开
 
-### 8.1 基准测试结论（来源：Cilium 官方及第三方测试）
+### 10.1 硬约束与隐性成本
 
-以下数据基于典型的裸金属测试环境（2x Intel Xeon，25 Gbps NIC），仅供参考：
+先看官方特性与内核版本的对应关系（摘录高频项）：
 
-| 场景 | Flannel VXLAN | Calico BGP | Cilium (kube-proxy替换) |
-| :--- | :---: | :---: | :---: |
-| **TCP 吞吐量（同节点 Pod）** | ~9 Gbps | ~9 Gbps | ~9.5 Gbps（Socket LB） |
-| **TCP 吞吐量（跨节点）** | ~7.5 Gbps | ~9 Gbps | ~9 Gbps |
-| **Service 延迟（10k Services）** | ~50ms | ~5ms | **~0.5ms** |
-| **Service 规则更新延迟** | 秒级 | 秒级 | **毫秒级** |
-| **CPU（Service 转发）** | 中（iptables 开销） | 中 | **低（BPF Map 查找）** |
-| **NetworkPolicy 延迟（1k Pod）** | N/A | ~2ms | **~0.1ms** |
+| 能力 | 最低内核版本 |
+| :--- | :--- |
+| 基础 CNI 与策略 | 4.19（更早版本残缺运行） |
+| kube-proxy 替换 / Host Services | 5.3 |
+| Socket-Level LB | 5.4 |
+| WireGuard 透明加密 | 5.6 |
+| BPF Ring Buffer（Hubble 高效通道） | 5.8 |
+| 生产推荐基线 | 5.10 LTS 及以上 |
 
-> [!info] 核心概念
-> "Service 延迟（10k Services）"这个指标最能体现 Cilium 的优势。kube-proxy（iptables 模式）在 10000 个 Service 时，每个数据包需要遍历数万条 iptables 规则，单次 DNAT 耗时可达数十毫秒。Cilium 的 BPF Map 哈希查找恒定 O(1)，在 10000 个 Service 和 1 个 Service 时查找时间几乎相同（约 0.5ms，主要是网络传输延迟）。
+- **内核版本是入场券**：上表意味着老发行版（CentOS 7/RHEL 7 系）基本被挡在门外，选型第一步是核对节点内核；
+- **排障知识换代**：问题域从"看 iptables 规则"变成"看 Map、prog、tail call 链"，`cilium status`、`cilium bpf lb list`、`bpftool prog list`、`cilium monitor --type drop` 是新工具箱，团队需要一轮技能重置——`cilium connectivity test` 这类自带回归测试能兜底一部分，但深层问题仍要求读懂 eBPF 的物件；
+- **升级的天花板效应**：Verifier 的程序上限使某些极端复杂策略需要拆分下发；跨版本升级涉及 Map schema 迁移与程序重载，官方虽有 migration 机制，大版本跳跃仍需在测试环境预演——升级窗口中旧 Map 与新程序的短暂错配是真实存在的风险敞口；
+- **生态共存的边界**：eBPF 接管路径后，主机上依赖 iptables 的第三方工具（审计、IDS、旧式探针）需要重新评估；
+- **Windows 与异构节点**：Windows 节点支持长期在路上，混合集群仍需 Calico 或 Flannel 顶位。
 
-### 8.2 何时不选 Cilium
+与之对称的是"何时可以不选 Cilium"的清单：五十节点以内、无 NetworkPolicy 诉求的教学级集群，Flannel 的极简更划算；内核无法升级的旧资产池，Calico 的 iptables 数据面更现实；而多团队共用、需要给应用团队下放 L7 自治权的组织，则要认真评估节点级 Envoy 的租户边界是否够用。
 
-Cilium 并非在所有场景下都是最佳选择：
+### 10.2 未完的争论：eBPF 能否取代 Sidecar
 
-- **旧版 Linux 内核（< 4.19）**：某些旧版 RHEL/CentOS 系统无法支持 Cilium 的全部特性，此时 Calico 更合适
-- **Windows 节点混合集群**：Cilium 对 Windows 节点的支持仍在进行中，Calico 或 Flannel 是更成熟的选择
-- **对 eBPF 调试经验要求高**：当 Cilium 出现问题时，排查 eBPF 程序的行为需要专业知识，团队如果没有 eBPF 调试经验，维护成本较高
-- **极度简单的集群（< 50 节点，无 NetworkPolicy 需求）**：Flannel 部署更简单，运维成本更低
+Cilium 阵营的论点很直接：既然 eBPF 能在内核完成转发、观测与 L3-L7 策略的大部分工作，何必再为每个 Pod 配一份 Sidecar 的内存与跳转税——这笔税在多语言栈环境里还要乘以各语言的代理适配成本，治理侧的回报（灰度、熔断、身份）似乎远小于为每个工作负载常驻一个代理的代价。
 
----
+反方的反驳同样有力，且分三层递进。第一层是事实层：L7 深度处理终究离不开 Envoy，节点级共享代理只是把 Sidecar 换成了"每节点一个大 Sidecar"，代理没有被消灭，只是被合并；第二层是隔离层：每 Pod 代理的故障半径是一个 Pod，每节点代理的故障半径是一整机，多租户场景里一个租户的代理崩溃会殃及同节点所有邻居，配置的爆炸半径、灰度粒度同样被拉粗；第三层是能力层：mTLS 的按工作负载身份签发与轮换、连接级灰度与熔断、按应用的协议升级路径——这些是控制面问题，从来不是换个数据面引擎就能消掉的复杂度。
 
-## 第 9 章 小结
+这场争论的公允读法，或许是把问题拆开：对于"转发、策略、观测"这类网络本职工作，eBPF 已证明自己做得到且做得更便宜；对于"工作负载身份与 L7 治理"这类服务网格本职，eBPF 至多提供一个更薄的执行底座。Envoy 在 Cilium 体系里没有被消灭，而是被从每 Pod 收敛到每节点——消灭的是 Sidecar 的部署密度，不是代理的功能性需求。
 
-### 9.1 Cilium 技术体系总览
+笔者的立场倾向中庸：eBPF 确定无疑地收编了 Sidecar 模型中"为基础设施所迫"的那部分开销，但服务网格要解决的身份、灰度、韧性问题具有独立价值，两者更可能走向"内核处理快路径、代理处理 L7 慢路径"的分层共存，而非一方取代另一方。这场争论目前仍然言之尚早。
 
-| 层面 | 技术 | 作用 |
-| :--- | :--- | :--- |
-| **数据面** | TC eBPF（每 veth 接口） | 包过滤、DNAT/SNAT、NetworkPolicy |
-| **Service 转发** | BPF Hash Map（O(1) 查找） | 替代 kube-proxy 的 iptables DNAT |
-| **早期介入** | XDP | DDoS 防护、NodePort 高性能处理 |
-| **同节点优化** | Socket Hook | 同节点 Pod 通信跳过网络栈 |
-| **策略模型** | Security Identity（基于 Labels） | 与 IP 解耦的网络身份 |
-| **L7 策略** | 透明代理（Envoy） | HTTP/gRPC/Kafka 层访问控制 |
-| **可观测性** | BPF Ring Buffer + Hubble | 零开销全流量可见性 |
-| **加密** | WireGuard（透明） | 节点间流量加密 |
+### 10.3 三插件的终局坐标
 
-### 9.2 三大 CNI 插件的本质差异总结
+回到与 [[03 Flannel深度解析——VXLAN、Host-GW与UDP模式|Flannel]]、[[04 Calico深度解析——BGP路由、eBPF数据面与网络策略|Calico]] 的三角对照：
 
 | 维度 | Flannel | Calico | Cilium |
 | :--- | :--- | :--- | :--- |
-| **核心技术** | 封包隧道（UDP/VXLAN） | BGP + iptables | **eBPF（颠覆性）** |
-| **策略层级** | 无 | L3/L4 | **L3/L4/L7** |
-| **Service 实现** | kube-proxy（iptables） | kube-proxy（或 eBPF 可选） | **eBPF（替代 kube-proxy）** |
-| **可观测性** | 基本 | 中等 | **完整（Hubble）** |
-| **技术复杂度** | 低 | 中 | **高** |
-| **内核要求** | 低（3.12+） | 中（4.x+） | **高（推荐 5.10+）** |
+| 数据面哲学 | 隧道掩盖差异 | 路由直面物理网络 | 内核可编程，隧道路由皆可 |
+| 策略能力 | 无 | L3/L4 | L3/L4/L7（经节点 Envoy） |
+| Service 转发 | 依赖 kube-proxy | kube-proxy 或 eBPF | 原生 eBPF 全面接管 |
+| 可观测性 | 无 | 基础 | Hubble 全流量内建 |
+| 身份模型 | IP | IP（+ipset） | Security Identity（标签锚定） |
+| 使用门槛 | 极低 | 中（BGP 素养） | 中高（内核与 eBPF 素养） |
 
-### 9.3 下一篇预告
+三者的分野本质上是**复杂性寄存位置**的选择：Flannel 寄在隧道里，Calico 寄在路由协议上，Cilium 寄在内核可编程层中。没有哪一层天然高贵——小型团队、存量内核、审计型组织未必供养得起 Cilium 的学习曲线，而大集群、强安全、重观测的场景里，它给出的回报同样无法被旧构件凑出来。还要补一句诚实的成本观：Cilium 把网络的"平均成本"降了下来，却把"极端情况的排障成本"提了上去——当一切顺遂时它比谁都便宜，当 eBPF 程序本身行为可疑时，能看懂它的人比能看懂 iptables 的人少得多。选型时把团队的人才结构算进总账，与把性能数字算进总账同样重要。
 
-理解了三大 CNI 插件的实现，接下来将聚焦 Kubernetes 中另一个核心网络组件：
+### 10.4 小结与过渡
 
-- **[[06 Service底层实现——kube-proxy、iptables与IPVS]]**：深入 kube-proxy 的 iptables 规则链结构，解析 ClusterIP/NodePort/LoadBalancer 的实现机制，以及 IPVS 模式如何解决大规模 Service 的性能问题
+行文至此，三大 CNI 的设计哲学已经各归其位：Flannel 用最小复杂度换来即插即用，Calico 用路由协议换来身份保真与策略纵深，Cilium 用可编程内核换来性能天花板与 L7 语义。回顾 Cilium 的全部设计，会发现它其实只做了一件连贯的事：把"报文该被怎么处理"这个命题，从静态规则表改写成了可编程内核中的即时计算——当判决变成程序，表达能力、执行效率与观测能力就成了同一件事的不同侧面。它们共享一个前提——数据面再聪明，也只解决"Pod 到 Pod"的问题；当流量以"服务"为单位被抽象、被负载均衡、被外部访问时，登场的将是另一套机制。下一篇回到所有集群的公共地基：[[06 Service底层实现——kube-proxy、iptables与IPVS|Service 与 kube-proxy 的底层实现]]。
 
 ---
 
-*本文是 [[Kubernetes网络原理与插件]] 专栏的第 5 篇。*
+## 参考资料
+
+1. **经典论文与协议**：
+   - McCanne, S., Jacobson, V. *The BSD Packet Filter: A New Architecture for User-level Packet Capture*. USENIX Winter 1993.
+   - Eisenbud, D. E. et al. *Maglev: A Fast and Reliable Software Network Load Balancer*. NSDI 2016.
+2. **Cilium 官方文档与代码库**：
+   - [Cilium Documentation](https://docs.cilium.io/)
+   - [cilium/cilium GitHub Repository](https://github.com/cilium/cilium)
+   - [eBPF.io — eBPF 社区官网站点](https://ebpf.io/)
+3. **内核文档**：
+   - Linux Kernel Documentation: BPF/XDP/TC 相关章节（`Documentation/bpf/`、`Documentation/networking/`）
+4. **经典著作**：
+   - 周志明. 《凤凰架构：构建可靠的大型分布式系统》. 机械工业出版社, 2021.
 
 ---
 
 > [!note] 思考题
-> 1. Cilium 使用 eBPF 在内核层实现网络策略和负载均衡——绕过了 iptables。在高 QPS 场景中（>100K PPS），Cilium 的性能比传统 CNI 高多少？eBPF 程序的加载和更新是否有延迟？在策略变更频繁的场景中，eBPF map 的更新开销如何？
-> 2. Cilium 的 Hubble 提供了网络层的可观测性——可视化 Service 之间的流量、延迟和错误率。Hubble Relay 聚合所有节点的 Hubble Agent 数据。在一个 200 节点集群中，Hubble 的数据量和存储需求是多少？Hubble 的 UI 在日常运维中解决什么问题？
-> 3. Cilium 的 Cluster Mesh 连接多个 Kubernetes 集群——实现跨集群的 Service 发现和 NetworkPolicy。Pod 可以直接访问其他集群的 Service（通过全局 Service）。Cluster Mesh 的流量路由如何避免跨区域的高延迟？与 Istio Multi-Cluster 相比，Cilium Cluster Mesh 的架构更简单吗？
+> 1. Cilium 用 BPF Map 的 O(1) 哈希查找替换了 iptables 的线性链匹配，又以"改 Map 元素"替换了"整表重建"。请推演一个 5000 Service、每秒发生 50 次 Endpoint 变更的集群：kube-proxy iptables 模式与 Cilium 各自在数据面延迟分布（均值与尾延迟）和控制面 CPU 消耗上会呈现怎样的曲线差异？为什么说两者的差距是"复杂度类"而非"常数项"的？
+> 2. Security Identity 让策略判决以标签为锚、在接收端执行，从而与 IP 生灭解耦。请分析：当两个不同 Namespace 恰好使用相同标签集合（譬如都有 `app=web`）时，Identity 模型如何避免跨 Namespace 的误放通？标签即身份的设计，对标签治理（Label 规范、变更审计）提出了哪些在 IP 模型中不存在的新要求？
+> 3. Cilium 的 L7 策略需要把命中流量透明重定向到节点级共享 Envoy。请对比这种"每节点一个大代理"与 Istio"每 Pod 一个 Sidecar"的隔离模型：在故障半径、性能开销、多租户隔离粒度、配置下发复杂度四个维度上各有什么得失？这对你评估"eBPF 是否将取代 Sidecar"的判断有何影响？

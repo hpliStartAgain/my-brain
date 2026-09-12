@@ -1,3 +1,178 @@
+# Kubernetes 网络原理与插件专栏严肃重写（content/云原生/Kubernetes/kubernetes网络原理与插件/ 8 篇）
+
+---
+status: done
+branch: main
+owner: devin
+updated: 2026-09-11 12:00
+tier: COMPLEX
+---
+
+## 1. 需求理解
+
+按 skill `writing-technical-article`（周志明《凤凰架构》DNA）与 AGENTS.md 交付硬指标，将 `content/云原生/Kubernetes/kubernetes网络原理与插件/` 下 8 篇（00 导览 + 01-07 正文）全量重写。
+现状：全专栏共 8 篇，正文 01-07 篇均 CJK 字符仅 4200-6900 字（篇幅仅达标 35%~50%），存在知识点平铺、缺乏 Linux 内核机制与数据面深度、00 导览与正文存在死链、缺乏凤凰架构叙事弧等问题。
+整改目标：
+- 严格遵循 12000-16000 中文字 / 500+ 行的技术深度专栏交付硬指标（00 导览除外，不设字数下限，重点在主线串联与无死链导航）。
+- 论述五问齐全：是什么 → 为什么出现 → 不这样会怎样 → 如何落地 → 边界与反例。
+- 注入凤凰架构六层 DNA（L1 绵密书面语/但/譬如/笔者/零感叹号；L2 历史演进/概念原理模板；L3 起源先行/标准与实现分离；L4 年份锚点/贴切比喻/权威序列；L5 架构即权衡/复杂性守恒/因地制宜；L6 加粗规范/Dracula Mermaid/Markdown 表格）。
+- 严厉执行反模式红线：禁止摘要/结语/延伸思考/参考资料灌水，禁止同义改写空洞套话，字数完全依靠 Linux 内核数据路径、RFC 协议规范、代码与数据结构深度拆解、真实生产避坑与边界反例支撑。
+- 执行流程：按 AGENTS.md 规定采用"每批前列清单 → 老板确认 → 并行 subagent 执行 → 统一验证 → 记录"。
+
+## 2. 批次规划
+
+- **第一批（网络底座与 CNI 基础，3 篇）**：
+  - `01 Kubernetes网络模型——从Linux网络命名空间到Pod IP.md`
+  - `02 CNI体系详解——插件规范、调用链与主流实现对比.md`
+  - `03 Flannel深度解析——VXLAN、Host-GW与UDP模式.md`
+- **第二批（生产级 CNI 与 eBPF 演进，2 篇）**：
+  - `04 Calico深度解析——BGP路由、eBPF数据面与网络策略.md`
+  - `05 Cilium深度解析——eBPF驱动的下一代网络与可观测性.md`
+- **第三批（服务转发、安全隔离与集群 DNS + 导览收官，3 篇）**：
+  - `06 Service底层实现——kube-proxy、iptables与IPVS.md`
+  - `07 NetworkPolicy与CoreDNS——网络安全策略与集群DNS.md`
+  - `00 专栏导览.md`（统一验证、死链修复、CHANGELOG 记录）
+
+## 3. 进度
+
+- [x] 01 Kubernetes网络模型——从Linux网络命名空间到Pod IP（891 行 / 12203 字，Mermaid 9 图，零感叹号）
+- [x] 02 CNI体系详解——插件规范、调用链与主流实现对比（694 行 / 12243 字，Mermaid 8 图，零感叹号）
+- [x] 03 Flannel深度解析——VXLAN、Host-GW与UDP模式（605 行 / 12222 字，Mermaid 4 图，零感叹号）
+- [x] 04 Calico深度解析——BGP路由、eBPF数据面与网络策略（615 行 / 12016 字，Mermaid 3 图）
+- [x] 05 Cilium深度解析——eBPF驱动的下一代网络与可观测性（508 行 / 12049 字，Mermaid 4 图）
+- [x] 06 Service底层实现——kube-proxy、iptables与IPVS（589 行 / 12013 字，Mermaid 4 图；userspace→iptables→IPVS→nftables 四代演进、conntrack 独立成章、externalTrafficPolicy、EndpointSlice、排障决策树）
+- [x] 07 NetworkPolicy与CoreDNS——网络安全策略与集群DNS（641 行 / 12005 字，Mermaid 2 图；白名单并集语义、Calico/Cilium 双实现、ANP 分级治理、KubeDNS→CoreDNS 演进、ndots 放大、NodeLocal DNSCache、联合排障矩阵）
+- [x] 00 专栏导览（06/07 两行描述已同步新稿内容，其余行核验准确；全专栏死链核验通过）
+- [x] 统一验证 + CHANGELOG（01-07 全部 ≥12000 中文字且 ≥500 行；frontmatter/摘要/参考资料/思考题齐全；全部 Mermaid 带 dracula；wiki 链接全部解析成功）
+
+---
+
+# Kubernetes 架构深度剖析专栏严肃重写（content/云原生/Kubernetes/Kubernetes架构深度剖析/ 19 篇）
+
+---
+status: done
+branch: main
+owner: devin
+updated: 2026-09-09 16:00
+tier: COMPLEX
+---
+
+## 1. 需求理解
+
+老板指出该专栏"特别水"，要求按 skill `writing-technical-article`（凤凰架构 DNA）与 AGENTS.md 交付标准严肃重写。现状：19 篇（00 导览 + 01-18 正文），篇均 CJK 字符 1800-7000，远低于 12000-16000 标准。骨架基本齐备（frontmatter/mermaid/callout），但内容偏 API 罗列和知识点平铺，缺凤凰架构叙事弧和绵密书面语。串行执行，一篇一篇写，技术资产（代码/mermaid/表格/链接/思考题）保留并重构。
+
+## 2. 设计方案
+
+- 风格：凤凰架构六层 DNA（L1 长句多逗号/笔者/譬如/但；L2 历史锚点开场/叙事弧/四式结尾；L3 历史先行→问题→标准与实现分离；L4 年份锚点+比喻+权威序列；L5 权衡取舍/因地制宜；L6 加粗1-2处/千字+dracula mermaid+Markdown表格）
+- 篇幅目标：技术深度专栏 12000-16000 中文字 / 500+ 行
+- 论述五问：是什么→为什么出现→不这样会怎样→如何落地→边界与反例
+- 格式：frontmatter（title/date/tags/aliases）、`**摘要：**` 段、`## 第 N 章` 编号、dracula mermaid、Obsidian callout、文末参考资料+思考题
+- 摘要统一从 `> [!abstract]` 改为 `**摘要：**` 段
+
+## 3. 文件级任务
+
+| 文件 | 动作 | 说明 |
+|------|------|------|
+| 01 设计哲学 | REWRITE | Borg→Omega→K8s 三代演进、六大设计原则 |
+| 02 声明式 API | REWRITE | 声明式范式、API 对象统一结构、Spec/Status |
+| 03 架构全景 | REWRITE | 控制平面/数据平面、Pod 完整生命周期 |
+| 04 API Server 请求链路 | REWRITE | HTTP 请求到 etcd 写入全链路 |
+| 05 认证授权准入 | REWRITE | 三级安全防线 |
+| 06 List-Watch 与 Informer | REWRITE | 分布式神经系统 |
+| 07 etcd 深度剖析 | REWRITE | Raft/MVCC/Watch |
+| 08 ResourceVersion 与乐观并发 | REWRITE | 乐观并发控制 |
+| 09 控制器模式与协调循环 | REWRITE | Deployment 到 Operator |
+| 10 StatefulSet | REWRITE | 有序部署与持久化身份 |
+| 11 Scheduler | REWRITE | 预选/优选/扩展机制 |
+| 12 CRD 与 Operator | REWRITE | 自定义控制器 |
+| 13 kubelet | REWRITE | Pod 生命周期与 CRI |
+| 14 Service 与 kube-proxy | REWRITE | iptables/IPVS/eBPF |
+| 15 CNI | REWRITE | Flannel/Calico/Cilium |
+| 16 生产化集群管理 | REWRITE | 多租户/资源治理/安全加固 |
+| 17 可观测性 | REWRITE | 监控/日志/追踪/诊断 |
+| 18 弹性伸缩与多集群 | REWRITE | HPA/VPA/Cluster Autoscaler |
+| 00 专栏导览 | REWRITE | 最后更新，引用各篇新内容 |
+
+## 4. 进度
+
+- [x] 01 设计哲学（591行/12006字）
+- [x] 02 声明式 API（611行/12011字）
+- [x] 03 架构全景（640行/12004字）
+- [x] 04 API Server 请求链路（606行/12001字）
+- [x] 05 认证授权准入（770行/12003字）
+- [x] 06 List-Watch 与 Informer（696行/12005字）
+- [x] 07 etcd 深度剖析（610行/12006字）
+- [x] 08 ResourceVersion 与乐观并发（779行/15918字）
+- [x] 09 控制器模式与协调循环（913行/12184字）
+- [x] 10 StatefulSet（712行/12024字）
+- [x] 11 Scheduler（750行/12008字）
+- [x] 12 CRD 与 Operator（821行/12008字）
+- [x] 13 kubelet（654行/12000字）
+- [x] 14 Service 与 kube-proxy（624行/12008字）
+- [x] 15 CNI（594行/12028字）
+- [x] 16 生产化集群管理（579行/12005字）
+- [x] 17 可观测性（551行/12009字）
+- [x] 18 弹性伸缩与多集群（583行/12000字）
+- [x] 00 专栏导览（103行/1689字，导航页）
+- [x] 统一验证 + CHANGELOG（全部通过）
+
+---
+
+# Netty 专栏全量重写（content/Java/Netty/ 11 篇）
+
+---
+status: done
+branch: main
+owner: devin
+updated: 2026-09-08 20:00
+tier: COMPLEX
+---
+
+## 1. 需求理解
+
+按 skill `writing-technical-article`（凤凰架构 DNA）与 AGENTS.md 交付标准，将 `content/Java/Netty/` 下 11 篇（00 导览 + 01-10 正文）全量重写。技术资产（代码/mermaid/表格/链接/思考题）也重构，叙述与技术资产都按凤凰架构风格重新组织。串行执行，一篇一篇写。
+
+## 2. 设计方案
+
+- 风格：凤凰架构六层 DNA（L1 长句多逗号/笔者/譬如/但；L2 历史锚点开场/叙事弧/四式结尾；L3 历史先行→问题→标准与实现分离；L4 年份锚点+比喻+权威序列；L5 权衡取舍/因地制宜；L6 加粗1-2处/千字+dracula mermaid+Markdown表格）
+- 篇幅目标：技术深度专栏 12000-16000 中文字 / 500+ 行
+- 论述五问：是什么→为什么出现→不这样会怎样→如何落地→边界与反例
+- 格式：frontmatter（title/date/tags/aliases）、摘要段、`## 第 N 章` 编号、dracula mermaid、Obsidian callout、文末参考资料+思考题
+
+## 3. 文件级任务
+
+| 文件 | 动作 | 说明 |
+|------|------|------|
+| 01 Java NIO基础 | REWRITE | NIO 三大组件，从 BIO 到 NIO 的范式革命 |
+| 02 Netty全局架构 | REWRITE | BossGroup/WorkerGroup/ChannelPipeline 全景 |
+| 03 EventLoop与线程模型 | REWRITE | Reactor 模式落地、单线程化设计 |
+| 04 ByteBuf | REWRITE | 引用计数、池化、零拷贝 |
+| 05 ChannelPipeline与Handler | REWRITE | 责任链、入站出站传播 |
+| 06 编解码器 | REWRITE | 粘包拆包、LengthFieldBasedFrameDecoder |
+| 07 Netty内存管理 | REWRITE | jemalloc 在 Java 中的实现 |
+| 08 Netty高性能之道 | REWRITE | FastThreadLocal/HashedWheelTimer/MpscQueue |
+| 09 RPC框架设计 | REWRITE | 序列化、路由、连接管理 |
+| 10 开源项目应用 | REWRITE | Dubbo/RocketMQ/Elasticsearch |
+| 00 专栏导览 | REWRITE | 最后更新，引用各篇新内容 |
+
+## 4. 进度
+
+- [x] 01 Java NIO基础（525行/12065字）
+- [x] 02 Netty全局架构（530行/12000字）
+- [x] 03 EventLoop与线程模型（518行/12019字）
+- [x] 04 ByteBuf（599行/12008字）
+- [x] 05 ChannelPipeline与Handler（512行/12005字）
+- [x] 06 编解码器（1009行/12026字）
+- [x] 07 Netty内存管理（704行/12018字）
+- [x] 08 Netty高性能之道（786行/14557字）
+- [x] 09 RPC框架设计（755行/12805字）
+- [x] 10 开源项目应用（678行/12629字）
+- [x] 00 专栏导览（108行/1730字）
+- [x] 统一验证（11篇全量通过：篇幅/frontmatter/Mermaid/wiki死链0/code fence）
+- [x] CHANGELOG 记录（已追加 2026-09-08 记录）
+
+---
+
 # content 专栏 Tags 标签规范化项目
 
 ## 1. 需求理解

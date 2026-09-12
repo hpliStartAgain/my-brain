@@ -39,3 +39,22 @@
 [2026-09-06] [devin] Go工程实践 01-07 完成：篇均 5595 字 / 442 行（4885-6318 字）
 [2026-09-06] [devin] 统一验证：25 篇 frontmatter 完整；Mermaid 统一 dracula；wiki 死链 0（修复 3 系列导航 + 9 外部概念改纯文本）；code fence 平衡；00 导览未修改
 [2026-09-06] [devin] 任务完成：25 篇结构重写完成，CHANGELOG/TODO/STATE/CONTEXT 已更新。备注：篇均 5000-9000 字，部分篇章未达 12000 理想目标，结构完整深度有提升空间
+
+# Netty 专栏全量重写（content/Java/Netty/ 11 篇）
+
+[2026-09-07] [devin] 任务登记 TODO.md（Netty 专栏全量重写，COMPLEX，11 篇主代理直写，串行一篇一篇写）
+[2026-09-07] [devin] 批 1 完成：01 Java NIO基础（525 行 / 12065 字，BIO→NIO 演进、Channel/Buffer/Selector、粘包拆包、epoll 空轮询 Bug、Netty 痛点解决）
+[2026-09-07] [devin] 批 2 完成：02 Netty全局架构（530 行 / 12000 字，Reactor 模式、Boss/Worker 主从 Reactor、ServerBootstrap、ChannelPipeline、入站出站事件、组件边界）
+[2026-09-07] [devin] 批 3 完成：03 EventLoop与线程模型（518 行 / 12019 字，Thread Confinement、inEventLoop、MPSC 任务队列、Selector.wakeup、ioRatio、ChannelFuture/Promise、阻塞陷阱、业务线程池卸载）
+[2026-09-07] [devin] 批 4 完成：04 ByteBuf（599 行 / 12008 字，双指针、五种分类、引用计数、内存泄漏检测、CompositeByteBuf 零拷贝、PooledByteBufAllocator、Dubbo 实践）
+[2026-09-07] [devin] 批 5 完成：05 ChannelPipeline与ChannelHandler（512 行 / 12005 字，双向链表、HeadContext/TailContext、入站出站传播、executionMask、ctx.write vs channel.write、@Sharable、异常传播、动态 Pipeline、Dubbo 多协议探测）
+[2026-09-08] [antigravity] 批 6 完成：06 编解码器（1009 行 / 12026 字，TCP 粘包拆包、ByteToMessageDecoder 累积缓冲区与 callDecode、LengthFieldBasedFrameDecoder 六参数几何学与丢弃模式、Titan-RPC 二进制自定义协议、ReplayingDecoder 边界）
+[2026-09-08] [antigravity] 批 7 完成：07 Netty内存管理（704 行 / 12018 字，jemalloc 算法、PoolChunk 伙伴系统二叉树、PoolSubpage 64位位图、PoolArena 多竞技场隔离与六大使用率队列、PoolThreadCache 无锁本地缓存与跨线程释放陷阱）
+
+
+[2026-09-08] [antigravity] 批 8 完成：08 Netty高性能之道（786 行 / 14557 字，FastThreadLocal 数组直接寻址、InternalThreadLocalMap 内存泄漏防御、HashedWheelTimer 时间轮算法与异步取消转储、MpscQueue 128字节缓存行填充防伪共享与 lazySet 内存屏障、Recycler 线程本地栈与跨线程无锁回收）
+[2026-09-08] [antigravity] 批 9 完成：09 RPC框架设计（755 行 / 12805 字，LPC到RPC抽象泄漏、八大物理谬误、Titan-RPC 二进制16字节协议帧设计、Protobuf/Hessian2/Kryo 序列化四维坐标横评与 SPI、客户端动态代理与 RequestId + CompletableFuture 全双工复用、微型连接池与自适应指数退避心跳重连、加权轮询与一致性哈希负载均衡与容错）
+[2026-09-08] [antigravity] 批 10 完成：10 开源项目应用（678 行 / 12629 字，Dubbo SPI Transporter 架构与五大 Dispatcher 线程派发策略、RocketMQ RemotingCommand 四段式协议与 FileRegion 操作系统原生零拷贝、Elasticsearch Netty4Transport 五大优先级专属物理连接通道与断路器内存防爆、横向设计推演与生产调优参数矩阵）
+[2026-09-08] [antigravity] 批 11 完成：00 专栏导览（108 行 / 1730 字，四层架构全景 Dracula Mermaid 图、10 篇完整篇幅指标表、三条定制化阅读路径、关联专栏互链）
+[2026-09-08] [antigravity] 统一验证完成：全专栏 11 篇 frontmatter 完整合规、10 篇正文全部达标（512-1009 行 / 12000-14557 CJK 字）、Meracula 主题 Dracula 规范、内部双向链接死链数 0、code fence 全部对称平衡
+[2026-09-08] [antigravity] CHANGELOG.md 已追加 2026-09-08 记录，TODO.md 状态更新为 done，任务圆满交付

@@ -2,594 +2,588 @@
 title: "Service底层实现——kube-proxy、iptables与IPVS"
 date: 2026-03-05
 tags: [ClusterIP, DNAT, EndpointSlice, iptables, IPVS, kube-proxy, Kubernetes, LoadBalancer, NodePort, Service, 云原生]
-aliases: []
+aliases: [Service底层实现, kube-proxy]
 ---
 
 # Service底层实现——kube-proxy、iptables与IPVS
 
-## 摘要
+**摘要：**
 
-Kubernetes Service 是集群内部服务发现与负载均衡的基础抽象，但它在底层并非一个真实存在的网络实体——ClusterIP 是一个"幻象 IP"，没有任何网络接口与之对应。本文深入 Service 的实现机制：kube-proxy 如何感知 Endpoint 变化并生成 iptables 规则，KUBE-SERVICES/KUBE-SVC/KUBE-SEP 三级规则链的精确语义，NodePort 和 LoadBalancer 类型的数据包路径，以及 IPVS 模式如何用内核虚拟服务器取代 iptables 规则链解决大规模 Service 的性能问题。**理解 Service 的底层实现，是排查"curl 通但 ping 不通"、"偶发超时"等经典故障的必备知识。**
+`curl http://my-service` 能通、`ping my-service` 却超时——几乎每个 Kubernetes 使用者的第一课都从这个悖论开始，而悖论的答案藏着整个 Service 的设计哲学：ClusterIP 是一个不存在于任何网卡上的虚拟地址，它只在 iptables 规则里"被引用"，在 conntrack 表里"被记住"。本文沿着"一个 SYN 包如何从 ClusterIP 走到真实 Pod"这条主线，先回溯 kube-proxy 从用户态代理到 iptables 再到 IPVS 的三代演进，再把 KUBE-SERVICES/KUBE-SVC/KUBE-SEP 三级链与概率负载均衡拆到字节级，继而给常被忽略的 conntrack 连接跟踪一次正名，最后端出大规模集群下 EndpointSlice、IPVS 与 eBPF 三条突围路线，以及一条完整的排障决策树。读完全文，你应当能回答三个问题：Service 为什么只能是"幻 IP"、iptables 模型在哪个规模开始崩、以及"偶发超时"在生产环境里究竟是谁的锅。
 
 ---
 
-## 第 1 章 Service 抽象的设计动机
+## 第 1 章 一个并不存在的 IP：Service 抽象的由来
 
-### 1.1 没有 Service 会怎样
+### 1.1 Pod 易变与服务入口的两难
 
-Pod 是 Kubernetes 的最小调度单位，但 Pod 是临时性的（Ephemeral）——Pod 可能因为节点故障、版本升级、资源压力被随时销毁和重建，每次重建后 Pod 会得到一个新的 IP 地址。
+回到 2014-2015 年 Kubernetes 的设计起点：Pod 被明确定义为易失品——节点故障、版本升级、资源压力都会让它原地销毁重建，每次重建都会换一个新 IP。可是微服务的调用方需要一个稳定的调用目标：前端不能每次后端重建就重新发现 IP，更不能在自己的代码里维护健康检查与客户端负载均衡——那是把基础设施复杂度摊派给每个应用。
 
-假设你有一个"前端"应用需要调用"后端"API，如果直接使用 Pod IP：
-- 后端 Pod 重启后 IP 变化，前端需要重新发现后端 IP
-- 后端有 3 个副本，前端需要自己实现客户端负载均衡
-- 后端 Pod 不健康时，前端需要自己实现健康检查和剔除
+一个天真的反问是"为什么不让客户端直接查 apiserver 拿 Pod IP 列表"——这恰是后来 Headless Service 与客户端负载均衡的方向，但它把三个问题原样退回给了应用：变更订阅的实时性（客户端要自己 Watch）、健康剔除（客户端要懂 readiness）、以及多语言栈重复实现（每种语言一份 SDK）。Kubernetes 的选择是让集群替所有客户端统一回答这个问题——用一次性的内核规则成本，换掉每应用一份的发现逻辑。
 
-这些逻辑如果放在每个微服务中实现，会造成严重的代码耦合和重复。这正是 Service 要解决的问题。
+Service 给出的答案在今天看来理所当然、在当时却是关键一跃：**为服务提供一个稳定的虚拟入口，让"入口存在"与"后端是谁"彻底解耦**。一个固定的 ClusterIP（及对应的 DNS 名）作为服务的法定地址，后端的 Pod 可以任意生灭，入口纹丝不动。这个抽象之所以成立，是因为 Kubernetes 选择了一条看似偷懒、实则精明的实现路线——不为 ClusterIP 创建任何实体：没有进程监听它，没有网卡绑定它，它只是一个写在 netfilter 规则里的匹配条件，一个被所有节点共同认账的"约定地址"。
 
-**Service 的核心价值**：提供一个**稳定的虚拟入口**——一个固定的 ClusterIP（或 DNS 名）和端口，无论后端 Pod 如何漂移，前端始终通过这个固定入口访问，Kubernetes 负责将流量自动分发到健康的 Pod。
+值得对照的是同时代的另一条路线：客户端负载均衡。Dubbo 用注册中心 + 客户端 SDK，Netflix 用 Eureka + Ribbon，都把"发现后端、选择后端"的责任放进了应用进程内——好处是少一跳转发、能做应用语义的路由，代价是每个语言栈都要维护一套 SDK、控制逻辑与业务进程同生共死。Kubernetes 的判断是基础设施化的：发现与均衡不该是应用的职责，哪怕为此在内核里多写几万条规则。这个判断的遗产至今仍在——到了服务网格专栏你会看到，Sidecar 模型正是把这条思路又往应用侧推回了一步：不再往内核写规则，而是每个 Pod 旁挂一个代理。架构的钟摆从来如此，在"下沉到基础设施"与"贴近应用语义"之间往复。
 
-### 1.2 Service 的四种类型
+### 1.2 四种 Service 形态：一张语义光谱
 
-| 类型 | 访问范围 | 实现机制 | 典型场景 |
+| 类型 | 访问面 | 实现机制 | 本质 |
 | :--- | :--- | :--- | :--- |
-| **ClusterIP** | 仅集群内部 | iptables/IPVS DNAT | 服务间内部调用 |
-| **NodePort** | 集群外部（通过节点 IP:端口） | ClusterIP + 节点 iptables | 开发测试、临时外部访问 |
-| **LoadBalancer** | 集群外部（通过云 LB IP） | NodePort + 云厂商 LB | 生产环境外部暴露 |
-| **ExternalName** | 集群内部访问外部域名 | DNS CNAME | 对接外部服务（无 iptables）|
+| **ClusterIP** | 集群内 | DNAT 规则（iptables/IPVS/eBPF） | 纯虚拟 IP |
+| **NodePort** | 集群外 | ClusterIP + 每节点固定端口 | 带节点入口的 ClusterIP |
+| **LoadBalancer** | 集群外 | NodePort + 云厂商 LB | 外包入口的 NodePort |
+| **ExternalName** | 集群内 | 仅一条 DNS CNAME | 不代理任何流量 |
 
-### 1.3 ClusterIP 为什么 ping 不通
+四种类型呈嵌套关系：LoadBalancer 包含 NodePort，NodePort 包含 ClusterIP。理解了这个同心圆，就不难解释为什么 ExternalName 与其他三类格格不入——它根本不在转发体系里，只是 CoreDNS 返回的一个别名记录。
 
-这是 Kubernetes 初学者最常见的困惑。`curl http://10.96.100.1:80` 成功，但 `ping 10.96.100.1` 超时。
+这个嵌套关系还有个实用推论：任何 LoadBalancer Service 都自动带着一个可用的 NodePort 和一个可用的 ClusterIP——你可以从集群内、节点 IP、云 LB 三条路径分别访问同一个后端集合。生产排障时"三条路径各自通不通"是定位故障域的快速切分法：ClusterIP 通而 NodePort 不通，问题在节点入向规则；NodePort 通而 LB 不通，问题在云厂商那层。
 
-**根本原因**：ClusterIP 是一个**纯粹的 iptables DNAT 规则的匹配条件**，它不对应任何网络接口，没有任何进程在"监听"这个 IP。当一个数据包目标是 ClusterIP 时，iptables 的 PREROUTING hook 在路由决策之前将其 DNAT 为某个 Endpoint IP。这个转换只对 TCP/UDP 数据包生效（kube-proxy 的 iptables 规则使用 `-p tcp` 或 `-p udp` 匹配）。
+一个最小 ClusterIP Service 的样子值得扫一眼，后面所有机制都在为这几个字段服务：
 
-ICMP（ping）数据包：
-1. 发出 `ping 10.96.100.1`
-2. ICMP 包进入内核协议栈
-3. iptables PREROUTING → KUBE-SERVICES 链：规则只匹配 TCP/UDP，ICMP 不匹配，直接通过
-4. 内核路由查找 `10.96.100.1`：找不到对应路由（ClusterIP 不在任何接口的地址范围）
-5. 内核返回 ICMP "No route to host" 或直接丢弃
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+spec:
+  selector: {app: web}          # 选择器：哪些 Pod 是后端
+  ports:
+  - {port: 80, targetPort: 8080} # ClusterIP:80 → Pod:8080
+```
 
-这就是 ClusterIP 可以 `curl` 不能 `ping` 的本质原因：**TCP/UDP 数据包命中了 DNAT 规则被重定向到真实 Pod，ICMP 数据包没有命中 DNAT 规则，在路由阶段就被丢弃。**
+`selector` 决定了 EndpointSlice 由谁填充，`ports` 的 port/targetPort 分离定义了"入口端口号"与"后端实际端口"的映射。这两个字段的所有组合，就是 kube-proxy 每夜要翻译成内核规则的全部原材料。
+
+还有一层分工值得现在就记住：**Service 层与 CNI 层是垂直叠加的两个平面**。CNI（Flannel/Calico/Cilium）负责让 Pod IP 可达，kube-proxy 负责让 ClusterIP 可达——前者管"去哪"，后者管"先改成去哪"。DNAT 把目标从 ClusterIP 改成 Pod IP 之后，接下来的传输依然是 CNI 的活；这意味着"Service 通不通"与"CNI 通不通"是两个可独立证伪的命题，第 7 章的排障树正是按这个分层来砍的。
+
+由此也衍生一条重要的边界意识：**ClusterIP 只在集群内有意义**。集群外的世界不认识 `10.96.x.x` 这个地址——它既不会被路由、也没有对应的网卡、更没有"离开集群"的路径；Service 的可及范围以"报文能碰到某台节点上写过这条规则的内核"为限。这就是为什么出集群必须走 NodePort/LoadBalancer/Ingress 的显式入口——虚拟地址的作用域从来是被规则的书写位置界定的。
+
+### 1.3 ping 不通的课：ClusterIP 的虚拟性
+
+`curl http://10.96.100.1:80` 通、`ping 10.96.100.1` 不通——这个组合是 Kubernetes 新人几乎人手一份的"第一个坑"。原理一句话：**kube-proxy 生成的 DNAT 规则只匹配 TCP/UDP（`-p tcp`/`--dport`），ICMP 报文根本不会被改写**。于是 ICMP 包顺着路由表走向一个没有任何接口认领的地址，在路由决策处无声消失。这个"能连不能 ping"的现象不是 Bug，而是 ClusterIP 虚拟性的直接推论——它只存在于"DNAT 匹配条件"这个语境里，不是一个能被 ping 达的网络实体。
+
+### 1.4 Headless Service：把"均衡"还给你的后门
+
+Service 还有第五种不太起眼却极其重要的形态——`clusterIP: None` 的 **Headless Service**。它放弃虚拟入口：不为服务分配 ClusterIP，kube-proxy 也不为它写任何 DNAT 规则，CoreDNS 对服务名的解析直接返回**所有后端 Pod 的 IP 列表**。发现归发现、转发归转发——StatefulSet 正是靠它拿到 `pod-0.svc` 这种稳定的逐实例 DNS 名（用于 Kafka broker 序号、数据库主从这些必须"指名道姓"的场景），而那些自己做客户端负载均衡的框架（gRPC 的 `dns:///` resolver 是典型）也靠它绕开连接级均衡拿到逐请求分发的能力。Headless 是这个体系里诚实的逃生舱：当"基础设施替你均衡"的假设不成立时，它把选择权原样交还。
+
+Headless 还揭示了一个常被忽略的语义事实：**ClusterIP 的"稳定入口"承诺本身也是一笔交易**。你得到的是"一个永远不变的地址"，失去的是"对后端选择的控制"——你不能指定某个 Pod、不能按权重分流、不能感知每个后端的负载差异。Headless 把这些自由原样退回，代价是重新把"选哪个后端"的责任放回客户端——这是一切 L7 负载均衡（gRPC 客户端 LB、服务网格）得以存在的逻辑空间。
 
 > [!info] 核心概念
-> ClusterIP 是 Kubernetes 最精妙的设计之一：它是一个"只存在于 iptables 规则中的 IP"。没有任何进程监听这个 IP，没有任何网卡配置这个 IP，但你可以用它建立 TCP 连接——因为在你发出 SYN 包的那一刻，iptables 已经在内核中悄悄将目标 IP 改成了真实的 Pod IP。这种"透明代理"的实现方式，是 Kubernetes 网络设计中用户态与内核协作的经典范例。
+> ClusterIP 是 Kubernetes 网络设计里"声明先于实体"的范例：你声明了一个地址，集群里所有节点就"认"这个地址——不是因为哪里真的有一台设备应答，而是因为每台节点的内核里都写着同一条规则："看到这个地址的包，请改投给这些后端"。虚拟化在网络领域的精髓正在于此：实体不存在，契约成立。
 
 ---
 
-## 第 2 章 kube-proxy 的工作机制
+## 第 2 章 kube-proxy：一个不转发流量的"代理"
 
-### 2.1 kube-proxy 是什么
+### 2.1 名字里的误会
 
-**kube-proxy** 是在每个 Kubernetes 节点上运行的网络代理组件（DaemonSet）。它的核心职责是：
+kube-proxy 的名字是它历史上最大的冤案——它根本不是一个代理。它不在任何流量的数据路径上，不终结 TCP，不读报文内容；它只是一台跑在每个节点上的 DaemonSet，职责是 **Watch apiserver 上 Service 与 EndpointSlice 的变化，把变化翻译成本节点内核中的转发规则**。真正的转发发生在内核里：iptables 的 DNAT、IPVS 的虚拟服务、或 Cilium 的 eBPF 程序。kube-proxy 进程即使崩溃，已写入的规则照常工作——只是 Service 世界的新变化再无人翻译。
 
-1. **Watch Kubernetes API**：监听 Service 和 Endpoint（Slice）对象的变化
-2. **维护转发规则**：根据 Service/Endpoint 的变化，在节点上更新 iptables 规则（或 IPVS 规则）
-3. **健康检查代理**：对 NodePort 类型的 Service，在节点上监听对应端口，处理健康检查请求
+它还有一份不那么显眼的兼职：`healthCheckNodePort` 的应答方。LoadBalancer 类 Service 在 `externalTrafficPolicy: Local` 下靠这个端口报告"本节点是否有活的后端"，云 LB 据此决定流量该打向谁——这是 kube-proxy 唯一一个真的在监听的端口，也是"它不做数据面"这件事的唯一例外。
 
-**kube-proxy 不转发实际流量**——它只是一个**规则维护者**。实际的数据包转发完全在 Linux 内核中完成（通过 iptables DNAT 或 IPVS 的内核模块）。kube-proxy 进程崩溃后，已有的规则仍然有效，只是无法响应新的 Service/Endpoint 变化。
+### 2.2 三代模式的演进史
 
-### 2.2 kube-proxy 的三种模式
+kube-proxy 的历史是一部"把代理逐出数据面"的历史：
 
-| 模式 | 实现机制 | 内核版本要求 | 适用场景 |
-| :--- | :--- | :--- | :--- |
-| **userspace（已废弃）** | kube-proxy 进程自身转发流量 | 任意 | 已不使用，历史遗留 |
-| **iptables（默认）** | 内核 iptables DNAT 规则 | 内核 2.6+ | 通用，适合中小规模集群 |
-| **ipvs** | 内核 IPVS 虚拟服务器 | 内核 4.11+，需 ipvs 模块 | 大规模集群（>1000 Service） |
+- **userspace 模式（史前）**：kube-proxy 真的在用户态监听端口、终结连接、再转发到后端——iptables 只负责把 ClusterIP 流量 DNAT 到 kube-proxy 自己监听的端口，由这个进程里的 Go 代码读完报文、选出后端、再新建一条到后端的连接。每条连接四次用户态↔内核态往返、两份 socket 缓冲，性能惨不忍睹，是 Kubernetes 1.2 之前的默认。它的存在意义是为"service 需要一个入口"提供了最早的占位答案，一旦 iptables 模式成熟便退场——今天的任何新集群都不再需要它，但理解它有助于看清"代理"二字的祛魅过程，也为"为什么每一代都在把转发往内核里塞"这个问题提供了最直观的反面教材；
+- **iptables 模式（默认至今）**：kube-proxy 退居控制面，数据面交给内核 netfilter 的 DNAT 规则，转发在协议栈内完成，零上下文切换——"代理"从此只剩名字，而 iptables 也从此成了 Kubernetes 网络的事实基础设施；
+- **ipvs 模式**：数据面换成内核 IPVS 哈希表，调度算法更丰富，面向 Service 规模上千的集群；
+- **nftables 模式（新）**：Kubernetes 1.29 起 kube-proxy 增加 nftables 后端，用 nftables 的集合（set）与映射（map）数据结构取代线性链——`vip:port → backend` 写成一次 map 查表而非逐条规则匹配，更新粒度也随之细化到集合成员级。这是 iptables 模型在自己的继任者身上完成的自我修正，也是对 Cilium 式"查表而非过链"路线的官方靠拢；
+- **干脆不用 kube-proxy**：Cilium 的 `kubeProxyReplacement` 让 eBPF 接管整个 Service 数据面，第 5 篇已详述。
 
-本文重点深入 iptables 和 IPVS 两种模式。
+每一代的驱动力相同：**让转发这件事留在内核、留在数据结构上、留在最小的开销处**。从用户态代理到 eBPF 的这条演进线，就是本专栏前五篇反复出现的那句话——把热路径交给内核，把声明交给控制面。
 
-### 2.3 Watch 机制：kube-proxy 如何感知变化
+三代同堂的格局也给排障带来一个前提动作：动手查规则前，先确认本集群的 kube-proxy 跑在哪个模式——`kubectl logs -n kube-system kube-proxy-xxx | grep "Using"` 启动日志会直接写明，别把 IPVS 集群当 iptables 集群查。
 
-kube-proxy 通过 Kubernetes API 的 **Watch 机制**（基于 HTTP/2 长连接）实时感知 Service 和 Endpoint 变化。具体链路：
+### 2.3 Watch、翻译与批量提交
 
+先看一张全景图，再逐段拆：
+
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+graph LR
+    classDef api fill:#6272a4,stroke:#8be9fd,color:#f8f8f2
+    classDef kp fill:#ff79c6,stroke:#ff79c6,color:#282a36
+    classDef kernel fill:#44475a,stroke:#50fa7b,color:#f8f8f2
+
+    APIServer["API Server / etcd"] -->|"Watch: Service/EndpointSlice"| KP["kube-proxy（每节点 DaemonSet）"]
+    KP -->|"iptables-restore 原子替换"| NFT["内核 iptables/nat"]
+    KP -->|"netlink 增量更新"| IPVS["内核 IPVS 表"]
+    NFT --> DNAT["DNAT 判决 → Pod IP"]
+    IPVS --> DNAT
+    Pod["业务流量"] -->|"每包经内核"| DNAT
+
+    class APIServer api
+    class KP kp
+    class NFT,IPVS,DNAT kernel
+    class Pod kernel
 ```
-API Server（etcd 存储）
-  ↓ Watch 推送
-kube-proxy
-  ↓ 差量计算（对比当前规则和目标规则）
-  ↓ 生成 iptables-save 格式的规则文本
-  ↓ iptables-restore 批量更新内核规则
-```
 
-**批量更新的重要性**：kube-proxy 不会对每个 Endpoint 变化单独调用 `iptables -A/-D`，而是积累一段时间内的所有变化，一次性通过 `iptables-restore` 批量写入。原因是 iptables 的修改操作需要持有内核的 `xt_iptables` 全局锁，在规则较多时单次操作耗时较长；批量写入可以大幅减少锁争用次数。
+kube-proxy 与 apiserver 之间是 HTTP/2 长连接 Watch：Service/EndpointSlice 的每一次变更被推送到每个节点的 kube-proxy，后者在内存里重算本节点的目标规则集，积累一个同步周期内的全部变更，最后用 `iptables-restore` 一次性原子替换。
 
-从 Kubernetes 1.19 版本起，kube-proxy 默认使用 **EndpointSlice**（而非 Endpoints）API——EndpointSlice 将 Endpoint 数据分片存储，解决了大型 Service（数百 Endpoint）时单个 Endpoints 对象过大、每次变化都需要传输整个对象的问题。EndpointSlice 每个切片最多 100 个 Endpoint，只传输变化的切片，大幅减少 API Server 和 kube-proxy 之间的数据传输量。
+批量提交不是洁癖而是必需品：iptables 的规则修改需要持有内核 `xt` 大锁，单条 `-A`/`-D` 操作的常数成本在大规则集下可观；而把"先 dump、改完、再 restore"攒成一个事务，既保证中途不出半成品状态，又把锁持有次数压到每周期一次。这个模式你在第 4 篇 Felix 身上已经见过一次——优秀的网络控制面殊途同归。
+
+同步节奏由 `--iptables-sync-period`（默认 30 秒）控制下限，Watch 事件驱动上限：高频变更会被攒批到下一个周期边界统一提交。这个"周期 + 事件"的双触发模型意味着 Service 变更到规则生效之间存在一个有界的传播窗口——它通常以百毫秒计，但在大集群里可以拖长到秒级，这是后文"滚动更新竞态"的物理根源之一。
+
+实现层面还有一个 informer 的机制值得知道：kube-proxy 并不直连 apiserver 长轮询，而是用 client-go 的 SharedInformer 维护本地缓存——apiserver 只推增量，本地缓存做去重与重同步兜底，即使 Watch 中断重连也能从 `resourceVersion` 续传。这套"远端只推变化、本地维护全量"的 informer 模式是整个 Kubernetes 控制面的事实标准，kube-proxy 只是其中一个消费者。
+
+值得顺带看清这条数据流的方向性：kube-proxy 是**纯消费者**——它从不向 apiserver 回写任何状态，也不参与任何共识；它只是把 apiserver 里的声明尽力投射成本节点的内核事实。这种"单向投影"的架构让它可以随便死、随便重启、随便慢一拍——恢复后重新 Watch 全量再校一遍，状态自然收敛。这与第 4 篇 Felix、第 5 篇 cilium-agent 的角色在哲学上完全一致：**所有 CNI 数据面的控制面，本质都是"声明到内核事实"的投影仪**——区别只在投影用的是 iptables 规则、BGP 路由还是 BPF Map。
 
 ---
 
-## 第 3 章 iptables 模式深度解析
+## 第 3 章 iptables 模式：把 DNAT 写成一张三级链表
 
-### 3.1 iptables 的规则链体系
+### 3.1 Netfilter 的五个挂载点
 
-要理解 kube-proxy 的 iptables 规则，需要先理解 iptables 的基本架构。iptables 基于 **Netfilter** 框架，定义了 5 个 Hook 点：
+理解 kube-proxy 规则前，先回到它的宿主。Netfilter 是 Linux 内核在协议栈上预设的五个钩子——每个报文在旅途中的五个关键站点都会被各张"规则表"过一遍。iptables 的"表"是按职责分的维度：`filter` 管放行/拒绝，`nat` 管地址转换，`mangle` 管报文修改，`raw` 管绕过 conntrack——kube-proxy 的业务几乎全在 `nat` 表，但 Calico 的策略规则（第 4 篇）住在 `filter`/`mangle`，两张表在同一挂载点上先后经手同一个报文。
 
-| Hook 点 | 触发时机 | 对应 iptables 链 |
-| :--- | :--- | :--- |
-| PREROUTING | 数据包刚到达本机，路由决策前 | PREROUTING |
-| INPUT | 路由决策后，包目标是本机进程 | INPUT |
-| FORWARD | 路由决策后，包需要转发（不是本机进程） | FORWARD |
-| OUTPUT | 本机进程发出的包，路由决策后 | OUTPUT |
-| POSTROUTING | 数据包即将离开本机，路由决策后 | POSTROUTING |
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+graph LR
+    classDef hook fill:#ff79c6,stroke:#ff79c6,color:#282a36
+    classDef proc fill:#44475a,stroke:#50fa7b,color:#f8f8f2
 
-kube-proxy 主要在 **nat 表**（Network Address Translation，网络地址转换）上操作，用于 DNAT（目的地址转换，将 ClusterIP 转为 Pod IP）和 SNAT（源地址转换）。
+    Pre["PREROUTING<br/>路由决策前"] --> Route["路由决策"]
+    Route -->|本机进程| In["INPUT"]
+    Route -->|转发| Fwd["FORWARD"]
+    In --> Local["本机进程"]
+    Local --> Out["OUTPUT"]
+    Out --> Route
+    Fwd --> Post["POSTROUTING"]
+    Route --> Post
 
-### 3.2 kube-proxy 创建的规则链结构
-
-kube-proxy 在 nat 表的 PREROUTING 和 OUTPUT 链上插入跳转规则，然后构建自己的三级规则链：
-
-```
-nat 表 PREROUTING
-  └── -j KUBE-SERVICES
-
-nat 表 OUTPUT（本机进程发出的包也需要 DNAT）
-  └── -j KUBE-SERVICES
-
-KUBE-SERVICES（Service 入口链，每个 Service 一条规则）
-  ├── -d 10.96.100.1 -p tcp --dport 80 -j KUBE-SVC-XXXXXXXX  ← 匹配 Service A
-  ├── -d 10.96.200.2 -p tcp --dport 443 -j KUBE-SVC-YYYYYYYY ← 匹配 Service B
-  └── -j KUBE-NODEPORTS（如果是 NodePort）
-
-KUBE-SVC-XXXXXXXX（单个 Service 的负载均衡链）
-  ├── -m statistic --mode random --probability 0.33333 -j KUBE-SEP-AAA  ← 33% 到 Endpoint 1
-  ├── -m statistic --mode random --probability 0.50000 -j KUBE-SEP-BBB  ← 50% 到 Endpoint 2
-  └── -j KUBE-SEP-CCC                                                    ← 100% 到 Endpoint 3
-
-KUBE-SEP-AAA（单个 Endpoint 的 DNAT 链）
-  ├── -s 10.244.0.5 -j KUBE-MARK-MASQ  ← 如果包来自 Endpoint 自己（防环）
-  └── -j DNAT --to-destination 10.244.0.5:8080  ← 实际 DNAT
+    class Pre,In,Fwd,Out,Post hook
+    class Route,Local proc
 ```
 
-### 3.3 负载均衡的概率计算原理
+kube-proxy 的全部规则都写在 **nat 表**上——`PREROUTING`（外部/转发流量入栈第一关）与 `OUTPUT`（本机进程出栈）上各插一条跳板指向自建链，报文在离开前的 `POSTROUTING` 还可能被 SNAT。
 
-`KUBE-SVC-xxx` 链中的概率跳转是一个精妙的数学设计。假设有 3 个 Endpoint，需要均等分配（33.3%/33.3%/33.3%），但 iptables 是顺序匹配的，每条规则的概率是**相对于剩余流量**的。
+### 3.2 三级链：入口、服务、端点
 
-计算方式：
-- **第 1 条规则**：`--probability 1/3`（0.333）→ 33.3% 的包跳到 Endpoint 1，66.7% 继续
-- **第 2 条规则**：`--probability 1/2`（0.5）→ 剩余 66.7% 中的 50% 跳到 Endpoint 2 = 33.3%，另 33.3% 继续
-- **第 3 条规则**：无概率，直接跳到 Endpoint 3 = 剩余 33.3%
+kube-proxy 的 nat 规则体系是一个三级跳转结构：
 
-公式：第 i 条规则的概率 = `1 / (N - i + 1)`，其中 N 是 Endpoint 总数，i 从 1 开始。
+```text
+PREROUTING / OUTPUT
+  └─ -j KUBE-SERVICES               （所有 Service 的统一入口）
 
-这种设计的局限性：**添加/删除 Endpoint 时，必须重算所有规则的概率**。kube-proxy 每次 Endpoint 变化都会重新生成整个 `KUBE-SVC-xxx` 链，并通过 `iptables-restore` 全量替换。
+KUBE-SERVICES
+  ├─ -d 10.96.100.1 -p tcp --dport 80 -j KUBE-SVC-XXXX   ← 每个 Service 一条
+  ├─ -d 10.96.200.2 -p tcp --dport 443 -j KUBE-SVC-YYYY
+  └─ -j KUBE-NODEPORTS              （NodePort 端口兜底）
+
+KUBE-SVC-XXXX（一个 Service 的负载均衡链）
+  ├─ -m statistic --mode random --probability 0.3333 -j KUBE-SEP-AAA
+  ├─ -m statistic --mode random --probability 0.5000 -j KUBE-SEP-BBB
+  └─ -j KUBE-SEP-CCC                （无概率=兜底）
+
+KUBE-SEP-AAA（一个 Endpoint 的实际 DNAT）
+  ├─ -s 10.244.0.5 -j KUBE-MARK-MASQ   ← 防止发给自己（hairpin）
+  └─ -j DNAT --to-destination 10.244.0.5:8080
+```
+
+每一级各司其职：KUBE-SERVICES 负责"这是不是某个 Service 的流量"，KUBE-SVC-* 负责"这个 Service 选哪个后端"，KUBE-SEP-* 负责"目标改成这个后端，顺便处理自环"。分层让规则有归属，但也让规则数随 Service×Endpoint 线性膨胀——这是后文性能讨论的伏笔。
+
+在真实节点上 `iptables-save -t nat` 出来的样子，与上面的示意只有噪声上的差别：
+
+```text
+-A KUBE-SERVICES -d 10.96.100.1/32 -p tcp -m comment --comment "default/web:http cluster IP" -m tcp --dport 80 -j KUBE-SVC-4N5TFS6S2PZO7QKR
+-A KUBE-SVC-4N5TFS6S2PZO7QKR -m comment --comment "default/web:http" -m statistic --mode random --probability 0.33333333349 -j KUBE-SEP-AAAA...
+-A KUBE-SVC-4N5TFS6S2PZO7QKR -m comment --comment "default/web:http" -m statistic --mode random --probability 0.50000000000 -j KUBE-SEP-BBBB...
+-A KUBE-SVC-4N5TFS6S2PZO7QKR -m comment --comment "default/web:http" -j KUBE-SEP-CCCC...
+-A KUBE-SEP-AAAA... -s 10.244.0.5/32 -m comment --comment "default/web:http" -j KUBE-MARK-MASQ
+-A KUBE-SEP-AAAA... -p tcp -m comment --comment "default/web:http" -m tcp -j DNAT --to-destination 10.244.0.5:8080
+```
+
+规则名里的哈希后缀来自 Service 名与端口的确定性散列——同名 Service 在所有节点上得到同样的链名，这让跨节点的 `iptables-save | grep` 比对成为可能。`-m comment` 注释则是排障时的路标：规则会告诉你它服务于谁，而不是只留下一串神秘哈希。
+
+### 3.3 概率均衡：一场数学上的把戏
+
+iptables 没有原生的"随机三分"指令，kube-proxy 用 `statistic` 模块把均等负载均衡折成了一组递推概率：若有 N 个后端，第 i 条规则的概率是 `1/(N-i+1)`——第一条 1/3、第二条在剩余 2/3 中取 1/2、最后一条兜底。展开后每个后端恰好分到 1/N。
+
+这个递推结构的数学直觉值得单独停留：每条规则要"从剩余流量中拿走自己的 1/N"，所以概率必须随位置递进——第 i 条面对的不是总流量的 1/N，而是剩余流量的 1/(N-i+1)。把这个结构读出来后，你就能立刻识别任何一组"看似随意"的概率数字背后的语义——它们不是后端权重，而是"条件概率链"。
+
+这个设计有两层值得记住的性质。其一是**规则顺序敏感**：概率是相对"走到这条规则时剩余流量"而言的，任何一条后端增删都会导致整条 KUBE-SVC 链的概率重算重排——增量变更在数学上不成立，只能整链重建。其二是**它均衡的是连接而非流量**：DNAT 只在连接建立时执行一次，之后整条连接的报文都由 conntrack 锁定到已选后端——于是 HTTP keep-alive 与 gRPC 长连接会让一个客户端的全部请求钉死在同一 Pod 上，"负载均衡"在长连接语义下名存实亡。
+
+三级链之外还有两条容易忽略的辅助规则值得点名。其一是 KUBE-SEP 链首的 `-s <PodIP> -j KUBE-MARK-MASQ`——当 Pod 访问自己所在的 Service 又被选中自己时（hairpin），回包若原样返回会因路径不对称被 TCP 栈丢弃，提前打标 MASQUERADE 把源改成节点 IP 以强制回程过同一节点。其二是 filter 表的 `KUBE-FORWARD` 链——DNAT 后的报文要经 FORWARD 转发，Kubernetes 早期版本依赖默认 ACCEPT，严格化之后由它显式放行 DNAT 流量；NetworkPolicy 类 CNI 的 filter 规则也常挂在同一段路径上，Service 转发与策略过滤在此交汇。
+
+### 3.4 一次 ClusterIP 访问的完整旅程
+
+Pod A（`10.244.0.2`）在 Node A 上访问 Service `10.96.100.1:80`（后端 Pod B `10.244.1.3:8080` 在 Node B）：
+
+```text
+1. Pod A 发包 src=10.244.0.2:12345 dst=10.96.100.1:80
+2. 经 veth 入 Node A 网络栈 → nat PREROUTING → KUBE-SERVICES
+3. 命中 -d 10.96.100.1 --dport 80 → KUBE-SVC-XXXX
+4. 概率跳转 → KUBE-SEP-AAA → DNAT dst=10.244.1.3:8080
+   conntrack 记录：这条连接的 DNAT 结论存档
+5. 路由决策：dst 属 Node B 的 PodCIDR → 走 CNI 数据面（VXLAN/BGP）
+6. Node B 收包 → 转发给 Pod B（报文已是 src=A dst=B）
+7. Pod B 回包 src=10.244.1.3:8080 dst=10.244.0.2:12345
+8. 回包经 Node A 时 conntrack 命中记录
+   → 反向 DNAT：src 还原为 10.96.100.1:80
+9. Pod A 收到：回包源与请求目标一致，连接正常
+```
+
+两个细节是整个机制的灵魂。其一，**DNAT 只发生在首包**：conntrack 在第 4 步把结论存档后，本连接后续每个报文查表即知去向，不再重跑 KUBE-* 链——连接级判决、报文级执行。其二，**回包必须回到执行 DNAT 的同一节点**才能被还原成 ClusterIP——这条约束在 NodePort 跨节点场景里直接催生了 MASQUERADE 规则，也是 `externalTrafficPolicy` 取舍的由来。
+
+这条路径上还有一个值得记住的观察点：第 5 步"DNAT 后交给 CNI 路由"意味着 **Service 层与 CNI 层是严格串行的两次判决**——kube-proxy 的规则负责"把目标从 ClusterIP 翻成 Pod IP"，Flannel/Calico/Cilium 的数据面负责"把 Pod IP 送到对端节点"。前者在 nat 表/哈希表里发生，后者在 VXLAN/BGP/eBPF 里发生，两层各自失败各自排——这就是为什么排查"Service 不通"时必须把"直接 curl Pod IP"当作分水岭动作的原因。
+
+还有一条路径常被问起：**本机进程访问 ClusterIP 走的不是 PREROUTING，而是 OUTPUT**——本机发出的报文不经"入栈第一关"，kube-proxy 因此在 OUTPUT 上挂了同样的 KUBE-SERVICES 跳板。这也是为什么节点上 `kubectl` 调试流量、`node-exporter` 抓取服务这类本机流量同样能被 Service 转发接管的原因。
+
+### 3.5 NodePort：把入口钉到每个节点
+
+NodePort 在每个节点打开 30000-32767 范围内的同一端口（`--service-node-port-range` 可调），外部流量打到任何节点的该端口都会进入 Service 的负载均衡。规则上它只是多了一条 `KUBE-NODEPORTS` 链把"节点 IP:NodePort"跳转到 KUBE-SVC-*，但真正的门道在回包路径：若选中的后端不在本节点，报文要在 `POSTROUTING` 被 MASQUERADE 成入口节点 IP，否则回包绕过入口节点、反向 NAT 无处还原——**为保住回包路径，源 IP 被改没了**。
+
+端口范围本身是个值得留意的配额：默认 2768 个端口中，每个 NodePort 服务要在所有节点上独占一个，且这些端口实际被 kube-proxy 的 iptables 规则"认领"而非被进程监听——`ss -tlnp` 看不到它，`netstat` 亦然，但端口确实已被占用。与宿主机自身服务（如 Node.js 应用、数据库）的端口规划冲突时，要么缩范围、要么换宿主机端口，这是集群规划里容易被遗漏的一项。
+
+这正是 `externalTrafficPolicy: Local` 存在的理由：设成 Local 后，kube-proxy 只为"本节点有后端"的 Service 保留 NodePort 规则，流量不再跨节点转发、不再 SNAT，Pod 能看到真实客户端 IP。代价同样直白——没有本机后端的节点上这个 NodePort 直接拒绝连接，外部负载均衡器必须靠健康检查把流量只打到有后端的节点，否则部分入口会黑洞化。为此 Service 还专门暴露了 `healthCheckNodePort` 字段——kube-proxy 在每个节点监听该端口应答健康检查，节点有本 Service 的健康后端才返回 200，云 LB 据此精确选路。LoadBalancer 类型再往上叠一层云厂商 LB，语义上只是把"谁来决定打向哪个节点"外包了出去，NodePort 的本质未变；而 ExternalName 则干脆不进入转发体系，只在 CoreDNS 里种一条 CNAME——适合"集群内统一用 `db.svc` 这个名字，实际指向外部 RDS"的解耦场景。
+
+> [!note] 客户端 IP 的三层存活方式
+> "保住源 IP"这件事在 Service 语境里有三档答案：`Cluster` 策略下源 IP 必然被 SNAT 抹掉（最早的路径即最模糊的身份）；`Local` 策略保住了它但牺牲了均衡半径；而 DSR（第 5 篇 Cilium 的方案）与 Proxy Protocol（云 LB 把客户端 IP 塞进连接头）则是"又要路径优、又要身份真"的两条高级路。每层解法都在为上一层的某个性质付费——这几乎可以作为"分布式系统里没有免费的透明性"的样本案例。
+
+把 NodePort 的跨节点路径画出来会更清楚 MASQUERADE 为何非此不可：
+
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+sequenceDiagram
+    participant C as 外部客户端
+    participant NA as Node A（入口）
+    participant NB as Node B（后端所在）
+    participant B as Pod B
+
+    C->>NA: SYN → NodeA:30080
+    Note over NA: DNAT dst=PodB<br/>SNAT src=NodeA（保住回程）
+    NA->>NB: src=NodeA dst=PodB
+    NB->>B: 送达
+    B-->>NB: 回包 dst=NodeA
+    NB-->>NA: 回包原路返回
+    Note over NA: conntrack 还原<br/>src=ClusterIP 语义
+    NA-->>C: 应答送达
+```
+
+注意第 2 步的 SNAT：若不做它，回包会从 Node B 直奔客户端，客户端看到的回包源是 Pod B 而非它请求过的 NodeA:30080，TCP 握手直接失败——MASQUERADE 是"对称回程"的保证金。
+
+### 3.6 这个模型的天花板在哪
+
+iptables 模式的两处结构性短板在第 5 篇已从 eBPF 视角对照过，这里从它自身说起——它们的共同根源都是同一个事实：iptables 的规则模型是"链表 + 逐条匹配"，它从 1998 年的防火墙时代走来，从未为一个"几千个虚 IP、每秒都在变"的场景设计过。
+
+- **查找是线性的**：KUBE-SERVICES 里每个 Service 一条规则，万级 Service 意味着每个首包平均遍历数千条规则——且 iptables 规则匹配要逐条执行 match 模块与 target 判定，每条的常数开销并不微小；
+- **更新是整表的**：任何 Endpoint 变化都要 `iptables-restore` 全量替换，万级规则下单次提交可达秒级，期间持锁阻塞新的规则操作——高频滚动更新时段，这个"秒级抖动"会与 `iptables-sync-period` 叠加，形成可观的规则生效延迟；
+- **能力是受限的**：概率随机之外没有调度算法可言，会话保持要靠 `recent` 模块打补丁，按权重、按最少连接、按一致性哈希一概欠奉。
+
+还有一处不那么显眼但同样真实的成本——**规则集本身就是内存与 cache 的负担**：数万条规则占用内核内存、撑爆 dmesg 与 `iptables-save` 的输出长度，排查时一次 `iptables -L` 可以刷出几十万行。中小集群里这些都不成问题——数百 Service 的规则集毫秒级遍历，更新抖动业务无感。天花板在"Service 数量与 Endpoint 变更频率"两个维度同时拉大时才真正碰到。
+
+---
+
+## 第 4 章 conntrack：隐形的连接状态机器
+
+### 4.1 DNAT 之后的账本
+
+所有 NAT 方案都有一个共同的会计问题：改写只在去程发生一次，回包怎么知道该改回来？Netfilter 的答案是 **conntrack（连接跟踪）**——内核为每条流（含 UDP 伪流）维护一条记录，里面记着原始四元组、应答四元组、连接状态（NEW/ESTABLISHED/RELATED/INVALID 等）与 NAT 改写结论。报文入栈先查 conntrack：命中即按存档处理，未命中才走规则链。这就是为什么"DNAT 是连接级的"——规则只在建流那一刻被咨询，之后一切听账本的。
+
+这几个状态的语义值得记住：`NEW` 是单向首包（只有去程见过），`ESTABLISHED` 是双向已确认，`RELATED` 是与既有连接相关的衍生流（FTP 数据通道的经典用法），`INVALID` 则是"无法归入任何已知流"的报文——后者在某些内核版本上会被默认丢弃，是"明明规则都对了但还是丢包"的一个隐角落。conntrack 同时是 NAT 的状态库与防火墙的流状态库——这解释了为何关掉 conntrack（`raw` 表 `-j NOTRACK`）能省内存却会让 NAT 一并失效：两者共用同一本账。
+
+账本条目是有生命周期的：TCP 连接在 FIN/RST 后进入 TIME_WAIT 倒计时清理，UDP"伪流"则纯靠超时过期（默认 180 秒，无流量的"流"就此消失）；条目数量有上限 `nf_conntrack_max`，大小与内存挂钩。每一条都是内核态的常驻状态——这也是 eBPF 版 Service 同样要维护 conntrack Map 的原因：连接跟踪不是 iptables 的私产，而是所有 NAT 数据面绕不开的宿命。
+
+一条真实记录长这样：
+
+```text
+tcp 6 431999 ESTABLISHED src=10.244.0.2 dst=10.96.100.1 sport=52344 dport=80
+    src=10.244.1.3 dst=10.244.0.2 sport=8080 dport=52344 [ASSURED] mark=0 use=1
+```
+
+前半是去程原样（客户端视角），后半是应答改写（服务端视角）——conntrack 把"双向四元组各是什么"一次性记全，后续报文正反两向都按此对号入座。`431999` 是这条 TCP 连接的剩余超时秒数，`[ASSURED]` 标记表示双向都已见包、条目不会轻易被回收——读懂这行字，你就能解释 90% 的"回包丢了"类故障。
+
+### 4.2 conntrack 带来的生产效应
+
+这本账不是免费的，它的代价以三种典型方式现身：
+
+- **表满丢包**：`nf_conntrack_max` 耗尽时新连接直接被丢（dmesg 里 `table full, dropping packet`），高并发短连接集群里这是常客——每条 DNS 查询、每次健康检查、每个短 HTTP 请求都各占一个名额，且 UDP 条目默认存活 180 秒，"短命流"的累计速度远比直觉快；应对除了调大 `nf_conntrack_max`（`sysctl -w net.netfilter.nf_conntrack_max=...`），还可以按需调小 UDP 流的 `nf_conntrack_udp_timeout` 并配合 NodeLocal DNSCache（第 7 篇）从源头削减 DNS 流条目；
+- **UDP 幽灵流**：UDP 没有连接终止信号，conntrack 条目只能靠超时过期；CoreDNS 的每两次查询（A 与 AAAA）各留一条 180 秒的记录，一个万次/秒 DNS 的集群在峰值时表内躺着数百万条 DNS 残留——这是大规模集群 `nf_conntrack_max` 被打满的第一嫌疑犯；
+- **滚动更新竞态**：Pod 收到 SIGTERM 的瞬间，EndpointSlice 里它还没被摘除，kube-proxy 的规则也还没重刷——此窗口内新连接仍会被 DNAT 到正在死亡的 Pod，于是有了"滚动更新期间零星 5xx"的经典悬案。
+
+第三条的机理值得掰开：Pod 进入 Terminating 状态时 apiserver 立即把它从切片摘除，但摘除事件要经 Watch 推到每个节点、再攒进 kube-proxy 的下一个 sync 周期才能落成规则——在"已 SIGTERM 但规则未刷新"的窗口里，这个正在退出的 Pod 仍然是有权接收新连接的合法 DNAT 目标。应用若在收到 SIGTERM 后立刻拒绝新连接，窗口内的建连就会撞上 RST——这就是 `preStop sleep` 存在的物理理由：让"我已被摘除"的消息先传遍全网，再开始关门。
+
+对应的标准配置写法：
+
+```yaml
+spec:
+  template:
+    spec:
+      terminationGracePeriodSeconds: 60
+      containers:
+      - lifecycle:
+          preStop:
+            exec: {command: ["sleep", "5"]}   # 先等摘除消息传遍全网
+```
+
+`sleep 5` 的秒数不是经验主义的拍脑袋——它是对"EndpointSlice 摘除 + Watch 传播 + kube-proxy 攒批 + iptables-restore"这条链路总时延的一个保守兜底；大集群或高变更频率下可以按需加长。
 
 > [!warning] 生产避坑
-> 这个负载均衡是**基于连接（connection）的随机分配**，不是基于字节的。一旦一个 TCP 连接建立（SYN 包触发 DNAT 决策），后续这条连接的所有包都走同一个 Endpoint（由 conntrack 表保证）。如果你的客户端使用了长连接（HTTP keep-alive，或 gRPC 长连接），那么一个客户端实例的所有请求都会打到同一个后端，实际负载可能严重不均——这就是为什么在 Kubernetes 中，基于 TCP 连接的 Service 负载均衡对于 gRPC/HTTP2 长连接效果差，需要在应用层（服务网格）做 L7 负载均衡。
+> 缓解滚动更新竞态的标准姿势是两段式：`preStop` 钩子里先 `sleep` 几秒（让 EndpointSlice 摘除与规则刷新的消息跑赢 SIGTERM），再配合理的 `terminationGracePeriodSeconds` 让存量连接排空。这条口诀几乎每个线上集群都要用到一次。
 
-### 3.4 ClusterIP 的完整数据包路径
+### 4.3 Session Affinity：给账本加一条偏好
 
-以 Pod A（`10.244.0.2`）访问 Service（ClusterIP `10.96.100.1:80`）为例：
+默认的"每连接随机"对有状态应用不友好——存了会话的 Pod 希望同一客户端一直来找自己。开启方式一行字段：
 
-**步骤 1：Pod A 发出 TCP SYN 包**
-```
-src=10.244.0.2:12345  dst=10.96.100.1:80
-```
-
-**步骤 2：包离开 Pod A 的 Network Namespace，经过 veth pair 进入节点网络栈**
-
-**步骤 3：节点内核——nat 表 OUTPUT 链（因为是本机发出的包）**
-
-等等——这是 Pod A 发出的包，为什么触发节点的 OUTPUT 链而不是 PREROUTING？
-
-关键在于：Pod A 的数据包经过 veth pair 进入节点，此时内核视角，这个包是从 `cali3a4b5c` 接口进来的，目标不是本机，需要**转发**（FORWARD 链），而不是走 OUTPUT 链。
-
-**更准确的路径**：
-
-```
-Pod A 发包
-  ↓ veth pair 进入节点
-nat PREROUTING
-  ↓ -j KUBE-SERVICES
-  ↓ 匹配 -d 10.96.100.1 -p tcp --dport 80
-  ↓ KUBE-SVC-XXXXXXXX → 概率跳转 → KUBE-SEP-AAA
-  ↓ DNAT: dst 改为 10.244.1.3:8080（Pod B）
-mangle FORWARD（略）
-filter FORWARD
-  ↓ KUBE-FORWARD 链允许转发
-nat POSTROUTING
-  ↓ KUBE-POSTROUTING 链（如果需要 SNAT）
+```yaml
+spec:
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP: {timeoutSeconds: 10800}
 ```
 
-**步骤 4：DNAT 后的包路由**
+`sessionAffinity: ClientIP` 在 iptables 模式下用 `recent` 模块实现：命中过某 KUBE-SEP 的源 IP 在超时窗口内被路由回同一后端。它本质上是"按客户端身份锁定 DNAT 结论"，实现了粘性但也放大了不均——某个大客户的长会话会把流量集中到单一后端。IPVS 侧则由 `sh`（源地址哈希）调度算法原生承担同一语义，只是实现从"查一张最近见过谁"换成了"源 IP 哈希到固定后端"，省掉的是一次表查询，留下的是同样的均衡隐患。
 
-DNAT 后，包的目标变为 `10.244.1.3:8080`（Pod B 在 Node B 上）。内核重新路由：通过 CNI 的路由规则（Flannel VXLAN 或 Calico BGP），找到 Node B，封包发出。
-
-**步骤 5：Node B 收包，转发给 Pod B**
-
-Node B 的内核收到包，路由到 Pod B。Pod B 看到的包是 `src=10.244.0.2, dst=10.244.1.3:8080`——源是 Pod A 的真实 IP，目标是自己的真实 IP，不知道中间经过了 DNAT。
-
-**步骤 6：Pod B 回包**
-
-Pod B 回复 `src=10.244.1.3:8080, dst=10.244.0.2:12345`。这个回包在穿越 Pod A 所在节点时，被 conntrack 表识别（存在 `10.244.0.2:12345 ↔ 10.244.1.3:8080` 的连接记录），自动进行反向 DNAT（`src=10.244.1.3:8080` 还原为 `src=10.96.100.1:80`），Pod A 收到的回包源是 ClusterIP，对上了发出时的目标，TCP 连接正常建立。
-
-### 3.5 NodePort：将集群内服务暴露到集群外
-
-**NodePort** 类型的 Service 在每个节点上开放一个固定端口（默认范围 30000-32767），外部流量访问任意节点的这个端口，都会被转发到 Service 的后端 Pod。
-
-kube-proxy 在节点上增加的额外规则：
-
-```
-nat PREROUTING → KUBE-SERVICES → KUBE-NODEPORTS
-  └── -p tcp --dport 30080 -j KUBE-SVC-XXXXXXXX  ← 匹配 NodePort 端口
-      └── ... 同 ClusterIP 的 KUBE-SVC-xxx 链
-```
-
-以及 SNAT 规则（确保回包经过同一节点）：
-
-```
-nat POSTROUTING → KUBE-POSTROUTING
-  └── -m mark --mark 0x4000/0x4000 -j MASQUERADE  ← 打了 KUBE-MARK-MASQ 标记的包做 MASQUERADE
-```
-
-**NodePort 的数据包完整路径**（外部客户端 `203.0.113.1` 访问 `192.168.1.10:30080`）：
-
-```
-外部客户端 → Node A (192.168.1.10:30080)
-  ↓ PREROUTING → KUBE-SERVICES → KUBE-NODEPORTS → KUBE-SVC-xxx
-  ↓ DNAT: dst=10.244.1.3:8080（Pod B，可能在 Node B 上）
-  ↓ 如果 Pod B 在本节点：直接路由到 Pod B
-  ↓ 如果 Pod B 在其他节点：
-      POSTROUTING → MASQUERADE：src 改为 Node A 的 IP（192.168.1.10）
-      发到 Node B，Node B 转发给 Pod B
-      Pod B 回包到 Node A（因为 src 是 Node A IP）
-      Node A 的 conntrack 还原 DNAT，发回外部客户端
-```
-
-> [!warning] 生产避坑
-> NodePort 的 MASQUERADE（SNAT）是必要的，但会隐藏客户端的真实 IP。如果你需要在应用中获取真实客户端 IP（日志、限流、地理位置等），有两种方案：
-> 1. 设置 `service.spec.externalTrafficPolicy: Local`：kube-proxy 只将 NodePort 流量路由到**本节点的 Pod**，跳过 SNAT（因为不需要跨节点转发），Pod 能看到真实客户端 IP。代价是负载不均（只能打到有 Pod 的节点）
-> 2. 使用 LoadBalancer 类型并配置 `ProxyProtocol`：云 LB 通过 Proxy Protocol 将客户端 IP 带入，应用层解析
-
-### 3.6 iptables 模式的性能瓶颈分析
-
-iptables 模式有两个已知的性能天花板：
-
-**瓶颈一：规则数量与匹配延迟**
-
-在 KUBE-SERVICES 链中，每个 Service 对应一条规则。当集群有 N 个 Service 时，每个数据包在 KUBE-SERVICES 中需要平均遍历 N/2 条规则才能找到匹配项（因为命中目标 Service 之前需要逐条跳过其他 Service 的规则）。当 N = 10000 时，平均遍历 5000 条规则，这在高并发场景下会显著增加 CPU 开销和延迟。
-
-**瓶颈二：规则更新的全量替换开销**
-
-当任何 Endpoint 发生变化时（Pod 重启、Deployment 滚动更新），kube-proxy 需要重新生成并 `iptables-restore` 整个规则集（因为 iptables 不支持原子的增量更新）。在 10000 个 Service 的集群中，单次 `iptables-restore` 可能需要 **2-5 秒**，在此期间内核持有锁，新建连接的 DNAT 会有短暂延迟。
+粘性的边界也该写清：它只保证"同一客户端 IP"的稳定，对 NAT 网关后共享出口 IP 的大量客户端（移动网络、企业 NAT）而言，粘性会退化成"半个互联网共用一个后端"——亲和不是均衡的替代品，而是它的局部豁免。
 
 ---
 
-## 第 4 章 IPVS 模式——用内核虚拟服务器替代规则链
+## 第 5 章 IPVS：内核里沉睡了二十年的负载均衡器
 
-### 4.1 IPVS 是什么
+### 5.1 LVS 的来历
 
-**IPVS（IP Virtual Server，IP 虚拟服务器）** 是 Linux 内核的一个模块，用于实现高性能的四层负载均衡。它最初由章文嵩（前 Linux 基金会理事，阿里云技术副总裁）在 1998 年设计，是 **LVS（Linux Virtual Server）** 项目的核心组件，在互联网行业的大规模生产级负载均衡场景中有数十年的实战历史。
+IPVS（IP Virtual Server）的来历比 Kubernetes 老得多：1998 年，章文嵩（后来的阿里云技术副总裁）发起 LVS 项目，目标是给 Linux 装上一个内核态四层负载均衡器——在那个硬件 LB 昂贵的年代，用普通服务器集群扛住门户网站的海量并发。IPVS 于 2004 年合入内核主线，此后二十多年一直在超大规模负载均衡场景服役，是淘宝双十一级别流量的老兵。
 
-**IPVS 的数据结构**：不同于 iptables 的链式规则，IPVS 在内核中维护**哈希表**（虚拟服务表）：
-- **虚拟服务（Virtual Service）**：`(VIP:Port, Protocol)` → Service 的 ClusterIP
-- **真实服务器（Real Server）**：每个虚拟服务对应多个 Real Server（即 Endpoint Pod IP:Port）
+这段历史给 IPVS 模式一个独特的定性：它不是"为 Kubernetes 造的新轮子"，而是"把一个生产检验了二十年的内核能力重新启用"。LVS 的设计假设本来就是这个场景——海量连接、频繁后端变更、要求逐连接记状态——Kubernetes 的 Service 几乎是它原生工作负载的复刻。这也解释了为什么它对"Service 多、Endpoint 变"的组合拳有如此天然的抗性：它本来就是为此而生的。
 
-查找一个 ClusterIP 时，IPVS 在哈希表中直接定位（O(1)），而不是像 iptables 那样线性遍历。
+它对 Service 场景的适配几乎是量身定做：虚拟服务表是哈希表而非链表，`VIP:Port → 后端集合` 的查找 O(1)；每个虚拟服务的后端增删是独立的增量操作，不存在整表重建；调度算法自带八种（rr/wrr/lc/wlc/sh/dh/sed/nq），kube-proxy 默认 **wlc**（加权最少连接）——比"连接级随机"更懂得把新连接发给此刻最闲的后端。内核里 IPVS 与 netfilter 的关系是协作而非替代：IPVS 在 LOCAL_IN 挂载点上接管目标为本机的报文，做自己的调度与 DNAT，然后再把报文交回协议栈走完剩下的路——它是在 netfilter 体系内加了一台"专用调度器"，而不是另立门户。
 
-### 4.2 IPVS 的多种调度算法
+IPVS 原生支持三种转发模式：NAT（masq，双向改写）、DR（Direct Routing，只改 MAC、回包不经过 LB）与 TUN（隧道封装）。kube-proxy 选用的是最简单的 masq 模式——DNAT 改写目标地址后按路由转发，回包对称返回经同一节点做反向 NAT，与 iptables 模式的数据面语义完全等价；它没有用 DR 模式榨取"回包不绕行"的性能（那是第 5 篇 DSR 的事），所以 IPVS 模式的收益全部集中在**查找效率与更新粒度**上，而非转发路径的长短。这一点是常被误读的：IPVS 模式并不比 iptables 少一跳，它只是更快地决定要跳去哪。
 
-IPVS 支持多种负载均衡调度算法，远比 iptables 的概率随机更丰富：
+### 5.2 IPVS 模式的三个机关
 
-| 算法 | 简称 | 原理 | 适用场景 |
-| :--- | :--- | :--- | :--- |
-| **Round Robin** | rr | 轮询，顺序分发 | 请求处理时间相近 |
-| **Weighted Round Robin** | wrr | 加权轮询，按权重分发 | 节点性能不均 |
-| **Least Connection** | lc | 最少连接，发给当前连接数最少的后端 | 长连接，请求处理时间差异大 |
-| **Weighted Least Connection** | wlc | 加权最少连接（默认） | **kube-proxy IPVS 模式默认** |
-| **Source Hash** | sh | 基于源 IP 哈希 | 会话保持（Session Affinity） |
-| **Destination Hash** | dh | 基于目标 IP 哈希 | 缓存服务 |
-| **Shortest Expected Delay** | sed | 最短期望延迟 | 响应时间敏感 |
-| **Never Queue** | nq | SED 变体，优先空闲后端 | 与 sed 类似 |
+kube-proxy IPVS 模式比 iptables 模式多一个关键道具——**dummy 网卡 `kube-ipvs0`**。ClusterIP 在内核路由表里本无任何归属，报文会在路由决策处被丢弃；kube-proxy 把所有 ClusterIP 以 /32 绑到 `kube-ipvs0` 上，使内核认为"这是本机地址"，报文得以走到 INPUT 方向并被 IPVS 模块接管。这个"先认领地址再接管流量"的手法，与 Calico 的 `169.254.1.1` 代理 ARP 在精神上异曲同工——虚拟入口要成立，总得在内核某处给它落一个户口。
 
-kube-proxy IPVS 模式默认使用 **Weighted Least Connection（wlc）**，可通过 `--ipvs-scheduler` 参数指定其他算法。
+另一个常被混淆的事实是：IPVS 模式下 **iptables 并没有消失**。后端以 `-m`（Masq/NAT 模式）加入虚拟服务，报文被 DNAT 到 Pod IP；而 masquerade、NodePort 的端口认领、若干标记规则仍由 iptables 完成，只是 kube-proxy 会用 ipset（`KUBE-CLUSTER-IP`、`KUBE-NODE-PORT-TCP` 等集合）把规则数压到常数级——`iptables-save | wc -l` 在两种模式下可能差三个数量级，但绝不会是零。判断集群是不是 IPVS 模式，看 `ipvsadm -Ln` 有没有虚拟服务比数 iptables 规则更可靠。
 
-### 4.3 kube-proxy IPVS 模式的工作方式
-
-kube-proxy 在 IPVS 模式下的工作：
-
-**1. 在节点上创建虚拟网卡 kube-ipvs0**
-
-IPVS 需要 ClusterIP 在本节点的某个接口上有地址，否则内核路由会在路由决策时直接丢弃目标为 ClusterIP 的包（因为找不到路由）。kube-proxy 创建一个 dummy 接口 `kube-ipvs0`，并将所有 Service 的 ClusterIP 绑定到这个接口上。
+切换动作本身一行命令就够，但请把它当变更管理对待：
 
 ```bash
-# IPVS 模式下的 kube-ipvs0 接口
+# 1. 确认内核模块在位
+lsmod | grep ip_vs   # 或 modprobe ip_vs ip_vs_rr ip_vs_wrr ip_vs_sh nf_conntrack
+
+# 2. 修改 kube-proxy 配置
+kubectl edit configmap kube-proxy -n kube-system
+#   mode: "" → "ipvs"
+
+# 3. 滚动重启
+kubectl rollout restart daemonset kube-proxy -n kube-system
+
+# 4. 验证
+ipvsadm -Ln | head
 ip addr show kube-ipvs0
-# 输出示例：
-# 5: kube-ipvs0: <BROADCAST,NOARP> mtu 1500 qdisc noop state DOWN
-#     inet 10.96.100.1/32 scope global kube-ipvs0   ← Service A 的 ClusterIP
-#     inet 10.96.200.2/32 scope global kube-ipvs0   ← Service B 的 ClusterIP
-#     inet 10.96.0.1/32 scope global kube-ipvs0     ← kubernetes Service
 ```
 
-这样，当数据包的目标是 ClusterIP 时，内核路由会将其视为"发往本机"的包（因为 kube-ipvs0 上有这个 IP），触发 INPUT 链，进而被 IPVS 模块处理。
-
-**2. 通过 ipvsadm 配置虚拟服务**
+切换瞬间会重建转发规则并打翻 conntrack——存量长连接会经历一次重连，低峰窗口操作是基本礼仪。
 
 ```bash
-# kube-proxy 执行等效于以下 ipvsadm 命令的操作
-ipvsadm -A -t 10.96.100.1:80 -s wlc   # 创建虚拟服务
-ipvsadm -a -t 10.96.100.1:80 -r 10.244.0.5:8080 -m   # 添加 Real Server（-m = masquerade/NAT 模式）
-ipvsadm -a -t 10.96.100.1:80 -r 10.244.0.6:8080 -m
-ipvsadm -a -t 10.96.100.1:80 -r 10.244.0.7:8080 -m
-
-# 查看 IPVS 表
+# 查看 IPVS 虚拟服务与后端
 ipvsadm -Ln
 # TCP  10.96.100.1:80 wlc
-#   -> 10.244.0.5:8080         Masq    1      0          0
-#   -> 10.244.0.6:8080         Masq    1      0          0
-#   -> 10.244.0.7:8080         Masq    1      0          0
+#   -> 10.244.0.5:8080   Masq   1   0   0
+#   -> 10.244.0.6:8080   Masq   1   0   0
 ```
 
-**3. 保留少量 iptables 规则**
-
-IPVS 模式并非完全不使用 iptables——仍然需要少量 iptables 规则处理：
-- SNAT（NodePort 流量出去时的 IP Masquerade）
-- 连接标记（标记需要 SNAT 的包）
-- 端口转发（NodePort 的端口监听）
-
-但这些规则数量远少于 iptables 模式（通常只有几十条，而不是数万条）。
-
-### 4.4 IPVS vs iptables 性能对比
+### 5.3 与 iptables 模式的对照
 
 ```mermaid
 %%{init: {'theme': 'dracula'}}%%
 graph LR
     classDef good fill:#50fa7b,stroke:#50fa7b,color:#282a36
     classDef bad fill:#ff5555,stroke:#ff5555,color:#f8f8f2
-    classDef mid fill:#ffb86c,stroke:#ffb86c,color:#282a36
-
-    subgraph "Service 查找复杂度"
-        A1["iptables: O(N) 线性遍历"]
-        A2["IPVS: O(1) 哈希查找"]
+    subgraph "查找"
+        A1["iptables: O(N) 顺序遍历"] 
+        A2["IPVS: O(1) 哈希"]
     end
-    subgraph "规则更新"
-        B1["iptables: 全量替换（秒级锁）"]
-        B2["IPVS: 增量更新（毫秒级）"]
+    subgraph "更新"
+        B1["iptables: 整表 restore + 持锁"]
+        B2["IPVS: 单虚拟服务增量"]
     end
-    subgraph "10000个Service时的延迟"
-        C1["iptables: ~50ms"]
-        C2["IPVS: <1ms"]
+    subgraph "调度"
+        C1["iptables: 概率随机"]
+        C2["IPVS: wlc/rr/sh 等 8 种"]
     end
-
     class A2,B2,C2 good
     class A1,B1,C1 bad
 ```
 
-| 指标 | iptables 模式 | IPVS 模式 |
+| 维度 | iptables | IPVS |
 | :--- | :--- | :--- |
-| **Service 查找** | O(N)，线性遍历 | O(1)，哈希表查找 |
-| **规则更新** | 全量替换，持有全局锁（秒级） | 增量更新，虚拟服务独立修改（毫秒级） |
-| **1000 个 Service 时的连接建立延迟** | ~2ms | ~0.1ms |
-| **10000 个 Service 时的连接建立延迟** | ~50ms | ~0.1ms |
-| **内存占用** | 约 100MB（规则链占用） | 约 10MB（哈希表占用） |
-| **调度算法** | 仅随机概率 | 8 种调度算法 |
-| **连接数限制** | 取决于 conntrack 表大小 | 取决于 IPVS 连接表大小 |
+| Service 查找 | O(N) | O(1) |
+| 变更粒度 | 整表替换 | 单虚拟服务增量 |
+| 调度算法 | 概率随机 | wlc 等 8 种 |
+| Session Affinity | recent 模块补丁 | sh 原生支持 |
+| 调试直觉 | 规则直白 | 需懂 ipvsadm 与 dummy 网卡 |
+| 规模拐点 | ~千级 Service 起吃紧 | 万级仍从容 |
 
-> [!note] 设计哲学
-> IPVS 模式的性能优势在 Service 数量超过 1000 时开始显现，在 Service 数量超过 5000 时非常明显。对于大多数中小规模集群（< 500 个 Service），两种模式的性能差异在实际业务中几乎感知不到。选型时不要为了追求技术先进性而盲目切换到 IPVS——如果你的集群规模不大，iptables 模式更稳定、更易于调试。
+公开基准的量级观感（不同环境数字浮动，只取方向）：iptables 模式下 Service 数从千到万，每连接建连延迟从亚毫秒爬升到几十毫秒、规则整表替换到秒级；IPVS 同规模下建连延迟稳定在亚毫秒、单服务更新毫秒级。两张表的差距不是"快多少"，而是"随规模如何变化"——O(N) 与 O(1) 的分水岭从来不在小数字上。
 
-### 4.5 切换到 IPVS 模式
+诚实的边界也该写在这里：IPVS 优化的是"Service 转发"这一段，iptables 的其余职责（masquerade、filter 链等）并未消失；当集群规模大到连 IPVS 的控制面同步都嫌重时，再往前一步就是第 5 篇的 eBPF——那已经不是"换一个内核模块"，而是"换一台执行引擎"。
 
-```bash
-# 前置条件：确认内核已加载 IPVS 模块
-lsmod | grep ip_vs
-# 如果没有输出，手动加载
-modprobe ip_vs
-modprobe ip_vs_rr
-modprobe ip_vs_wrr
-modprobe ip_vs_sh
-modprobe nf_conntrack
-
-# 方式一：修改 kube-proxy ConfigMap
-kubectl edit configmap kube-proxy -n kube-system
-# 将 mode: "" 改为 mode: "ipvs"
-
-# 方式二：kubeadm 初始化时指定
-kubeadm init --config kubeadm-config.yaml
-# kubeadm-config.yaml 中添加：
-# kubeProxy:
-#   config:
-#     mode: "ipvs"
-
-# 切换后重启所有 kube-proxy Pod
-kubectl rollout restart daemonset kube-proxy -n kube-system
-
-# 验证 IPVS 规则
-ipvsadm -Ln
-```
+还有一条 IPVS 模式的隐性成本需要计入：它把"Service 转发"的排障工具从 iptables 生态换到了 `ipvsadm`/`ipset`/`kube-ipvs0` 这一套——当团队中多数人只熟悉 iptables 的输出时，IPVS 模式会把"规则看没看对"从一目了然变成需要先理解"dummy 网卡 + 虚拟服务表"的两步翻译。这个工具链迁移成本在选型时经常被低估。
 
 ---
 
-## 第 5 章 EndpointSlice——大型 Service 的性能优化
+## 第 6 章 规模化的补丁：EndpointSlice 与拓扑感知
 
-### 5.1 Endpoints 的扩展性问题
+### 6.1 Endpoints 对象的大对象病
 
-Kubernetes 早期，每个 Service 对应一个 `Endpoints` 对象，存储该 Service 的所有 Endpoint IP:Port。当一个 Service 有 1000 个 Endpoint 时，这个 Endpoints 对象可能有几十 KB；每次任何一个 Pod 重启（只有一个 Endpoint 变化），API Server 都要传输整个 Endpoints 对象给所有 Watch 了这个 Service 的 kube-proxy——N 个节点的集群，每次 Endpoint 变化要传输 N 次完整的大对象。这在有大量 Service 和 Pod 的集群中是显著的 API Server 带宽压力。
+控制面也有自己的规模病。早期每个 Service 的所有后端挤在一个 `Endpoints` 对象里：一千个 Endpoint 就是几十 KB 的单体对象，任何一个 Pod 重启都要把这个庞然大物全量推送给每个 Watch 它的 kube-proxy——N 个节点 × M 次变更 = 全集群无谓的带宽与 CPU。问题不在数据量大，而在**变更粒度与传输粒度不匹配**：动一个 IP，传一千个。这个设计的后果在大型集群里非常具体：API Server 的出向带宽被 Endpoints 推送吃掉、每个 kube-proxy 的反序列化 CPU 被反复全量解析烧掉、etcd 的对象读写也随变更频率线性放大——Endpoints 曾经是大集群扩容路上最先撞到的那堵墙。
 
-### 5.2 EndpointSlice 的设计
+算一笔账：5000 Endpoint 的 Service、每秒 50 个 Pod 生灭、1000 节点——Endpoints 模型下每次变更推送一次全量对象（约几百 KB），每秒 50 次变更 × 1000 节点 = 每秒几十 GB 的 apiserver 出口带宽，还不含序列化与 Watch 维护的 CPU。这不是"优化空间"，这是"根本跑不动"。
 
-**EndpointSlice**（K8s 1.17 引入，1.21 默认启用）将 Endpoint 数据分片存储：
+### 6.2 分片解法与附带红利
 
-- 每个 EndpointSlice 最多包含 100 个 Endpoint
-- 一个 Service 可以对应多个 EndpointSlice
-- 当某个 Endpoint 变化时，只更新包含该 Endpoint 的 EndpointSlice，其他切片不变
-- kube-proxy 只需接收变化的切片，而非整个 Service 的所有 Endpoint
-
-例如，一个有 300 个 Endpoint 的 Service：
-- **旧方式（Endpoints）**：1 个对象，300 个 IP，每次变化传输约 30KB
-- **新方式（EndpointSlice）**：3 个切片，每切片 100 个 IP；Endpoint 变化时只传输 1 个切片，约 10KB
-
-在高频 Pod 滚动更新的场景下，EndpointSlice 的带宽节省可达 **60-70%**。
-
-### 5.3 EndpointSlice 的 Topology 感知路由
-
-EndpointSlice 还引入了 **Topology-aware Hints（拓扑感知路由）** 功能：
+EndpointSlice（1.17 引入、1.21 默认）把后端按最多 100 个一组切片存储：某 Endpoint 变化只更新并下发它所在的那一片。同样的服务、同样的变更频率，apiserver 与 kube-proxy 之间的传输量直接砍去一个数量级——一个只改"分配粒度"就兑现的优化。一个真实切片长这样：
 
 ```yaml
 apiVersion: discovery.k8s.io/v1
 kind: EndpointSlice
 metadata:
-  name: my-service-abc123
+  name: web-abc12
   labels:
-    kubernetes.io/service-name: my-service
+    kubernetes.io/service-name: web   # 回链 Service
 addressType: IPv4
 endpoints:
-  - addresses: ["10.244.0.5"]
-    conditions:
-      ready: true
-    hints:
-      forZones:
-        - name: "us-east-1a"    # 建议 us-east-1a 的节点优先使用这个 Endpoint
-    zone: "us-east-1a"
+- addresses: ["10.244.0.5"]
+  conditions: {ready: true}
+  nodeName: node-a
+  zone: us-east-1a
+  hints:
+    forZones: [{name: "us-east-1a"}]  # 拓扑感知提示
+ports:
+- {name: http, port: 8080, protocol: TCP}
 ```
 
-kube-proxy 可以根据 hints 优先选择同可用区的 Endpoint，减少跨可用区流量（降低延迟和跨区数据传输费用）。这在多可用区部署的云上集群中非常有价值。
+每片自带 `conditions.ready`（kube-proxy 据此过滤未就绪后端）、`nodeName`/`zone`/`hints`（拓扑信息）与 `ports` 映射——切片已经不是"Endpoints 的分片"，而是"带元数据的端点单元"。
+
+附带的结构红利更持久：切片对象天然是挂扩展字段的地方。**Topology-aware Hints** 在每片端点上携带 `forZones` 提示，kube-proxy 据此优先选择同可用区后端——跨 AZ 流量的延迟与数据传输费因此有了官方的内生解法，而不必再靠外部拓扑路由的奇技淫巧。Hints 语义有个诚实的限定词：它是"在分布均衡的前提下尽量就近"，当各可用区后端比例严重失衡时控制器宁可放弃提示也要保住均衡——拓扑优化让位于负载公平，这是合理的优先级排序。
+
+EndpointSlice 还有一处设计细节值得记取：它由独立的 EndpointSlice 控制器（而非 kubelet 或 kube-proxy）负责生成，对象带 `kubernetes.io/service-name` 标签回链 Service，`addressType` 字段让 IPv4/IPv6 双栈共存得以前置建模——分片不是终点，而是"把 Service 的成员关系变成一等 API 对象"的载体。
+
+### 6.3 internalTrafficPolicy 的补位
+
+`externalTrafficPolicy` 管外部流量，对称地，`internalTrafficPolicy`（1.26 起引入、随后毕业）开始管集群内流量：设为 `Local` 时只路由到本节点后端。它为"DaemonSet 型服务只处理本节点流量"这类拓扑约束提供了官方表述——譬如节点本地的日志收集 agent 以 Service 形式访问本节点的采集端点，避免无意义的跨节点绕行。这也让 Service 的流量路径治理语义第一次完整覆盖了内外两个方向。
+
+这一对字段的对称性里藏着 Service 模型的一个成熟标记：**"流量从哪来"与"流量该去哪"被拆成了两个独立的策略轴**。外部流量的源 IP 保真、路径跳数、健康检查（`externalTrafficPolicy`）与内部流量的拓扑约束（`internalTrafficPolicy`）可以分别调优——这在云上是"外部流量过 LB、内部流量就近"这类生产诉求的直接落点。
+
+一个容易被忽略的配套知识：`externalTrafficPolicy` 影响的是"进入集群后怎么走"，`internalTrafficPolicy` 影响的是"集群内部怎么选"，而 `ipFamilyPolicy`/`ipFamilies` 则决定 Service 在双栈集群里拿到几个地址族——三个字段共同构成了 Service 流量治理的完整控制面，它们之间没有重叠，但经常被混为一谈。
 
 ---
 
-## 第 6 章 Session Affinity——粘性会话
+## 第 7 章 排障：Service 不通的决策树
 
-### 6.1 什么是 Session Affinity
+Service 类故障的高明之处在于症状雷同、根因分散——同一个"连不通"可能出在六个不同层。一棵按"隔离变量"组织的决策树比背命令更有用：
 
-默认情况下，kube-proxy 对每个新的 TCP 连接随机选择 Endpoint，相同客户端的连续请求可能到不同的 Pod。对于有状态的应用（如存储了用户会话的 Web 应用），这可能导致用户体验问题。
-
-**Session Affinity（会话保持）** 确保来自同一客户端（源 IP）的请求总是路由到同一个 Pod。
-
-```yaml
-apiVersion: v1
-kind: Service
-spec:
-  sessionAffinity: ClientIP
-  sessionAffinityConfig:
-    clientIP:
-      timeoutSeconds: 10800  # 3小时
+```text
+症状：访问 Service 不通/超时
+├─ 先确认 DNS 解析正常（nslookup my-service，详见第 7 篇）
+├─ kubectl get endpointslice -l kubernetes.io/service-name=X
+│    ├─ 无切片/为空 → 选择器或 Pod 健康（控制面问题）
+│    └─ 有健康端点 ↓
+├─ 绕过 Service：直接 curl <PodIP:Port>
+│    ├─ 不通 → 问题在 Pod 或 CNI（不是 Service 层）
+│    └─ 通 ↓ 问题锁定在转发层
+├─ 查本节点规则
+│    ├─ iptables -t nat -L KUBE-SERVICES | grep <ClusterIP>
+│    └─ ipvsadm -Ln | grep <ClusterIP>
+│    ├─ 无规则 → kube-proxy 异常（看日志）
+│    └─ 有规则 ↓
+├─ conntrack -L | grep <ClusterIP> / 查表是否打满
+│    └─ dmesg | grep "table full"
+└─ 滚动更新零星失败 → preStop/优雅退出竞态
 ```
 
-### 6.2 iptables 模式的 Session Affinity 实现
+配套的几个高频根因：Endpoint 摘除与规则刷新的延迟差（滚动更新竞态）；conntrack 表满（高并发短连接）；`externalTrafficPolicy: Local` 下无本地后端的节点黑洞（外部 LB 健康检查未同步）；以及会话亲和导致的"负载均衡看起来失效"。
 
-kube-proxy 在 iptables 模式下，为启用了 Session Affinity 的 Service 增加额外的规则：
-
-```bash
-# 在 KUBE-SVC-xxx 链头部添加 recent 模块的规则
--m recent --name KUBE-SEP-AAA --rcheck --seconds 10800 --reap -j KUBE-SEP-AAA
-```
-
-`recent` 模块维护一张"最近见过的源 IP"表：
-- 如果源 IP 在过去 10800 秒内曾命中 KUBE-SEP-AAA（Endpoint 1），那么这次也跳到 KUBE-SEP-AAA
-- 如果没有记录，走正常的随机分配逻辑，分配后记录这个 (源 IP, Endpoint) 的映射
-
-**IPVS 模式**使用 `sh`（Source Hash）调度算法天然支持 Session Affinity，基于源 IP 哈希选择 Real Server，更高效。
-
----
-
-## 第 7 章 故障排查实践
-
-### 7.1 Service 不通的排查流程
+每一条根因都有对应的实证命令，排障时按图索骥：
 
 ```bash
-# 步骤 1：确认 Service 和 Endpoint 状态
-kubectl get svc my-service -n default
-kubectl get endpoints my-service -n default  # 旧版
-kubectl get endpointslice -n default -l kubernetes.io/service-name=my-service  # 新版
+# 端点是否就位
+kubectl get endpointslice -n default -l kubernetes.io/service-name=my-service
 
-# 步骤 2：确认 kube-proxy 是否正在运行且健康
-kubectl get pods -n kube-system -l k8s-app=kube-proxy
-kubectl logs -n kube-system kube-proxy-xxx | tail -20
-
-# 步骤 3：在 Pod 所在节点检查 iptables 规则（iptables 模式）
+# 本节点规则是否存在（iptables 模式）
 iptables -t nat -L KUBE-SERVICES -n | grep <ClusterIP>
-iptables -t nat -L <KUBE-SVC-xxx> -n -v
 
-# 步骤 4：在 Pod 所在节点检查 IPVS 表（IPVS 模式）
+# 本节点规则是否存在（IPVS 模式）
 ipvsadm -Ln | grep -A5 <ClusterIP>
 
-# 步骤 5：测试从 Pod 内直接访问 Endpoint IP（绕过 Service）
-kubectl exec -it test-pod -- curl http://10.244.0.5:8080/healthz
-
-# 步骤 6：如果直接访问 Endpoint IP 通但通过 ClusterIP 不通，
-#         说明 iptables/IPVS 规则有问题，检查 kube-proxy 日志
-
-# 步骤 7：查看 conntrack 表，确认 DNAT 是否正在工作
-conntrack -L | grep <ClusterIP>
-```
-
-### 7.2 偶发连接超时的排查
-
-偶发超时（部分请求成功，部分超时）通常与以下原因有关：
-
-**原因 1：Endpoint 健康状态延迟更新**
-
-Pod 已经不健康（进程崩溃），但 kubelet 的健康检查还没有上报，kube-proxy 还没有从 Endpoint 列表中删除该 Pod，仍然向其发送流量。
-
-诊断：在超时发生时检查 Pod 状态，看是否有 Pod 处于 `CrashLoopBackOff` 或 `Running` 但 Ready 为 `False` 的状态：
-```bash
-kubectl get pods -n default -o wide | grep -v Running
-kubectl get pods -n default -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.conditions[?(@.type=="Ready")].status}{"\n"}{end}'
-```
-
-**原因 2：滚动更新期间的连接中断**
-
-Deployment 滚动更新时，旧 Pod 被 `SIGTERM`，但 kube-proxy 的 iptables 规则更新有延迟（Watch 事件 + 规则更新的时间差）。期间新连接可能仍被路由到正在关闭的 Pod，导致连接被 RST 或超时。
-
-解决方案：
-```yaml
-spec:
-  template:
-    spec:
-      terminationGracePeriodSeconds: 60  # 给 Pod 足够的 graceful shutdown 时间
-      containers:
-      - lifecycle:
-          preStop:
-            exec:
-              command: ["sleep", "5"]  # 在 SIGTERM 前先 sleep 5s，等待 iptables 规则更新
-```
-
-**原因 3：conntrack 表满**
-
-在高并发集群中，Linux 的 conntrack 表可能被打满，导致新连接无法建立（返回 "nf_conntrack: table full, dropping packet"）：
-```bash
-# 检查 conntrack 表当前大小和最大值
+# conntrack 是否打满
 cat /proc/sys/net/netfilter/nf_conntrack_count
 cat /proc/sys/net/netfilter/nf_conntrack_max
+conntrack -L | grep <ClusterIP>
 
-# 临时调大（需要在所有节点执行）
-sysctl -w net.netfilter.nf_conntrack_max=1048576
+# 绕过 Service 直连 Pod（隔离 Service 层）
+kubectl exec -it test-pod -- curl http://<PodIP>:<Port>/healthz
 ```
 
----
+排障的本质是逐层证伪——Service 层清白了再怀疑 CNI，转发规则在位了再怀疑 conntrack，顺序不能反。还有一类不在此表中的干扰项值得记住：NetworkPolicy——策略把流量在转发路径上拦下时，从 Service 视角看与"后端不通"几乎无法区分，查排障树之前先问一句"最近有没有上策略"往往能省半小时。
 
-## 第 8 章 小结
+最后补两条"症状诡异但根因平凡"的排障案底，都是线上真实高频事件：
 
-### 8.1 Service 实现体系全景
+- **某节点上 Service 全部不通，其他节点正常**——本节点 kube-proxy 挂了或卡了（`kubectl logs` 看 panic/oom，DaemonSet 该 Pod 重启即可），与"网络坏"无关；
+- **访问某 Service 偶发连接到已下线的 Pod**——EndpointSlice 已摘除但本节点 conntrack 里该连接的 DNAT 结论仍有效（既有连接不受规则删除影响），这是"规则改了但老连接还活着"的 conntrack 黏性，对短连接无影响、对长连接需要 `conntrack -D` 或重启客户端兜底。
 
-| 组件 | 职责 | 位置 |
+### 7.1 一张最小排障清单
+
+把上面收敛成日常操作版：
+
+| 检查项 | 命令 | 期待 |
 | :--- | :--- | :--- |
-| **kube-proxy** | Watch Service/Endpoint，维护转发规则 | 每节点 DaemonSet |
-| **iptables（DNAT）** | 将 ClusterIP 透明转发到 Endpoint | 内核 nat 表 |
-| **IPVS** | 高性能虚拟服务器负载均衡 | 内核 IPVS 模块 |
-| **conntrack** | 跟踪 NAT 连接，确保回包正确还原 | 内核 nf_conntrack |
-| **EndpointSlice** | 分片存储 Endpoint，减少 API Server 压力 | Kubernetes API |
-| **kube-ipvs0** | IPVS 模式下绑定 ClusterIP 的虚拟接口 | 节点虚拟网卡 |
+| Service 存在 | `kubectl get svc` | ClusterIP 与端口正确 |
+| 端点就位 | `kubectl get endpointslice -l kubernetes.io/service-name=X` | 至少一条 ready: true |
+| 本节点规则（iptables） | `iptables -t nat -L KUBE-SERVICES \| grep <IP>` | 有命中链 |
+| 本节点规则（IPVS） | `ipvsadm -Ln \| grep <IP>` | 有虚拟服务 |
+| conntrack 余量 | `cat /proc/sys/net/netfilter/nf_conntrack_{count,max}` | count 远低于 max |
+| 直连后端 | `kubectl exec -- curl <PodIP>:<Port>` | 通则 Service 层问题 |
 
-### 8.2 iptables vs IPVS 选型建议
-
-- **< 500 个 Service**：iptables 模式，稳定、易调试，性能够用
-- **500-1000 个 Service**：考虑 IPVS，开始有明显的性能差异
-- **> 1000 个 Service**：强烈建议 IPVS，或考虑 Cilium（完全替代 kube-proxy）
-
-### 8.3 下一篇预告
-
-Service 解决了服务发现和负载均衡，NetworkPolicy 解决服务间的访问控制，CoreDNS 解决集群 DNS 解析。最后一篇将这两个主题综合：
-
-- **[[07 NetworkPolicy与CoreDNS——网络安全策略与集群DNS]]**：深入 NetworkPolicy 的选择器语义与 iptables 实现，CoreDNS 的插件链架构，以及 ndots 参数导致的 DNS 性能问题与调优方案
+这份清单的隐含前提值得点明：它假定你已确认流量确实走到了 Service 层——也就是 DNS 解析已返回 ClusterIP、客户端确实在打这个地址。大量"Service 不通"的工单最后的根因其实在更上游：`nslookup my-service` 解析失败（CoreDNS 问题，下一篇的主角）、NetworkPolicy 静默丢弃、或者应用根本没在用它以为的那个名字。排查永远从"流量是否真的到达了这一层"开始，而不是从"这一层出了什么错"开始。
 
 ---
 
-*本文是 [[Kubernetes网络原理与插件]] 专栏的第 6 篇。相关专栏：[[04 流量管理——VirtualService、DestinationRule与灰度发布|Istio 流量管理]]（Service 之上的 L7 路由层）、[[05 Cilium深度解析——eBPF驱动的下一代网络与可观测性|Cilium eBPF 替代 kube-proxy]]*
+## 第 8 章 边界与演进：三代同堂之后
+
+### 8.1 三个数据面的各自地盘
+
+至此 Service 的实现谱系完整：iptables 是默认且普适的存量，IPVS 是规模化的官方答案，eBPF 是范式跃迁的下一代——而 nftables 后端则是 iptables 模型在其继任者身上的保守演进。四者不是"新旧替代"关系，而是**不同规模、不同内核条件、不同团队能力下的并存选项**：数百 Service 的小集群用 iptables 心安理得，数千规模上 IPVS 性价比最高，万级规模或内核够新时 Cilium 给出代差级回报。
+
+选型的量级参考（公开基准与生产经验的共识区间，非合同条款）：Service 数在数百量级时三种模式的可感知差异几乎为零；过千后 iptables 的规则遍历与更新抖动开始显现；五千以上 kube-proxy 的 iptables 模式已是明显的运维负担，IPVS 或 eBPF 成为必选项而非优化项。切换本身的成本也应计入——模式变更要求 kube-proxy 滚动重启，存量连接会因 conntrack 失效而中断重连，生产集群请挑低峰窗口操作。
+
+反向的"何时就留在 iptables"同样值得写清：中小规模集群（<500 Service）里 iptables 模式的规则直白、`iptables-save` 可读性最好、不引入额外内核模块依赖；存量集群在没痛到点上前，切 IPVS/eBPF 的收益对不上变更风险——"它没坏就不动它"在网络层永远是更稳妥的默认值。性能优化类切换的正确触发器从来是"当前模式已被观测到成为瓶颈"，而不是"有一个更快的方案存在"。
+
+值得为 nftables 模式多写一笔，因为它是这条演进线上最安静、也最可能走得最远的一支。iptables 的原罪从来不是功能，而是数据结构——链表式的规则组织天然抗拒 O(1) 查找与增量更新；nftables 在内核里引入真正的 set/map 原语后，kube-proxy 可以用与 IPVS 几乎相同的"查表"模型实现 DNAT，而不必引入第二个内核子系统。它 1.29 起作为 kube-proxy 后端可用，语义上与 iptables 模式完全等价（同一套 Service API、同样的 ClusterIP/NodePort），差别只在底层执行引擎——这几乎是"同一个翻译器换了个内核方言"的最好样本。
+
+### 8.2 Service 模型的边界
+
+也该说清 Service 抽象自身的边界：它只解决 L4 的"可达与均衡"，不解决 L7 的"路由、灰度、熔断、重试"——后者是 Ingress/Gateway 与服务网格的地盘；它的负载均衡是连接级的，长连接场景需要 L7 层补位；它的健康检查是"Endpoint 在不在切片里"级别的，应用级健康要靠 readinessProbe 把语义传到位。把不该归它的需求塞进 Service，譬如指望 ClusterIP 做按比例分流，是架构错配最常见的形式。
+
+往上看还有一条接缝值得点破：Service 只管"到 Pod"的这一段，至于"从外部世界到 Service"的入口——域名、证书、路径路由、WAF——那是 Ingress 与 Gateway API 的战场。Ingress 是声明式 L7 入口规范，Gateway API 是它的后继者，两者都在 Service 之上再架一层；而 LoadBalancer 类型则是"把入口外包给云厂商"的另一种形态。Kubernetes 的边界划分是清晰而有意的：Service 不试图成为入口代理，正如 CNI 不试图成为负载均衡器——每一层守自己的职责，复杂性才有处安放。
+
+协议面上同样有边界：ClusterIP/NodePort 默认面向 TCP/UDP（SCTP 需要 CNI 与 kube-proxy 的双重支持，双栈服务需要 `ipFamilyPolicy` 显式声明）；Service 的语义以"东西向集群内通信"为主轴，南北向入口（域名、证书、路径路由）从设计上就是 Ingress/Gateway 的职责——认清这条接缝，比记住任何一条规则都更能避免误用。
+
+### 8.3 小结与过渡
+
+行文至此，Kubernetes 网络的两大支柱已各归其位：Pod 网络解决"每个工作负载有地址"，Service 解决"地址集合有稳定入口"。若把前五篇与这篇连起来看，会发现同一个模式在不断复现：一个声明式 API（NetworkPolicy、Service、Pod）落到用户态控制器（Felix、cilium-agent、kube-proxy），再被翻译成内核事实（iptables 规则、BGP 路由、BPF Map）——"声明 → 投影 → 内核执行"是 Kubernetes 网络所有层的通用语法。
+
+Service 的故事还有一个更长的余韵值得收个尾：它证明了"虚拟化网络实体"的威力——一个不存在任何设备的地址，可以靠全集群的规则共识成为最可靠的服务入口；也证明了其代价——为了让这个虚拟地址成立，每台节点要背一张不断变化的规则表，而这张表的规模上限，正是后来 IPVS、eBPF、nftables 相继登场的全部理由。但一个能通的网络还不是一个安全的网络——谁能访问谁、服务名如何解析成 ClusterIP，这两件每天发生亿万次的小事，是最后一篇的主角：[[07 NetworkPolicy与CoreDNS——网络安全策略与集群DNS|NetworkPolicy 与 CoreDNS]]。
+
+---
+
+## 参考资料
+
+1. **官方文档**：
+   - [Kubernetes Service 文档](https://kubernetes.io/docs/concepts/services-networking/service/)
+   - [KEP-752: EndpointSlice API](https://github.com/kubernetes/enhancements/tree/master/keps/sig-network/752-endpointslice)
+   - [kube-proxy nftables 模式说明](https://kubernetes.io/docs/reference/networking/virtual-ips/)
+2. **Netfilter/LVS**：
+   - Linux Kernel Documentation: netfilter / IPVS（`Documentation/networking/`）
+   - [LVS 项目官网](http://www.linuxvirtualserver.org/)
+3. **经典著作**：
+   - 周志明. 《凤凰架构：构建可靠的大型分布式系统》. 机械工业出版社, 2021.
 
 ---
 
 > [!note] 思考题
-> 1. CNI 负责 L3/L4 网络（Pod IP 分配、路由、NetworkPolicy），Service Mesh 负责 L7 流量管理（路由、重试、熔断、mTLS）。两者在不同网络层协作。但 Cilium 模糊了这个边界——它同时提供 CNI 和 L7 策略（通过 Envoy 或 eBPF）。'一个组件解决所有问题'（Cilium）vs '每层一个专门组件'（Calico + Istio）哪种架构更好？
-> 2. Service Mesh 的 Sidecar 代理增加了每跳 2 次用户态代理的延迟。Cilium 的 eBPF 加速可以在内核层处理 L4 流量——只在需要 L7 策略时才经过用户态代理。这种'按需升级到 L7'的策略如何降低 Service Mesh 的性能开销？
-> 3. 在网络故障排查中，CNI 层和 Service Mesh 层的问题可能相互混淆——如 Pod 间通信失败是 CNI 路由问题还是 mTLS 证书过期？你如何系统地分层排查——先验证 L3/L4 连通性（`ping`/`telnet`），再验证 L7 策略（检查 Envoy 日志和配置）？
+> 1. kube-proxy 的 iptables 模式把"负载均衡"实现为"建连时刻的一次概率跳转 + conntrack 长期锁定"。请推演：在 gRPC 长连接场景下，后端从 3 副本扩到 6 副本后，现有客户端连接的流量分布会发生什么？为什么"重启客户端"往往是最快的负载均衡手段？这对长连接服务的容量规划有何启示？
+> 2. `externalTrafficPolicy: Local` 用"可能黑洞部分节点"换来"保住真实客户端 IP + 少一跳转发"。请画出外部流量经云 LB 进入集群的完整路径，说明健康检查如何避免打到无后端的节点；再推演 LB 健康检查与 Pod 摘除不同步时的故障窗口长什么样。
+> 3. EndpointSlice 把"变更粒度"从整对象缩到百级分片，解决了 apiserver 推送风暴。请分析：若某 Service 有 5000 个 Endpoint 且每秒滚动更新 50 个，分片前后每个 kube-proxy 每秒接收的数据量各是多少量级？除了带宽，分片还降低了 kube-proxy 哪部分的开销？
