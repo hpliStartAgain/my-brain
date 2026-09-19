@@ -2,6 +2,67 @@
 
 本文件记录 my-brain 数字花园的重大内容变更。
 
+## 2026-09-20
+
+### 完成：Linux 进程管理专栏全量重写（content/Linux/进程管理/ 11 篇）
+
+按 skill `writing-technical-article` 与 AGENTS.md 交付硬指标，完成 `content/Linux/进程管理/` 下 11 篇全量重写（老板授权清理内容从零写，写作方式为主 agent 串行撰写，禁止派发子 agent）。文件名为保持 10+ 处入链而一律不变，frontmatter 沿用原 title/date/tags/aliases 结构。
+
+**成果（正文篇均 12072 字 / 675 行，全部满足 12000-16000 中文字与 500+ 行；零语气感叹号；25 个 Mermaid 全 dracula；34 个 wiki 链接全部核实零死链）**：
+
+- `01 进程的本质`（502 行 / 12188 字，2 图）：单道批处理到分时的历史与进程概念的诞生、四类反事实、进程的**双重身份**（资源容器 + 执行流）与上下文切换代价、`task_struct` 字段分组与卫星结构、一次 `./hello` 的完整系统调用路径、进程树与 PID 复用（`pidfd` 的动机）、进程组/会话、内核线程家族、`/proc` 实战与 fd 目录反推
+- `02 task_struct 深度拆解`（569 行 / 12151 字，2 图）：静态进程表到指针化布局的演进、八组字段逐组拆解、`__state` 位掩码与三套优先级、三个调度实体与 `sched_entity`、`pid`/`tgid` 双编号与 `comm` 长度限制、`cred` 不可变对象与五集合 Capability、两级引用计数与懒 TLB、VMA 的 maple tree 迁移、`THREAD_INFO_IN_TASK` 的安全动机与栈溢出防护、`copy_thread` 的初始栈帧、每执行流 16KB 内核栈的隐性成本
+- `03 fork 的内核之旅`（613 行 / 12196 字，1 图）：复制而非创建的哲学与反事实推演、`kernel_clone` 骨架与 `do_fork` 改名史、`copy_process` 三阶段与 `bad_fork_*` 分级回滚、写时复制四小节（页表复制 / 只读映射 / 两级引用计数 / `MADV_DONTFORK`）与四类真实代价、fork 炸弹与 `RLIMIT_NPROC` 口径、多线程 fork 的锁陷阱、`vfork`/`posix_spawn`/`clone3`/`CLONE_INTO_CGROUP` 三条替代路线、Redis BGSAVE 的 COW 内存翻倍反例
+- `04 exec 家族与程序加载`（646 行 / 12080 字，3 图）：六函数一系统调用与 `PATH` 查找的位置、`linux_binprm` 与可扩展的 `linux_binfmt` 注册表、ELF 段与节两套划分及 RELRO/`PT_GNU_STACK`、段的延迟装载与 Page Cache、栈上 argv/envp/auxv 三份数据、动态链接器交权顺序与重定位、soname 与符号版本、`#!` 的两条限制与 setuid 脚本决策、`execveat` 与内存驻留执行、`execve` 保留/丢弃总账
+- `05 exit、wait 与僵尸进程`（715 行 / 12003 字，2 图）：三次释放三段时间、`atexit` 四条规则、`do_exit` 的释放顺序与 `exit_notify`、`exit_state` 与统计结算、退出状态位段编码与 `$?` 的 128+N 来历、僵尸占用表与 `kill -9` 无效的原因、`wait4` 主子循环与 `EINTR` 特例、`SIGCHLD` 三态对照与 `SA_NOCLDWAIT`、孤儿收养与 subreaper、容器 PID 1 三职责与 `pids.max` 叠加代价、`pidfd` 事件化、僵尸巡检脚本
+- `06 进程状态机`（736 行 / 12022 字，2 图）：位掩码与单字母的映射关系、修饰字符详解、状态全集与三个瞬态位、睡眠-唤醒的屏障与丢失唤醒、抢占四时机与 `PREEMPT_RT`、**D 状态深度剖析**（设计目的、成因分类、`load average` 口径与容器下失真、四层雪崩链条）、`TASK_KILLABLE` 的边界、等待队列与惊群、`schedule_timeout` 家族与 `usleep_range`、`/proc` 状态解读与 `schedstat`、四类症状排查与按 `wchan` 聚合脚本、cgroup 冻结伪装的 `T` 状态
+- `07 线程的真相`（642 行 / 12012 字，3 图）：说法的准确边界、LinuxThreads 四个缺陷与 NPTL 的内核侧补丁、`LD_ASSUME_KERNEL` 迁移代价、clone flags 逐项与组合约束的语义必然性、`PARENT_SETTID`/`CHILD_CLEARTID` 同步协议、天生不共享的属性、线程组三项语义与两种信号粒度、按线程聚合 CPU 时间的脚本、pthread 层职责与线程栈大小来源（`RLIMIT_STACK` 反直觉陷阱）、四种 TLS 访问模型、futex 快速路径与 `FUTEX_WAIT` 原子性、1:1 模型与调度器激活的失败史、线程数决策与容器配额错配
+- `08 CFS 调度器`（738 行 / 12019 字，3 图）：三代调度器各自的失效原因与 SD/BFS 插曲、理想多任务处理器与 `vruntime` 的问题转化、nice 映射表与非线性映射的意义、进程级与组级权重（`cpu.shares` 与 `cpu.weight` 不可直接比较）、时间片计算的两段代码与三组算例、`cfs_rq` 与 `rb_leftmost` 的冷热路径取舍、新任务起点与睡眠补偿、`min_vruntime` 的单调性、组调度分层、唤醒抢占与睡眠惩罚、**EEVDF 在 6.6 的替代**、跨 CPU IPI 抢占、`schedstat`/`sched_debug`/`perf sched` 与完整延迟排查、负载均衡与 CPU 绑定
+- `09 实时调度与调度策略全景`（764 行 / 12008 字，3 图）：实时不等于快与延迟四段构成、五种调度类层次与 `stop_sched_class` 的存在理由、三个设置接口与 `sched_setattr` 的结构体参数模式、两套优先级体系、`sched_yield` 的两种语义、RT 节流参数与代价、组级 RT 带宽与 cgroup v2 的能力缺口、优先级反转与火星探路者事故、PI 实现与死锁检测的边界、`SCHED_DEADLINE` 三参数 / EDF+CBS / 准入控制、DL 与 RT 的两套带宽账、`SCHED_BATCH`/`SCHED_IDLE`、`cyclictest` 与排查实例、容器 RT 权限收紧的根因、优先级层层加码的反模式
+- `10 进程间通信全景`（825 行 / 12040 字，4 图）：三种中介形态与"内核做中介"的价值、SysV 与 POSIX 两代 IPC 及并存原因、`ipcs`/`/proc/sysvipc` 观测与残留清理、管道环形缓冲与 `PIPE_BUF` 原子性、`SIGPIPE` 与 EOF 引用计数 bug、`splice` 零拷贝中转、信号的能力边界与实时信号与 `signalfd`、信号量从 Dijkstra 到 futex、共享内存零拷贝与 `/dev/shm` 容量陷阱与三个真实使用者、消息边界与消息队列、UDS 传 fd / 传凭证 / 抽象命名空间 / 性能差距来源、`eventfd`/`memfd`+密封/`pidfd`/`io_uring` 的共同思路、选型决策表与逐层收窄的推演实例
+- `00 专栏导览`：重写专栏定位、四阶段主线、10 篇新内容描述、三类阅读路径、7 个关联专栏链接全部核实
+
+**修复问题**：正文 01-10 原 CJK 口径仅 4265-7725 字（达标 36%-64%），篇幅虚胖靠代码块注释支撑；原 01 篇单字母状态描述与内核位掩码语义不符、原 10 篇缺少 `memfd`/`pidfd`/`io_uring` 等新一代机制。本次重写全部按凤凰架构六层 DNA 重铸叙事弧，并补充至达标篇幅。
+
+---
+
+### 完成：服务网格专栏全量重写（content/云原生/服务网格/ 8 篇）
+
+按 skill `writing-technical-article` 与 AGENTS.md 交付硬指标，完成 `content/云原生/服务网格/` 下 8 篇全量重写（老板授权清理内容从零写，写作方式为主 agent 串行撰写）。
+
+**成果（篇幅均达标 12000-16000 中文字 / 500+ 行，零感叹号，Mermaid 全 dracula，wiki 链接全核实零死链）**：
+
+- `01 服务网格概述`（500 行 / 15346 字）：治理逻辑位置之争主线、SDK 四堵墙、Sidecar 架构跃迁与命名时刻、iptables 透明劫持、数据面门槛、四能力四代价、组织承接
+- `02 Istio架构`（501 行 / 12499 字）：控制面/数据面分离、Mixer 教训与 1.5 合并 istiod、策略编译器模型、编译全过程拆解（灰度规则四步）、注入模板解剖与卸载退出、xDS 五类/ADS/NACK/增量、推送风暴与容量账、失效清单与排障三分法
+- `03 Envoy代理`（500 行 / 12206 字）：线程模型与 per-worker 定语、配额错配、请求四帧旅程、连接池按协议分治、熔断/异常点/恐慌阈值、弹性事件复盘、快照切换与热重启、503 标志位与决策树、调优四科目
+- `04 流量管理`（506 行 / 12056 字）：Service 天花板与路由语言、VS/DR 松耦合、灰度四形态谱系、步进序列与自动化金丝雀（Flagger）、镜像影子世界与副作用陷阱、retryOn 与超时推演、Gateway API 关系
+- `05 安全`（501 行 / 13880 字）：零信任三问、SPIFFE 身份与免吊销设计、PeerAuthentication 四模式与双轨迁移、三策略对象分工、ALLOW 收口语义、外部授权失败开闭、迁移路线图与安全演练四科目
+- `06 可观测性`（517 行 / 12025 字）：两双眼睛分工、两层指标与 reporter 语义、基数治理三板斧、Telemetry API、日志采样经济学、追踪传播接力与采样范式、Kiali 推导、盲区地图、四站排障走位
+- `07 性能开销与Ambient Mesh`（500 行 / 12949 字）：四笔账单（延迟/资源/连接/运维）、优化第一性原理与调优步骤表、Ambient 分层按需（ztunnel/HBONE/waypoint）、迁移路径、gRPC 直连与 eBPF 路线、四路线坐标系、决策流程图与部署矩阵
+- `00 专栏导览`：全链接重写，修复原空格差异死链 5 处与模糊死链（[[Kubernetes]]/[[Dubbo]]/[[服务网格]] 等），描述同步新稿
+
+**修复问题**：01-07 正文原篇幅仅 4026-6046 字（达标 34%-50%）；原 00 导览 5 处死链及模糊链接已全部修复。
+
+---
+
+## 2026-09-19
+
+### 重写：Docker 容器核心原理专栏全量重写（content/云原生/Docker/ 共 7 篇）
+
+按 skill `writing-technical-article` 与 AGENTS.md 交付硬指标，完成 `content/云原生/Docker/` 全部 7 篇的完全重写（老板授权从零写，文件名与 frontmatter 结构保持不变）。
+
+**本批成果**（正文篇均 12403 字，全部满足 12000+ 中文字 / 500+ 行）：
+
+- `01 容器的本质——从进程隔离到 OCI 标准`（546 行 / 12026 字）：容器 vs 虚拟机的隔离层次、四十年演进史（chroot→Jail→LXC→Docker→OCI）、Docker 产品化四贡献与商业沉浮、OCI 三规范与运行时分层、docker run 完整执行路径、dockershim 移除、手动造容器实验
+- `02 Linux Namespace 深度解析`（506 行 / 12056 字）：nsproxy 内核实现与指针共享、六大核心 Namespace（PID/Mount/Network/UTS/IPC/User）三段式拆解、Cgroup/Time 新生代、clone/unshare/setns 与 docker exec 原理、五重隔离手工实验、pause 容器与 Pod 沙箱
+- `03 Cgroups 资源限制与控制`（501 行 / 12526 字）：三个事故场景、v1→v2 统一层级、CFS 配额与 Throttling 陷阱及配额决策推演、内存三级响应与 OOM/QoS、Page Cache/内核内存/swap、I/O 与 pids、Docker/K8s 映射、PSI、kubelet 驱逐、排障速查表
+- `04 UnionFS 与容器镜像原理`（501 行 / 12195 字）：rootfs 必要性、OverlayFS 读/写（CoW）/删（Whiteout）三路径与手工实验、镜像分层与 digest/diffID 双哈希、内容寻址、构建缓存链式失效、多阶段构建与 BuildKit、分发两段式与 eStargz 懒加载、可写层/Volume/tmpfs 划界、节点镜像管理
+- `05 容器网络原理`（501 行 / 12141 字）：五类通信需求、veth/Bridge（FDB）/iptables NAT/conntrack 积木化拆解、br_netfilter、四种网络模式与嵌入式 DNS、五类流量逐跳推演、VXLAN 与跨主机、CNI 规范与 IPAM、K8s 扁平网络与 Service 衔接、排障速查表
+- `06 容器安全边界与逃逸风险`（501 行 / 13471 字）：共享内核根本矛盾与威胁模型分档、防御纵深七层模型、Capabilities/Seccomp（含 USER_NOTIF）/AppArmor/SELinux、四个逃逸案例解剖（CVE-2019-5736/2020-15257/2022-0185/2024-21626）、--privileged 与 socket 挂载、供应链防线、Rootless 与 gVisor/Kata/Firecracker、RuntimeClass、加固清单与 PSS 三级
+- `00 专栏导览`：同步全稿主线、目录描述、阅读路径与 K8s 前置映射
+
+**统一验证结果**（7 个文件全部通过）：01-06 全部满足 12000+ 中文字（CJK 口径）/ 500+ 行；frontmatter（title/date/tags/aliases）完整；15 个 Mermaid 图全部 Dracula 主题且引号配平；摘要/参考资料/思考题结构齐全；思考题每条 1-2 句无灌水；115 个 wiki 链接全部解析成功（原稿 [[Kubernetes]]/[[Linux]]/[[Prometheus]] 等裸名死链 34 处已修复为纯文本或真实路径链接）；零感叹号；代码块全部成对闭合。
+
 ## 2026-09-12
 
 ### 脱敏：SRE 故障排查与复盘专栏全量脱敏（content/SRE/故障排查与复盘/ 共 14 篇）

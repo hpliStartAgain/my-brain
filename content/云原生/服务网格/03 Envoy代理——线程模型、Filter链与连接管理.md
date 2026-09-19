@@ -7,545 +7,494 @@ aliases: []
 
 # Envoy代理——线程模型、Filter链与连接管理
 
-## 摘要
+**摘要：**
 
-Envoy 是现代云原生生态中最重要的数据面代理，它不仅是 Istio 的数据面，还是 AWS App Mesh、Google Cloud Traffic Director、Kong Mesh 等众多服务网格的基础。理解 Envoy 的内部机制，是真正掌握服务网格数据面行为的必要条件。本文深入 Envoy 的事件驱动多线程架构——为什么选择 Worker 线程模型而非 Go 的 goroutine 模型，每个 Worker 如何独立处理连接；解析 Filter Chain 的层次结构，从 L4 Network Filter 到 L7 HTTP Filter 的处理逻辑，以及 Filter 如何实现插件化功能扩展；剖析连接池（Connection Pool）、健康检查（Health Check）、熔断（Circuit Breaker）三大连接管理机制的精确工作原理。**Envoy 的设计证明了一个命题：在高并发网络代理场景中，精心设计的 C++ 事件循环 + 静态线程池，在性能和可预测性上优于动态协程模型。**
-
----
-
-## 第 1 章 Envoy 的诞生背景与设计哲学
-
-### 1.1 Lyft 的痛点：微服务可观测性黑盒
-
-2015 年，Lyft 的工程团队面临一个棘手的问题。随着微服务数量从十几个增长到数百个，整个系统的网络行为变成了一个黑盒——当某条 API 调用链路出现超时时，工程师无法快速定位是哪个服务导致的，因为没有统一的机制追踪跨服务的请求延迟。
-
-每个服务团队使用不同的语言（Python、Java、Go、Node.js），需要在每种语言的框架中独立集成追踪客户端、限流库、熔断库。这种工作重复低效，而且各团队的实现质量参差不齐——部分服务的熔断配置错误，导致一个服务故障级联引发多个服务宕机。
-
-**Matt Klein**（Envoy 的创始工程师）在 Lyft 提出了一个解决方案：与其让每个服务单独解决这些问题，不如构建一个高性能的 L4/L7 代理，统一处理所有服务的网络治理需求。这个代理就是 Envoy，于 2016 年在 Lyft 内部达到生产就绪状态，同年开源。
-
-### 1.2 Envoy 的核心设计原则
-
-Matt Klein 在 Envoy 的架构设计文档中明确了几个核心原则：
-
-**原则一：对应用透明**。Envoy 作为透明代理运行，应用代码不需要知道 Envoy 的存在——它只是"碰巧"接管了应用的网络连接。这要求 Envoy 在协议层面做到完全兼容，不能修改请求语义。
-
-**原则二：L7 感知**。不同于传统的 L4 负载均衡器（HAProxy、LVS），Envoy 理解 HTTP/1.1、HTTP/2、gRPC、Thrift 等应用层协议，能够基于 URL、Header、Method 做路由决策，并采集 L7 粒度的指标（成功率、延迟分布）。
-
-**原则三：高性能、可预测**。Envoy 使用 C++ 实现，基于 libevent/io_uring（最新版本）的事件驱动架构，追求极低的 tail latency（尾延迟）而非高平均吞吐量——在分布式系统中，尾延迟比平均延迟更重要（木桶效应）。
-
-**原则四：统一的可观测性输出**。所有通过 Envoy 的流量，都能以统一的格式输出 Stats（指标）、Access Log（访问日志）、Trace Span（追踪），屏蔽了各个服务之间可观测性实现的差异。
+istiod 把配置"编译"出来之后，真正逐包执行治理动作的是 Envoy——全网格每一条服务间调用要各穿越它两次，它的每一个设计决定都被乘以全网请求量。本文自底向上拆解这台数据面引擎：从 Lyft 为什么放弃 Nginx 而自研 Envoy 说起（配置热更新与 API 化是分水岭）；拆开它的事件驱动线程模型——主线程管配置与统计、每个 worker 独立跑完整管线、连接终生绑定线程——并顺着这个模型推演出连接池与容量限制的 per-worker 本质；再跟随一个请求走完"监听器、过滤链、路由、集群、连接池"的完整旅程；随后厘清三组容易混淆的机制：负载均衡策略与一致性哈希、熔断（资源上限）与异常点检测（被动剔除）、主动健康检查与恐慌阈值；最后交代 Envoy 的配置热更新与热重启两套机制，并以 503 响应标志位收束成一张排障对照表。读完全文你应当能回答两个问题：一次代理转发里真正发生了什么，以及"偶发 503"在生产环境里究竟是谁的锅。
 
 ---
 
-## 第 2 章 Envoy 的线程模型
+## 第 1 章 Envoy 的诞生：从 Lyft 的痛点到通用数据面
 
-### 2.1 事件驱动的 I/O 模型
+### 1.1 Nginx 时代的三块短板
 
-Envoy 基于 **事件驱动的非阻塞 I/O** 模型，这是高性能网络代理的标准选择。在这个模型中：
+2015 年前后的 Lyft 正处在微服务快速扩张期，内部通信治理跑在一组 Nginx 与 HAProxy 上。这两款代理是上一代 web 基础设施的王者，但用在服务间通信上，三块短板很快显形。其一是**配置静态**：所有路由、上游、健康检查都写在静态文件里，任何一条变更都要走一遍 reload——服务发现这种分钟级变更是常态，静态配置与之天然失配；其二是 **reload 的代价**：新配置要拉起新的 worker 进程、旧 worker 排干存量连接，发布高峰期反复 reload 时，新旧进程交替窗口的连接毛刺与偶发失败防不胜防；其三是**可观测粒度粗**：按服务、按路由、按版本拆分的请求统计拿不到，灰度发布的成功率与延迟对比无从谈起。三块短板共同指向同一个判断：**这些代理是为"人类偶尔改一次配置"设计的，而服务间通信需要"机器持续地改配置"**。
 
-- 网络 I/O 操作（读取数据、等待连接建立）不会阻塞线程
-- 当 I/O 事件就绪（如"有数据可读"），内核通过 epoll 通知 Envoy
-- Envoy 的事件循环处理这个事件，进行数据读取和处理
+Lyft 内部由 Matt Klein 主导写了一个 C++ 代理（内部代号就叫 http_proxy），把这些问题的解法直接内置：配置以 API 推送的方式动态下发、转发统计按集群与路由两级精细拆分、连接不因配置变更而中断。2016 年 9 月，这个代理以 Envoy 之名开源。
 
-相比多线程阻塞 I/O 模型（每个连接一个线程，等待时阻塞），事件驱动模型的优势是：单个线程可以处理数千个并发连接，内存占用和上下文切换开销远低于"每连接一线程"。
+### 1.2 一年之后的定位宣言
 
-### 2.2 Worker 线程架构：为什么不用 goroutine
+2017 年 9 月，Klein 发表《The Universal Data Plane API》，给 Envoy 的定位画了像：**控制面注定五花八门，数据面应当收敛**——因此要定义一套中立的数据面 API（后来的 xDS），让任何控制面驱动任何代理。上一篇已经引用过这篇文章的历史意义，此处补充它在工程上的分量：Envoy 从诞生起就把"被程序驱动"当成一等公民，而同期大多数代理把"被人配置"当主场景，API 是后来补的。设计起点的差别，决定了谁最后能当数据面。
 
-Envoy 使用**固定数量的 Worker 线程**（默认等于 CPU 核数）+ 一个主线程（Main Thread）的架构。这与 Go 语言的 goroutine 模型有本质区别：
+社区轨迹随后快速兑现这个定位：2017 年 9 月 Envoy 进入 CNCF 孵化，2018 年 11 月毕业；[[02 Istio架构——控制面与数据面的职责分离|Istio]]、AWS App Mesh、Consul Connect 相继选它作数据面——第 01 篇讲过的"数据面门槛"（每包开销、事件驱动、协议完整性、热更新、埋点深度五项）Envoy 全部跨过，于是通用数据面这个生态位就被它坐实了。生态的辐射还延伸到网关层：Emissary Ingress、Gloo Edge 等网关产品把 Envoy 当内核，APISIX 之外的现代网关格局里半壁江山跑着 Envoy 的代码——"数据面收敛"的判断，最终以"各家控制面各显神通、底层引擎趋同"的方式实现。
 
-**Go goroutine 模型**：M 个 OS 线程运行 N 个 goroutine（N >> M），goroutine 是轻量级用户态协程，M:N 调度，Go Runtime 负责调度。创建 goroutine 的成本极低（几 KB 栈），适合大量并发任务。
+### 1.3 本篇的视角声明
 
-**Envoy Worker 线程模型**：固定 N 个 OS 线程（N = CPU 核数），每个线程有独立的事件循环（libevent/io_uring），连接直接绑定到某个 Worker 线程（通过 accept 线程分发），连接的生命周期内始终由同一个 Worker 线程处理。
+Envoy 是一个体量巨大的系统，官方文档洋洋洒洒数百页。本篇不打算做文档复述，而是抓住**理解服务网格行为最需要的四层机制**：线程模型（决定容量怎么算）、过滤链（决定治理动作怎么编排）、连接池与健康（决定故障怎么表现）、配置更新（决定变更怎么生效）。每层都配一个可以直接检验的推论——学完线程模型你就能算连接数，学完标志位你就能定域 503。网格排障的功夫大半就在这些机制的因果链上。
 
-**Envoy 选择固定 Worker 线程的理由**：
+### 1.4 Envoy 的工程性格
 
-1. **无锁数据访问**：每个连接绑定到一个固定 Worker，连接的所有处理都在同一个线程内进行。连接相关的数据结构（Filter 状态、连接统计等）不需要加锁——这是 Envoy 低延迟的关键。如果使用 goroutine 动态调度，同一连接可能被不同 goroutine 处理，需要加锁。
+从后续章节的机制里会反复看到几个一以贯之的性格特征，先立此存照：
 
-2. **CPU 缓存友好**：同一连接的处理始终在同一 CPU 核上进行，连接相关的数据在 L1/L2 cache 中是热的，减少 cache miss。
+- **性能是底线不是目标**：C++ 与事件驱动只是及格线，真正的功夫在"每一纳秒都被乘以全网请求量"的自我要求——统计无锁、转发零拷贝、连接不中断，处处是这条要求的落实；
+- **API 优先**：一切配置皆可动态下发，静态文件只是兼容的例外，这个性格让它天然适配控制面驱动的时代；
+- **可观测内建**：统计、日志、追踪锚点是架构的一部分而不是事后补丁，第 06 篇的可观测能力全部建立在这层埋点上；
+- **扩展但克制**：过滤器与 wasm 插件开放了扩展点，但核心路径的改动极其保守——数据面的每一行热路径代码都要为十年后的生产环境负责。
 
-3. **可预测的性能**：固定线程数 = 固定的并发度，没有动态调度的开销和不确定性，延迟更可预测（这对服务网格的 tail latency 目标非常重要）。
+这四条性格是理解 Envoy 一切设计选择的钥匙，也是"为什么后来者很难替代它"的软性答案：门槛不在功能清单，而在十年生产校准出来的工程纪律。这个生态位的统治力可以从侧面验证——后来不少网关产品（Emissary Ingress、Gloo Edge 等）干脆把 Envoy 当内核，网关层只做易用性封装；数据面的"造轮子运动"始终没能撼动它的位置。
+
+---
+
+## 第 2 章 线程模型：一个进程如何吃下全机流量
+
+### 2.1 主线程与 worker 的分工
+
+Envoy 是单进程多线程架构，线程分两类。**主线程（main thread）**不碰任何数据包，只做四件"全局事务"：接收并应用 xDS 配置、聚合各线程的统计并定期刷出、管理证书与 SDS、维护进程健康。**worker 线程**数量默认等于 CPU 核数，每个 worker 独立运行一条完整的转发管线——从监听 socket 接受连接，到执行过滤链，再到向上游发起连接、读写响应——一条连接从生到死都在同一个 worker 内完成，没有跨线程移交。
+
+这个模型与 Netty 的 Reactor 架构神似而不雷同：同为事件驱动，Netty 的 EventLoop 在应用层自由组合（boss 与 worker 分工、业务线程池承接阻塞逻辑），Envoy 的 worker 则自带完整网络栈语义，业务逻辑以过滤器插件形式嵌入事件循环，没有"回业务线程池"一说。读过 [[03 EventLoop与线程模型——Reactor模式的落地实现]] 的读者可以这样对照：Envoy 相当于把 Reactor、Pipeline、连接管理全部内置成不可拆的整机，扩展点只剩过滤器。
+
+为什么坚持连接不跨线程？因为跨线程移交的每一笔都有代价——锁、上下文切换、缓存失效。Envoy 的选择是让每条连接在其生命周期内只被一个线程读写，线程之间几乎无锁，唯一的同步点是主线程下发配置与统计聚合时的短暂互斥。**用"连接亲和"换"无锁转发"**，这是全部线程模型推演的起点。把这个选择摊开，可以列出三份直接的红利与一份账单：
+
+- 红利一：转发路径零锁竞争，吞吐随核数近似线性扩展；
+- 红利二：连接状态（缓冲区、会话、统计）天然 thread-local，内存与代码都省去同步；
+- 红利三：单 worker 卡死只影响它名下的连接，故障域天然按线程切分；
+- 账单：所有按连接计数的资源限制都变成 per-worker，容量模型必须显式乘上 worker 数。
+
+### 2.2 监听 socket 的分发
+
+worker 之间如何分摊监听流量？Envoy 采用 SO_REUSEPORT：每个 worker 在同一监听端口上各自绑定一个 socket，内核把新连接哈希分发到其一。连接被哪个 worker 的 socket 接受，就终生属于哪个 worker。这个机制让连接的分摊完全在内核完成，用户态零协调成本——但也埋下一个排障线索：如果内核的哈希分布不均（极少见但存在），个别 worker 会承载偏重的流量，其内存与连接数指标会系统性偏高。
 
 ```mermaid
 %%{init: {'theme': 'dracula'}}%%
-graph TD
-    classDef main fill:#ff79c6,stroke:#ff79c6,color:#282a36
-    classDef worker fill:#6272a4,stroke:#8be9fd,color:#f8f8f2
-    classDef conn fill:#44475a,stroke:#50fa7b,color:#f8f8f2
-
-    MainThread["主线程 (Main Thread)</br>配置管理、xDS 处理、统计聚合"]
-
-    subgraph "Worker 线程池 (N = CPU 核数)"
-        W1["Worker 1</br>事件循环 (epoll)"]
-        W2["Worker 2</br>事件循环 (epoll)"]
-        W3["Worker 3</br>事件循环 (epoll)"]
+flowchart TD
+    subgraph Main["主线程（不碰数据包）"]
+        XDS["接收 xDS 配置"]
+        STAT["统计聚合与刷出"]
+        CERT["证书与 SDS 管理"]
     end
+    subgraph W1["worker-0 事件循环"]
+        L1["监听 socket<br/>SO_REUSEPORT"] --> F1["过滤链处理"]
+        F1 --> U1["上游连接池"]
+    end
+    subgraph W2["worker-1 事件循环"]
+        L2["监听 socket<br/>SO_REUSEPORT"] --> F2["过滤链处理"]
+        F2 --> U2["上游连接池"]
+    end
+    XDS -.->|"配置快照广播"| W1
+    XDS -.->|"配置快照广播"| W2
+    W1 -.->|"thread-local 统计<br/>定期聚合"| STAT
 
-    C1["连接 1"]
-    C2["连接 2"]
-    C3["连接 3"]
-    C4["连接 4"]
-
-    MainThread -->|"xDS 配置更新推送到 Worker"| W1
-    MainThread --> W2
-    MainThread --> W3
-
-    C1 -->|"绑定"| W1
-    C2 -->|"绑定"| W1
-    C3 -->|"绑定"| W2
-    C4 -->|"绑定"| W3
-
-    class MainThread main
-    class W1,W2,W3 worker
-    class C1,C2,C3,C4 conn
+    classDef main fill:#ffb86c,stroke:#282a36,color:#282a36
+    classDef wkr fill:#50fa7b,stroke:#282a36,color:#282a36
+    class XDS,STAT,CERT main
+    class L1,F1,U1,L2,F2,U2 wkr
 ```
 
-### 2.3 主线程与 Worker 线程的协作
+### 2.3 per-worker：一切容量限制的隐藏定语
 
-**主线程（Main Thread）** 的职责：
-- 接收 xDS 配置更新（从 istiod 的 ADS gRPC 流）
-- 解析新配置，生成新的配置对象（Listener/Cluster/Route）
-- 将新配置通过线程安全的机制分发给所有 Worker 线程
+线程模型最重要的推论是：**Envoy 里所有以"连接数、请求数"为单位的限制，默认都是 per-worker 的**。连接池上限、等待队列上限、熔断的最大连接数——每一个 worker 都有自己独立的一份。这一推论直接改变容量计算方式：4 个 worker、每 worker 连接池 1024，理论连接总量是 4096 而不是 1024；扩容机器的 CPU 核数让 worker 数变多，连接数上限就随之翻倍。不少"代理连接数莫名翻倍""压测结果随核数变化"的困惑，根子都在这个隐藏定语上。
 
-**配置更新的 TLS（Thread-Local Storage）机制**：
+反过来，这也是一份排障地图：某 worker 上连接池打满，其他 worker 完全健康，表现为小比例的请求失败——如果把 per-worker 的账算成全局的，你会得出"连接池余量充足"的错误结论，然后漏掉真正的凶手。本篇第 6 章的排障表会反复用到这个视角。排障时还有一个直观信号：Envoy 自带的 server.concurrency 配置与节点核数是否一致、容器配额是多少——两个数字先对账，多数"容量对不上"的问题在这里就现出了原形。
 
-这是 Envoy 架构中最精妙的设计之一。当主线程更新配置时，它不是直接修改 Worker 线程的共享数据（这需要加锁），而是：
+### 2.4 统计的 thread-local 设计
 
-1. 主线程创建新配置对象（Cluster/Route），保存在主线程的内存中
-2. 主线程向每个 Worker 线程的事件队列中放入一个回调任务
-3. Worker 线程在下一次事件循环时，执行回调，将自己的 TLS 数据（线程本地的 Cluster 引用）更新为指向新配置对象
-4. 主线程等待所有 Worker 线程都完成 TLS 更新后，释放旧的配置对象
+连统计都服从同一哲学。每个 worker 在 thread-local 存储里记自己的计数，主线程定期把各线程的数字聚合刷出——转发路径上连统计都不加锁，代价是统计数字有秒级的聚合延迟。分位数直方图（histogram）同理：各线程各自记桶，聚合后由 Prometheus 抓取时计算分位数。这个设计的工程含义是：**Envoy 的指标是准实时的，用它做秒级告警要小心抖动，做趋势与定域足够可靠**。
 
-这个机制确保了：
-- **Worker 线程访问配置时从不需要加锁**（TLS 数据是线程私有的）
-- **配置更新是原子的**（要么 Worker 使用旧配置，要么使用新配置，不会有中间状态）
-- **零停机配置热更新**（Envoy 在处理流量的同时更新配置，无需重启）
+### 2.5 worker 数量：容器配额下的经典错配
 
-### 2.4 Dispatcher：事件循环的抽象
+worker 数默认取 CPU 核数，这个默认值在容器环境里有一个著名的坑：**线程数看的是机器的核数，而容器实际能用的是 cgroup 配额**。一个被限制为 1 核配额的 Pod，跑在 64 核节点上，Envoy 会启动 64 个 worker——64 个线程挤在 1 核的时间片里轮转，上下文切换开销被放大数十倍，性能不升反降。Istio 后来在 sidecar 里做了修正（按 CPU limit 计算 worker 数），但理解这个错配的机制仍然重要：**事件驱动模型的前提是"每个事件循环有自己的核"，配额与线程数一旦脱钩，模型的前提就塌了**。
 
-每个 Worker 线程运行一个 **Dispatcher**（`Event::Dispatcher`），这是 Envoy 对事件循环的抽象封装。Dispatcher 提供：
+由此推出两条实操规则：
 
-- 定时器（Timer）管理：支持超时机制（如请求超时、连接空闲超时）
-- I/O 事件注册：将 fd（文件描述符）的读写事件注册到 epoll
-- 异步回调队列：支持跨线程安全地向 Worker 投递任务
-- DNS 解析：非阻塞的异步 DNS 解析（不阻塞 Worker 事件循环）
+- sidecar 的 CPU limit 要与业务容器的实际用量一起规划——代理的 worker 数决定了它吃 CPU 的上限；
+- 压测代理性能时必须锁定核数配额，不同配额下的结果没有可比性——"同样是 Envoy，为何我家慢"的谜题，一半的答案在配额里。
+
+Istio 默认在注入模板里把并发性设置与资源 limit 绑定，就是为了把这条错配挡在模板层。
+
+### 2.6 从线程模型回看 Sidecar 的资源画像
+
+线程模型还解释了第 01 篇 3.4 节那笔"边车资源账"的微观机理。代理与业务容器虽分属不同 cgroup，但 worker 线程与业务线程共享同一组物理核——业务高峰打满节点时，代理的事件循环被挤压，转发延迟上升；反过来代理在 TLS 握手与七层解析上的 CPU 开销，也从业务的配额里扣。没有隔离的是核，有隔离的只是配额——理解了这一点，就明白为什么 sidecar 的 CPU requests 不是可省的油钱，而是给调度器的容量承诺；也明白了为什么大流量 Pod 的 sidecar 需要单独调高配额，而不是沿用模板默认值。
 
 ---
 
-## 第 3 章 Filter Chain：Envoy 的插件化架构
+## 第 3 章 一个请求的完整旅程：从端口到上游
 
-### 3.1 为什么需要 Filter Chain
+### 3.1 四类配置对象
 
-Envoy 需要对每个连接和请求执行多种处理逻辑：TLS 解密、协议解析、认证检查、路由决策、指标采集、日志记录、限流等。如果把所有逻辑写在一个大函数里，代码会变成难以维护的泥球（Big Ball of Mud）。
+Envoy 的配置模型由四类对象组成，先立一张速查表，请求旅程按此展开：
 
-Filter Chain（过滤器链）是 Envoy 的核心架构模式：**将每种处理逻辑封装为独立的 Filter，多个 Filter 按顺序组成链条，数据从链头流向链尾，每个 Filter 可以读取/修改数据，也可以终止链的执行**。
-
-这个模式类似于中间件链（如 Express.js 的 `app.use()`），但 Envoy 的 Filter 体系有更严格的层次结构。
-
-### 3.2 两层 Filter 架构
-
-Envoy 的 Filter 分为两个层次：
-
-**L4 Network Filter（网络过滤器）**：工作在 TCP 连接层，处理的单元是字节流（`Buffer`）。Network Filter 不理解应用层协议（HTTP/gRPC），它的职责是：
-- TLS 解密/加密（`envoy.transport_sockets.tls`）
-- 流量统计（字节数、连接数）
-- TCP 代理（将连接转发到上游）
-- 连接级别的访问控制
-
-**L7 HTTP Filter（HTTP 过滤器）**：工作在 HTTP 请求/响应层，由 L4 层的 **HTTP Connection Manager（HCM）** Network Filter 启动。HTTP Filter 理解 HTTP 语义（Method、URL、Header、Body），其职责是：
-- 路由决策（Router Filter）
-- JWT Token 验证（JWT Authentication Filter）
-- RBAC 访问控制（RBAC Filter）
-- 请求/响应 Header 修改
-- 限流（Rate Limit Filter）
-- Fault Injection（故障注入）
-- gRPC JSON 转码
-
-```mermaid
-%%{init: {'theme': 'dracula'}}%%
-graph TD
-    classDef l4 fill:#6272a4,stroke:#8be9fd,color:#f8f8f2
-    classDef l7 fill:#50fa7b,stroke:#50fa7b,color:#282a36
-    classDef hcm fill:#ff79c6,stroke:#ff79c6,color:#282a36
-
-    InboundConn["入站 TCP 连接"]
-
-    subgraph "L4 Network Filter Chain"
-        TLS["TLS Inspector</br>(检测 TLS/Plain 流量)"]
-        TCPProxy["TCP Proxy / HCM</br>(协议分流)"]
-    end
-
-    subgraph "L7 HTTP Filter Chain (由 HCM 启动)"
-        JWT["JWT Auth Filter</br>(验证 JWT Token)"]
-        RBAC["RBAC Filter</br>(授权检查)"]
-        Router["Router Filter</br>(路由决策，终止 Filter 链)"]
-    end
-
-    Upstream["上游 Cluster (后端 Pod)"]
-
-    InboundConn --> TLS
-    TLS --> TCPProxy
-    TCPProxy -->|"HTTP 请求"| JWT
-    JWT --> RBAC
-    RBAC --> Router
-    Router -->|"选定 Endpoint，转发"| Upstream
-
-    class TLS,TCPProxy l4
-    class JWT,RBAC,Router l7
-    class TCPProxy hcm
-```
-
-### 3.3 HTTP Connection Manager（HCM）深度解析
-
-**HTTP Connection Manager（HCM）** 是 Envoy 中最重要的 Network Filter，它是 L4 和 L7 之间的桥梁。HCM 的职责：
-
-1. **HTTP 解析**：解析 HTTP/1.1 或 HTTP/2 协议，将字节流拆分为 Request/Response 对象
-2. **连接管理**：HTTP/1.1 的 Keep-Alive、HTTP/2 的多路复用（Multiplexing）
-3. **启动 L7 HTTP Filter Chain**：对每个 HTTP 请求执行 HTTP Filter 链
-4. **路由表管理**：持有路由表（Route Table），用于路由决策
-5. **访问日志生成**：请求完成后生成访问日志
-
-HCM 的关键配置字段：
-
-```json
-{
-  "name": "envoy.filters.network.http_connection_manager",
-  "typed_config": {
-    "@type": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
-    "codec_type": "AUTO",          // 自动检测 HTTP/1.1 或 HTTP/2
-    "stat_prefix": "ingress_http", // 指标前缀
-    "stream_idle_timeout": "300s", // 流空闲超时（HTTP/2 stream 级别）
-    "request_timeout": "0s",       // 请求总超时（0 = 无限制）
-    "rds": {                       // 从 RDS 动态获取路由表
-      "config_source": {"ads": {}},
-      "route_config_name": "local_route"
-    },
-    "http_filters": [              // L7 HTTP Filter 链
-      {"name": "envoy.filters.http.jwt_authn"},
-      {"name": "envoy.filters.http.rbac"},
-      {"name": "envoy.filters.http.router"}  // 必须最后一个
-    ],
-    "access_log": [...]
-  }
-}
-```
-
-### 3.4 Router Filter：HTTP 请求的最终裁决者
-
-**Router Filter** 是 HTTP Filter 链中最后执行的 Filter（也是唯一必须存在的 Filter），负责做出最终的路由决策：
-
-1. 遍历当前请求的 Virtual Host，找到匹配的 Route（基于 path、header、method 等）
-2. 根据 Route 配置选定目标 Cluster（可能是加权随机选择，用于灰度发布）
-3. 应用 Route 级别的策略（超时、重试配置、Header 修改）
-4. 从选定 Cluster 的 Endpoint 列表中，通过负载均衡算法选择一个 Endpoint
-5. 建立到 Endpoint 的连接（通过连接池），转发请求
-
-Router Filter 还负责实现 Envoy 的 **重试机制**：
-
-```json
-"retry_policy": {
-  "retry_on": "5xx,gateway-error,connect-failure,retriable-4xx",
-  "num_retries": 3,
-  "retry_host_predicate": [
-    {"name": "envoy.retry_host_predicates.previous_hosts"}  // 不重试到同一台主机
-  ],
-  "per_try_timeout": "5s",
-  "retry_back_off": {
-    "base_interval": "0.025s",  // 初始退避 25ms
-    "max_interval": "0.250s"    // 最大退避 250ms
-  }
-}
-```
-
-`retry_on` 字段定义了触发重试的条件：
-- `5xx`：后端返回 5xx 错误
-- `gateway-error`：后端返回 502/503/504
-- `connect-failure`：连接建立失败（TCP 握手失败）
-- `retriable-4xx`：可重试的 4xx（目前只有 409 Conflict）
-
-> [!warning] 生产避坑
-> Envoy 的重试只对**幂等**操作安全。HTTP GET 通常是幂等的（重试不会产生副作用），但 HTTP POST 不一定幂等（重试可能导致重复创建资源）。Istio 的默认重试配置对所有请求（包括 POST）都开启了 `5xx` 重试，这在非幂等 POST 请求场景下可能导致重复操作。生产中建议在 VirtualService 中为 POST 请求单独配置 `retryOn`，或者对非幂等接口明确禁用重试：`retries: {attempts: 0}`。
-
----
-
-## 第 4 章 连接池管理
-
-### 4.1 为什么需要连接池
-
-Envoy 作为代理，需要维护两端的连接：
-- **下游（Downstream）**：客户端（应用进程通过 iptables 重定向）到 Envoy 的连接
-- **上游（Upstream）**：Envoy 到后端 Endpoint（Pod）的连接
-
-直接方式是：每次有新的下游请求，就建立一个新的上游 TCP 连接。但 TCP 连接的建立（三次握手）和 TLS 握手需要数毫秒，对于高频小请求场景，每次建立新连接的开销是不可接受的。
-
-**连接池（Connection Pool）** 解决了这个问题：Envoy 为每个 Cluster 的每个 Endpoint 维护一个连接池，已经建立的连接可以被多个请求复用（HTTP/1.1 的 Keep-Alive，或 HTTP/2 的多路复用）。
-
-### 4.2 HTTP/1.1 vs HTTP/2 的连接池差异
-
-**HTTP/1.1 连接池**：
-- 一个连接同时只能处理一个请求（串行）
-- 支持 Keep-Alive（连接用完后归还到池中供下一个请求使用）
-- 需要多个并发连接来处理多个并发请求
-- 连接池大小决定了并发度上限
-
-**HTTP/2 连接池**：
-- 一个 TCP 连接上可以多路复用多个 HTTP/2 Stream（并发请求）
-- 理论上单个连接就能处理大量并发请求
-- Envoy 默认对 HTTP/2 Cluster 只建立少量连接（甚至 1 个），通过 Stream 并发
-
-**DestinationRule 中的连接池配置**：
-
-```yaml
-trafficPolicy:
-  connectionPool:
-    tcp:
-      maxConnections: 100          # 到每个 Endpoint 的最大 TCP 连接数
-      connectTimeout: 30ms         # TCP 连接建立超时
-      tcpKeepalive:
-        probes: 9
-        time: 7200s
-        interval: 75s              # TCP Keepalive 配置
-    http:
-      http1MaxPendingRequests: 100 # HTTP/1.1: 等待可用连接的最大请求数
-      http2MaxRequests: 1000       # HTTP/2: 单个连接最大并发 stream 数
-      maxRequestsPerConnection: 0  # 每个连接的最大请求数（0 = 无限制）
-      maxRetries: 3                # 最大并发重试数
-      idleTimeout: 60s             # 连接空闲超时
-      h2UpgradePolicy: UPGRADE     # 如果服务支持 HTTP/2，自动升级
-```
-
-### 4.3 连接池的 Per-Thread Per-Endpoint 模型
-
-Envoy 的连接池不是全局共享的，而是 **per-Worker-thread、per-Endpoint** 的。每个 Worker 线程为每个 Endpoint 维护独立的连接池，这确保了 Worker 线程访问连接池时不需要加锁（与线程模型一致）。
-
-这意味着：如果你有 4 个 Worker 线程，每个 Endpoint 最多有 `maxConnections = 25` 个连接，那么实际对一个 Endpoint 的最大连接数是 4 × 25 = 100 个。在配置 `maxConnections` 时，需要除以 Worker 线程数来理解每个 Endpoint 实际收到的连接数。
-
----
-
-## 第 5 章 健康检查机制
-
-### 5.1 主动健康检查 vs 被动健康检查
-
-Envoy 支持两种健康检查机制：
-
-**主动健康检查（Active Health Check）**：Envoy 定期向 Endpoint 发送探测请求（HTTP GET、TCP connect、gRPC Check），根据响应判断 Endpoint 是否健康。类似于 Kubernetes 的 `readinessProbe`，但在 Envoy 侧执行。
-
-```yaml
-# DestinationRule 中的主动健康检查配置
-trafficPolicy:
-  outlierDetection: {}  # 被动熔断（见下文）
-```
-
-注意：Istio 中通常**不推荐**在 DestinationRule 中配置主动健康检查，因为 Kubernetes 已经通过 `readinessProbe` 管理 Endpoint 健康状态——kube-proxy 或 CNI 会将不健康的 Pod 从 Service Endpoint 列表中移除，istiod 通过 EDS 通知 Envoy。重复的健康检查会产生额外的流量开销。
-
-**被动健康检查（Outlier Detection，异常检测/熔断）**：Envoy 观察实际请求的响应，当某个 Endpoint 的连续错误率超过阈值时，将其标记为不健康并短暂移除（Eject），经过一段时间后再尝试恢复。这就是 Envoy 的**熔断（Circuit Breaking）** 实现。
-
-### 5.2 Outlier Detection 的工作机制
-
-**Outlier Detection** 是 Envoy 中实现熔断的核心机制，它基于实际请求失败来动态调整 Cluster 的 Endpoint 列表。
-
-**触发条件**（可配置任意组合）：
-
-| 条件 | 配置字段 | 说明 |
+| 对象 | 职责 | 对应 xDS 类型 |
 | :--- | :--- | :--- |
-| 连续 5xx 错误 | `consecutive5xxErrors` | 连续 N 次 5xx 响应 |
-| 连续网关错误 | `consecutiveGatewayErrors` | 连续 N 次 502/503/504 |
-| 连续本地原因错误 | `consecutiveLocalOriginFailures` | 连续 N 次连接失败/超时 |
-| 成功率 | `successRateMinimumHosts/RequestVolume` | 低于平均成功率 stdev 倍标准差 |
+| Listener（监听器） | 定义"从哪里进"：端口与入口过滤链 | LDS |
+| Filter Chain（过滤链） | 定义"进来先做什么"：协议探测与转发方式 | 随 LDS |
+| Route Configuration（路由表） | 定义"从入口到出口的映射" | RDS |
+| Cluster（集群） | 定义"往哪里出"：上游集合与均衡策略 | CDS/EDS |
 
-**Eject 机制**：
+不妨把四类对象读成一座大楼的门禁系统：Listener 是各处大门，过滤链是大门处的登记与安检流程，路由表是楼层索引，Cluster 是电梯井与楼层里的房间。访客（请求）从哪扇门进、登记哪些事项、去几层、进哪个房间，全部由这四类对象静态定义——代理本身没有策略，它只是配置的忠实执行者。
 
-当某个 Endpoint 触发条件时，Envoy 将其从 Cluster 的活跃 Endpoint 列表中移除（Eject），移除时间为 `baseEjectionTime × 被移除次数`（指数增长，但不超过 `maxEjectionPercent` 的比例）。
+### 3.2 逐帧回放
 
-```yaml
-outlierDetection:
-  consecutive5xxErrors: 5       # 连续 5 次 5xx 触发
-  interval: 10s                  # 检测间隔
-  baseEjectionTime: 30s          # 基础移除时间（第 1 次移除 30s，第 2 次 60s，以此类推）
-  maxEjectionPercent: 50         # 最多移除 50% 的 Endpoint（保证可用性）
-  splitExternalLocalOriginErrors: true  # 区分网络错误（超时、连接失败）和后端返回的 5xx
+现在跟一个 HTTP 请求走完全程。**第一帧：进入监听器。** 请求到达 15006（Istio 的入站端口），Envoy 按端口定位 Listener，先过监听器级过滤器——这一层的过滤器是"探针型"的，只采集事实、不改动流量：
+
+| 监听器过滤器 | 采集的事实 | 用途 |
+| :--- | :--- | :--- |
+| tls_inspector | 是否 TLS、SNI 域名、ALPN 协议 | 后续按域名分流与 TLS 终止的依据 |
+| original_dst | 连接的原始目的地址 | 通配监听还原真实去向（iptables 改写后） |
+| http_inspector | 明文流量是否 HTTP | 协议自动识别 |
+
+**第二帧：网络过滤链。** Listener 的过滤链里，http_connection_manager（HCM，HTTP 连接管理器）接管 HTTP 流量，tcp_proxy 接管 TCP 流量。HCM 是 Envoy 的七层中枢：解析 HTTP 报文头，随后在 HCM 内部再跑一条 **HTTP 过滤链**——每个过滤器按序处理请求头，任何一个都有权短路（拒绝、重定向）。常用的 HTTP 过滤器可以列成一张表：
+
+| 过滤器 | 职能 | 治理语义 |
+| :--- | :--- | :--- |
+| jwt_authn | 校验 JWT 签名与声明 | 入口认证，第 05 篇的主角之一 |
+| ext_authz | 外呼外部鉴权服务 | 自定义策略的注入点 |
+| fault | 按比例注入延迟或错误 | 混沌工程的代理层实现 |
+| cors | 跨域头处理 | 浏览器侧的安全策略 |
+| router | 匹配路由并转发 | 过滤链的终点，请求在此离场 |
+
+过滤链的顺序在配置里显式声明，治理动作的编排语义就来自这个顺序：鉴权必须先于转发，故障注入的观察点在哪个过滤器之后都有讲究。Istio 的许多高层能力（认证、授权、遥测）落到数据面，都是在这条链上插入对应过滤器——**Istio 的声明式 API 是给过滤器链写"编排说明"的人类界面**，这句话概括了两篇之间的衔接关系。
+
+**第三帧：路由匹配。** HCM 带着请求查路由表：先匹配 domain（虚拟主机，精确与通配各按优先级），再依次匹配路径（精确、前缀、正则）、HTTP 方法、Header、查询参数——先具体后抽象，第一条命中的规则生效。命中后规则给出目标 Cluster 与转发策略（超时、重试、镜像都挂在这里）。匹配顺序里藏着两类经典事故：其一，通配 domain 抢在精确 domain 之前声明，所有请求被宽规则截胡；其二，`/api` 的前缀规则排在 `/api/v2` 之前，后者的精确规则永远轮不到生效。**路由表是顺序敏感的数据结构**，把它当无序集合来维护，迟早会撞上这两类事故。
+
+**第四帧：集群与连接池。** Cluster 的负载均衡器从健康端点中选出一个，向上游连接池要一条连接：HTTP/1.1 池按需建连，HTTP/2 池复用多路复用连接。请求发出、响应回来，沿原路反向穿过过滤链，统计与访问日志在过滤链的锚点上落账。
+
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+flowchart TD
+    A["请求到达监听端口"] --> B["Listener<br/>tls_inspector 探测 SNI"]
+    B --> C["网络过滤链<br/>http_connection_manager 接管"]
+    C --> D["HTTP 过滤链逐个过闸<br/>jwt_authn → ext_authz → fault → router"]
+    D --> E["路由匹配<br/>domain → path → header"]
+    E --> F["选定 Cluster"]
+    F --> G{"负载均衡选端点"}
+    G --> H["从连接池取连接<br/>HTTP/1.1 按需建连 / HTTP/2 复用"]
+    H --> I["发往上游实例"]
+    I --> J["响应反向穿链<br/>统计与访问日志落账"]
+
+    classDef stage fill:#50fa7b,stroke:#282a36,color:#282a36
+    classDef hub fill:#bd93f9,stroke:#282a36,color:#282a36
+    class A,B,J stage
+    class C,D,E,F,G,H,I hub
 ```
 
-**恢复机制**：Eject 时间到期后，Endpoint 自动重新加入活跃列表，接受少量流量。如果这些流量也失败，移除时间进一步翻倍；如果成功，Endpoint 完全恢复。
+### 3.3 Istio 的双监听与通配技巧
 
-> [!info] 核心概念
-> Outlier Detection 实现的是**自动化的熔断器（Circuit Breaker）模式**。在 Netflix Hystrix 时代，熔断器是在应用代码中实现的——每个服务独立维护一个熔断器状态机（Closed/Open/Half-Open）。Envoy 的 Outlier Detection 将这个逻辑下沉到代理层，对所有服务统一生效，且与应用语言无关。更重要的是，Envoy 的熔断是**集群感知的**（cluster-aware）——当某个 Endpoint 被 Eject 时，流量被重新分配给其他健康 Endpoint，而不是简单地快速失败，大幅提升了系统的整体可用性。
+Istio 接管 Pod 流量的方式建立在这套模型上：出站方向，iptables 把应用的所有连接重定向到 15001，Envoy 在那里配置了一个**通配监听器**——它不写死任何目标，而是用 original_dst 取回连接的真实目的地址，再虚拟出一组按 IP 与端口区分的监听器逐一分流；入站方向对称，15006 收下全端口流量再分发。这个设计让"代理所有端口"成为可能——不必为每个上游服务单独监听——但也让配置规模与集群服务数成正比，第 02 篇讲的作用域裁剪，裁的正是这里的配置量。理解了双监听与通配，"iptables 劫持之后流量怎么走"这个上一章遗留的问号就闭环了：劫持只负责把流量送到代理门口，original_dst 负责告诉代理"这包原本要去哪"，通配监听器与虚拟监听器群负责把每个目的地翻译成对应的治理动作——三层接力，透明才有内容。
 
----
+### 3.4 一行访问日志的解剖
 
-## 第 6 章 Envoy 的负载均衡算法
+请求走完全程后会在访问日志里留下一行记录。把一行典型日志摊开看，每个字段都是前几节某个机制的出口：
 
-### 6.1 支持的负载均衡策略
-
-Envoy 在 Cluster 层面支持多种负载均衡算法，通过 DestinationRule 的 `loadBalancer` 字段配置：
-
-**Round Robin（轮询）**：轮流选择 Endpoint，每个 Endpoint 获得等量请求。简单，但不考虑 Endpoint 当前负载。
-
-**Random（随机）**：随机选择 Endpoint。在 Endpoint 数量较多时，随机选择的长期分布接近均匀，但短期可能不均。
-
-**Least Request（最少请求）**：选择当前 pending 请求数最少的 Endpoint（每个 Worker 线程独立维护各 Endpoint 的请求计数）。对于请求处理时间差异大的场景（如一些请求需要数秒，一些需要毫秒），最少请求能更好地均衡负载。
-
-**Ring Hash / Maglev（一致性哈希）**：基于请求的某个属性（如 Cookie、Header 值、Source IP）做哈希，确保相同属性的请求始终路由到同一个 Endpoint（会话粘性）。Maglev 是 Google 提出的改进一致性哈希算法，在 Endpoint 数量变化时，需要重新路由的请求数量最少。
-
-**Random + Outlier Detection（推荐组合）**：Random 配合 Outlier Detection 是 Istio 推荐的生产配置——Random 负载均衡足够简单高效，Outlier Detection 负责自动移除故障 Endpoint，两者结合能在绝大多数场景下提供良好的负载均衡效果。
-
-### 6.2 Zone-Aware 路由
-
-当集群跨多个可用区部署时，Envoy 的 **Zone-Aware Routing** 功能可以优先将流量路由到与请求来源同可用区的 Endpoint，减少跨可用区的延迟和网络费用：
-
-```yaml
-trafficPolicy:
-  loadBalancer:
-    localityLbSetting:
-      enabled: true
-      failover:
-      - from: us-east-1a
-        to: us-east-1b    # us-east-1a 的 Endpoint 全部不可用时，failover 到 us-east-1b
+```text
+[2026-09-19T10:23:45.123Z] "POST /api/v1/orders HTTP/2" 200 -
+  0 41 12 11 "-" "productpage/1.0" "10.244.1.15" "outbound|9080||reviews.default.svc.cluster.local"
+  "10.244.3.7:9080" "10.244.2.11:9080" 10.244.3.7:51344 10.244.3.7:9080 10.244.3.12:41832 -
+  reviews.default.svc.cluster.local -
 ```
 
-Zone-Aware 路由要求 EDS 的 Endpoint 数据中包含 `locality`（可用区）信息，Istio 通过 Kubernetes Node 的 `topology.kubernetes.io/zone` 标签自动提取这个信息。
+关键字段的对应关系逐项列出：
 
----
-
-## 第 7 章 Envoy 的 TLS 处理
-
-### 7.1 mTLS 握手流程
-
-当 Envoy 建立到上游 Cluster 的连接时（在 Istio 中，上游也是另一个 Envoy Sidecar），如果启用了 mTLS，握手过程如下：
-
-```
-发起方 Envoy → 目标 Envoy
-  ↓ TCP 三次握手
-  ↓ TLS Client Hello（附带 SNI：outbound_.80_._.backend-svc.default.svc.cluster.local）
-  ← TLS Server Hello（附带服务器证书）
-  
-目标 Envoy 验证：
-  - 验证服务器证书的 CA（是否由 istiod/Citadel 签发）
-  - 验证证书中的 SPIFFE SAN（是否与预期的服务身份匹配）
-
-  ↓ Client Certificate（发送自己的证书，因为是 mTLS）
-  
-发起方 Envoy 验证：
-  - 同样验证服务器证书
-
-  ← Finished（握手完成）
-  ↓ 加密的 HTTP/2 请求
-```
-
-### 7.2 SDS 与证书热更新
-
-前文提到，Envoy 通过 SDS（Secret Discovery Service）从 istiod 动态获取证书。SDS 的关键优势是：**证书可以在不重启 Envoy 的情况下轮换**。
-
-当 Envoy 的证书即将过期时：
-1. Envoy 向 istiod 发送 SDS 请求，申请新证书
-2. istiod 签发新证书，通过 SDS 流推送给 Envoy
-3. Envoy 热更新其 TLS 上下文，从这一刻起新建的 TLS 连接使用新证书
-4. 已有的 TLS 连接继续使用旧证书（直到连接自然关闭）
-
-全程无需重启任何进程，对正在处理的流量完全透明。
-
----
-
-## 第 8 章 Envoy 的可观测性接口
-
-### 8.1 Stats（统计指标）
-
-Envoy 内置丰富的统计指标，在 `:15090/stats` 端点以 Prometheus 格式暴露：
-
-**连接层指标**：
-```
-envoy_cluster_upstream_cx_active{cluster_name="..."} 42         # 当前活跃连接数
-envoy_cluster_upstream_cx_connect_fail{cluster_name="..."} 3    # 连接失败次数
-envoy_cluster_upstream_cx_total{cluster_name="..."} 12345       # 总连接数
-```
-
-**请求层指标**：
-```
-envoy_cluster_upstream_rq_total{cluster_name="..."} 98765       # 总请求数
-envoy_cluster_upstream_rq_pending_active{cluster_name="..."} 5  # 待处理请求数
-envoy_cluster_upstream_rq_2xx{cluster_name="..."} 97000         # 2xx 响应数
-envoy_cluster_upstream_rq_5xx{cluster_name="..."} 120           # 5xx 响应数
-envoy_cluster_upstream_rq_time_bucket{...}                      # 延迟直方图
-```
-
-**Outlier Detection 指标**：
-```
-envoy_cluster_outlier_detection_ejections_active{cluster_name="..."} 2   # 当前被移除的 Endpoint 数
-envoy_cluster_outlier_detection_ejections_total{cluster_name="..."} 15   # 历史移除总次数
-```
-
-### 8.2 Access Log：每请求的详细记录
-
-Envoy 为每个通过的请求生成一条访问日志，默认输出到标准输出（stdout），由 Kubernetes 的 log driver 收集。访问日志格式可以通过 Istio 的 `MeshConfig.accessLogFormat` 自定义：
-
-```
-# 默认 Istio 访问日志格式（部分字段）：
-[%START_TIME%] "%REQ(:METHOD)% %REQ(X-ENVOY-ORIGINAL-PATH?:PATH)% %PROTOCOL%"
-%RESPONSE_CODE% %RESPONSE_FLAGS% %BYTES_RECEIVED% %BYTES_SENT%
-%DURATION% %RESP(X-ENVOY-UPSTREAM-SERVICE-TIME)% "%REQ(X-FORWARDED-FOR)%"
-"%REQ(USER-AGENT)%" "%REQ(X-REQUEST-ID)%" "%REQ(:AUTHORITY)%" "%UPSTREAM_HOST%"
-%UPSTREAM_CLUSTER% %UPSTREAM_LOCAL_ADDRESS% %DOWNSTREAM_LOCAL_ADDRESS%
-%DOWNSTREAM_REMOTE_ADDRESS% %REQUESTED_SERVER_NAME% %ROUTE_NAME%
-
-# 示例输出：
-[2024-01-15T10:23:41.234Z] "GET /api/v1/users HTTP/1.1"
-200 - 0 1234
-3 2 "-" "curl/7.64.1" "abc-123-def" "backend-service" "10.244.0.5:8080"
-outbound|80||backend-service.default.svc.cluster.local
-10.244.1.3:41234 10.96.100.1:80
-10.244.1.3:41234 10.244.1.3:0 outbound_.80_._.backend-service.default.svc.cluster.local default
-```
-
-**Response Flags（响应标志）** 是访问日志中极其重要的诊断字段，标识请求失败的原因：
-
-| Flag | 含义 |
+| 字段样例 | 对应机制 |
 | :--- | :--- |
-| `-` | 正常完成 |
-| `UF` | Upstream Connection Failure（连接建立失败） |
-| `UO` | Upstream Overflow（连接池满，熔断触发） |
-| `URX` | Upstream Retry Exhausted（重试次数耗尽） |
-| `NR` | No Route Match（没有匹配的路由规则） |
-| `DC` | Downstream Connection Termination（客户端关闭连接） |
-| `UC` | Upstream Connection Termination（后端关闭连接） |
-| `UH` | Upstream No Healthy Hosts（没有健康的 Endpoint） |
-| `UT` | Upstream Request Timeout（上游请求超时） |
+| "POST /api/v1/orders HTTP/2" 200 | HCM 协议解析与过滤链的最终裁决 |
+| 0 41 12 11 | 响应标志位、字节数、总耗时与上游耗时（12 与 11 之差即本代理开销） |
+| "productpage/1.0" | 上游服务身份（mTLS 证书声明的 SPIFFE 身份，第 05 篇展开） |
+| outbound\|9080\|\|reviews... | 集群命名：方向、端口、subset、服务 FQDN 四段编码 |
+| "10.244.2.11:9080" | 负载均衡选中的上游端点 |
 
-> [!warning] 生产避坑
-> 当收到大量 503 错误时，查看访问日志中的 `Response Flags` 字段能立即定位根因：
-> - `UH`：所有 Endpoint 都被 Outlier Detection 移除，需要检查后端服务健康状态
-> - `UO`：连接池满，需要调大 `maxConnections` 或排查后端处理慢的问题
-> - `NR`：路由规则配置错误，用 `istioctl proxy-config route` 检查路由表
+读懂一行日志，就读懂了代理的一次完整决策——第 06 篇的可观测性体系，正是把这行日志与指标、追踪跨度组装起来的工程。
 
 ---
 
-## 第 9 章 小结
+## 第 4 章 集群、连接池与健康：上游世界的三条规则
 
-### 9.1 Envoy 核心机制总览
+### 4.1 负载均衡策略：五种选择器
 
-| 层面 | 机制 | 工程价值 |
+Cluster 是治理策略在数据面的最终载体：负载均衡策略、连接池上限、异常点检测、主动健康检查全部挂在它身上。理解了 Cluster 的地位，上一篇讲的 DestinationRule（负载均衡策略与 Subset 的声明处）与它的对应关系也就一目了然——声明层的每个字段，编译后都落在某个 Cluster 的某个字段上。
+
+Cluster 的负载均衡器决定"这一次请求发给谁"，Envoy 提供的策略各有明确的适用前提：
+
+| 策略 | 语义 | 适用场景与代价 |
 | :--- | :--- | :--- |
-| **并发模型** | 固定 Worker 线程 + 事件循环 | 无锁、可预测的低延迟 |
-| **配置热更新** | TLS + 主线程分发回调 | 零停机配置变更 |
-| **L4 处理** | Network Filter Chain | 可插拔的 TCP 层处理逻辑 |
-| **L7 处理** | HTTP Filter Chain（由 HCM 启动） | 可插拔的 HTTP 层处理逻辑 |
-| **连接复用** | Per-thread Per-Endpoint 连接池 | 消除连接建立开销 |
-| **故障隔离** | Outlier Detection（被动熔断） | 自动移除故障 Endpoint |
-| **负载均衡** | Random/LeastRequest/Maglev | 多场景适配的流量分发 |
-| **安全** | SDS 动态证书 + mTLS | 零重启证书轮换 |
-| **可观测性** | Stats + Access Log + Tracing | 统一的运维可见性 |
+| ROUND_ROBIN | 依次轮转 | 默认选项，实例能力相近时最稳 |
+| LEAST_REQUEST | 发给当前活跃请求最少的实例 | 实例处理耗时差异大时更均衡，统计有开销 |
+| RANDOM | 随机挑选 | 简单且无状态，超大集群下表现稳定 |
+| RING_HASH | 一致性哈希环 | 会话保持场景，端点增减只影响相邻区间 |
+| MAGLEV | 一致性哈希的另一实现 | 哈希表更大、分布更均匀，内存开销更高 |
 
-### 9.2 下一篇预告
+两个哈希策略值得多说一句：它们是"会话亲和"（同一用户落到同一实例）的实现基础，哈希键可以是 Header、Cookie 或源 IP。但亲和是策略不是承诺——实例下线时，哈希区间重排，亲和自然断裂。把会话状态存在实例内存里再配上哈希策略，滚动更新时依旧会掉会话，这是把应用状态外置（进缓存或数据库）的众多理由之一。与下一章预告的 DestinationRule 相对照：Subset 负载均衡（把流量限制在带特定标签的实例子集内）叠加在这些策略之上，先筛子集、再在子集内均衡——两级过滤是版本路由的数据面基石。
 
-理解了 Envoy 的内部机制，接下来将深入 Istio 流量管理的核心用法：
+### 4.2 连接池：按协议分治
 
-- **[[04 流量管理——VirtualService、DestinationRule与灰度发布]]**：VirtualService 和 DestinationRule 的精确语义，如何用它们实现金丝雀发布、A/B 测试、故障注入，以及常见的配置错误和排查方法
+连接池的语义随上游协议分治，这是最容易算错账的地方。**HTTP/1.1** 下，一条连接同一时刻只承载一个请求，池子按 `max_connections`（per-worker，记住第 2 章的定语）限制并发连接数，请求超过池容量就在 `max_pending_requests` 的等待队列里排队，队列也满则直接失败。**HTTP/2** 下，一条连接可以多路复用成百上千个并发流，`max_concurrent_streams` 限制单连接的并发流数——池子只需极少的连接就能扛住高并发，代价是所有请求挤在少数几条 TCP 连接上，队头拥塞与单连接的丢包放大效应要靠调大连接数对冲。**纯 TCP** 代理最简单：每 worker 每上游维护连接数上限，超限排队或失败。
+
+这份分治清单直接给出两条调优经验：其一，HTTP/2 或 gRPC 上游的连接池上限要按"流"而不是"连接"估算，配 1000 条连接毫无意义，关注的是 streams 与连接数的乘积；其二，从 HTTP/1.1 迁到 HTTP/2 后连接数断崖式下降是正常现象，不是丢连接事故——但监控口径要跟着换，否则告警形同虚设。
+
+连接池还有两个时间参数常被忽视。**空闲超时（idle timeout）**决定连接闲置多久被回收——设得过短，空闲期后的第一波请求要承担建连与 TLS 握手的冷启动成本，毛刺由此而来；**预连接（preconnect）**让代理在预测到流量前提前建连对冲冷启动，代价是可能建了用不上的连接。两者连同 keepalive 探测（探测半开连接，防止把请求发进已死的连接里等超时）构成连接池的时间维度调优——数量管并发，时间管延迟，缺一面都算不清连接池的账。
+
+### 4.3 熔断与异常点检测：主动上限与被动剔除
+
+Hystrix 教育出来的一代人容易把这两者混为一谈，实际上它们是互补的两套机制。**熔断（Circuit Breaking）是资源级的主动上限**：连接数、等待队列、并发请求、重试数各设上限，触顶即快速失败——它保护的是**代理自身与下游的容量**，不管下游健康与否，只要资源账超了就拦。**异常点检测（Outlier Detection）是被动的健康剔除**：统计每个端点的连续错误（如连续 5 次 5xx）或错误率，越限者被暂时"弹射"出负载均衡池（baseEjectionTime 起步、逐次翻倍），到期自动回归——它保护的是**请求不再撞向已经病了的实例**。
+
+| 维度 | 熔断 | 异常点检测 |
+| :--- | :--- | :--- |
+| 触发条件 | 并发资源超限 | 端点错误率越限 |
+| 作用对象 | 整个 Cluster 的准入 | 个别端点的池内资格 |
+| 失败形态 | 快速失败，请求被拒 | 请求被导向其余健康端点 |
+| 保护目标 | 防止故障传导、保护容量 | 隔离坏实例、自动恢复 |
+| 恢复方式 | 流量回落后自动恢复 | 弹射到期自动回归 |
+
+两者的时间尺度也不同：熔断是毫秒级的当下保护，异常点检测是十秒级（默认检测间隔）的群体免疫。它们共同构成无 SDK 时代的弹性层——上一篇对照表里"语言无关的熔断"，物理载体就在这里。还有一条容易被忽略的互动：**重试预算也受熔断约束**——Envoy 的 `max_retries` 限制的是"同时处于重试中的请求总数"（per-worker），下游故障引发的重试风暴会先撞上这堵墙，被拦截的重试直接失败而不是堆积——这正是第 01 篇重试风暴推演在数据面的落点：重试可以配，但必须配在资源上限之内。
+
+### 4.4 健康检查的两种形态与恐慌阈值
+
+判断"端点还能不能用"有两条信息通道。**主动健康检查**（active health check）由 Envoy 定期探测——HTTP 探活、TCP 探活各有精度与开销，发现坏得快、误伤也可能快；**被动健康检查**就是异常点检测，靠真实流量的错误反馈说话，零探测开销、发现偏慢。Istio 默认只开被动侧（经 DestinationRule 配置），主动探测需要显式声明——因为网格场景里实例生灭已经由 Kubernetes 的探针管理，主动探测的增量价值主要在"应用活着但语义异常"的场景。
+
+被动剔除还有一个精妙的逃生门：**恐慌阈值（panic threshold）**。当健康端点占比跌破 50%，Envoy 不再假装自己知道谁健康，而是把流量全量发往所有端点——宁可全试、不再选择性拒绝。这个反直觉的设计背后的判断是：健康信息已经不可信时，"基于错误信息的选择性剔除"比"基于无差别转发"更危险。调试时若发现"明明配了剔除策略却像没配"，先按三个问题自查：
+
+1. 健康端点占比是否已跌破恐慌线——跌进去就是全量转发的预期行为，不是配置失效；
+2. 剔除参数是否过保守——maxEjectionPercent 默认 10%，20 个实例最多弹射 2 个，错误率自然压不下去；
+3. 低流量实例是否误判——样本太少时连续错误计数波动大，需要结合 success rate 类指标综合判断。
+
+> [!info] 核心概念：Ejection 不是熔断的分支，而是它的镜像
+> 一个便于记忆的框架：熔断回答"我还要不要再放请求进去"，异常点检测回答"这个端点还有没有资格被选中"。前者站在流量的门口，后者站在候选名单里。生产里最常见的配错是把两者当一个用——配了熔断没配异常点检测，于是坏实例永远留在池子里被轮询选中，错误率下不去；或者反过来配了剔除没配上限，坏流量洪水冲垮代理自己的连接资源。
+
+### 4.5 TCP 代理：L4 视野的能与不能
+
+不是所有流量都是 HTTP。数据库连接、Redis、消息队列的私有协议，在 Envoy 里走 tcp_proxy 这条 L4 通道。L4 视野的能与不能值得列清楚：能做的——连接级转发、连接数与资源上限、mTLS 加密（第 05 篇）、按连接计的指标；不能做的——理解报文内容，于是**按路由分流、按请求重试、按接口授权这些七层治理全部缺席**，重试一条 TCP 流意味着重放应用语义，代理不敢也不该代劳。Istio 支持把数据库纳入网格（有 MySQL、Postgres、Redis 的协议解析过滤器），但成熟度远不及 HTTP 系。对 TCP 流量，网格的合理预期是"安全与可观测"，而不是"治理"——预期错位是 TCP 场景失望的根源。
+
+### 4.6 主动健康检查的形态选择
+
+| 形态 | 探测内容 | 优势 | 代价与陷阱 |
+| :--- | :--- | :--- | :--- |
+| HTTP 主动探活 | 指定路径返回 2xx/3xx | 可探到应用语义层 | 探活路径"活"不代表业务"健康" |
+| TCP 主动探活 | 端口可建连 | 开销最低 | 只能证明进程在，不能证明能服务 |
+| 被动（异常点检测） | 真实流量的错误反馈 | 零探测开销，反映真实 | 发现慢，低流量端点误判难 |
+
+三种形态没有普适的优劣，组合使用是常态：TCP 探活做底线（进程死了快速摘除），被动检测做主力（真实流量说了算），HTTP 语义探活留给确有健康语义声明的服务。组合的要点在于**各层各司其职、探测频率错开**——底层高频、语义层低频，避免任何一层成为探测风暴的源头。
+
+Kubernetes 场景里还有第四条通道——kubelet 的探针已经管理着实例生灭，网格侧的主动检查是在这套机制之上的增量，重复配置两套严苛探活只会互相放大误伤。
+
+### 4.7 一次完整的弹性事件复盘
+
+把本章机制串成一次真实形态的事故推演。起点：某实例因内存泄漏开始返回 5xx。事件按时间轴展开：
+
+| 时刻 | 事件 | 机制 |
+| :--- | :--- | :--- |
+| T+0 | 请求陆续失败，坏实例仍在池中 | 检测窗口未走完 |
+| T+10 秒 | 连续 5xx 越限，实例被弹射出池 | 异常点检测，baseEjectionTime 起算 |
+| T+30 秒 | 弹射到期，实例回归——泄漏仍在，再被弹射 | 弹射时长翻倍，进入震荡期 |
+| 持续 | 若剔除前并发已超熔断上限，队列溢出请求被快速拒绝 | 熔断的资源上限即时生效 |
+| 直至根因处理 | 实例在池内外震荡或被 K8s 重启 | 弹性机制止血，根因另治 |
+
+复盘里有三个认知点。其一，被动剔除的**恢复尝试是特性不是缺陷**——自动回归给了瞬时故障自愈的机会，代价是坏实例反复进出池子的震荡期；其二，熔断与剔除在这一事件里各司其职，缺了任何一个，故障形态都会更糟；其三，根因修复（重启实例、回滚版本）永远在弹性机制之外——网格替你止血，不替你治病。
+
+### 4.8 连接池调优清单
+
+把本章的调优要素收进一张清单，供实际排障时逐项核对：
+
+| 调优项 | 管什么 | 常见错误 |
+| :--- | :--- | :--- |
+| max_connections | 每 worker 并发连接数 | 忘乘 worker 数，或按全局口径理解 |
+| max_pending_requests | 等待队列长度 | 过大导致排队延迟掩盖故障，过小放大失败 |
+| max_concurrent_streams | HTTP/2 单连接并发流 | 与连接数混算，监控口径错位 |
+| idle_timeout | 连接闲置回收 | 过短引发冷启动毛刺，过长堆积僵尸连接 |
+| keepalive | 半开连接探测 | 未开启时空闲期后偶发超时 |
+| outlier 检测参数 | 剔除灵敏度 | 检测间隔过长，坏实例在池内停留过久 |
+| 恐慌阈值 | 健康占比失守时的策略 | 误以为是"剔除失效"而反复乱调 |
+
+清单里的每一行都对应一类生产事故，调优顺序建议从上往下——先算对数量账（前两行），再对齐协议口径（第三行），最后打磨时间参数。顺序反了，常在时间参数上空转。
 
 ---
 
-*本文是 [[服务网格]] 专栏的第 3 篇。*
+## 第 5 章 配置更新与热重启：两套不中断的机制
+
+### 5.1 xDS 动态更新：配置不碰连接
+
+上一篇讲了 xDS 的协议细节，本节补数据面的消费侧。配置更新到达 worker 后，Envoy 采用**配置快照切换**语义，落地分三步：收到推送后先整体校验（引用闭合、语义合法），通过后构建一套新的 Listener/Cluster/Route 对象；快照构建完成即原子切换，存量连接继续按旧配置走完，新连接按新配置建立；被移除的监听器进入排水（drain）状态，存量连接按排水超时陆续关闭。整个过程没有 reload、没有断流窗口，代理在任意时刻执行的都是一套自洽配置——绝不出现半新半旧的中间态。这就是第 1 章里"配置热更新"短板的正面回答：**变更的粒度是连接，而不是进程**。
+
+### 5.2 热重启：二进制升级的祖传手艺
+
+xDS 解决"配置怎么变"，解决不了"二进制怎么换"——升级 Envoy 本体时，旧进程要被新进程替代，这就是热重启（Hot Restart）的职责。它的机制分三步：新进程启动后与旧进程经 Unix 域 socket 协商，完成监听 socket 移交（新进程接管 accept）与统计的共享内存对接（计数不断档）；随后旧进程进入排水，存量连接按排水超时自然收尾；超时未排干的连接由旧进程强行关闭，重启完成。整个过程对上游与应用表现为：连接偶有重建，端口从不关闭，监控曲线不出现断崖。
+
+xDS 与热重启的分工值得一张表说清：
+
+| 维度 | xDS 动态更新 | 热重启 |
+| :--- | :--- | :--- |
+| 变更对象 | 配置（监听器、集群、路由） | 二进制（Envoy 版本升级） |
+| 频率 | 分钟级，随时 | 月级，跟随版本 |
+| 机制 | 快照切换与连接排水 | 父子进程协商与 socket 移交 |
+| 与 Istio 的关系 | 日常配置下发的主通道 | Sidecar 镜像升级的底层保障 |
+
+Istio 场景里热重启被藏得更深：Sidecar 升级通常整体重建 Pod，热重启主要在"只升代理镜像不重建 Pod"的高级用法里出现。但理解它仍有价值——它是"数据面进程永不直接断流"这个承诺的完整拼图。
+
+### 5.3 排水：优雅退场的全部秘密
+
+排水（drain）在两套机制里都出现，值得单独交代语义。监听器被移除时，Envoy 停止接受新连接，但存量连接继续服务直到自然结束或排水超时——超时值是利弊的天平：
+
+- 设太长：配置变更的收敛时间被拖长，旧规则残留越久，新旧规则并存的窗口越大；
+- 设太短：长连接被强拆，客户端偶发重置，滚动更新期"偶发失败"多由此来；
+- HTTP/2 与 gRPC 场景：连接上挂着的长寿命流需要更久的排水窗口，GOAWAY 帧是 HTTP/2 的"我不再接新活"信号，gRPC 客户端收到后应主动迁移连接——**服务端只管宣告，迁移的礼数要客户端配合**。
+
+这也是长连接服务滚动更新时"服务端已排水、客户端却撞墙"事故的根源：排水语义落在协议帧上，客户端不响应帧，排水就只是单方面的礼貌。
+
+### 5.4 管理端点：代理的自我陈述
+
+每个 Envoy 进程内嵌一个管理端点（Istio 映射在 localhost 的 15000 端口），提供几组排障利器：`/config_dump` 输出代理当前生效的完整配置（上一篇排障三分法的"代理端"取数点）、`/clusters` 列出各集群的端点与健康状态、`/stats` 暴露全部计数器、`/server_info` 给出版本与启动参数。它们与 istioctl 的 proxy-config 系列命令同源——后者本质是对这些端点的格式化封装。代理自己永远是最诚实的证人，排障时先取证、再推断。
+
+### 5.5 Istio 场景的配置全景：一个 Sidecar 的配置从哪来
+
+把第 02 篇的编译与本篇的消费侧对齐，一个 Sidecar 的配置全景可以这样描述。istiod 为每个代理单独编译一份配置：出站侧，一个名为 virtualOutbound 的通配监听器坐镇 15001，用 original_dst 虚拟出该代理"可见的"全部上游监听——可见二字对应第 02 篇的作用域裁剪，Sidecar 声明之外的命名空间根本不会出现在这份配置里；入站侧，virtualInbound 坐镇 15006，按端口逐一分发到本 Pod 的应用容器。每个 Cluster 对应"服务加 subset"的一对组合，每条路由对应 VirtualService 的一条 http 规则——上一章 3.5 节那条灰度规则，在数据面的最终形态就是"两个 Cluster 加一条权重路由"。
+
+这份全景还解释了一个规模现象：Sidecar 的内存占用与"它可见的服务数"成正比，与"集群总服务数"无关——作用域裁剪是 Sidecar 内存问题的第一处方，调优 Sidecar 资源参数只是第二处方。排障时 config_dump 里的配置与预期不符，第一步永远是确认"这份配置本来就该是什么样"——编译的意图与消费的实况对上号，分歧点自然显形。至于劫持机制本身如何把流量送到这些监听器门口，[[01 服务网格概述——从微服务治理痛点到Sidecar模式|第 01 篇]] 的 iptables 三段论是它的前置阅读。
+
+---
+
+## 第 6 章 边界与反例：503 的家族史与容量的算术
+
+前四章讲的全是"正常时怎么运转"，但数据面工程师的真实日常，一大半花在"异常时怎么解释"上。Envoy 对此有一个常被低估的善意设计：它几乎从不在失败时沉默——每个失败请求都带着字段、计数与标志位离开。本章把这些痕迹组织成一张验伤报告、一道算术题与一棵决策树。
+
+### 6.1 响应标志位：每个失败都带着验伤报告
+
+Envoy 拒绝或失败一个请求时，会在访问日志与响应头（x-envoy-upstream-service-time 旁的 flag 字段）里留下标志位——这是网格排障里信息密度最高的一个字段，值得整表收录：
+
+| 标志 | 含义 | 典型根因与去处 |
+| :--- | :--- | :--- |
+| UH | 无健康上游（NoHealthyUpstream） | 端点全被剔除或标签错配，回查第 4 章健康机制与 subset 标签 |
+| UF | 上游连接失败 | 网络不通、端口错、安全组拦截 |
+| UC | 上游连接中断 | 上游进程崩溃或中间设备掐断连接 |
+| URX | 重试次数超限 | 重试策略耗尽，回查上游为何持续失败 |
+| UT | 上游请求超时 | 上游慢，查超时配置与上游容量 |
+| UO | 上游溢出（UpstreamOverflow） | 熔断上限触顶，按 4.3 节的账重算容量 |
+| RL | 被限流（RateLimited） | 限流策略生效，属预期行为而非故障 |
+| NR | 无路由（NoRouteFound） | 路由表没匹配上，查 domain 与路径规则 |
+| UAHR | 主动健康检查标记的失败 | 探活配置与真实可用性不符 |
+
+这张表的用法是**定域**：UH、NR 指向网格自身的配置与状态（控制面或代理配置问题），UF、UC、UT 指向上游与网络（应用或基础设施问题）。看到 503 先看标志位，等于先把故障切成了两半，每半的排查路径完全不同——排障效率的差距主要就在这第一步。举一个真实形态的例子：某服务偶发 503 且占比不足 1%，日志里 flag 均为 UO——上游溢出。按表对号入座，这是连接池或队列上限触顶，而"偶发、低占比"正是 per-worker 限制被集中打满的典型形态：全局余量充足，个别 worker 在流量尖峰瞬间爆表。调大 per-worker 上限并配合连接池预热后，问题消失。没有标志位，这类问题的排查往往要绕一大圈。
+
+### 6.2 延迟毛刺的解剖：P99 从哪里冒出来
+
+平均值健康而 P99 抖动，是网格场景最常见的性能投诉。把毛刺的来源按代理内外分开盘点，**代理内**的来源有四类：
+
+- **连接池冷启动**：存量连接被回收后，新请求承担建连与 TLS 握手成本，典型表现是空闲期后的第一波请求变慢；
+- **per-worker 队列等待**：个别 worker 承载偏重时，毛刺集中在它名下的请求；
+- **排水期余量**：配置切换或排水超时设置不当，旧连接上的请求带着旧规则完成生命周期；
+- **切换瞬间重建**：配置快照切换时少量连接重建的抖动。
+
+**代理外**的来源——上游 GC 停顿、内核网络抖动、对端节点竞争——代理只是如实转发了这些延迟，但在访问日志里它们与代理自身的延迟混在一起。
+
+区分的钥匙是 Envoy 记录的两个时间量：请求在代理内的处理耗时与上游耗时是分开统计的（访问日志的 duration 与 upstream_service_time 之差就是代理自身开销）。**两个数字一减，代理的嫌疑当庭洗清或坐实**——这个动作应该成为网格性能排障的条件反射。
+
+毛刺治理没有银弹，只有对症：
+
+- 连接池保活与预热管冷启动，空闲超时别设得过短；
+- 连接数上调管队列等待，per-worker 的账先算对；
+- 上游的账要上游还——GC、慢查询、磁盘抖动都不在代理的管辖范围。
+
+每一类来源都有对应的科目，混在一起猜永远猜不出结果。
+
+### 6.3 容量的算术：一道综合应用题
+
+把前几章的机制合成一道题：一个 32 核节点上的 sidecar（32 个 worker），上游服务 20 个实例（HTTP/2，每连接 100 流），连接池每 worker 上限 8 连接，等待队列 1024。算笔账：理论并发流上限 = 32 × 8 × 100 = 25600 流；上游总连接 = 32 × 8 × 20 = 5120 条 TCP——后者才是这个配置里先爆的资源。由此可见 HTTP/2 场景的容量瓶颈常常不在"流"，而在"连接"的建连风暴与内存；而把 worker 数（核数）翻倍，三个数字同时翻倍——per-worker 定语再次显灵。这道题的通用解法固定为三步：
+
+1. **先定协议**：HTTP/1.1 与 HTTP/2 的池语义完全不同，算错协议全盘皆错；
+2. **再按 per-worker 展开**：每个限制先算单 worker 的，再乘 worker 数；
+3. **最后乘实例数**：上游连接总量、内存占用、端口消耗都与实例数线性相关。
+
+三步算完，容量账就不会错得离谱。
+
+### 6.4 Envoy 不适合做什么
+
+边界意识同样重要，四类场景应当先想清楚再上：
+
+- **业务语义的边界**：过滤链能处理请求头与路径，但"这个请求属于哪个租户、扣费怎么算"永远在应用里——代理是协议层的执行者，不是业务逻辑的解释者；
+- **极端低延迟**：微秒级交易路径上，两次代理穿越的成本不可接受，进程内治理或 eBPF 路线更合适（第 07 篇展开）；
+- **私有协议扩展**：私有的二进制协议需要自写过滤器，工程成本远高于通用 HTTP 场景，除非协议值得，否则绕开；
+- **小规模场景**：几个服务的单体或小集群上它纯属过度设计，一个 Ingress 加进程内治理足够。
+
+数据面是重资产，投入前先确认流量值得。
+
+### 6.5 Sidecar 的资源调优科目
+
+Sidecar 模式下每个业务 Pod 都带着一个 Envoy，它的资源调优有四个固定科目。**科目一：并发性与 CPU**——worker 数应与 CPU 配额对齐（第 2.5 节的错配），Istio 默认把两者绑定，自管 Envoy 时要自己盯紧。**科目二：内存的构成**——xDS 配置快照、连接缓冲、TLS 会话、统计存储四块大头里，配置快照随可见服务数增长（作用域裁剪是第一处方），连接缓冲随并发增长（容量规划是第二处方）。**科目三：统计基数**——指标标签基数（source、destination、code 等的组合）直接影响统计内存，基数失控的网格里，统计本身能吃掉几百 MB，第 06 篇会专讲这个话题。**科目四：排水时长**——terminationDrainDuration 决定 Pod 终止时代理收尾存量连接的耐心，长连接服务要显著调大，否则滚动更新时客户端撞上被强拆的连接。
+
+四个科目对应 Sidecar 资源账单的四个旋钮，按流量形态与网格规模各调各的——它们共同决定了第 07 篇要算的那笔"每 Pod 底盘开销"的最终数字。
+
+> [!warning] 生产避坑：直连 sidecar 的"漏网流量"
+> 配置了劫持规则就默认"所有流量都经过治理"，是常见的思维漏洞。网格通常只接管声明的服务端口，旁路端口（调试端口、监控端口、直连外部 IP 的流量）并不入网——它们没有 mTLS、没有指标、没有审计。安全评估与容量评估都要把这部分"网格视野之外"的流量单独盘点，否则画出服务拓扑时会有一批看不见的边。审计的办法也简单：应用容器内抓包比对访问日志，多出来的连接就是漏网之鱼。
+
+### 6.6 503 排障决策树
+
+把标志位与机制收拢成一棵决策树，面对 503 按图索骥：
+
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+flowchart TD
+    A["收到 503"] --> B{"查访问日志 flag"}
+    B -->|UH| C["无健康上游"]
+    B -->|NR| D["无匹配路由"]
+    B -->|UF / UC| E["上游连接层问题"]
+    B -->|URX / UT| F["上游持续失败或超时"]
+    C --> C1{"subset 端点是否为空"}
+    C1 -->|"是"| C2["标签错配或全被剔除<br/>查 DestinationRule 与实例标签"]
+    C1 -->|"否"| C3["作用域裁剪导致<br/>代理未见端点，查 Sidecar 范围"]
+    D --> D1["domain 或路径不匹配<br/>查路由表顺序与 host 声明"]
+    E --> E1["网络不通或上游崩溃<br/>绕开代理直连验证"]
+    F --> F1["上游容量或性能问题<br/>查上游指标与慢查询"]
+
+    classDef entry fill:#f1fa8c,stroke:#282a36,color:#282a36
+    classDef branch fill:#bd93f9,stroke:#282a36,color:#282a36
+    classDef action fill:#50fa7b,stroke:#282a36,color:#282a36
+    class A entry
+    class B,C1 branch
+    class C,C2,C3,D,D1,E,E1,F,F1 action
+```
+
+树的每个叶子都落在前几章的某个机制上——这正是本篇反复强调的因果链：机制学扎实了，决策树不需要背，因为它就是机制的骨架图。
+
+### 6.7 本篇机制速查
+
+收官前把全篇机制收进一张速查表，供排障时按图索骥：
+
+| 机制 | 一句话语义 | 排障入口 |
+| :--- | :--- | :--- |
+| worker 线程模型 | 连接终生绑定线程，容量限制 per-worker | 指标按 worker 分位观察 |
+| 过滤链 | 治理动作按序编排，可短路 | config_dump 看过滤器顺序 |
+| 路由匹配 | 顺序敏感，先具体后抽象 | proxy-config routes |
+| 连接池 | 数量管并发、时间管延迟 | /clusters 与溢出计数 |
+| 熔断 | 资源上限，超限快速失败 | UO 标志与 pool overflow 计数 |
+| 异常点检测 | 被动剔除坏端点 | ejections 计数与错误率对照 |
+| 恐慌阈值 | 健康占比失守后退回全量转发 | 健康占比与剔除行为矛盾时先查它 |
+| xDS 快照切换 | 新配置新连接、存量连接照旧 | 配置版本与连接代际对照 |
+| 排水 | 优雅退场，长连接要给足窗口 | 滚动更新期的客户端重置 |
+| 响应标志位 | 每个失败自带验伤报告 | 访问日志 flag 字段 |
+
+这张表也是本专栏前三篇的索引：线程模型属于本篇、作用域裁剪属于第 02 篇、劫持机制属于第 01 篇——三张拼图合在一起，网格数据面的完整图景才告闭合。
+
+---
+
+## 第 7 章 小结：把治理动作组织成管线
+
+收拢全篇：Envoy 用主线程加 worker 的事件驱动模型换来无锁转发，代价是所有容量限制带 per-worker 定语；用四层配置对象把"进、滤、由、出"组织成管线，治理动作以过滤器形式按序编排；连接池按协议分治，熔断守资源上限、异常点检测做被动剔除、恐慌阈值在健康信息失真时兜底；配置更新以连接为粒度无缝切换，二进制升级由热重启兜底；而每个失败请求携带的标志位，把 503 的家族史摊开在访问日志里。
+
+三篇连载到这里的因果链已经完整：**SDK 时代的困境呼唤治理外移（第 01 篇），外移需要控制面与数据面的分工（第 02 篇），分工的执行端是 Envoy 这台管线引擎（本篇）**。至此，一条 VirtualService 从用户声明到逐包执行的全部旅程——声明、编译、下发、快照切换、过滤链执行、连接池转发——每一环都有了名字与机制。但这条链路上的治理动作目前只讲了"怎么执行"，还没讲"怎么声明"：灰度、熔断、重试、镜像这些最常被使用的治理意图，如何在 Istio 的声明式 API 里表达、组合与避坑，是下一篇 [[04 流量管理——VirtualService、DestinationRule与灰度发布]] 的主题。
+
+---
+
+## 参考资料
+
+1. Envoy 官方文档：架构概述（线程模型、监听器与过滤链）. https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview
+2. Envoy 官方文档：配置最佳实践与 circuit breaking / outlier detection. https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/upstream/circuit_breaking
+3. Envoy 官方文档：Hot Restart. https://www.envoyproxy.io/docs/envoy/latest/operations/hot_restarter
+4. Matt Klein. Envoy: The story so far. 2016-09. https://medium.com/@mattklein123/envoy-the-story-so-far-403a0f3f5f69
+5. Matt Klein. The Universal Data Plane API. 2017-09.
+6. Istio 官方文档：Envoy sidecar 排障（proxy-config 与响应标志位）. https://istio.io/latest/docs/ops/diagnostic-tools/proxy-cmd/
+7. CNCF. Envoy 毕业公告. 2018-11.
+8. 周志明. 凤凰架构：构建可靠的大型分布式系统. 机械工业出版社， 2021.（服务网格章节）
 
 ---
 
 > [!note] 思考题
-> 1. xDS 协议包括 CDS（集群发现）、EDS（端点发现）、LDS（监听器发现）和 RDS（路由发现）。当 Service 的 Endpoint 变化（如 Pod 扩缩容），istiod 通过 EDS 推送新的端点列表到 Envoy。从 Pod 就绪到 Envoy 收到更新的延迟通常是多少？在极端情况下（如大规模滚动更新），这个延迟如何影响流量路由？
-> 2. Envoy 的流量管理支持权重路由（`VirtualService` 的 `weight`）、Header 匹配路由和故障注入。在金丝雀发布中，将 5% 流量路由到新版本——如何验证新版本的正确性？如果新版本有 bug，如何快速回滚到 0%？Istio 的 `VirtualService` + `DestinationRule` 如何配合实现？
-> 3. Envoy 的重试策略（`retryOn: 5xx, connect-failure`）自动重试失败请求。但重试可能导致'重试风暴'——上游服务已过载，大量重试加剧过载。重试预算（Retry Budget）限制重试请求的比例——如何配置以防止重试风暴？Envoy 的断路器（Circuit Breaker）与重试如何配合？
+> 1. 第 2.3 节的 per-worker 定语推演出"连接数限制随核数翻倍"。请推演反向场景：把节点从大核数机器迁到小核数机器，代理容量会发生什么变化？哪些依赖该节点的容量规划需要重算？
+> 2. 恐慌阈值的设计是"健康信息不可信时，放弃选择性、退回全量转发"。请对照你熟悉的系统找出同构的设计（譬如注册中心的自我保护模式），并思考这类设计的共同前提：它们都在什么信号失真时起作用？
+> 3. 6.2 节的容量题里，上游连接总量（5120 条）先于并发流上限触顶。请为 gRPC 长连接场景重新设计连接池参数：每 worker 2 连接、每连接 100 流，并推演滚动更新时连接重建风暴的规模。
+

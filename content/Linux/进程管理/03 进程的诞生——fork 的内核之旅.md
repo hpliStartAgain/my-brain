@@ -5,492 +5,609 @@ tags: [clone, Copy-on-Write, copy_process, do_fork, fork, Linux, vfork, 内核, 
 aliases: ["Linux fork原理", "fork内核实现", "Copy-on-Write原理", "clone系统调用"]
 ---
 
+# 03 进程的诞生——fork 的内核之旅
+
 **摘要：**
 
-`fork()` 是 Unix 系统设计中最优雅也最深刻的系统调用之一——通过"复制自身"来创建新进程，父子进程从同一个执行点开始，但随后走向不同的命运。这个看似简单的接口背后，是内核一套精心设计的实现：`sys_fork()` 只是入口，真正的工作由 `do_fork()` 和 `copy_process()` 完成——分配新 `task_struct`、复制或共享父进程的各种资源（内存、文件、信号）、为子进程建立内核栈、将子进程加入调度队列。其中最关键的设计是**写时复制（Copy-on-Write，CoW）**：`fork()` 之后父子进程共享同一套物理内存页，只有在某一方发生写操作时才触发页面复制，将高频操作（创建进程）的代价压缩到极致。本文从用户态的 `fork()` 调用出发，沿着内核调用链逐层剖析，并深入解释 `clone()`、`vfork()` 为什么存在以及它们与 `fork()` 的本质区别。
+Unix 创建进程的方式在四十多年里一直让从其它系统转过来的人感到意外：它不提供一个"用给定参数启动某个程序"的调用，而是提供一个"把当前进程完整复制一份"的调用，让复制出来的那一份自己去变成别的程序。这种"复制而非创建"的选择，是 `fork()` 全部优点的来源，也是它全部麻烦的来源。本文沿着一条 `fork()` 从用户态进入内核、再带着一个新进程返回的完整路径展开：先看 `kernel_clone()` 的骨架与它从 `do_fork` 改名而来的历史，再把 `copy_process()` 拆成检查与定身份、复制资源、调度收尾三个阶段逐项讲解，重点说明 `dup_task_struct()`、`copy_mm()`、`copy_thread()` 各自做了什么、失败时如何分级回滚。随后深入写时复制（Copy-on-Write，COW）——为什么它只复制页表而不复制数据、只读映射与缺页异常如何配合、以及它在页表规模上的真实代价。文章还系统梳理 `fork()` 的几类陷阱：fork 炸弹、多线程程序里只能调用 async-signal-safe 函数这条 POSIX 约束、`malloc` 锁导致的死锁、以及文件描述符泄漏。最后讨论 `vfork()`、`posix_spawn()`、`clone3()` 三条替代路线的取舍，并给出一份"什么场景该用哪种创建方式"的判断依据。全文回答两个问题：`fork()` 在内核里究竟做了什么，以及为什么现代系统越来越不鼓励直接使用它。
 
 ---
 
-## 第 1 章 fork 的设计哲学：为什么选择"复制"而非"创建"
+## 第 1 章 复制而非创建
 
-### 1.1 Unix 的核心设计决策
+### 1.1 一个反常的接口设计
 
-在设计进程创建机制时，有两种截然不同的思路：
+如果让今天的人重新设计进程创建接口，多数人的直觉会是一个类似 `CreateProcess(command, args)` 的调用：给定程序路径与参数，返回新进程的句柄。Windows 的 `CreateProcess()` 正是这个形态，它把"创建进程"与"装载程序"合并成一个步骤。
 
-**思路 A（创建型）**：提供一个系统调用，让用户直接指定"我要运行哪个程序"，内核从头创建一个新进程并加载程序。Windows 的 `CreateProcess()` 就是这种思路的代表——一次调用完成进程创建和程序加载。
+Unix 的答案与此相反：`fork()` 不带任何参数，它做的事只有一件——把调用者完整复制一份，父子两个进程从同一个位置继续执行，只有返回值不同（父进程拿到子进程的 PID，子进程拿到 0）。要执行另一个程序，子进程需要自己再调用一次 `execve()`。**创建与装载被拆成了两个独立步骤**，这是 Unix 进程模型最独特的特征。
 
-**思路 B（复制型）**：通过复制当前进程来创建新进程（`fork()`），新进程与父进程完全相同，然后再通过另一个系统调用（`exec()`）来替换为想要运行的程序。Unix/Linux 选择了这种思路。
+### 1.2 为什么是复制
 
-**为什么 Unix 选择了"复制"？**
+这个设计在 1970 年代是自然的选择。当时的 Unix 只支持单线程进程，内存以几十 KB 计，复制一个进程的代价在可接受范围内；而分时系统里最常见的操作恰恰就是"再开一个 shell"，`fork()` 用一个不带参数、语义极简的调用覆盖了这个场景。
 
-这是 Ken Thompson 和 Dennis Ritchie 在 PDP-7 上设计 Unix 时做出的决定，其背后的逻辑非常深刻：
+更关键的是，`fork()` 提供的不是"创建进程"，而是**"让一个进程继续运行、同时让另一个副本去做别的事"**。这个能力在 shell 里随处可见：管道 `a | b` 需要先 `fork` 两个子进程、在各自进程里重定向 fd、再分别 `execve`，而重定向之所以能生效，正是因为子进程可以在 `execve` 之前修改自己的文件描述符表。用 `CreateProcess(command, args)` 的模型表达"运行 b 但把 stdout 接到管道"，就不得不为这种需求额外设计参数。
 
-1. **接口的正交性（Orthogonality）**：`fork()` 和 `exec()` 各自做一件事，而且做到极致。`fork()` 负责"创建一个新进程"，`exec()` 负责"让一个进程运行指定程序"。两者正交组合，覆盖了所有场景；而 `CreateProcess()` 将两件事混在一起，导致参数极其复杂（Windows 的 `CreateProcess` 有 10 个参数）。
+### 1.3 反事实：如果只有 spawn 模型
 
-2. **Shell 重定向的优雅实现**：Shell 执行 `ls | grep foo` 时，在 `fork()` 之后、`exec()` 之前，子进程可以自由地操作文件描述符（设置管道、重定向 stdin/stdout）。这在"创建型"接口中需要额外的机制支持，而在 `fork()` 模型中是自然而然的。
+不妨设想一个没有 `fork()` 的系统会遇到什么。守护进程的经典写法——`fork()` 之后父进程退出、子进程 `setsid()` 脱离控制终端——在没有 `fork()` 的世界里需要操作系统提供专门的"脱壳"接口。shell 的作业控制、`system()` 的实现、`popen()` 的实现、以及无数需要"先设置上下文再执行程序"的场景，都会变成对内核的定制请求。
 
-3. **`fork()` 本身就有用途**：很多场景只需要 `fork()`，不需要 `exec()`——守护进程的工作进程模型（prefork）、`system()` 调用、多进程并发处理（Nginx 的 master/worker）。如果没有 `fork()`，这些模式都需要更复杂的机制。
+反过来说，`fork()` 也付出了它的代价：**它把"复制整个进程地址空间"这件事变成了进程创建的默认行为**，而绝大多数场景下，被复制出来的副本马上就 `execve` 把刚复制的东西全部扔掉。用一句话概括这笔交易的荒谬之处——你付了复印整本书的钱，只是为了在扉页上写一个名字，然后把整本书换成另一本。写下时复制（Copy-on-Write）正是为了把这张账单抹掉，而 `posix_spawn()` 则是从接口层面承认了这笔交易本来就不该做。
 
-> [!note] 设计哲学：Unix 的正交性原则
-> Unix 的设计哲学是"做一件事，并做好"（Do one thing and do it well）。`fork()` + `exec()` 的组合是这一哲学的完美体现：两个简单的原语，通过组合覆盖了所有进程创建场景，比单一的"万能"接口更加灵活和可组合。
+### 1.4 一个三态返回值
 
-### 1.2 fork 的核心挑战：复制的代价
+`fork()` 的返回值有三个分支，这是它区别于绝大多数系统调用的地方：
 
-`fork()` 的语义是"创建一个与父进程完全相同的副本"。在朴素实现中，这意味着：
-- 复制父进程的整个虚拟地址空间（代码段、数据段、堆、栈）
-- 复制文件描述符表
-- 复制信号处理配置
-- ……
+```c
+pid_t pid = fork();
+if (pid < 0) {
+    /* 创建失败：errno 里有原因，常见 EAGAIN / ENOMEM */
+} else if (pid == 0) {
+    /* 这是子进程：pid 变量在子进程里被置为 0 */
+} else {
+    /* 这是父进程：pid 是子进程的进程号 */
+}
+```
 
-对于一个占用 1GB 内存的服务进程，每次 `fork()` 都要复制 1GB 内存，代价是灾难性的——更何况很多场景中，`fork()` 之后紧接着就是 `exec()`（直接替换地址空间，之前复制的内存全部白费）。
+三段代码在同一个函数体里，却分别在两个不同的进程地址空间里执行。这个形态给代码组织带来了实际困难：一个函数里同时写着父进程逻辑与子进程逻辑，两条路径上的资源所有权不同（子进程退出时要 `_exit()` 而不是 `exit()`，否则会把父进程的 `stdio` 缓冲区冲刷两遍），局部变量的含义也随分支而变。
 
-**写时复制（Copy-on-Write，CoW）** 正是解决这个问题的关键设计。
+更麻烦的是错误处理的对称性。子进程在 `fork` 之后如果因为某种原因需要放弃执行，必须调用 `_exit()` 而不是 `exit()`，否则会触发 `atexit()` 注册的回调与 `stdio` 缓冲区的冲刷——那些回调可能正在父进程的另一个线程里执行，冲刷同一个缓冲区会导致输出重复。`exit()` 与 `_exit()` 的这一字之差，是 `fork` 相关代码里最常见的 bug 来源之一，而且它的表现（日志出现重复行）往往被误判为日志系统的问题。
 
 ---
 
-## 第 2 章 写时复制：fork 性能的核心保障
+## 第 2 章 从用户态到内核
 
-### 2.1 CoW 的核心思想
+### 2.1 glibc 里的 `fork()` 其实是 `clone`
 
-CoW 的思想极为简洁：**`fork()` 时不复制内存，而是让父子进程共享同一套物理内存页，并将所有共享页面标记为只读（通过页表权限位）。当任意一方尝试写入某页时，触发缺页异常（Page Fault），内核在异常处理中才真正复制这一页，然后让写操作在副本上进行。**
+在 glibc 的实现里，`fork()` 并不对应一个叫 `fork` 的系统调用。现代 Linux 上唯一用于创建进程/线程的系统调用是 `clone`（以及它的继任者 `clone3`），`fork()` 与 `pthread_create()` 都是对它不同参数组合的封装：
+
+```c
+/* glibc 里 fork 的本质：只传 SIGCHLD，不共享任何资源 */
+pid_t fork(void)
+{
+    return __clone(SIGCHLD, 0, NULL, NULL, NULL);
+}
+```
+
+`clone()` 的第一个参数是子进程退出时发给父进程的信号（`SIGCHLD` 表示"退出时通知我，但别做别的事"），第二个参数是标志位集合。`fork()` 传空标志，表示子进程与父进程**不共享任何资源**；`pthread_create()` 则传 `CLONE_VM | CLONE_FS | CLONE_FILES | CLONE_SIGHAND | CLONE_THREAD | CLONE_SYSVSEM | CLONE_SETTLS | CLONE_PARENT_SETTID | CLONE_CHILD_CLEARTID`，表示除了寄存器与内核栈之外几乎全部共享。第 07 篇会展开这些标志的组合逻辑。
+
+### 2.2 系统调用入口
+
+用户态的 `clone` 指令（x86-64 上是 `syscall` 指令）进入内核后，落在 `arch/x86/entry/entry_64.S` 定义的入口点，内核把用户态寄存器保存到一个 `pt_regs` 结构里，然后按系统调用号分派到 `__x64_sys_clone()`。
+
+这一步留下的 `pt_regs` 是理解 `fork()` 语义的关键。它保存的是**父进程此刻的用户态寄存器现场**，包括指令指针 `ip` 与栈指针 `sp`。子进程被创建之后，它的内核栈里也会有一份 `pt_regs` 的副本，内容与父进程几乎相同——这就是为什么两个进程会"从同一个位置继续执行"。差异只在返回值寄存器 `ax` 上：父进程的 `ax` 被改写成子进程 PID，子进程的 `ax` 被置为 0。
+
+### 2.3 `kernel_clone()` 的骨架
+
+把所有检查都算上，`fork()` 的内核主线可以压缩成下面这样的几步：
+
+| 步骤 | 关键函数 | 做什么 |
+| :--- | :--- | :--- |
+| 权限与参数检查 | `clone` 入口、`copy_flags` | 校验 flags 合法性，检查 `CLONE_*` 组合约束 |
+| 复制进程 | `copy_process()` | 见第 3 章的三个阶段 |
+| 唤醒新任务 | `wake_up_new_task()` | 把新进程入队，可能立刻抢占当前 CPU |
+| 返回并调度 | `schedule()` 路径 | 若设置了 `CLONE_VFORK` 则等待子进程 `exec` 或退出 |
+
+`wake_up_new_task()` 里有一个值得注意的优化：如果新进程与当前进程运行在同一个 CPU 上，且当前进程没有其他可运行任务，内核可能不把 CPU 让出去，而是让新进程稍后运行。更激进的版本在 CFS 里有"直接抢占当前进程"的策略（`sched_child_runs_first` 与 `WF_FORK` 相关逻辑），目的是让刚刚 `fork` 出来的子进程尽快开始执行——因为紧接着它多半就要 `execve`，越早执行意味着 `fork` 到 `exec` 之间的窗口越短，COW 页表被真正复制的概率也越低。
+
+### 2.4 一次改名：从 `do_fork` 到 `kernel_clone`
+
+读过老内核代码的人会记得 `do_fork()`，而 5.10 之后的内核里这个名字消失了，取而代之的是 `kernel_clone()`。这次改动不只是改名，还把 `fork`/`vfork`/`clone`/`clone3` 四条入口的公共部分彻底合并到了一处，四个入口变成了同一段代码的四组参数：
+
+```c
+/* 四条入口最终都落到这里 */
+pid_t kernel_clone(struct kernel_clone_args *args);
+```
+
+参数结构体 `kernel_clone_args` 把原先散落在各个函数签名里的十几个参数聚合起来，这个模式在内核里反复出现（`clone3` 用 `struct clone_args`、`openat2` 用 `struct open_how`）——**当参数多到一定程度，内核倾向于引入一个带长度字段的结构体**，因为结构体可以通过追加字段向前兼容，而函数签名不能。这条经验对设计任何长期演进的接口都适用。
+
+### 2.5 两个进程的执行顺序没有保证
+
+`fork()` 返回之后，父子两个进程谁先运行是不确定的。`wake_up_new_task()` 会把子进程放进运行队列，但调度器何时挑中它取决于当时的负载、CPU 亲和性、以及是否有其它更高优先级的任务。在单核机器上，父子进程的执行顺序通常取决于调度器的实现细节；在多核机器上，两者可能真正并行。
+
+这个不确定性有一系列实际的后果：
+
+- **输出交错**。如果父子进程都往同一个终端写，输出顺序无法预测。这也是 shell 里 `echo` 与后台任务输出互相穿插的原因。
+- **依赖关系的竞态**。父进程如果不加同步就假设"子进程已经完成了初始化"，会遇到随机失败。正确的做法是用管道、`pidfd` 或信号做显式同步。
+- **`wait` 的时机**。父进程在 `fork` 之后立刻 `wait` 会阻塞自己，直到子进程退出；而如果父进程先做别的事再 `wait`，子进程在此期间可能已经退出并成为僵尸，等待被回收。
+
+有一处例外值得记住：当设置 `CLONE_VFORK` 时，父进程会被明确挂起，直到子进程 `execve` 或退出。这是唯一一个对执行顺序给出保证的创建方式，代价是它牺牲了父子并行性。
+
+---
+
+## 第 3 章 `copy_process`：复制一个进程
+
+`copy_process()` 是整条路径上最长的一个函数，在 6.x 内核里有几百行。它的结构可以按"做什么"分成三个阶段。
+
+### 3.1 第一阶段：检查与定身份
+
+进入函数后的第一批操作是防御性的：
+
+- **检查 flags 的合法组合**。`CLONE_THREAD` 必须与 `CLONE_SIGHAND` 同时出现（线程组内必须共享信号处置），`CLONE_SIGHAND` 又必须与 `CLONE_VM` 同时出现（共享信号处置意味着共享内存视图），`CLONE_NEWPID` 不能与 `CLONE_THREAD` 组合。这些约束看起来零碎，每一条背后都有具体的语义原因。
+- **检查进程数限制**。`RLIMIT_NPROC` 限制的是某个真实 UID 名下的进程/线程总数，超过则返回 `EAGAIN`。这条限制在容器场景下尤其重要——它是抵御 fork 炸弹的第一道防线。
+- **检查 ptrace 与安全策略**。判断调用者是否有权创建具有指定命名空间或凭证的子进程，LSM 钩子在这里介入。
+- **分配 PID**。`alloc_pid()` 从当前 PID 命名空间的位图中取号，并把新 PID 结构挂到各级命名空间的哈希表上。
+- **复制凭证**。`copy_creds()` 通常只是增加 `cred` 的引用计数；但如果设置了 `CLONE_NEWUSER` 或调用了 `setuid()` 之后有未提交的变更，则需要复制一份新的 `cred`。
+
+这一阶段的产出是一个尚未与任何资源关联的 `task_struct`，以及它的身份（PID 与凭证）。
+
+### 3.2 第二阶段：复制资源
+
+接下来是逐项复制资源，每一项对应一个 `copy_*()` 函数，且都受某个 `CLONE_*` 标志的控制：
+
+| 函数 | 目标 | 受控标志 | 未设置标志时的行为 |
+| :--- | :--- | :--- | :--- |
+| `dup_task_struct` | `task_struct` + 内核栈 | 无（总是复制） | — |
+| `copy_semundo` | System V 信号量撤销状态 | `CLONE_SYSVSEM` | 复制一份撤销列表 |
+| `copy_files` | `files_struct` | `CLONE_FILES` | 复制 fd 表，共享 `struct file` |
+| `copy_fs` | `fs_struct` | `CLONE_FS` | 复制 cwd 与 root |
+| `copy_sighand` | `sighand_struct` | `CLONE_SIGHAND` | 复制处置函数表 |
+| `copy_signal` | `signal_struct` | `CLONE_THREAD` | 新建一份，初始化 `RLIMIT` 等 |
+| `copy_mm` | `mm_struct` | `CLONE_VM` | 复制页表并标记 COW |
+| `copy_namespaces` | `nsproxy` | 各 `CLONE_NEW*` | 共享父进程的 `nsproxy` |
+| `copy_io` | `io_context` | `CLONE_IO` | 共享或新建 I/O 上下文 |
+| `copy_thread` | 内核栈上的初始帧 | 无（总是执行） | — |
+
+这张表是理解 `fork()` 与 `pthread_create()` 差异的钥匙：两者的差别不在于走了不同的代码路径，而在于**同一段代码在这张表上选了不同的列**。
+
+`copy_mm()` 值得单独说明。对 `fork()`（未设置 `CLONE_VM`），它调用 `dup_mm()`：分配一个新的 `mm_struct`，把父进程的全部 VMA 复制过去，然后调用 `copy_page_range()` 为每一级页表逐项复制并设置写保护。整个过程中**没有一个用户数据页被复制**——这就是写时复制的全部秘密，第 4 章会展开。
+
+### 3.3 第三阶段：调度与收尾
+
+资源复制完成之后，内核还需要让新进程"准备好被调度"：
+
+- `sched_fork()`：把新进程的状态设为 `TASK_NEW`，初始化它的调度实体，并决定它应该放在哪个 CPU 的运行队列上。对新创建的任务，CFS 会做一个特殊处理——把 `vruntime` 设为当前运行队列的最小值加一个偏移，而不是继承父进程的 `vruntime`，避免出现"新进程一上来就被饿死"或"一来就抢占一切"两种极端。
+- `copy_thread()`：布置内核栈上的初始栈帧，让新任务第一次被调度时"看起来像是刚从 `schedule()` 返回"。对 `fork()` 而言，返回后 `rax` 里是 0，因此子进程看到 `fork()` 返回 0。
+- `cgroup_can_fork()` / `cgroup_post_fork()`：把新进程挂进父进程所在的 cgroup。
+- `wake_up_new_task()`：把新进程入队，这一步之后它就可能被调度执行。
+
+### 3.4 失败回滚：分级清理
+
+`copy_process()` 里最容易被忽略、也最能体现工程功底的部分是它的错误处理。函数里有十来个以 `bad_fork_*` 命名的跳转标签，按资源获取的逆序排列：
+
+```c
+bad_fork_free_pid:
+    if (pid)
+        free_pid(pid);
+bad_fork_cancel_cgroup:
+    cgroup_cancel_fork(p);
+bad_fork_free:
+    ...
+```
+
+这种写法的要点是**每个标签只负责释放它上面那一步成功获取的资源**，跳转时选择对应层级的标签即可，不需要在每个失败点上重复写清理代码。它与 C 语言缺少析构机制这一限制直接相关，在内核代码里是一种被广泛遵守的约定。
+
+`fork()` 失败在生产上并不罕见。最常见的返回码是 `EAGAIN`（进程数达到 `RLIMIT_NPROC` 或系统级 `pid_max` 耗尽）与 `ENOMEM`（无法分配 `task_struct` 或页表）。这两者的区分在排障时很重要：前者要靠调限制，后者往往意味着内存已经紧张，继续加大限制只会让情况恶化。
+
+### 3.5 `dup_task_struct` 与那些必须清空的字段
+
+`dup_task_struct()` 的实现思路是"先整块复制、再定点修正"。它调用 `arch_dup_task_struct()` 把父进程的 `task_struct` 逐字节复制到新对象上，然后重置几个字段：
+
+- `stack`：指向新分配的内核栈，绝不能沿用父进程的；
+- `thread`：整个 `thread_struct` 被清零，因为它保存的是父进程的寄存器现场；
+- `flags`：清掉 `PF_*` 系列标志里的若干位（如 `PF_SUPERPRIV`、`PF_FORKNOEXEC`），并重新设置 `PF_FORKNOEXEC` 表示"还没 exec 过"；
+- 统计计数：`nvcsw`、`nivcsw`、`utime`、`stime` 等归零；
+- 与锁相关的字段：`pi_lock`、`alloc_lock` 等重新初始化。
+
+值得注意的是**没有**被清空的那部分：`prio`、`policy`、`cpus_mask`、`cgroup` 归属、`cred` 指针、`nsproxy` 指针全都保留。这就是"子进程继承父进程的调度属性、权限、命名空间"这一语义的实现方式——不是显式地逐项继承，而是复制之后不加修改。
+
+哪些清空、哪些保留，实际上定义了 `fork` 的继承语义。把这两组字段列在一起看，规律就出来了：**属于"执行流的物理状态"的清空，属于"进程的策略与归属"的保留**。这个规律比记住具体字段名更有用，因为内核对 `task_struct` 字段的增删从未停止，而这条规律一直成立。
+
+### 3.6 cgroup 归属：从继承到指定
+
+在很长时间里，新进程的 cgroup 归属只有一种可能——继承父进程。内核在 `copy_process()` 里调用 `cgroup_can_fork()` 与 `cgroup_post_fork()`，把子进程挂进父进程所在的那一组。
+
+这个"只能继承"的限制在 5.7 被打破，`clone3` 增加了 `CLONE_INTO_CGROUP` 标志，允许在创建时直接指定目标 cgroup，通过 `struct clone_args` 的 `cgroup` 字段传入一个 cgroup 目录的 fd。这项改动的动机来自容器调度：一个已经运行的服务进程要把新任务放进另一个 cgroup，用继承语义做不到，只能"先创建、再写入 `cgroup.procs`"，而这两步之间存在窗口，新进程会在错误的 cgroup 下短暂运行，占用不该占用的资源配额。`CLONE_INTO_CGROUP` 把这个两步操作变成了原子的创建即归属。
+
+这个例子再次印证了第 2.4 节提到的那条经验：**接口一旦固定，新增能力的成本就会转移到参数扩展上**。`clone` 的位标志早已用满，所以是 `clone3` 的结构体承担了这项扩展；而如果当初设计时就把参数放进结构体里，`CLONE_INTO_CGROUP` 可能只需要一次头文件更新。
+
+---
+
+## 第 4 章 写时复制
+
+### 4.1 只复制页表
+
+写时复制的核心动作只有一个：**复制页表，并把两边指向同一物理页的页表项都标记为只读**。
+
+在 x86-64 的四级页表结构下，一次 `fork()` 需要复制 PGD、PUD、PMD、PTE 四级。内核并不会无脑地把整棵页表树深拷贝：对一个超出进程地址空间范围、或者父进程从未使用的页表分支，`dup_mm()` 不会为它分配新页。同样，对应到具体的 PTE 时，如果父进程那个位置本来就是空的，也就无所谓复制。
+
+真正会被复制的，是**父进程实际映射了物理页的那些 PTE**。这部分的数量与进程的常驻内存（RSS）成正比：一个 RSS 为 10GB 的进程执行 `fork()`，需要复制大约 260 万个 PTE（按 4KB 页计），仅这些 PTE 本身就占 20MB 内存，而复制它们需要遍历多层页表——这就是下一节要讲的代价。
+
+### 4.2 只读映射与缺页异常的配合
+
+标记成只读之后，父子两个进程对同一个物理页的**读取**可以继续并行进行，各自读到同样的内容，没有任何额外开销。
+
+一旦其中一方尝试**写入**，CPU 会因为 PTE 的只读位而触发缺页异常（Page Fault）。内核的缺页处理函数检查这个地址对应的页是否属于 COW 范围，处理逻辑是：
+
+1. 如果这个物理页的引用计数为 1（另一方已经不再引用它），直接把 PTE 改回可写，不做任何复制；
+2. 如果引用计数大于 1，分配一个新物理页，把旧页内容复制过去，把当前进程的 PTE 指向新页并设为可写，旧页引用计数减一。
+
+第二步里"引用计数为 1 时直接改回可写"这个分支至关重要。它意味着：如果父子进程中的一方在另一方写入之前就退出了，或者某一页始终只有一方在写，那么这一页永远不会被真正复制——COW 的收益因此比表面上看到的更大。
+
+### 4.3 页的共享与回收
+
+COW 依赖的引用计数存放在 `struct page` 的 `_refcount` 字段里。这里有一个容易忽略的细节：**COW 页的引用计数可能远大于 2**。原因是 `fork()` 可以被连续调用，A 进程 `fork` 出 B、B 再 `fork` 出 C，此时某个物理页可能被三个进程共享。
+
+引用计数的另一个作用是决定释放时机。当 COW 页的引用计数降到 1 时，内核知道这个页已经独占，此时可以把它的 PTE 恢复为可写，之后不再需要触发缺页异常。这个优化被称为"回写独占"（exclusive writeback），它让"父子进程都存活但只有一方写入"的场景逐渐收敛到没有额外开销的状态。
+
+对于确定不需要被子进程继承的大块映射，内核还提供了一个主动排除的手段：`madvise(addr, len, MADV_DONTFORK)` 会在这段 VMA 上设置 `VM_DONTCOPY` 标志，`dup_mm()` 遍历到它时直接跳过，既不复制页表也不在下游建立映射。这个机制常用于两类场景：一是把一块巨大的、子进程绝不会访问的缓冲区排除在复制范围之外，从而压低 `fork` 的成本；二是某些依赖固定物理地址或唯一性假设的设备映射，子进程继承它们会破坏原有的语义。涉及 RDMA 与 GPU 显存映射的程序里，`MADV_DONTFORK` 常被用来避免子进程继承这些不该继承的区域。
+
+### 4.4 COW 的真实代价
+
+写时复制常被描述成"让 `fork()` 变得几乎免费"，这个说法需要修正。它免除的是**数据页复制**，没有免除的是：
+
+- **页表复制**：与 RSS 成正比，不可省略。这是大内存进程 `fork` 变慢的主因。
+- **TLB 失效**：父子进程共享的页被标记为只读后，之前那些可写的 TLB 条目必须失效；此后每一次写都会触发缺页异常，直到该页被独占为止。
+- **缺页异常的开销**：每一次 COW 缺页都要走进异常处理路径，包括页分配、内存复制、页表更新。在"父进程 `fork` 后立即写大量内存"的模式下，这套开销与直接复制数据相比未必更省，只是把成本从 `fork` 时刻推迟到了写入时刻。
+- **内存超售的幻觉**：`fork` 之后父子进程的 RSS 相加会大于实际占用的物理内存，因为共享的页被计了两次。`ps` 输出里的 RSS 在 fork 之后会出现"看起来内存翻倍"的现象，这在容量规划时经常造成误判。
+
+把这四点合起来看，结论是清楚的：**COW 把 `fork` 的成本从"与内存规模成正比"降到了"与页表规模成正比"，这是一个巨大的改善，但仍然是线性复杂度**。在一个长期运行的 JVM 进程（RSS 数十 GB）上执行 `fork`，即使立即 `execve`，也要付出复制几百万个 PTE 的代价，停顿可能达到几十毫秒。这正是 `posix_spawn()` 与 `vfork()` 存在的理由。
+
+### 4.5 COW 与映射类型的交互
+
+`fork` 之后的页是否会被 COW 处理，取决于这个页是通过什么方式映射进来的。内核用页表项的"可写"位与 VMA 的 `vm_flags` 共同决定，具体可以分成四种情形：
+
+| 映射方式 | `fork` 之后的行为 | 是否会触发 COW |
+| :--- | :--- | :--- |
+| `MAP_PRIVATE` 匿名映射（堆、栈） | 页表项置只读，双方共享 | 会 |
+| `MAP_PRIVATE` 文件映射（共享库） | 只读页保持不变，可写段置只读 | 只读页不会，可写段会 |
+| `MAP_SHARED` 匿名映射（`MAP_SHARED \| MAP_ANONYMOUS`） | 双方继续映射同一个物理页 | 不会 |
+| `MAP_SHARED` 文件映射 | 双方继续共享，写回落到文件 | 不会 |
+
+这张表解释了一个容易被忽略的事实：**只有 `MAP_PRIVATE` 的页才有 COW 语义**。`MAP_SHARED` 的映射在 `fork` 之后依然是真正共享的，父子进程对同一地址的写入互相可见——这不是 bug，而是共享内存（如 [[Linux/内存管理/01 虚拟内存：为什么每个进程都以为自己独占内存]] 里讨论的匿名共享映射）本来就是靠这个语义工作的。
+
+共享库的情况更细一些。可执行代码段本身是只读的 `MAP_PRIVATE` 文件映射，`fork` 之后父子进程共享同一份物理页，而且由于页永远不可写，**它们永远不会被 COW 复制**。可写数据段（`.data`、`.bss`）虽然同样是 `MAP_PRIVATE` 文件映射，但在 `fork` 后会被置为只读，一旦写入就触发 COW——而且复制出来的页变成匿名页，与磁盘上的文件再无关系。
 
 ```mermaid
 %%{init: {'theme': 'dracula'}}%%
 sequenceDiagram
-    participant P as "父进程"
-    participant K as "内核"
-    participant C as "子进程"
-
-    P->>K: "fork() 系统调用"
-    K->>K: "复制 task_struct，复制页表（页表条目指向同一物理页，权限改为只读）"
-    K-->>P: "返回子进程 PID"
-    K-->>C: "返回 0（子进程）"
-
-    Note over P,C: "此时父子共享所有物理内存页（只读标记）"
-
-    C->>K: "write(变量 x = 42)（触发缺页异常）"
-    K->>K: "分配新物理页，复制原页内容，更新子进程页表指向新页，恢复写权限"
-    K-->>C: "写操作在新页上完成"
-
-    Note over P: "父进程原页不受影响，仍指向原物理页"
+    participant P as 父进程
+    participant K as 内核
+    participant C as 子进程
+    P->>K: fork()
+    K->>K: dup_mm() 复制页表
+    K->>K: 双方 PTE 置为只读
+    K-->>P: 返回子进程 PID
+    K-->>C: 返回 0
+    P->>K: 写变量 X
+    K->>K: COW 缺页：分配新页并复制
+    K-->>P: 父进程独享新页
+    C->>K: 读变量 X
+    K-->>C: 直接读共享页，无异常
+    Note over P,C: 直到其中一方写入前，物理页始终共享
 ```
-
-### 2.2 CoW 的内核实现：页表权限位的精妙运用
-
-CoW 的实现依赖硬件 MMU（内存管理单元）和内核缺页异常处理的协同：
-
-**fork() 时的页表处理**：
-
-`copy_process()` 调用 `copy_mm()` 来处理内存。`copy_mm()` 不复制物理页，而是：
-1. 为子进程创建一个新的 `mm_struct`（独立的地址空间描述符）
-2. 遍历父进程的所有 VMA（虚拟内存区域）
-3. 对每个可写的 VMA，在父子进程的页表中，将对应的页表条目（PTE）的写权限位（`_PAGE_RW`）清除，同时增加物理页的引用计数
-
-```c
-/* 内核中 CoW 页表处理的核心逻辑（简化） */
-static int copy_pte_range(...) {
-    pte_t pte = *src_pte;
-
-    /* 如果是可写页（且不是共享映射），清除写权限 */
-    if (is_cow_mapping(vm_flags)) {
-        /* 清除父进程页表中该页的写权限位 */
-        ptep_set_wrprotect(src_mm, addr, src_pte);
-        /* 子进程页表直接拷贝该 PTE（已是只读） */
-        pte = pte_wrprotect(pte);
-    }
-
-    /* 增加物理页的引用计数（父子共享这一页） */
-    get_page(page);
-
-    /* 将（只读的）PTE 写入子进程页表 */
-    set_pte_at(dst_mm, addr, dst_pte, pte);
-}
-```
-
-**写操作时的 CoW 触发**：
-
-当子进程（或父进程）尝试写入只读页时，CPU 产生缺页异常（Page Fault，错误码中 `FAULT_FLAG_WRITE` 置位）。内核的缺页异常处理函数 `do_page_fault()` → `handle_mm_fault()` → `do_wp_page()` 执行 CoW：
-
-```c
-/* do_wp_page：处理写时复制的缺页异常（大幅简化） */
-static vm_fault_t do_wp_page(struct vm_fault *vmf) {
-    struct page *old_page = vmf->page;
-
-    /* 检查该物理页的引用计数 */
-    if (page_count(old_page) == 1) {
-        /* 只有一个引用者（另一方已经 CoW 了），直接将页权限改回可写 */
-        /* 这是一个重要优化：避免不必要的页面复制 */
-        wp_page_reuse(vmf);
-        return VM_FAULT_WRITE;
-    }
-
-    /* 引用计数 > 1：需要真正复制这一页 */
-    /* 1. 分配一个新的物理页 */
-    struct page *new_page = alloc_page(GFP_HIGHUSER_MOVABLE);
-
-    /* 2. 将旧页内容复制到新页 */
-    copy_user_highpage(new_page, old_page, vmf->address, vma);
-
-    /* 3. 更新当前进程的页表条目，指向新页，并恢复写权限 */
-    set_pte_at(mm, vmf->address, vmf->pte,
-               mk_pte(new_page, vma->vm_page_prot));
-
-    /* 4. 减少旧页的引用计数 */
-    put_page(old_page);
-
-    return VM_FAULT_WRITE;
-}
-```
-
-### 2.3 CoW 的性能影响与实际开销
-
-CoW 将 `fork()` 的开销从"复制所有物理内存"降低到"复制页表"。但 CoW 并非零代价：
-
-**CoW 的实际开销**：
-1. **`fork()` 时**：需要遍历并复制整个页表层级。对于大进程（如 1GB 内存），页表本身就可能有几 MB，复制页表是主要开销
-2. **首次写入时**：每次 CoW 触发都有缺页异常的开销（保存寄存器、进入内核、分配新页、复制页内容、更新页表、返回用户态），大约几微秒
-3. **写入密集场景**：如果 `fork()` 后子进程大量写入，会触发大量 CoW，总体开销可能超过直接复制
-
-> [!warning] 生产避坑：Redis fork 与 CoW 内存膨胀
-> Redis 执行 RDB 快照时会 `fork()` 出一个子进程来持久化数据。此时父进程（Redis 主进程）继续处理写请求，每次写操作都触发 CoW——父进程修改的每个内存页都会被复制一份。如果 Redis 正在高频写入，且数据量大（如 10GB），fork 期间内存使用量可能翻倍（父进程 10GB + CoW 复制的修改页）。这是 Redis 在进行 BGSAVE 时出现内存爆涨、进而触发 OOM 的根本原因。
-> 监控指标：`redis-cli info memory` 中的 `rdb_last_cow_size` 字段记录了上次 RDB 快照期间 CoW 复制的字节数。
 
 ---
 
-## 第 3 章 fork 的内核调用链
+## 第 5 章 `fork()` 的成本与陷阱
 
-### 3.1 从用户态到内核态
+### 5.1 fork 炸弹
 
-用户程序调用 `fork()`，经历以下路径进入内核：
-
-```
-用户态：
-  fork()
-    ↓ (glibc 包装)
-  syscall 指令（x86-64）/ svc 指令（ARM64）
-    ↓ (CPU 切换到特权级，跳转到系统调用入口)
-内核态：
-  entry_SYSCALL_64（系统调用入口点）
-    ↓
-  do_syscall_64()
-    ↓
-  sys_fork()   ← fork 的系统调用处理函数
-    ↓
-  kernel_clone(SIGCHLD, ...)   ← Linux 5.x 统一的克隆入口
-    ↓
-  copy_process()   ← 核心：创建新 task_struct 并复制资源
-    ↓
-  wake_up_new_task()   ← 将子进程加入调度队列
-```
-
-`sys_fork()` 的实现（Linux 5.x）：
-
-```c
-SYSCALL_DEFINE0(fork)
-{
-    struct kernel_clone_args args = {
-        .exit_signal = SIGCHLD,  /* 子进程退出时给父进程发送 SIGCHLD */
-    };
-    return kernel_clone(&args);
-}
-```
-
-注意：`fork()` 实际上是 `clone()` 的特例——`fork()` 使用默认的 `clone_flags`（只传 `SIGCHLD`），而 `clone()` 允许精细控制哪些资源共享（详见第 5 章）。
-
-### 3.2 copy_process：进程创建的核心
-
-`copy_process()` 是 `fork()` 最重要的函数，负责创建新进程的 `task_struct` 并填充所有字段。其主要步骤：
-
-```c
-static struct task_struct *copy_process(
-    struct pid *pid,
-    int trace,
-    int node,
-    struct kernel_clone_args *args)
-{
-    int retval;
-    struct task_struct *p;
-
-    /* === 步骤 1：安全性检查 === */
-    /* 检查 clone_flags 的合法性（如不能同时设置 CLONE_NEWNS | CLONE_FS）*/
-    retval = security_task_create_flags(clone_flags);
-
-    /* === 步骤 2：复制 task_struct === */
-    /* 从 task_struct Slab 缓存分配一个新的 task_struct */
-    /* dup_task_struct 同时为新进程分配内核栈 */
-    p = dup_task_struct(current, node);
-    /* 此时 p 是 current 的完整拷贝（包括所有字段）*/
-
-    /* === 步骤 3：初始化新 task_struct 的各字段 === */
-    /* 重置统计信息（CPU 时间、内存使用量等不继承父进程的历史数据）*/
-    p->utime = p->stime = 0;
-    p->start_time = ktime_get_ns();
-
-    /* === 步骤 4：按 clone_flags 复制或共享各子系统 === */
-    /* 4a. 复制或共享文件描述符表 */
-    retval = copy_files(clone_flags, p);
-    /* 若 CLONE_FILES 置位：共享父进程的 files_struct（引用计数 +1）*/
-    /* 否则：创建新的 files_struct，复制父进程的 fd 映射 */
-
-    /* 4b. 复制或共享文件系统信息（当前目录、根目录）*/
-    retval = copy_fs(clone_flags, p);
-
-    /* 4c. 复制或共享信号处理函数 */
-    retval = copy_sighand(clone_flags, p);
-
-    /* 4d. 复制信号状态（pending 信号被清空，不继承父进程的待处理信号）*/
-    retval = copy_signal(clone_flags, p);
-
-    /* 4e. 复制或共享内存（CoW 的关键调用点）*/
-    retval = copy_mm(clone_flags, p);
-
-    /* 4f. 复制或共享 Namespace */
-    retval = copy_namespaces(clone_flags, p);
-
-    /* 4g. 复制 IO 上下文（IO 调度相关）*/
-    retval = copy_io(clone_flags, p);
-
-    /* 4h. 复制线程（架构相关：设置子进程的寄存器状态）*/
-    retval = copy_thread(p, args);
-    /* 关键：设置子进程的 pc（程序计数器）和返回值 */
-    /* 子进程从 ret_from_fork 开始执行，返回值为 0 */
-
-    /* === 步骤 5：分配 PID === */
-    pid = alloc_pid(p->nsproxy->pid_ns_for_children, ...);
-    p->pid = pid_nr(pid);   /* 全局 PID */
-    p->tgid = p->pid;       /* 对于 fork，tgid = pid（新线程组） */
-    /* 若 CLONE_THREAD 置位（创建线程）：tgid = current->tgid（加入父进程的线程组）*/
-
-    /* === 步骤 6：加入进程树 === */
-    /* 设置父子关系 */
-    p->real_parent = current;
-    p->parent = current;
-    /* 加入 current 的 children 链表 */
-    list_add_tail(&p->sibling, &p->real_parent->children);
-
-    /* === 步骤 7：加入全局进程列表 === */
-    /* init_task.tasks 是双向循环链表，连接所有进程 */
-    list_add_tail_rcu(&p->tasks, &init_task.tasks);
-
-    /* 将新进程加入 PID hash 表（方便通过 PID 快速查找 task_struct）*/
-    attach_pid(p, PIDTYPE_PID);
-
-    return p;
-}
-```
-
-### 3.3 子进程如何知道自己是子进程
-
-`fork()` 在父进程中返回子进程的 PID（> 0），在子进程中返回 0。这是如何实现的？
-
-关键在 `copy_thread()`（架构相关实现）。以 x86-64 为例：
-
-```c
-/* arch/x86/kernel/process.c */
-int copy_thread(struct task_struct *p, const struct kernel_clone_args *args)
-{
-    struct pt_regs *childregs = task_pt_regs(p);  /* 子进程内核栈顶的 pt_regs */
-
-    /* 将父进程的寄存器状态复制到子进程的内核栈 */
-    *childregs = *current_pt_regs();
-
-    /* 关键：将子进程 pt_regs 中的 ax 寄存器（系统调用返回值）设为 0 */
-    childregs->ax = 0;  /* 子进程 fork() 返回 0 */
-
-    /* 设置子进程的内核态栈指针，指向 ret_from_fork */
-    /* 子进程第一次被调度时，从 ret_from_fork 开始执行 */
-    p->thread.sp = (unsigned long)childregs;
-    p->thread.ip = (unsigned long)ret_from_fork;
-
-    /* 父进程的 fork() 系统调用正常返回子进程 PID（在 kernel_clone 中设置）*/
-    return 0;
-}
-```
-
-子进程被调度器首次选中运行时，从 `ret_from_fork` 开始执行，从内核栈弹出 `pt_regs`（其中 `ax=0`），返回用户态，用户态看到 `fork()` 返回 0。
-
-### 3.4 父子进程的执行顺序
-
-`copy_process()` 完成后，`kernel_clone()` 调用 `wake_up_new_task()` 将子进程加入调度器的就绪队列。此时父子进程都处于就绪状态，谁先运行由调度器决定。
-
-**Linux 的策略是：子进程优先运行（Linux 3.x 之后的默认行为）**。
-
-为什么让子进程先运行？因为很多 `fork()` 之后子进程会立即执行 `exec()`（替换地址空间），如果父进程先运行且修改了共享内存页，会触发 CoW，而子进程随后的 `exec()` 会丢弃这些 CoW 副本，造成浪费。让子进程先运行并执行 `exec()`，可以直接释放与父进程共享的页面，减少 CoW 开销。
-
-这个行为由 `/proc/sys/kernel/sched_child_runs_first` 控制（1 = 子进程先运行）。
-
----
-
-## 第 4 章 vfork：为什么存在，为什么几乎被淘汰
-
-### 4.1 vfork 的历史动机
-
-在 CoW 被引入之前，`fork()` 必须完整复制父进程的地址空间，开销极大。彼时有大量代码遵循 `fork()` + `exec()` 的模式（`fork()` 后立即 `exec()`，不使用父进程的内存），完整复制内存完全是浪费。
-
-`vfork()` 就是在这个背景下诞生的优化：
-
-```c
-SYSCALL_DEFINE0(vfork)
-{
-    struct kernel_clone_args args = {
-        .flags = CLONE_VFORK | CLONE_VM,  /* 关键：CLONE_VM = 与父进程共享同一个 mm_struct */
-        .exit_signal = SIGCHLD,
-    };
-    return kernel_clone(&args);
-}
-```
-
-**`vfork()` 的特殊语义**：
-1. 子进程与父进程**共享同一个虚拟地址空间**（`CLONE_VM`）——完全不复制任何内存
-2. **父进程被挂起**（`CLONE_VFORK`），直到子进程调用 `exec()` 或 `exit()`，父进程才被唤醒
-3. 父进程挂起期间，子进程独占地址空间，可以安全读写（因为父进程不在运行）
-
-**为什么父进程必须挂起？**
-
-因为父子共享同一 `mm_struct`——如果父进程继续运行并修改内存，子进程看到的数据也会变化（这是共享映射的语义），必然出现竞态条件。`vfork()` 通过"父进程暂停"来规避并发问题，代价是牺牲并发性。
-
-### 4.2 vfork 为什么几乎被淘汰
-
-Linux 引入 CoW 之后，`fork()` + CoW 的开销已经足够小（只需复制页表，不需要复制物理内存），`vfork()` 的性能优势几乎消失。更重要的是，`vfork()` 的使用极其危险：
-
-```c
-/* vfork 的正确用法（极为受限）*/
-pid_t pid = vfork();
-if (pid == 0) {
-    /* 子进程中：只允许调用 exec 家族函数或 _exit() */
-    execve("/bin/ls", argv, envp);
-    _exit(1);  /* exec 失败时只能用 _exit，不能用 exit() */
-}
-/* 父进程在这里等待，直到子进程 exec 或 _exit */
-```
-
-**为什么子进程不能调用普通 `exit()`？**
-
-`exit()` 会执行 C 运行库的清理函数（`atexit` 回调、刷新 stdio 缓冲区），这些清理函数会修改父子共享的内存（如 `FILE` 结构体的缓冲区），导致父进程的状态被污染。`_exit()` 直接进行系统调用退出，不执行任何用户态清理。
-
-**为什么子进程不能修改局部变量？**
-
-子进程的栈帧也是父进程栈的一部分（共享 `mm_struct`）——子进程修改的局部变量，父进程恢复运行后也能"看到"这些修改（因为共享栈内存），可能导致父进程栈帧损坏。
-
-> [!warning] 生产避坑：现代代码中禁止使用 vfork
-> `vfork()` 在 POSIX 标准中已被标记为"过时的"。现代 glibc 的 `posix_spawn()`（用于替代 `fork()` + `exec()` 的组合）底层实现使用的是 `clone()` 加 `CLONE_VM` + `CLONE_VFORK` 的组合，但通过严格的接口封装规避了 `vfork()` 的陷阱。新代码应使用 `fork()` 或 `posix_spawn()`，绝对避免直接调用 `vfork()`。
-
----
-
-## 第 5 章 clone：fork 的泛化形式
-
-### 5.1 clone 是 fork 的本质
-
-在现代 Linux 内核中，`fork()`、`vfork()`、`pthread_create()` 底层都调用同一个接口——`clone()`（或其内核内部版本 `kernel_clone()`）。三者的区别只是传给 `clone()` 的 `flags` 参数不同：
-
-```c
-/* fork() 等价于：*/
-clone(SIGCHLD, ...)
-/* 不设置任何 CLONE_* 标志：不共享任何资源，完全独立的子进程 */
-
-/* vfork() 等价于：*/
-clone(CLONE_VFORK | CLONE_VM | SIGCHLD, ...)
-/* 共享地址空间，父进程挂起 */
-
-/* pthread_create() 等价于（简化）：*/
-clone(CLONE_VM | CLONE_FS | CLONE_FILES | CLONE_SIGHAND | CLONE_THREAD | SIGCHLD, ...)
-/* 共享几乎所有资源，但加入同一线程组 */
-```
-
-### 5.2 clone 的关键 flags 解析
-
-| 标志 | 含义 | fork 时 | pthread_create 时 |
-|------|------|---------|-------------------|
-| `CLONE_VM` | 共享虚拟地址空间（`mm_struct`）| ❌ 复制 | ✅ 共享 |
-| `CLONE_FS` | 共享文件系统信息（当前目录、umask）| ❌ 复制 | ✅ 共享 |
-| `CLONE_FILES` | 共享文件描述符表 | ❌ 复制 | ✅ 共享 |
-| `CLONE_SIGHAND` | 共享信号处理函数表 | ❌ 复制 | ✅ 共享 |
-| `CLONE_THREAD` | 加入父进程的线程组（tgid 相同）| ❌ 新线程组 | ✅ 同线程组 |
-| `CLONE_NEWPID` | 创建新的 PID Namespace | ❌ | ❌ (容器用) |
-| `CLONE_NEWNET` | 创建新的 Network Namespace | ❌ | ❌ (容器用) |
-| `CLONE_VFORK` | 父进程挂起直到子进程 exec/exit | ❌ | ❌ |
-
-**容器创建**就是使用了 `CLONE_NEWPID | CLONE_NEWNET | CLONE_NEWNS | ...` 等标志，在 `clone()` 时为新进程创建全新的各类 Namespace。
-
-### 5.3 实战：用 strace 观察 fork 的系统调用
+`fork` 的语义里没有任何"每个进程只能创建 N 个子进程"的约束，于是一个进程可以不断自我复制，形成指数级增长。经典的 shell 版本只有一行：
 
 ```bash
-# 用 strace 追踪 bash 执行 ls 命令时的 fork
-strace -e trace=clone,execve bash -c "ls /tmp" 2>&1
-
-# 输出示例（Linux 5.x 用 clone3 替代了 clone）：
-# clone3({flags=CLONE_CHILD_SETSTID|CLONE_CHILD_CLEARTID, ...
-#          exit_signal=SIGCHLD}, 88) = 12345
-# [子进程 12345]
-# execve("/usr/bin/ls", ["ls", "/tmp"], ...) = 0
-# exit_group(0)
-
-# fork() 的 flags 中包含 SIGCHLD：子进程退出时通知父进程
-# exit_signal=SIGCHLD 对应 fork() 的语义
-
-# 用 strace 观察 pthread_create：
-strace -e trace=clone -f ./my_pthread_program 2>&1 | grep clone
-# clone(child_stack=..., flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|
-#       CLONE_THREAD|CLONE_SYSVSEM|...) = 12346
-# 注意 CLONE_THREAD 和 CLONE_VM 标志，表明这是线程创建
+# 经典 fork 炸弹：每个进程不断复制自己
+# Linux 上它的实际效果受 RLIMIT_NPROC 限制
+:(){ :|:& };:
 ```
 
+抵御它的机制有几层。`RLIMIT_NPROC` 限制单个 UID 的进程总数，是默认生效的一层；cgroup 的 `pids.max` 提供容器粒度的限制；而 systemd 的 `TasksMax` 则把它接到了服务单元上。这些限制的意义不只是防恶意攻击——一个因为 bug 而不断 `fork` 子进程的服务，其破坏效果与 fork 炸弹完全相同，而限制能在它把系统拖垮之前拦住。
+
+需要留意的是 `RLIMIT_NPROC` 的统计口径：它按**真实 UID** 统计，因此对以同一用户运行的多个服务是共享的。一个服务把进程数用满，其它同用户的服务也跟着 `fork` 失败。这种耦合在生产上造成过不少"看起来毫不相干的进程互相影响"的故障。
+
+### 5.2 多线程程序里的 `fork`
+
+POSIX 对 `fork()` 在多线程程序中的行为给出了一个明确的约束：**在子进程中，只允许调用 async-signal-safe 函数，直到调用 `execve()` 为止**。
+
+这条约束的原因在于 `fork()` 只复制调用线程。假设进程里有三个线程，其中线程 B 正在执行 `malloc()` 并且已经获取了分配器的内部锁，此时线程 A 调用 `fork()`，子进程里只有 A 的副本——**B 不存在了，但 B 持有的那把锁在子进程里仍然处于已加锁状态**。子进程如果接着调用 `malloc()`，就会永远等在一把没有持有者的锁上，死锁由此产生。
+
+这个问题的正统解法只有两条：要么在 `fork` 之后立刻 `execve`（换掉整个地址空间，锁的状态随之消失），要么在 `fork` 前后用 `pthread_atfork()` 注册处理函数，在 `prepare` 阶段获取所有关键锁、在 `parent` 与 `child` 阶段释放它们。`pthread_atfork()` 的实践效果并不理想——它要求所有依赖的库都正确注册，而第三方库往往不做这件事。
+
+### 5.3 `malloc` 之外的锁
+
+除了内存分配器，还有几处常见的"fork 之后锁状态不一致"来源：
+
+| 锁 | 位置 | 症状 |
+| :--- | :--- | :--- |
+| `malloc` 内部锁 | glibc 分配器 | 子进程调用 `malloc` 时挂起 |
+| `stdio` 锁 | `FILE` 对象的锁 | 子进程调用 `printf` 时挂起 |
+| 应用层全局锁 | 业务代码 | 子进程访问共享数据时挂起 |
+| DNS 解析器锁 | glibc resolver | 子进程做名称解析时挂起 |
+
+其中 `stdio` 这一条尤其隐蔽：`fork` 之后子进程如果调用 `printf`，而父进程的另一个线程当时正在 `printf` 且持有 `stdout` 的锁，子进程就会卡住。正确的做法是用 `write()` 而不是 `printf()`——`write` 是 async-signal-safe 的，`printf` 不是。
+
+### 5.4 文件描述符的泄漏
+
+第 01 篇已经讲过 `fork` 与 `execve` 各自的 fd 继承规则。这里补充一个由 `fork` 单独造成的场景：**父进程在 `fork` 之后没有关闭不再需要的 fd**。
+
+在"父进程负责监听 socket、子进程负责处理连接"的经典模型中，父进程接受连接后 `fork`，子进程持有连接 fd 与监听 fd。子进程如果不关闭监听 fd，那么这个 socket 就多了一个引用；父进程退出时，监听套接字不会真正关闭，端口仍然被占用。这个 bug 的表现是"服务重启时报 `Address already in use`"，而查 `lsof` 会发现占用端口的进程是某个早已不提供服务的子进程。
+
+### 5.5 信号处置的继承与重置
+
+`fork` 与 `execve` 对信号处置表的处理方式不同，这个差异是很多信号相关故障的根源：
+
+| 信号处置 | `fork` 之后 | `execve` 之后 |
+| :--- | :--- | :--- |
+| 自定义处理函数（`sa_handler` 指向函数） | 继承 | **重置为 `SIG_DFL`** |
+| `SIG_IGN` | 继承 | 继承 |
+| `SIG_DFL` | 继承 | 继承 |
+
+关键在第二行与第一行的对比。`fork` 之后子进程完整继承父进程的信号处置，包括自定义处理函数；而 `execve` 会把这些自定义处理函数**全部重置为默认动作**，因为新程序的地址空间里根本没有那些函数的代码，保留处置函数指针会导致执行到已卸载的内存。`SIG_IGN` 之所以能跨越 `execve` 保留，是因为它不指向任何代码——它是一个纯标记。
+
+这条规则有一个直接后果：一个以 `SIG_IGN` 忽略 `SIGCHLD` 的进程，`execve` 之后新程序仍然忽略 `SIGCHLD`。如果新程序是一个需要 `wait` 子进程的服务框架，它会在完全不知情的情况下丢掉所有子进程退出通知，僵尸进程随之累积。反过来，一个显式注册了 `SIGCHLD` 处理函数的父进程，在 `execve` 之后这个处理函数被重置，新程序需要自己重新注册——这些差异对应用程序是不可见的，但排查时能看到截然不同的现象。
+
+信号在 `fork` 与 `execve` 之间的另一个细节是待处理信号。`fork` 之后子进程的 `pending` 队列是空的，父进程当前待处理的信号不会复制给子进程；`execve` 之后待处理信号会保留（除了那些处置函数被重置的信号会被丢弃）。理解这两条，才能解释"为什么信号在某些进程上突然消失了"这类问题。
+
+### 5.6 守护进程为什么 `fork` 两次
+
+创建守护进程的经典步骤里有两个 `fork`，第二个常常让初学者困惑：
+
+```c
+/* 标准守护进程化的关键几步 */
+pid = fork();
+if (pid > 0) _exit(0);        /* 第一次 fork：父进程退出，子进程成为孤儿 */
+setsid();                     /* 脱离控制终端，成为新会话的首进程 */
+pid = fork();
+if (pid > 0) _exit(0);        /* 第二次 fork：确保不再持有会话首进程身份 */
+chdir("/");
+```
+
+第一次 `fork` 的目的是让进程成为孤儿，从而被 `init` 收养、脱离原会话。第二次 `fork` 的目的常被误解为"防止重新获得控制终端"，更准确的说法是：**`setsid()` 之后调用者成为了会话首进程（Session Leader），而会话首进程在特定条件下（打开一个终端设备且该终端尚未成为其它会话的控制终端）可以获得控制终端**，一旦获得，终端关闭时的 `SIGHUP` 又会把它带走。再 `fork` 一次，新进程不再具备会话首进程身份，这条获得控制终端的路径就被彻底堵死了。
+
+这段代码同时说明了 `fork` 与 `wait` 的责任关系：第一个父进程 `_exit(0)` 之后，它的退出状态需要由 shell 通过 `wait` 收回；而第二个子进程从此与任何父进程都没有交互，它的退出状态由 `init`（或 subreaper）负责回收。**每个 `fork` 都必须在某处配对一个 `wait`**，否则就是僵尸进程——第 05 篇会完整展开这条记账规则。
+
 ---
 
-## 第 6 章 fork 的性能基准与生产考量
+## 第 6 章 `vfork` 与 `posix_spawn`
 
-### 6.1 fork 的实际开销
+### 6.1 `vfork` 的历史与语义
 
-在现代 Linux 系统上，一次 `fork()` 的典型开销：
+`vfork()` 出现在 1980 年代的 BSD，动机是性能：`fork()` 需要复制页表，而某些系统上没有写时复制，`fork` 的成本高得让人无法接受。
 
-| 进程状态 | fork 耗时（x86-64，Linux 5.x）|
-|---------|------------------------------|
-| 最小进程（几乎无内存映射）| ~50 微秒 |
-| 中等进程（100MB 内存）| ~500 微秒（主要是页表复制）|
-| 大进程（1GB 内存）| ~5 毫秒（页表复制开销显著）|
+`vfork()` 的语义是极端化的：**它不复制地址空间，子进程直接使用父进程的地址空间，同时父进程被挂起**，直到子进程调用 `execve()` 或退出为止。这样做的收益是几乎零开销，代价是极其危险的语义——子进程在 `execve` 之前对任何变量的修改都会直接影响父进程，包括它自己的栈。
 
-**主要开销来源**（CoW 之后）：
-1. 分配新 `task_struct` 和内核栈（Slab 分配，很快）
-2. **复制页表**（与进程内存映射数量成正比，这是大进程 `fork()` 慢的主因）
-3. 将所有可写页面标记为只读（遍历页表，与物理页数量成正比）
-4. 分配新 PID
+`vfork()` 的手册里因此有一系列禁令：子进程不能从当前函数返回、不能调用 `exit()`（要用 `_exit()`）、不能修改任何数据。这些约束靠约定而非编译器强制，违反了也不会有明确的报错，而是以极其诡异的方式破坏父进程状态。
 
-### 6.2 prefork 模式：Apache/Nginx 的选择逻辑
+### 6.2 现代内核里的 `vfork`
 
-许多高性能服务器使用 prefork 模型：master 进程在服务启动时就 `fork()` 出若干 worker 进程，每个 worker 独立处理请求。
+在支持 COW 的现代内核上，`vfork()` 的性能优势基本消失了，因此它现在的实现方式是：用 `CLONE_VM | CLONE_VFORK` 标志走 `clone` 路径，父进程在 `kernel_clone` 末尾调用 `wait_for_vfork_done()` 等待子进程完成 `execve` 或退出。
 
-**为什么在启动时 fork，而不是在每次请求时 fork？**
+有意思的是，现代内核为 `vfork` 加了一项 `fork` 没有的优化：在 `CLONE_VFORK` 且父进程等待期间，内核可以**不复制父进程的页表**，因为子进程马上就会 `execve` 把它抛弃。这实际上让 `vfork` 在"马上 exec"这个最常见的场景下比 `fork` 更快，且没有 `fork` 那样的页表复制停顿。
 
-1. **复用初始化开销**：数据库连接池、配置文件加载、动态库加载……这些昂贵的初始化操作只做一次（在 master 中），fork 时子进程通过 CoW 继承这些数据，真正需要时才复制（如果根本不修改，则完全不复制）
-2. **避免 fork 热路径**：请求处理路径上不出现 `fork()`，避免高并发下的 fork 开销
+### 6.3 `posix_spawn`
 
-**CoW 与 prefork 的微妙交互**：
+`posix_spawn()` 是 POSIX 标准给出的进程创建接口，它的存在本身就是对 `fork` 语义的一份"妥协声明"：标准委员会承认并非所有平台都能高效地实现 `fork`，因此需要一个语义更受限、但可移植且高效的接口。
 
-Nginx 的每个 worker 进程启动后，随着请求处理，会逐渐写入自己的内存（日志缓冲区、连接状态等），触发 CoW，worker 的内存使用量逐渐增大。这是正常现象——CoW 页面只会越来越多，不会减少（除非进程退出）。
+```c
+/* posix_spawn 的接口形态：把创建与装载合并成一步 */
+int posix_spawn(pid_t *pid, const char *path,
+                const posix_spawn_file_actions_t *file_actions,
+                const posix_spawnattr_t *attrp,
+                char *const argv[], char *const envp[]);
+```
+
+它通过 `file_actions` 参数表达 fd 重定向、通过 `attrp` 表达信号与调度属性，这些正是当年需要在 `fork` 与 `execve` 之间手动做的事情。glibc 的实现会根据运行环境在这三条路径之间选择最优：如果系统支持 `CLONE_VM | CLONE_VFORK`，就用它；否则退回到 `fork`。
+
+需要说明的是，`posix_spawn()` 并不能表达 `fork` 的全部用法。它无法在子进程中执行任意代码（比如建立一个自定义的命名空间、或者做只有通过系统调用才能完成的设置），因此**它取代的是"fork 之后立刻 exec"这一类用法，而不是 `fork` 本身**。
+
+### 6.4 `clone3`：新一代接口
+
+`clone3()` 在 Linux 5.3 引入，把 `clone` 那十几个参数收进一个带版本长度的 `struct clone_args`：
+
+```c
+struct clone_args {
+    __aligned_u64 flags;    /* 与 clone 的 flags 含义相同 */
+    __aligned_u64 pidfd;    /* 直接返回 pidfd，避免 PID 复用竞态 */
+    __aligned_u64 child_tid;
+    __aligned_u64 parent_tid;
+    __aligned_u64 exit_signal;
+    __aligned_u64 stack;
+    __aligned_u64 stack_size;
+    /* 后续版本追加的字段可以继续往后排 */
+};
+```
+
+结构体参数的价值在于**可扩展**：新的创建选项（如 `CLONE_INTO_CGROUP`）可以作为新字段追加，而不需要新增系统调用号或复用已有参数的位。`clone3` 的 `pidfd` 字段尤其值得注意，它一次性解决了"`fork` 返回的 PID 可能在父进程用它之前就被复用"这个长期存在的竞态——返回的 `pidfd` 是稳定的文件描述符引用，不受 PID 回收影响。
+
+### 6.5 一个尚未解决的历史包袱
+
+`clone3` 在 2019 年随 Linux 5.3 发布，本意是取代 `clone`，但它的推广遇到了一个非技术性的障碍。2020 年 glibc 2.32 为 `posix_spawn()` 增加了走 `clone3` 的快速路径，随后因为 seccomp 策略的问题被撤回：容器运行时（Docker 19.03 及更早、以及一批 Kubernetes 发行版）为容器配置的 seccomp 过滤器是按系统调用号白名单工作的，`clone3` 是新增的系统调用号，不在白名单里，于是所有使用新 glibc 的容器在创建进程时都会收到 `ENOSYS`。
+
+这件事的教益超出了 `clone3` 本身。**系统调用白名单与新增系统调用之间存在结构性的兼容问题**：过滤器按编号放行，编号是内核单方面追加的，用户态无法预知。正确的应对方式是让过滤器在遇到未知系统调用号时返回 `ENOSYS`（让用户态回退到旧接口）而不是直接杀掉进程，但这条实践在事故发生时并没有被普遍采用。至今仍有不少运行时的策略停留在"默认拒绝未知系统调用"的形态上，`clone3` 的使用因此被推迟了好几年。
 
 ---
 
-## 小结
+## 第 7 章 `clone`：精细控制的本质
 
-`fork()` 的内核之旅贯穿了操作系统的多个核心子系统：
+### 7.1 标志位全景
 
-**调用链**：`sys_fork()` → `kernel_clone()` → `copy_process()` → `wake_up_new_task()`
+`clone()` 的行为完全由标志位决定，下面这张表把主要标志按"共享什么"归类：
 
-**`copy_process()` 的核心工作**：
-- 调用 `dup_task_struct()` 分配新 `task_struct` 和内核栈
-- 按 `clone_flags` 决定每类资源是"复制"还是"共享"（引用计数 +1）
-- 调用 `copy_thread()` 设置子进程的寄存器状态（`ax=0` → 子进程返回 0）
-- 分配 PID，建立父子关系，加入进程树和调度队列
+| 标志 | 共享的资源 | 典型使用者 |
+| :--- | :--- | :--- |
+| `CLONE_VM` | 地址空间（`mm_struct`） | 线程、容器进程 |
+| `CLONE_FS` | 文件系统信息（cwd/root） | 线程 |
+| `CLONE_FILES` | 文件描述符表 | 线程 |
+| `CLONE_SIGHAND` | 信号处置表 | 线程 |
+| `CLONE_THREAD` | 线程组（信号、统计） | 线程 |
+| `CLONE_NEWNS` | 创建新的挂载命名空间 | 容器 |
+| `CLONE_NEWPID` | 创建新的 PID 命名空间 | 容器 |
+| `CLONE_NEWNET` | 创建新的网络命名空间 | 容器 |
+| `CLONE_NEWUSER` | 创建新的用户命名空间 | 无 root 容器 |
+| `CLONE_VFORK` | 阻塞父进程直到子进程 exec | `posix_spawn` 优化路径 |
+| `CLONE_PARENT` | 新进程的父进程指向调用者的父进程 | 特殊场景 |
+| `CLONE_PIDFD` | 返回 pidfd | 现代进程管理 |
 
-**CoW 的精髓**：`fork()` 时只复制页表（不复制物理内存），所有可写页标记为只读；写操作触发缺页异常，内核在异常处理中才真正复制那一页。CoW 将 `fork()` 的内存开销从 O(内存量) 降低到 O(页表大小)。
+### 7.2 从 `clone` 到线程
 
-**clone 是本质**：`fork()`、`vfork()`、`pthread_create()` 都是 `clone()` 的特例，区别仅在于 `flags` 参数控制哪些资源被共享。
+线程的实现可以用一句话概括：**给 `clone` 传上 `CLONE_VM | CLONE_FS | CLONE_FILES | CLONE_SIGHAND | CLONE_THREAD`**。这样创建出来的执行流与调用者共享地址空间、文件上下文、fd 表与信号处置，只保留各自的寄存器现场与内核栈——这正是"线程"的定义。
 
-下一篇 [[04 进程的灵魂替换——exec 家族与程序加载]] 将接续 `fork()` 的故事：子进程创建完成后，如何通过 `execve()` 彻底替换为新程序——包括 ELF 文件格式的解析、新地址空间的建立，以及动态链接器 `ld-linux.so` 的介入时机。
+这套实现方式带来一个副作用：`/proc` 下的线程组结构、`ps -L` 的特殊输出、以及 `kill` 默认作用于整个线程组这些用户可见的行为，全都是"线程就是共享资源的进程"这一实现的直接投影。它们不是被设计出来的，而是被推导出来的。
+
+### 7.3 容器创建时的用法
+
+容器运行时的进程创建是 `clone` 最复杂的用法：它需要在一次调用中同时创建多个命名空间、设置 cgroup、并保证子进程在新命名空间里诞生（尤其是 PID 命名空间无法事后加入，见 [[云原生/Docker/02 Linux Namespace 深度解析]]）。
+
+```c
+/* 容器创建的核心调用形态（简化） */
+pid = clone(child_func, stack,
+            CLONE_NEWNS | CLONE_NEWPID | CLONE_NEWNET |
+            CLONE_NEWUTS | CLONE_NEWIPC | SIGCHLD,
+            NULL);
+```
+
+`runc` 的实际实现比这复杂得多，它会先用 `CLONE_NEWUSER`（如果启用 rootless）建立映射，再在子进程里 `setns` 到各个命名空间，最后才 `execve` 容器入口。之所以不能一次 `clone` 就把所有命名空间建好，是因为某些命名空间的创建需要按特定顺序进行，而 `clone` 的初始化是同时发生的。
+
+### 7.4 栈参数与线程栈的管理
+
+`clone` 的第二个参数 `child_stack` 在不同用途下含义完全不同，这一点经常被误解：
+
+- **对 `fork` 而言**：传 `NULL`。因为子进程走的是父进程的 `pt_regs`，返回用户态时用的还是原来那个栈指针，不需要指定新栈。
+- **对线程而言**：必须传一个明确地址。新线程要从这个地址开始执行被指定的函数，而这个函数需要自己的栈，不能与创建者共用。
+- **对 `CLONE_VM` 的其它用途**：同样必须指定，因为共享地址空间意味着不能靠复制得到独立的栈。
+
+`pthread_create()` 正是围绕这个参数做了大量工作。glibc 默认从堆上（或通过 `mmap`）分配一块栈空间，大小由 `pthread_attr_setstacksize()` 控制，默认 8MB；这块空间需要在创建时分配、在线程退出时释放。默认 8MB 是一个值得留意的数字——它与内核栈的 16KB 相比大了三个数量级，而用户态的栈通常只用得到几十 KB。一个开了几千个线程的进程，光用户态栈的虚拟地址空间就要占几十 GB，虽然大部分不会被实际映射成物理页，但虚拟地址空间的消耗在 64 位下虽然通常不是问题，在 `RLIMIT_AS` 受限的环境里却可能成为创建线程失败的直接原因。
+
+glibc 的 `pthread_create` 在这里有一处精巧的处理：栈的守卫页（guard page）通过 `mprotect(PROT_NONE)` 设置，这样一旦线程的栈溢出，会得到一个明确的 `SIGSEGV`，而不是静默地踩坏相邻的线程栈。这个机制与第 02 篇讲的内核栈守护页（`CONFIG_VMAP_STACK`）是同一个思路在不同层次上的实现。
+
+---
+
+## 第 8 章 观测与调试
+
+### 8.1 看 `fork` 的真实行为
+
+`strace` 是观察进程创建最直接的工具，它对 `clone` 的输出带着大量细节：
+
+```bash
+strace -f -e trace=clone,fork,vfork,execve ./app 2>&1 | head -n 10
+# clone(child_stack=NULL, flags=CLONE_CHILD_CLEARTID|CLONE_CHILD_SETTID|SIGCHLD, ...) = 12346
+# clone(child_stack=0x7f8a..., flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|..., ...) = 12347
+```
+
+第一行是 `fork` 的形态：`child_stack=NULL` 说明没有指定子进程栈（因为走后会立刻 `execve`），`SIGCHLD` 是退出信号。第二行是 `pthread_create` 的形态：`child_stack` 有具体地址，flags 里出现了 `CLONE_VM` 与 `CLONE_THREAD`。**看懂这两行，就等于看懂了 `fork` 与线程在系统调用层面的全部差别**。
+
+### 8.2 用 ftrace 跟踪内核路径
+
+`strace` 只能看到系统调用边界，要看内核内部可以用 `ftrace`：
+
+```bash
+# 跟踪 copy_process 的调用次数与耗时
+echo 1 > /sys/kernel/debug/tracing/events/sched/sched_process_fork/enable
+cat /sys/kernel/debug/tracing/trace_pipe
+# 输出包含父进程名、子进程 PID 与 comm
+```
+
+`sched_process_fork` 是调度器提供的跟踪点，它记录的信息足以回答"谁在创建进程"这个问题。在排查 fork 风暴时，把这个跟踪与 `sched_process_exit` 对照，就能看出进程的创建与销毁速率是否失衡。
+
+### 8.3 一个排查实例
+
+设想一台服务器上 CPU 使用率周期性飙升、`load average` 长时间高位，但没有任何进程的 CPU 占用特别高。排查路径可以这样走：
+
+```bash
+# 第一步：看上下文切换与创建速率，确认是否存在创建风暴
+vmstat 1 5
+# procs -----------memory---------- ---swap-- -----io---- --system-- ------cpu-----
+#  r  b   swpd   free   buff  cache   si   so    bi    bo   in   cs  us sy id wa
+#  3  0      0 812345  12345 456789    0    0     0    12 1200 8500   4  6 89  0
+
+# 第二步：统计进程总数与僵尸数
+ps -eo stat | sort | uniq -c | sort -rn | head
+# 输出里若 Z 状态数量持续增长，说明回收路径有问题
+
+# 第三步：定位创建者
+perf trace -e clone -a -- sleep 5 2>&1 | tail -n 20
+```
+
+第一步里 `cs`（上下文切换）与 `r`（运行队列长度）都在高位、而 `us`（用户态 CPU）并不高，这个组合指向"大量短命进程在创建与销毁"。第二步确认僵尸数是否在涨，第三步找出是哪个进程在批量创建——通常是一个没有正确 `wait` 子进程的服务，或者一个把 `fork` 写进循环的业务代码。
+
+### 8.4 测量 `fork` 的真实延迟
+
+"`fork` 很慢"是一个需要量化的说法，因为在不同的进程规模下它跨越了两个数量级。测量方式可以简单到用 `perf` 统计系统调用耗时：
+
+```bash
+# 统计 clone 系统调用的延迟分布（单位纳秒）
+perf trace -e clone -s ./your_app
+# 输出的柱状图会给出 min/avg/max 与标准差
+```
+
+在小进程上（RSS 几 MB），`fork` 的延迟通常在几十微秒量级；在 RSS 数十 GB 的进程上，光页表复制就可能达到几十毫秒。两者之间相差上千倍，而决定这个差距的**不是代码逻辑，而是进程的常驻内存规模**——这一点在容量规划时经常被忽略：一个在测试环境（几 GB 内存）表现良好的 `fork` + `exec` 模式，到了生产环境（几十 GB）可能成为显著的延迟尖刺来源。
+
+如果观察到周期性延迟尖刺与进程内存规模正相关，可以进一步用 `perf` 追踪 `copy_page_range` 的耗时，确认时间确实花在页表复制上。确认之后的对策通常不是"优化 `fork`"，而是**改用 `posix_spawn` 或把创建子进程的操作从延迟敏感路径上移走**——有些问题的最优解是绕开，而不是加速。
+
+---
+
+## 第 9 章 边界与反例
+
+### 9.1 创建进程不止 `fork` 一条路
+
+把本文讨论的几种方式并列起来，它们的选择依据可以整理成一张决策表：
+
+| 场景 | 推荐方式 | 原因 |
+| :--- | :--- | :--- |
+| 运行一个外部程序并等待结果 | `posix_spawn` 或 `fork` + `execve` | 语义直白，`execve` 会丢弃 COW 页 |
+| 需要自定义命名空间/cgroup | `clone` / `clone3` | 只有它能表达这些组合 |
+| 创建线程 | `pthread_create` | 它就是 `clone` 的封装 |
+| 大内存进程创建子进程 | `posix_spawn`、避免裸 `fork` | 避开页表复制停顿 |
+| 需要子进程继承特定 fd 上下文 | `fork` + 手工设置 + `execve` | 只有两段式能表达 |
+
+### 9.2 COW 不总是生效
+
+以下几种情况会让"写时复制"变成"立刻复制"：
+
+- 源页是**大页**（HugePage）或由 `madvise(MADV_HUGEPAGE)` 标记的区域，`fork` 时可能被拆分成小页或直接复制；
+- 使用了 `memfd` 的共享映射且设置了 `MAP_SHARED`，这类页在 `fork` 后仍然是共享的，不触发 COW；
+- 父进程在 `fork` 之后立刻遍历并修改大量内存（如 JVM 的 GC 线程），COW 会在极短时间内被逐个触发，总开销与直接复制相当甚至更大；
+- `fork()` 之后立刻 `execve()` 的场景下，COW 的收益接近于零，因为父进程复制出来的页表马上就作废了。
+
+### 9.3 一条实用的经验
+
+判断"该不该用 `fork`"有一个简单的经验法则：**如果 `fork()` 之后到 `execve()` 之间的代码不止几十行，就需要重新审视这段设计**。中间这段窗口越长，越容易调入非 async-signal-safe 的函数、越容易碰到锁状态不一致、也越容易让 COW 页被真正复制。很多历史上的 `fork` 相关疑难杂症，追根究底都出在这段窗口里。
+
+### 9.4 一个真实的反例：`fork` 与内存翻倍
+
+Redis 的持久化机制是"`fork` 出子进程、子进程遍历数据写快照"，这个设计在过去十几年里被反复讨论，因为它把一个隐蔽的问题摆到了台面上：**子进程不复制数据，但父进程在子进程运行期间的任何写入都会触发 COW，被复制的页是实打实的新增内存**。
+
+设 Redis 实例占用 20GB 内存，执行 `BGSAVE` 后子进程开始遍历并写快照。如果在这段时间里父进程持续处理写请求，那么每次写入都会让对应的页在父子之间分叉：父进程拿到一份新的可写页，子进程保留原来那份。极端情况下（父进程在 `BGSAVE` 期间把所有数据都改了一遍），物理内存占用会接近翻倍，达到 40GB。
+
+这个现象带来的运维结论是明确的：**Redis 实例的内存规划必须为 COW 留出余量**，而不是按数据集大小 1:1 配置。它同时也说明 COW 的"共享"是有时效的——共享状态只在不写入时才成立，而一个持续接受写入的服务，其共享窗口可能非常短。第 04 篇的 `madvise(MADV_DONTFORK)` 与"避免在 fork 期间写入"这类建议，都是从这个反例里生长出来的工程经验。
+
+需要补充的是，这个行为不是 Redis 的实现缺陷，而是所有"`fork` 后长时间不 `exec`"的用法都要面对的共同代价。区分"`fork` 后马上 `exec`"（COW 的收益最大化、代价接近零）与"`fork` 后长期驻留"（COW 会持续触发、内存可能翻倍）这两种用法，是判断 `fork` 是否合适的第一道分水岭。
+
+### 9.5 特权程序的额外约束
+
+一个以 setuid 安装的程序在运行期间持有提升后的权限，它执行的每一次 `fork` 都会把这些权限复制一份给子进程。如果这个子进程随后去执行一个用户可影响的程序（或者在没有丢弃权限的情况下执行 shell），提权就此完成。
+
+防御手段有两层。一是**在 `fork` 之后立刻降权**：子进程在 `execve` 之前调用 `setuid()` 回到真实用户身份，或者用 `prctl(PR_SET_NO_NEW_PRIVS)` 禁止后续的权限提升。二是**使用 `posix_spawn` 而不是裸 `fork` 来执行外部程序**，因为 `posix_spawn` 不允许在子进程里插入任意代码，也就没有"忘记降权"的机会。
+
+这条约束与第 5 章讨论的 async-signal-safe 限制是同一个问题的两个侧面：`fork` 之后的那段窗口既危险又难以约束，因此**最优的工程实践是让这段窗口尽可能短，最好是零**。
+
+---
+
+## 第 10 章 小结：复制哲学的取舍
+
+`fork()` 用"复制当前进程"这一个动作，同时解决了进程创建、上下文继承、fd 重定向准备这三件本来无关的事。这个统一带来的表达力是巨大的——shell 的管道、作业控制、`system()`、`popen()` 全都建立在它上面；代价是把"复制整个地址空间"变成了默认行为，而这在内存以 GB 计的现代服务上是笔不小的开销。
+
+Linux 对此的应对不是替换 `fork`，而是在它周围补了一层又一层的优化与替代品：写时复制把数据复制变成页表复制，`vfork` 把页表复制也省掉，`posix_spawn` 从接口层面鼓励"创建即装载"的用法，`clone3` 用结构体参数把接口的可扩展性打开。**这四条路线各自都没有取代 `fork`，只是把不同场景从它身上分流出去**——这正是没有银弹的另一种表现：不是找一个更好的方案，而是承认不同场景需要不同的方案，然后让它们共存。
+
+由此可见，理解 `fork` 的落点不在记住 `copy_process` 的每一个分支，而在于把握住那条分界线：**哪些资源被复制、哪些被共享，以及这个选择在什么场景下会成为负担**。这条分界线同时也是理解线程、容器、以及第 07 篇"轻量级进程"模型的同一把钥匙。
+
+---
+
+## 参考资料
+
+1. *Linux Kernel Source* — `kernel/fork.c`：`kernel_clone()`、`copy_process()`、`copy_mm()`、`dup_mm()`、`copy_thread()` 的实现。
+2. *Linux Kernel Source* — `mm/memory.c`：`copy_page_range()` 与 COW 缺页处理路径 `do_wp_page()`。
+3. *Linux Kernel Source* — `include/uapi/linux/sched.h`：`CLONE_*` 标志位定义。
+4. *Linux Kernel Source* — `kernel/fork.c`、`include/linux/sched/task.h`：`struct kernel_clone_args` 与 `clone3` 的对接。
+5. *clone(2), fork(2), vfork(2), clone3(2) manual pages*：各接口的语义、约束与返回码。
+6. *The Linux Programming Interface*, Michael Kerrisk, 2010：第 24-28 章，进程创建的完整用户态视角与 `fork` 陷阱。
+7. *POSIX.1-2017*, `posix_spawn()` 规范：关于异步信号安全函数的约束定义。
+8. *Advanced Programming in the UNIX Environment*（3rd Edition）, W. Richard Stevens, 2013：第 8 章，`fork` 与文件描述符继承规则。
+9. *Linux Kernel Documentation* — `Documentation/core-api/kernel-api.rst`：内核对 `struct` 参数接口的演进说明。
 
 ---
 
 > [!note] 思考题
-> 1. CFS 使用'虚拟运行时间'（vruntime）作为调度键——vruntime 最小的进程优先运行。高优先级（低 nice 值）的进程 vruntime 增长更慢——因此获得更多 CPU 时间。nice 值从 -20 到 19 映射到权重——nice 值每增加 1，进程获得的 CPU 时间减少约 10%。在一个 nice=0 和 nice=19 的进程竞争同一个 CPU 时，它们的 CPU 时间比例大约是多少？
-> 2. CFS 使用红黑树（按 vruntime 排序）管理可运行进程。`pick_next_task` 选择红黑树最左节点——O(1) 复杂度。但进程入队/出队是 O(log n)。在进程数量达到数万时，红黑树的调度开销是否成为瓶颈？CFS bandwidth throttling（CGroups CPU 限制）是如何在 CFS 基础上实现的？
-> 3. CFS 的调度延迟（`sched_latency_ns`，默认 6ms）保证每个可运行进程在这个时间窗口内至少执行一次。如果有 100 个可运行进程，每个进程的时间片是 60μs——频繁的上下文切换会导致 TLB 和 Cache 污染。在什么场景下你需要增大 `sched_latency_ns`？这对交互式应用的响应性有什么影响？
+> 1. `copy_process()` 把 `vruntime` 设为运行队列最小值加偏移而不是继承父进程的值，这两种做法分别在什么负载形态下更合适？
+> 2. 如果内核在 `fork` 时对所有的 COW 页都不增加引用计数、而是改用别的机制标记共享，会遇到什么问题？
+> 3. `CLONE_VFORK` 允许父进程在被挂起期间不复制页表，那么如果子进程在 `execve` 之前就崩溃了，父进程的地址空间需要做什么补偿？
+> 4. 为什么 `pthread_atfork()` 在实践中很难彻底解决多线程 `fork` 的锁问题？

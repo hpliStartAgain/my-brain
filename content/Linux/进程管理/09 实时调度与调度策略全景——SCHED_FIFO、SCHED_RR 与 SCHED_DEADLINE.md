@@ -5,575 +5,760 @@ tags: [EDF, Linux, RT调度, SCHED_DEADLINE, SCHED_FIFO, SCHED_RR, 优先级反�
 aliases: ["Linux实时调度", "SCHED_FIFO原理", "SCHED_DEADLINE", "调度策略全景", "RT调度类"]
 ---
 
+# 09 实时调度与调度策略全景——SCHED_FIFO、SCHED_RR 与 SCHED_DEADLINE
+
 **摘要：**
 
-CFS 解决了普通进程的公平调度问题，但它是一个"尽力而为"（best-effort）的调度器——它能保证比例公平，但无法保证进程在指定时间内必然得到执行。对于需要**确定性延迟**的场景（音频处理不能有杂音、机械臂控制必须精确到毫秒、网络包处理有严格 SLA），CFS 是不够的。Linux 为此提供了实时调度类：`SCHED_FIFO`、`SCHED_RR` 和 `SCHED_DEADLINE`。三者代表了不同的实时保证层次：`SCHED_FIFO` 和 `SCHED_RR` 提供固定优先级调度（优先级高的进程始终优先于低优先级进程），`SCHED_DEADLINE` 则基于 EDF（Earliest Deadline First）算法提供更精确的截止期保证。本文从"为什么 CFS 不够"出发，完整解析三种实时调度策略的工作原理、适用场景与配置方法，以及调度类优先级层次如何在多类调度策略共存时决定运行顺序。同时深入分析实时调度中最经典的问题——优先级反转，以及 Linux 的解决方案优先级继承（Priority Inheritance）。
+"实时"这个词在工程语境里被误用得极其频繁：它指的不是"快"，而是"在确定的时间前完成"。一个 10 微秒内必定完成的任务是实时的，一个平均 1 毫秒但偶尔需要 100 毫秒的任务不是。这个区分决定了实时调度器与 CFS 的根本差别——CFS 追求的是长期的比例公平，实时调度类追求的是单次响应的确定性。本文从调度类的层次结构讲起，说明 Linux 的五种调度类（stop、deadline、rt、fair、idle）如何按严格优先级排列、`pick_next_task()` 如何从高到低挑选，以及为什么最高优先级的 `stop_sched_class` 在内核里始终存在。随后逐项拆解三种实时策略：`SCHED_FIFO` 的"不主动让出就一直运行"、`SCHED_RR` 的时间片轮转、以及它们的优先级范围与相互影响。核心部分讨论三个在实时系统里绕不开的机制：RT 节流（`sched_rt_runtime_us`）如何防止实时任务饿死整个系统、优先级反转为什么会让高优先级任务被低优先级任务阻塞、以及优先级继承（PI mutex）如何解决它——火星探路者号在 1997 年因这个问题反复重启的案例，是这段历史里最著名的注脚。接着引入 `SCHED_DEADLINE`（3.14，2014），讲清它的三个参数（runtime/deadline/period）、EDF 与 CBS 的关系、以及准入控制这一让"声明即保证"得以成立的设计。最后给出实践边界：实时调度不是性能优化、一个卡住的 RT 任务会让系统完全失去响应、容器里的 RT 权限为什么被默认收紧。全文回答两个问题：Linux 提供了哪些调度策略、它们各自在什么条件下成立。
 
 ---
 
-## 第 1 章 为什么 CFS 不够：实时需求的本质
+## 第 1 章 实时不等于快
 
-### 1.1 确定性延迟：实时系统的核心诉求
+### 1.1 两种实时性
 
-CFS 的目标是**长期公平**——在足够长的时间窗口内，每个进程得到与其权重成正比的 CPU 时间。但"长期公平"和"确定性延迟"是两个完全不同的需求：
+工程上把实时系统分成两类，区分标准是"错过截止时间的后果"：
 
-**普通调度（CFS）的保证**：在 6ms 的调度延迟窗口内，你一定会得到至少一次运行机会。但具体是在这 6ms 的哪个点，无法精确保证。
+| 类型 | 定义 | 例子 |
+| :--- | :--- | :--- |
+| 硬实时（Hard Real-Time） | 错过截止时间即为系统失败 | 飞控、安全气囊触发、工业机器人 |
+| 软实时（Soft Real-Time） | 错过截止时间导致质量下降 | 音视频播放、交互式界面、高频交易 |
 
-**实时调度的保证**：优先级为 99 的实时进程，只要它可运行，就一定优先于所有普通进程（CFS）运行，不管那些普通进程等了多久。
+通用操作系统（包括 Linux）的设计目标是软实时。它们提供的是"**最坏情况下的延迟有上界**"这一能力，而这个上界受制于一个前提：**内核路径上不能有不可控的长耗时操作**。
 
-**实时系统的两类**：
+### 1.2 延迟与抖动
 
-- **软实时（Soft Real-Time）**：有延迟目标，偶尔违反可以容忍（如音频/视频播放——偶尔卡顿可接受，但要尽量避免）
-- **硬实时（Hard Real-Time）**：有严格截止期，任何违反都是系统失败（如汽车 ABS 制动控制、航空自动驾驶）
+衡量实时性有两个指标，它们的含义不同：
 
-Linux 的实时调度支持软实时和近似硬实时（`SCHED_DEADLINE`），但 Linux 本身不是 RTOS（实时操作系统）——内核中仍有不可抢占的临界区，完全的硬实时需要 PREEMPT_RT 补丁或 Xenomai 等方案。
+- **延迟（Latency）**：从事件发生到任务开始处理的时间；
+- **抖动（Jitter）**：延迟的波动幅度。
 
-### 1.2 调度类的优先级层次
+一个平均延迟 100 微秒、抖动 20 微秒的系统，其最坏延迟约 120 微秒；而一个平均延迟 50 微秒、抖动 500 微秒的系统，最坏延迟是 550 微秒。**对实时系统而言，后者远比前者糟糕**——因为它无法给出一个有意义的保证。
 
-Linux 内核将所有调度策略组织为多个**调度类（Scheduling Class）**，按严格的优先级顺序排列：
+这个区别解释了为什么实时调度不使用"平均性能"作为目标。CFS 的公平性是一个长期的统计性质，它在任意一段短时间窗口内都不保证什么；而实时调度必须对每一次调度决策负责。
 
-```
-调度类优先级（从高到低）：
+### 1.3 Linux 的实时能力边界
 
-1. stop_sched_class     ← 最高优先级，用于停止 CPU（CPU 热插拔、迁移）
-2. dl_sched_class       ← SCHED_DEADLINE（基于截止期的实时）
-3. rt_sched_class       ← SCHED_FIFO / SCHED_RR（固定优先级实时）
-4. fair_sched_class     ← SCHED_NORMAL / SCHED_BATCH（CFS 普通调度）
-5. idle_sched_class     ← SCHED_IDLE（仅在 CPU 完全空闲时运行）
-```
+主线 Linux 提供的是软实时能力，其延迟上界受几个因素限制：
 
-`pick_next_task()` 的主调度逻辑：
+| 因素 | 影响 |
+| :--- | :--- |
+| 不可抢占的内核代码段 | 某些内核路径运行期间无法切换 |
+| 中断处理 | 硬件中断可能在任何时刻打断任何代码 |
+| 关中断的临界区 | 期间中断被延迟处理 |
+| 缓存与内存的抖动 | 缺页、TLB miss 引入不可预测的延迟 |
 
-```c
-/* kernel/sched/core.c：选择下一个运行的进程（简化）*/
-static struct task_struct *pick_next_task(struct rq *rq, ...) {
-    /* 按优先级顺序遍历调度类 */
-    /* 只要更高优先级的调度类有可运行进程，就不会轮到低优先级类 */
-    for_each_class(class) {
-        struct task_struct *p = class->pick_next_task(rq, ...);
-        if (p)
-            return p;
-    }
-    /* 不可达：至少 idle 类总有进程 */
-    BUG();
-}
-```
+主线内核的调度延迟通常在几十微秒量级，最坏情况在毫秒级。要把它压到几十微秒以内，需要 `PREEMPT_RT`——这套补丁把自旋锁改为可睡眠的互斥锁、把中断处理搬到内核线程、并把大部分不可抢占区改造成可抢占的。它在 6.12 被正式合并进内核主线（第 06 篇讨论过这次合并的意义）。
 
-**关键含义**：只要有任何一个 `SCHED_FIFO` 或 `SCHED_RR` 进程处于可运行状态，所有 CFS 进程都不会被调度——哪怕 CFS 进程已经等待了很长时间。这是实时调度的"特权"，也是需要谨慎使用实时策略的原因。
+需要强调的是：**即使在 `PREEMPT_RT` 内核上，Linux 也只是"延迟更小、抖动更可控"的软实时系统**，它与经过形式化验证的硬实时系统（如 VxWorks、QNX 在特定配置下）在设计目标上并不相同。
 
----
+### 1.4 延迟由哪几段构成
 
-## 第 2 章 SCHED_FIFO：固定优先级的先进先出
+一个"从事件发生到处理完成"的端到端延迟，可以拆成四段，它们各自有不同的优化手段：
 
-### 2.1 SCHED_FIFO 的语义
+| 阶段 | 含义 | 主要影响因素 |
+| :--- | :--- | :--- |
+| 硬件到中断处理 | 事件发生到 CPU 开始执行中断处理函数 | 中断控制器、关中断的临界区 |
+| 中断到唤醒任务 | 中断处理完成到目标任务被放入运行队列 | 中断下半部、软中断处理 |
+| 唤醒到实际执行 | 任务入队到真正获得 CPU | **调度延迟**（本章的主题） |
+| 执行本身 | 任务开始运行到处理完成 | 算法、缓存、内存访问 |
 
-`SCHED_FIFO`（First In First Out）是最简单的实时调度策略，其规则极为直接：
+这个分解的价值在于**定位延迟问题时能逐段排除**。`cyclictest` 测量的其实只是第三段——它通过一个周期性睡眠与唤醒的线程，测量"被唤醒到实际运行"的时间差。如果一个系统的端到端延迟不达标，而 `cyclictest` 的结果很漂亮，那么问题就不在调度器上，而要往前后两段去找：可能是中断被关得太久（第一段），也可能是处理逻辑本身太慢（第四段）。
 
-1. 每个进程有一个**实时优先级**（`rt_priority`），取值范围 1-99（99 最高）
-2. 调度器总是运行优先级最高的可运行进程
-3. 同一优先级的进程按 FIFO 顺序（先就绪先运行）
-4. **`SCHED_FIFO` 进程没有时间片**——一旦运行，就一直运行，直到：
-   - 进程主动让出 CPU（调用 `sched_yield()`、阻塞 IO、睡眠）
-   - 更高优先级的进程变为可运行（被抢占）
-   - 进程退出
-
-```c
-/* 检查 SCHED_FIFO 的不可抢占性 */
-/* rt_sched_class 的 check_preempt_curr 回调 */
-static void check_preempt_curr_rt(struct rq *rq, struct task_struct *p, int flags) {
-    /* 只有新进程的优先级 > 当前进程时才抢占 */
-    /* 同优先级不抢占（FIFO 语义：等待当前进程主动让出）*/
-    if (p->prio < rq->curr->prio) {  /* 内核 prio 越小优先级越高 */
-        resched_curr(rq);            /* 标记需要重新调度 */
-        return;
-    }
-    /* 同优先级：不抢占，保持 FIFO 顺序 */
-}
-```
-
-### 2.2 SCHED_FIFO 的危险性
-
-`SCHED_FIFO` 进程没有时间片，且优先级高于所有普通进程——一个 bug（如死循环）可以完全锁死整个系统：
-
-```c
-/* 危险示例：SCHED_FIFO 进程死循环，系统完全无响应 */
-#include <sched.h>
-
-int main() {
-    struct sched_param param = { .sched_priority = 99 };
-    sched_setscheduler(0, SCHED_FIFO, &param);  /* 设置为最高实时优先级 */
-
-    while (1) {
-        /* 什么也不做，CPU 100% 占用 */
-        /* 此时系统几乎无响应：没有任何普通进程能运行 */
-        /* 甚至 Ctrl+C、Ctrl+Alt+Del 都可能无效！*/
-    }
-}
-```
-
-**Linux 的保护机制：`sched_rt_runtime_us`**
-
-```bash
-# 实时进程的 CPU 时间限制
-cat /proc/sys/kernel/sched_rt_period_us
-# 1000000（1 秒周期）
-
-cat /proc/sys/kernel/sched_rt_runtime_us
-# 950000（每秒最多 950ms 给实时进程，保留 50ms 给普通进程）
-
-# 默认设置：实时进程最多占用 95% CPU
-# 这确保了即使实时进程出 bug，系统还有 5% 的 CPU 余量供 SRE 干预
-
-# 若要允许实时进程无限制使用 CPU（高风险，仅用于严格实时系统）：
-# echo -1 > /proc/sys/kernel/sched_rt_runtime_us
-```
-
-> [!warning] 生产避坑：实时优先级的权限要求
-> 设置 `SCHED_FIFO` 或 `SCHED_RR` 需要 `CAP_SYS_NICE` capability 或 root 权限。普通用户无法创建实时进程，这是防止恶意或错误程序锁死系统的安全屏障。在容器环境（Docker、Kubernetes）中，默认情况下容器内进程无法设置实时调度策略，需要额外授权（`--cap-add SYS_NICE` 或 securityContext 配置）。
-
-### 2.3 SCHED_FIFO 的典型应用场景
-
-```bash
-# 为进程设置 SCHED_FIFO 调度策略（需要 root 或 CAP_SYS_NICE）
-chrt -f 50 ./realtime_program       # 优先级 50 启动
-chrt -f -p 50 <pid>                 # 对已运行进程设置
-
-# 查看进程的调度策略
-chrt -p <pid>
-# pid 1234's current scheduling policy: SCHED_FIFO
-# pid 1234's current scheduling priority: 50
-
-# 音频服务器（如 PulseAudio/JACK）使用 SCHED_FIFO 防止音频卡顿
-# JACK 音频服务器：rt_priority=70，处理音频回调时绝对不能被普通进程抢占
-```
+把调度延迟与其它三段分开，也解释了为什么"提高实时优先级"往往是无效的优化。如果瓶颈在第四段（处理逻辑耗时过长），把任务提到 RT 99 也不会让它跑得更快；如果瓶颈在第一段（中断被长时间屏蔽），RT 优先级同样无能为力。**实时调度只负责第三段，把它当成万能药是方向性的错误。**
 
 ---
 
-## 第 3 章 SCHED_RR：带时间片的实时轮转
+## 第 2 章 调度类层次
 
-### 3.1 SCHED_RR 与 SCHED_FIFO 的对比
+### 2.1 五种调度类
 
-`SCHED_RR`（Round Robin）是 `SCHED_FIFO` 的变体，唯一区别是：**同优先级的 `SCHED_RR` 进程之间按时间片轮转**。
+Linux 把调度策略组织成五个调度类，它们之间是严格的优先级关系：
 
-| 特性 | `SCHED_FIFO` | `SCHED_RR` |
-|-----|-------------|-----------|
-| 时间片 | 无（运行直到主动让出或被高优先级抢占）| 有（默认 100ms）|
-| 同优先级调度 | FIFO 顺序（等待当前进程让出）| 时间片用完则轮转到下一个 |
-| 高优先级抢占 | ✅ 更高优先级立即抢占 | ✅ 更高优先级立即抢占 |
-| 适用场景 | 单个实时任务，需要独占 CPU | 多个同优先级实时任务，需要公平分享 |
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+graph TD
+    A["stop_sched_class<br/>内核内部使用"] --> B["dl_sched_class<br/>SCHED_DEADLINE"]
+    B --> C["rt_sched_class<br/>SCHED_FIFO / SCHED_RR"]
+    C --> D["fair_sched_class<br/>SCHED_NORMAL / BATCH / IDLE"]
+    D --> E["idle_sched_class<br/>CPU 空闲时"]
+```
 
-`SCHED_RR` 的时间片（Quantum）：
+| 调度类 | 对应策略 | 使用者 | 优先级来源 |
+| :--- | :--- | :--- | :--- |
+| `stop_sched_class` | 无用户可见策略 | 内核（CPU 热插拔、migration 线程） | 最高，不可配置 |
+| `dl_sched_class` | `SCHED_DEADLINE` | 用户（需特权） | `dl_deadline` 等三个参数 |
+| `rt_sched_class` | `SCHED_FIFO`、`SCHED_RR` | 用户（需特权） | RT 优先级 1-99 |
+| `fair_sched_class` | `SCHED_NORMAL`、`SCHED_BATCH`、`SCHED_IDLE` | 默认 | nice 值 |
+| `idle_sched_class` | 无 | 内核 | 最低 |
+
+**这个层次的关键性质是"严格优先"而不是"加权混合"**：只要 `dl_sched_class` 上有可运行任务，`rt_sched_class` 就完全拿不到 CPU；只要 RT 队列非空，CFS 的任务就一直等待。第 08 篇结尾提到的"一个持续可运行的实时任务会饿死所有普通任务"，说的就是这个机制。
+
+### 2.2 `stop_sched_class` 为什么存在
+
+这个调度类没有对应的用户可见策略，它服务于内核自身的需求。典型用途是 CPU 热插拔：当一个 CPU 需要下线时，必须有一个"绝对优先"的执行流把该 CPU 上的其它任务迁移走，并且这个迁移过程不能被任何用户任务打断——如果被打断，迁移逻辑可能在中途失去 CPU，留下不一致的状态。
+
+`migration/N` 这类内核线程就运行在这个调度类上。它们在 `ps` 输出里以方括号形式出现（`[migration/0]`），平时处于睡眠状态，只在需要迁移任务或处理 CPU 热插拔时被唤醒。**它们的存在说明了一件事：即使是最高的用户可见优先级（RT 99），也不是系统里的最高优先级**——内核始终为自己保留了一条凌驾于所有用户任务之上的通道。
+
+### 2.3 `pick_next_task` 的挑选过程
+
+调度器每次要决定"下一步跑谁"时，会按调度类的层次从高到低询问：
+
+```c
+/* 简化的挑选逻辑 */
+for_each_class(class) {
+    p = class->pick_next_task(rq);   /* 按层次从高到低 */
+    if (p)
+        return p;
+}
+/* 全部为空时运行 idle 任务 */
+return idle_task(rq);
+```
+
+这个循环的每一轮都可能返回 `NULL`（该类没有可运行任务），此时继续问下一个类。由于层次的顺序是编译期确定的，这个循环的实际迭代次数极少——绝大多数情况下，第一个非空的类是 `fair_sched_class`。
+
+早期内核还维护了"每个调度类是否有可运行任务"的计数，用于在循环开始前快速跳过空类。这个优化后来因为 SMP 场景下的计数一致性成本被简化掉了——**又一次体现了"优化热路径要在正确的地方下手"这一原则**：计数的维护开销（每次入队出队都要原子更新一个共享变量）可能高于它省下的几次函数调用。
+
+### 2.4 调度类的注册
+
+每个调度类通过 `DEFINE_SCHED_CLASS()` 宏定义，其中包含一组函数指针：
+
+| 回调 | 职责 |
+| :--- | :--- |
+| `enqueue_task` | 把任务加入运行队列 |
+| `dequeue_task` | 从运行队列移除 |
+| `pick_next_task` | 挑选下一个任务 |
+| `task_tick` | 时钟中断时调用，用于时间片判定 |
+| `check_preempt_curr` | 判断是否应抢占当前任务 |
+| `set_curr_task` | 任务被调度为当前任务时调用 |
+| `task_fork` / `task_dead` | 生命周期钩子 |
+
+这套接口的存在让新增调度类不需要修改调度器主体——`SCHED_DEADLINE` 在 3.14 的引入就受益于此，它作为 `dl_sched_class` 插入了既有的层次结构中，而没有改动 CFS。**用一组函数指针把"可扩展点"抽象出来**，这是 Linux 内核里反复使用的设计手法，第 04 篇讨论的 `linux_binfmt` 是同一思路的另一处应用。
+
+### 2.5 三个设置策略的接口
+
+用户态设置调度策略有三个系统调用，它们出现的时间与能力各不相同：
+
+| 系统调用 | 引入时间 | 能设置的参数 | 现状 |
+| :--- | :--- | :--- | :--- |
+| `sched_setscheduler` | 早期 | 策略 + RT 优先级 | 仍在使用 |
+| `sched_setparam` | 早期 | 仅参数（不改策略） | 仍在使用 |
+| `sched_setattr` | 3.14（2014） | 策略 + RT 优先级 + **DL 三个参数** | 推荐方式 |
+
+`sched_setscheduler` 的问题在于它的参数是一个 `struct sched_param`，而这个结构体里只有一个 `sched_priority` 字段。对 RT 策略这够用，但对 `SCHED_DEADLINE` 就完全不够——它需要 runtime、deadline、period 三个参数。
+
+`sched_setattr` 的解法与第 04 篇讨论的 `clone3` 如出一辙：**用一个带 `size` 字段的结构体传参**。
+
+```c
+struct sched_attr {
+    __u32 size;                 /* 结构体大小，用于版本兼容 */
+    __u32 sched_policy;
+    __u64 sched_flags;
+    __s32 sched_nice;           /* CFS 的 nice 值 */
+    __u32 sched_priority;       /* RT 优先级 */
+    __u64 sched_runtime;        /* DL 参数 */
+    __u64 sched_deadline;
+    __u64 sched_period;
+    /* 后续版本追加的字段继续往后排 */
+};
+```
+
+`size` 字段是这套设计的核心：内核根据调用者传入的 `size` 判断它认识哪些字段，从而在追加新字段时保持向前兼容。**同一个模式在内核里已经出现了三次**（`clone3`、`sched_setattr`、`openat2`），它们都出现在"原有接口的参数位已经用尽、但又不得不向后兼容"的时刻。把这三次放在一起看，可以得到一条接口设计的经验：**当一个接口的参数需要超过三四个时，就应当考虑用结构体承载，并预留版本字段**——把这个判断提前，能省下未来一次不可逆的接口分裂。
+
+---
+
+## 第 3 章 `SCHED_FIFO` 与 `SCHED_RR`
+
+### 3.1 优先级范围
+
+RT 调度类使用 1 到 99 的优先级（数值越大优先级越高），这个范围与 nice 值是**两套独立的体系**：
+
+| 体系 | 范围 | 方向 | 谁在使用 |
+| :--- | :--- | :--- | :--- |
+| nice | -20 ~ 19 | 越小越优先 | CFS |
+| RT 优先级 | 1 ~ 99 | 越大越优先 | RT 调度类 |
+
+两套体系不共存：一个任务要么在 RT 类里（用 RT 优先级），要么在 CFS 类里（用 nice 值）。转换调度策略时，另一套属性的取值不会自动生效——把任务从 `SCHED_NORMAL` 改为 `SCHED_FIFO` 时，如果不同时指定 RT 优先级，它会拿到默认的优先级。
+
+**"RT 优先级 1 的任务也会压过 nice -20 的任务"**，这句话是理解这套体系的关键。只要一个任务在 RT 类里，无论它的 RT 优先级多低，都在 CFS 的全部任务之上。
+
+### 3.2 `SCHED_FIFO` 的运行规则
+
+`SCHED_FIFO` 的规则可以用三句话概括：
+
+1. **同优先级之间是先到先服务**：一个任务一旦开始运行，就会一直运行到它主动让出或被更高优先级的任务抢占。
+2. **更高优先级的任务可随时抢占**：RT 内部的抢占是即时的。
+3. **没有时间片的概念**：它不会因为"跑得久了"而被切换。
+
+第三条是关键，也是 `SCHED_FIFO` 危险的地方。一个 `SCHED_FIFO` 的忙循环会让同优先级与更低优先级的任务永远得不到 CPU——包括 CFS 的全部任务。如果这个任务运行在单核机器上，系统会完全失去响应，因为它连 shell 都抢不到 CPU。
+
+主动让出的方式有三种：调用会睡眠的系统调用（`read`、`sleep`、等待锁）、调用 `sched_yield()`、或者退出。**一个从不睡眠的 `SCHED_FIFO` 任务，在它退出之前就是系统的主宰**。
+
+### 3.3 `SCHED_RR` 的时间片轮转
+
+`SCHED_RR` 与 `SCHED_FIFO` 的唯一差别是引入了时间片：同一个优先级上的多个任务会按时间片轮转，时间片用完后被放到该优先级队列的队尾。
+
+它的时间片长度由内核参数决定，调整方式是：
 
 ```bash
-# 查看 SCHED_RR 的时间片长度
+# 查看 RR 时间片的默认值（微秒）
 cat /proc/sys/kernel/sched_rr_timeslice_ms
-# 100（100ms，默认值）
-
-# 验证：用 C 程序获取时间片
-#include <time.h>
-#include <sched.h>
-struct timespec tp;
-sched_rr_get_interval(0, &tp);   /* 0 = 当前进程 */
-printf("RR timeslice: %ld ms\n", tp.tv_nsec / 1000000);
+# 输出 100，即 100 毫秒
 ```
 
-### 3.2 SCHED_RR 的内核实现
+需要注意两点。第一，**时间片只在同优先级的任务之间起作用**：一个 `SCHED_RR` 的任务如果遇到了更高优先级的 RT 任务（无论 FIFO 还是 RR），照样会被立刻抢占。第二，100 毫秒这个默认值对实时任务来说相当长——一个需要每隔几毫秒响应的场景，如果依赖时间片轮转来保证公平，其延迟是无法接受的。
 
-同优先级的 `SCHED_RR` 进程在一个循环链表中轮转。时钟中断时，内核检查当前 `SCHED_RR` 进程的时间片是否耗尽：
+### 3.4 FIFO 与 RR 的混用
 
-```c
-/* rt_sched_class 的 task_tick 回调（时钟中断时调用）*/
-static void task_tick_rt(struct rq *rq, struct task_struct *p, int queued) {
-    struct sched_rt_entity *rt_se = &p->rt;
+同一个优先级上可以同时存在 `SCHED_FIFO` 与 `SCHED_RR` 的任务。它们的调度关系是：**同优先级队列内，RR 任务之间轮转，而 FIFO 任务一旦运行就不会被同优先级的 RR 任务抢占**。
 
-    /* SCHED_FIFO：没有时间片概念，直接返回 */
-    if (p->policy != SCHED_RR)
-        return;
+这个组合的实际效果往往出乎意料：一个 `SCHED_FIFO` 任务与若干 `SCHED_RR` 任务同优先级时，如果 FIFO 任务先运行，它会一直占住 CPU，RR 任务完全得不到执行机会。因此在同一个系统上混用这两种策略时，需要确保它们在不同优先级上，或者确保 FIFO 任务会主动让出。
 
-    /* SCHED_RR：减少剩余时间片 */
-    if (--p->rt.time_slice)
-        return;  /* 时间片未耗尽，继续运行 */
+### 3.5 设置方式
 
-    /* 时间片耗尽：重置时间片，将进程移到同优先级队列的末尾 */
-    p->rt.time_slice = sched_rr_timeslice;
+```bash
+# 把进程设为 SCHED_FIFO，优先级 50
+chrt -f 50 -p 12345
 
-    /* 若同优先级队列有其他进程，触发调度（轮转）*/
-    if (rt_se->run_list.prev != rt_se->run_list.next) {
-        /* 将当前进程移到队列末尾 */
-        requeue_task_rt(rq, p, 0);
-        resched_curr(rq);  /* 标记需要重新调度 */
-    }
-}
+# 把进程设为 SCHED_RR，优先级 50
+chrt -r 50 -p 12345
+
+# 查看当前策略与优先级
+chrt -p 12345
+# pid 12345's current scheduling policy: SCHED_FIFO
+# pid 12345's current scheduling priority: 50
 ```
 
-### 3.3 实时进程的优先级队列
+这两个命令都需要 `CAP_SYS_NICE` 权限。默认情况下 `ulimit -r`（`RLIMIT_RTPRIO`）限制了普通用户能设置的最高 RT 优先级，通常是 0——意味着普通用户根本无法设置 RT 优先级。
 
-RT 调度类维护 100 个优先级队列（对应 `rt_priority` 1-99，加上一个特殊的 0 优先级），用位图快速找到最高优先级的可运行进程：
+### 3.6 `sched_yield` 的两种语义
 
-```c
-struct rt_rq {
-    struct rt_prio_array active;  /* 优先级队列 */
-    /* ... */
-};
+第 3.2 节提到 RT 任务可以通过 `sched_yield()` 主动让出，这个调用在 RT 类与 CFS 类里的行为并不相同，值得单独说明。
 
-struct rt_prio_array {
-    DECLARE_BITMAP(bitmap, MAX_RT_PRIO + 1);  /* 100 位，标记哪些优先级有进程 */
-    struct list_head queue[MAX_RT_PRIO];       /* 每个优先级一个双向链表 */
-};
-```
+**在 RT 类中**，`sched_yield()` 的语义是明确的：把当前任务移到**同优先级队列的队尾**。如果同优先级上没有其它任务，这个调用几乎没有任何效果——任务会立刻再次被选中。这与 `SCHED_FIFO` 的语义一致：它不改变优先级，只改变同一优先级内的排队顺序。
 
-选择下一个进程的逻辑：
+**在 CFS 类中**，`sched_yield()` 的效果要弱得多。CFS 的实现是把当前任务移到红黑树的靠右位置（`yield_task_fair`），同时给它一个小的 `vruntime` 惩罚。如果一个 CFS 任务调用 `sched_yield()` 时队列上没有其它可运行任务，那么它**什么都不会发生**——因为没有别人可以运行，内核只能继续运行它。
 
-```c
-static struct sched_rt_entity *pick_next_rt_entity(struct rt_rq *rt_rq) {
-    struct rt_prio_array *array = &rt_rq->active;
+这个差异带来一个常见的反模式：**用 `sched_yield()` 实现"等一等"**。在单线程或低竞争的 CFS 环境下，这个调用几乎不产生任何等待效果，循环会以接近满速的节奏空转；而在 RT 环境下，如果同优先级没有其它任务，效果同样微弱。正确的等待方式永远是显式的同步原语（条件变量、futex、事件通知），而不是寄希望于调度器给自己让路。
 
-    /* 用 __ffs（Find First bit Set）找到最高优先级（O(1) 操作，用 CPU 指令实现）*/
-    int idx = sched_find_first_bit(array->bitmap);
-
-    /* 从该优先级的链表头取第一个进程（FIFO 或 RR 的当前轮次进程）*/
-    struct list_head *queue = array->queue + idx;
-    return list_entry(queue->next, struct sched_rt_entity, run_list);
-}
-```
+`man 2 sched_yield` 里有一句值得记住的表述：这个函数适用于"调用者不再需要 CPU，但希望其它任务获得机会"的场景，而**它绝不应该被用作同步手段**。把它当作同步原语使用，在多核系统上会产生难以复现的时序问题——因为另一个 CPU 上的线程可能根本没在等这个让出。
 
 ---
 
-## 第 4 章 SCHED_DEADLINE：基于截止期的精确实时保证
+## 第 4 章 RT 节流：防止饿死系统
 
-### 4.1 固定优先级调度的根本局限
+### 4.1 一个必须解决的问题
 
-`SCHED_FIFO` 和 `SCHED_RR` 使用**固定优先级**——用户必须手动为每个实时任务分配一个优先级（1-99），系统不理解任务的时间约束。
+第 3.2 节描述了 `SCHED_FIFO` 的危险性：一个永不睡眠的 RT 任务会让系统失去响应。这个风险在 2000 年代被反复讨论，因为一个失控的 RT 任务在生产环境里意味着"只能重启机器"。
 
-这带来两个问题：
+内核给出了一个全局性的保险：**RT 节流**（Real-Time Throttling），在 Linux 2.6.25 引入。它的思路是给 RT 任务设定一个 CPU 预算，用完即被强制停止，直到下一个周期。
 
-**问题一：优先级分配困难**。如果有 20 个实时任务，用户需要手动决定它们的优先级顺序，这在任务之间有复杂依赖关系时极为困难，而且当任务的时间需求变化时，优先级也需要手动调整。
+### 4.2 两个参数
 
-**问题二：响应时间无法精确控制**。假设有两个任务：
-- 任务 A：每 10ms 需要运行 1ms（CPU 利用率 10%）
-- 任务 B：每 50ms 需要运行 4ms（CPU 利用率 8%）
-
-即使两者 CPU 利用率总和只有 18%，用固定优先级调度时，优先级低的任务的最坏响应时间仍然难以精确计算和保证。
-
-### 4.2 EDF 算法：截止期最早的任务优先
-
-**EDF（Earliest Deadline First，最早截止期优先）** 是实时调度理论中的经典最优算法——在单处理器上，只要任务集合可调度（CPU 利用率 ≤ 100%），EDF 就能保证所有任务都在截止期内完成。
-
-EDF 的规则极为简单：**总是运行截止期最近（Deadline 最早）的任务**。
-
-Linux 3.14 引入的 `SCHED_DEADLINE` 调度策略正是基于 EDF（的扩展版本 CBS：Constant Bandwidth Server），为每个任务提供三个参数：
-
-```
-任务的带宽参数（通过 sched_setattr() 设置）：
-- Runtime（运行时间）：每个周期内需要多少 CPU 时间（纳秒）
-- Period（周期）：任务的执行周期（纳秒）
-- Deadline（截止期）：在周期内必须完成的相对截止期（纳秒，≤ Period）
-
-CPU 利用率 = Runtime / Period
-
-示例：
-  音频处理任务：Runtime=1ms, Period=10ms, Deadline=10ms
-  → 每 10ms 需要 1ms CPU，CPU 利用率 10%
-
-  视频编码任务：Runtime=4ms, Period=50ms, Deadline=50ms
-  → 每 50ms 需要 4ms CPU，CPU 利用率 8%
+```bash
+# 默认值：周期 1 秒，其中 RT 任务最多可使用 950 毫秒
+cat /proc/sys/kernel/sched_rt_period_us   # 1000000（微秒）
+cat /proc/sys/kernel/sched_rt_runtime_us  # 950000（微秒）
 ```
 
-### 4.3 SCHED_DEADLINE 的 CBS 机制
+含义是：在每个 1 秒的周期里，RT 任务总共最多能使用 950 毫秒的 CPU 时间。超出之后，所有 RT 任务被"节流"——从运行队列上摘下来，直到下一个周期开始。
 
-CBS（Constant Bandwidth Server）是 EDF 的扩展，解决了原始 EDF 中过度使用 CPU 会影响其他任务的问题：
-
-**每个 SCHED_DEADLINE 进程维护一个"预算"（budget）**：
-
-```
-初始状态：budget = runtime（满预算）
-         deadline = now + deadline（初始截止期）
-
-进程运行时：budget 随时间消耗
-          若 budget 耗尽：
-            - 进程被挂起（throttled）
-            - 等到下一个周期开始，重新补充 budget
-            - 重新设置 deadline = old_deadline + period
-```
-
-**CBS 保证**：即使进程在一个周期内用完了全部 runtime，它也不会"借"下一周期的预算——这严格限制了每个任务的 CPU 消耗上界，防止一个任务影响其他任务的调度。
+留出的 50 毫秒（5%）是给 CFS 任务的，它保证了**即使在最坏的 RT 失控场景下，普通任务仍然能获得少量 CPU**，从而让运维有机会登录系统、杀掉失控的进程。
 
 ```mermaid
 %%{init: {'theme': 'dracula'}}%%
 sequenceDiagram
-    participant T as "DEADLINE 任务"
-    participant K as "内核 CBS 机制"
-    participant O as "其他任务"
-
-    Note over T,O: "Period 开始：budget=runtime=1ms，deadline=now+10ms"
-    T->>K: "请求 CPU"
-    K->>T: "分配（当前 deadline 最早）"
-    T->>K: "运行 1ms（budget 耗尽）"
-    K->>K: "Throttle（限流）：任务暂停，等待下一周期"
-    K->>O: "分配 CPU（其他任务运行）"
-    Note over T: "等待中..."
-    K->>T: "Period 到期：budget=1ms，deadline+=10ms"
-    T->>K: "再次请求 CPU"
+    participant RT as RT 任务群
+    participant K as 内核节流器
+    participant CFS as 普通任务
+    Note over K: 周期开始（1 秒）
+    RT->>K: 累计使用 950ms
+    K->>RT: 触发节流，全部移出运行队列
+    K->>CFS: 让出 50ms 给普通任务
+    Note over K: 周期结束，解除节流
+    K->>RT: RT 任务重新入队
 ```
 
-### 4.4 SCHED_DEADLINE 的配置与使用
+### 4.3 节流的代价
 
-```c
-/* 用 sched_setattr() 配置 SCHED_DEADLINE（需要 CAP_SYS_NICE）*/
-#include <linux/sched.h>
+RT 节流是一道保险，但它的触发本身就是一个必须关注的事件：**被节流的 RT 任务会经历最长 50 毫秒的停顿**，对于追求确定性的实时任务而言，这个停顿可能直接导致截止时间错过。
 
-struct sched_attr {
-    __u32 size;
-    __u32 sched_policy;    /* SCHED_DEADLINE */
-    __u64 sched_flags;
-    __s32 sched_nice;
-    __u32 sched_priority;
-
-    /* SCHED_DEADLINE 专用字段（单位：纳秒）*/
-    __u64 sched_runtime;   /* 每个周期的运行时间预算 */
-    __u64 sched_deadline;  /* 截止期（相对于周期开始）*/
-    __u64 sched_period;    /* 任务周期 */
-};
-
-/* 示例：设置一个每 10ms 需要 1ms CPU 的实时任务 */
-struct sched_attr attr = {
-    .size           = sizeof(struct sched_attr),
-    .sched_policy   = SCHED_DEADLINE,
-    .sched_runtime  = 1000000,    /* 1ms = 1,000,000 ns */
-    .sched_deadline = 10000000,   /* 10ms */
-    .sched_period   = 10000000,   /* 10ms */
-};
-
-syscall(SYS_sched_setattr, 0, &attr, 0);  /* 0 = 当前进程 */
-```
+节流的可观测性通过 `/proc/sys/kernel/sched_rt_runtime_us` 的取值与 tracepoint 提供：
 
 ```bash
-# 命令行工具（需要支持 DEADLINE 的工具，如 rt-utils）
-# 验证 SCHED_DEADLINE 进程
-chrt -p <pid>
-# pid 1234's current scheduling policy: SCHED_DEADLINE
-# pid 1234's current scheduling priority: 0
-# pid 1234's current runtime/deadline/period: 1000000/10000000/10000000
+# 观察 RT 节流事件
+perf trace -e sched:sched_rt_throttle -a -- sleep 5
 ```
 
-> [!info] 核心概念：SCHED_DEADLINE 的可调度性检验
-> Linux 在 `sched_setattr()` 时会进行**准入控制（Admission Control）**：检查系统中所有 SCHED_DEADLINE 任务的总 CPU 利用率之和是否超过系统 CPU 总量（考虑 `sched_rt_runtime_us` 的限制）。若加入新任务后总利用率超限，`sched_setattr()` 返回 `EBUSY`，拒绝设置。这保证了已经被接受的任务的截止期保证不被破坏。
+当出现这类事件时，正确的判断是：**要么这个系统的 RT 负载已经超出了配置的预算，要么有 RT 任务在不必要地消耗 CPU**。前者需要重新评估配置（提高 `sched_rt_runtime_us` 或减少 RT 任务），后者需要定位那个失控的任务。
+
+### 4.4 一个极端配置及其代价
+
+把 `sched_rt_runtime_us` 设为 -1 会**完全关闭 RT 节流**，让 RT 任务不受任何预算限制。这在内核文档里被明确标注为危险操作，只有在一个深刻的取舍之后才应该采用：
+
+| 配置 | 收益 | 风险 |
+| :--- | :--- | :--- |
+| 默认（950000） | 系统始终保有一定响应能力 | RT 任务可能被节流，错过截止时间 |
+| 设为 -1 | RT 任务不会被节流 | 一个失控的 RT 任务会让系统完全无响应 |
+
+选择哪一个取决于"错过截止时间的后果"与"系统失去响应的后果"哪个更难以接受。对大多数场景，默认值是更稳妥的；只有在经过严格测试、且 RT 任务的行为已被充分验证的嵌式系统上，关闭节流才是一个合理的选项。
+
+### 4.5 组级别的 RT 带宽控制
+
+第 4.2 节的节流参数是**全局**的——它限制的是整个系统上所有 RT 任务的总预算。这在多租户场景下不够用：一个租户的 RT 任务可以把全局预算用光，导致其它租户的 RT 任务被连带节流。
+
+cgroup v1 的 CPU 控制器提供了组级别的控制：
+
+```bash
+# cgroup v1：为某个 cgroup 设置 RT 带宽（单位微秒）
+cat /sys/fs/cgroup/cpu/<group>/cpu.rt_period_us   # 默认 1000000
+cat /sys/fs/cgroup/cpu/<group>/cpu.rt_runtime_us  # 默认 950000
+```
+
+这两个文件让每个 cgroup 拥有独立的 RT 预算。一个租户的 RT 任务超额时，只影响它自己那一组，其它组不受牵连。
+
+需要留意的是：**cgroup v2 目前不支持 RT 带宽控制这一功能**。这是从 v1 迁移到 v2 时一个真实存在的能力缺口，截至近期的内核版本仍未补上。对依赖这项能力的系统（典型如某些实时音视频平台、工业控制网关），迁移到 cgroup v2 需要额外考虑：要么保留 v1 的 CPU 控制器混合挂载（v1 与 v2 的部分控制器可以共存），要么重新设计 RT 任务的隔离方案。
+
+**这个缺口的存在提醒了一件事：cgroup v2 是一次彻底的重新设计，它在统一层级、改进接口的同时并没有覆盖 v1 的全部功能**。迁移评估时，逐项核对"v1 用到的控制器与参数在 v2 里是否有对应"是必须做的功课，而不是假设"新版本一定更全"。
 
 ---
 
 ## 第 5 章 优先级反转与优先级继承
 
-### 5.1 优先级反转：实时系统的经典陷阱
+### 5.1 反转的场景
 
-优先级反转（Priority Inversion）是固定优先级实时调度中最危险的问题，一个真实的历史案例使它广为人知——1997 年火星探路者号（Mars Pathfinder）的计算机系统就因为优先级反转而频繁复位，险些酿成任务失败。
+优先级反转（Priority Inversion）指的是：**一个高优先级任务被一个低优先级任务间接阻塞**。它发生的条件是三个任务加一把锁：
 
-**优先级反转的产生场景**：
+| 步骤 | 事件 |
+| :--- | :--- |
+| 1 | 低优先级任务 L 获取了锁 M |
+| 2 | 高优先级任务 H 就绪，抢占 L，尝试获取锁 M，被阻塞 |
+| 3 | 中优先级任务 M2 就绪，抢占 L（因为 L 现在优先级最低且被阻塞在锁上） |
+| 4 | H 等待的锁被 L 持有，而 L 因为 M2 的抢占无法运行 → **H 被 M2 间接阻塞** |
 
-假设有三个进程，优先级从高到低：H（高）、M（中）、L（低），H 和 L 共享一个互斥锁：
+关键在第 3 步：中优先级的 M2 本不该影响高优先级的 H，但因为 H 依赖 L 释放锁，而 L 又被 M2 抢占，H 的实际等待时间变得不可预测——取决于 M2 运行多久。
 
-```
-时间轴：
-t1: L 获取互斥锁，开始临界区操作
-t2: H 变为可运行，抢占 L
-t3: H 尝试获取互斥锁，锁被 L 持有，H 阻塞
-t4: M 变为可运行，因为 M 优先级 > L，M 抢占 L
-t5: M 持续运行...
-t6: M 运行结束，L 恢复运行，完成临界区，释放锁
-t7: H 终于获得锁，继续运行
+### 5.2 火星探路者号
 
-问题：H 被迫等待 L 的临界区，而 L 又被 M 抢占
-→ H 的延迟 = L 临界区时间 + M 的运行时间
-→ 高优先级任务被中优先级任务"间接"阻塞，这就是优先级反转
-```
+1997 年，NASA 的火星探路者号（Mars Pathfinder）在着陆后反复发生系统重启。事后调查（由 JPL 的 Glenn Reeves 等人完成）确认根因正是优先级反转。
 
-在实时系统中，这可能导致高优先级任务错过截止期——这是灾难性的。
+系统中的三个关键任务：
 
-### 5.2 优先级继承：Linux 的解决方案
+| 任务 | 优先级 | 职责 |
+| :--- | :--- | :--- |
+| ASI/MET（气象数据） | 低 | 周期性获取气象数据 |
+| 通信任务 | 中 | 处理通信 |
+| 总线管理任务（bc_dist） | 高 | 管理信息总线，带看门狗 |
 
-**优先级继承（Priority Inheritance，PI）** 是解决优先级反转的主流方案：当高优先级进程 H 因为等待低优先级进程 L 持有的锁而阻塞时，**临时将 L 的优先级提升到 H 的优先级**，使 L 不会被中优先级进程 M 抢占，从而尽快完成临界区并释放锁。
+总线管理任务需要获取一把共享的互斥锁，而气象任务持有它时被通信任务抢占——于是高优先级的总线任务被无限期阻塞，看门狗超时，系统重启。
 
-```
-优先级继承后的时间轴：
-t1: L 获取互斥锁
-t2: H 变为可运行，抢占 L
-t3: H 尝试获取互斥锁，锁被 L 持有
-    → 内核将 L 的优先级临时提升到 H 的级别
-    → H 阻塞
-t4: L（现在有 H 的优先级）继续运行临界区
-    → M 无法抢占 L（L 优先级 = H > M）
-t5: L 完成临界区，释放锁
-    → L 的优先级恢复到原来的低优先级
-t6: H 获得锁，继续运行
-    → H 的延迟只有 L 临界区时间，M 不再影响 H
-```
+这次事故的处理方式是在地面上修改参数（关闭了部分功能，避开触发条件），而它带来的影响远大于事故本身：**它让"优先级继承"从一个学术概念变成了工程必需品**，此后几乎所有实时操作系统的互斥锁都默认支持优先级继承。
 
-Linux 内核提供了支持优先级继承的互斥锁类型：
+### 5.3 优先级继承的实现
+
+解决反转的机制叫优先级继承（Priority Inheritance，PI）：**当一个高优先级任务被一个低优先级任务持有的锁阻塞时，临时把持有者的优先级提升到等待者的水平**。
+
+用 5.1 节的场景重演一遍：H 阻塞在 L 持有的锁上时，L 的优先级被临时提升到 H 的水平。此时 M2 就绪，但它无法抢占 L——因为 L 现在的优先级与 H 相同，高于 M2。L 得以继续运行、释放锁，随后它的优先级被恢复，H 获得锁。
+
+这个机制把"H 被 M2 间接阻塞"变成了"H 只被 L 持有锁的那一小段时间阻塞"，**最坏等待时间从"不可预测"变成了"有界"**。
+
+Linux 的实现有两部分：调度器侧的优先级传播（`rt_mutex` 与 `task_struct.prio` 的临时提升）与用户态的 futex PI 接口（`FUTEX_LOCK_PI`）。第 02 篇讲过 `task_struct` 里有 `static_prio`、`normal_prio`、`prio` 三个优先级字段，其中 `prio` 就是被 PI 机制临时改写的那个——**保留"名义优先级"与"生效优先级"两份值，正是为了让临时提升可以被准确地恢复**。
+
+### 5.4 为什么不是所有锁都支持 PI
+
+`pthread_mutex` 默认不支持优先级继承，需要显式设置属性：
 
 ```c
-/* 内核中的 PI mutex（rt_mutex）*/
-#include <linux/rtmutex.h>
-
-DEFINE_RT_MUTEX(my_rt_mutex);  /* 声明一个支持 PI 的互斥锁 */
-
-rt_mutex_lock(&my_rt_mutex);   /* 加锁（若被阻塞，自动进行优先级继承）*/
-/* 临界区 */
-rt_mutex_unlock(&my_rt_mutex); /* 解锁（恢复被继承进程的原始优先级）*/
-```
-
-**用户态的 PI mutex（`PTHREAD_MUTEX_ROBUST` + `PTHREAD_PRIO_INHERIT`）**：
-
-```c
+/* 创建一个支持优先级继承的互斥锁 */
 pthread_mutexattr_t attr;
 pthread_mutexattr_init(&attr);
-pthread_mutexattr_setprotocol(&attr, PTHREAD_PRIO_INHERIT);  /* 启用优先级继承 */
-pthread_mutex_init(&my_mutex, &attr);
-
-/* 使用与普通 pthread mutex 完全相同 */
-pthread_mutex_lock(&my_mutex);
-/* 临界区 */
-pthread_mutex_unlock(&my_mutex);
+pthread_mutexattr_setprotocol(&attr, PTHREAD_PRIO_INHERIT);
+pthread_mutex_init(&mutex, &attr);
 ```
 
-> [!note] 设计哲学：优先级继承 vs 优先级上限
-> 除优先级继承外，另一种方案是**优先级上限协议（Priority Ceiling Protocol，PCP）**：为每个互斥锁预先设置一个"天花板优先级"（等于所有可能持有该锁的任务中的最高优先级）。任何进程获取锁时，其优先级立即提升到天花板优先级，释放锁时恢复。PCP 能完全避免死锁，但要求提前知道所有任务的优先级关系。Linux 通过 `pthread_mutexattr_setprioceiling()` 支持 PCP，但在实践中优先级继承（PI）更为常用，因为它无需提前规划，可动态适应。
+默认不启用的原因是代价：
+
+| 代价 | 说明 |
+| :--- | :--- |
+| 内部结构更复杂 | PI 版本的 futex 需要维护等待者链 |
+| 系统调用路径更长 | 需要处理优先级传播与恢复 |
+| 性能开销 | 无竞争时的快速路径差异不大，但有竞争时开销明显更高 |
+| 死锁检测负担 | PI 实现需要处理更多边界情况 |
+
+在不需要严格实时保证的场景下，付出这些代价没有意义——一个普通的 Web 服务不需要 `PTHREAD_PRIO_INHERIT`。**只有在实时任务与普通任务共享锁、且实时任务的截止时间对系统的正确性有影响时，这个代价才是值得的。**
+
+### 5.5 优先级的上限传播
+
+PI 机制有一个需要注意的性质：**优先级的提升会沿着锁的持有链传播**。如果 H 等待 L1 持有的锁，而 L1 又在等待 L2 持有的锁，那么 L2 的优先级也会被提升——即使它从未直接与 H 交互。
+
+这个传播在链很长时会带来实际影响：一个被提升了优先级的任务，其行为与它原本的设计预期不符（它可能长时间占用 CPU 而不被抢占）。这也是 PI 实现复杂的地方——**它需要在锁释放时准确地沿着链条恢复每一级优先级**，而这个恢复过程本身可能触发新的调度决策。
+
+### 5.6 优先级链条成环时会怎样
+
+第 5.5 节的传播机制有一个必须处理的边界：**如果等待链构成了环，会发生什么**。
+
+设想 A 等待 B 持有的锁、B 等待 C 持有的锁、C 又等待 A 持有的锁。这是一个死锁，但从优先级继承的角度看，它还多了一层麻烦：三者的优先级提升会互相传播，形成一个无法收敛的循环。
+
+Linux 的 `rt_mutex` 实现了死锁检测：当等待链上检测到环时，让当前的加锁操作失败并返回 `EDEADLK`（用户态 futex PI 的 `FUTEX_LOCK_PI` 同样会返回 `EDEADLK`）。检测的实现方式是沿着 `rt_mutex_waiter` 的链条向上追溯，如果追溯到了发起者自己，就判定为环。
+
+需要注意这个检测的边界：**它只能检测到"由 rt_mutex 构成的等待环"**。如果环上有一段是通过其它同步原语（信号量、自旋锁、或普通的非 PI 互斥锁）连接的，检测就无法覆盖——因为那条边的等待关系不在 rt_mutex 的数据结构里。这意味着 PI 的死锁检测并不是一个通用的死锁检测机制，它只服务于它自己那套链条的完整性。
+
+由此可以得出一条实践建议：**在实时系统里混用多种同步原语时需要特别小心**。普通 mutex 与 PI mutex 混用不仅会让优先级继承失效（链条断开），还会让死锁检测失效。一个更稳妥的做法是在设计上就避免"实时任务与非实时任务共享同一把锁"这种结构——如果必须共享，就要确保共享的这把锁支持 PI，并且沿着这条链的所有锁也都支持。
 
 ---
 
-## 第 6 章 调度策略全景：SCHED_NORMAL、SCHED_BATCH、SCHED_IDLE
+## 第 6 章 `SCHED_DEADLINE`
 
-### 6.1 完整的调度策略列表
+### 6.1 三个参数
 
-Linux 的全部调度策略（通过 `sched_setscheduler()` 或 `chrt` 设置）：
+`SCHED_DEADLINE` 在 Linux 3.14（2014）引入，它的表达方式是三个时间参数：
 
-| 调度策略 | 调度类 | 优先级范围 | 时间片 | 特性 |
-|---------|-------|----------|-------|------|
-| `SCHED_DEADLINE` | dl_sched_class | 不适用 | runtime | 基于 EDF，最高实时保证 |
-| `SCHED_FIFO` | rt_sched_class | 1-99 | 无 | 固定优先级，无时间片 |
-| `SCHED_RR` | rt_sched_class | 1-99 | 100ms | 固定优先级，同级轮转 |
-| `SCHED_NORMAL` | fair_sched_class | nice: -20~+19 | 动态 | CFS 公平调度，默认策略 |
-| `SCHED_BATCH` | fair_sched_class | nice: -20~+19 | 动态 | CFS 变体，针对批处理优化 |
-| `SCHED_IDLE` | idle_sched_class | 不适用 | 动态 | 仅在 CPU 完全空闲时运行 |
+| 参数 | 含义 |
+| :--- | :--- |
+| `sched_runtime` | 每个周期内最多需要多少 CPU 时间 |
+| `sched_deadline` | 相对于周期开始，必须在多久内完成 |
+| `sched_period` | 周期的长度 |
 
-### 6.2 SCHED_BATCH：批处理优化
+语义是：**该任务承诺"每个 period 内最多消耗 runtime 的 CPU，且在 deadline 前完成"**，内核则保证这个承诺被兑现（只要准入检查通过）。
 
-`SCHED_BATCH` 是 CFS 的一个变体，专为批处理任务设计——如编译、备份、数据处理等不需要交互响应、只追求吞吐量的任务。
+设置方式是通过 `sched_setattr` 系统调用：
 
-与 `SCHED_NORMAL` 的区别：
-1. **不给唤醒奖励**：`SCHED_BATCH` 进程唤醒时，不会像 `SCHED_NORMAL` 进程那样获得 vruntime 的奖励（减少），因此不会抢占当前正在运行的交互型进程
-2. **调度粒度更大**：允许进程运行更长时间才被抢占，减少上下文切换频率，提高 CPU cache 效率
-
-```bash
-# 将编译任务设置为 SCHED_BATCH
-chrt -b 0 make -j8   # -b = SCHED_BATCH，优先级参数固定为 0
-# 或
-chrt -b -p 0 $(pgrep make)
+```c
+/* 声明：每 100ms 一个周期，需要 20ms CPU，必须在 80ms 内完成 */
+struct sched_attr attr = {
+    .size = sizeof(attr),
+    .sched_policy = SCHED_DEADLINE,
+    .sched_runtime  = 20 * 1000 * 1000,   /* 20ms，单位纳秒 */
+    .sched_deadline = 80 * 1000 * 1000,   /* 80ms */
+    .sched_period   = 100 * 1000 * 1000,  /* 100ms */
+};
+syscall(SYS_sched_setattr, pid, &attr, 0);
 ```
 
-### 6.3 SCHED_IDLE：最低优先级
+### 6.2 EDF 与 CBS
 
-`SCHED_IDLE` 的语义是：**只有 CPU 没有任何其他可运行进程时才运行**。与 `nice=+19` 不同（nice=+19 的进程在系统负载低时仍会运行，只是 CPU 份额很少），`SCHED_IDLE` 进程在系统有任何普通负载时都不会运行。
+`SCHED_DEADLINE` 的实现综合了两个算法：
 
-> [!warning] 注意区分 SCHED_IDLE 与 idle 进程
-> Linux 内核中的 idle 进程（`swapper/0`，PID=0 的内核线程，每 CPU 一个）是使用 `idle_sched_class` 的特殊进程，当没有任何其他进程可运行时运行，执行 `hlt` 指令让 CPU 进入低功耗状态。这与用户态的 `SCHED_IDLE` 策略不同——`SCHED_IDLE` 是用 fair_sched_class 实现的，通过给予极低的权重（weight=3，远低于 nice=+19 的 15）来实现"近乎空闲"的效果。实际上在 Linux 5.x+ 中，`SCHED_IDLE` 改为使用 idle_sched_class 实现，比 CFS 的低权重更彻底地压低优先级。
+| 算法 | 作用 |
+| :--- | :--- |
+| EDF（Earliest Deadline First） | 在可运行任务中选**绝对截止时间最早**的那个 |
+| CBS（Constant Bandwidth Server） | 按带宽约束控制每个任务的运行，超出即延后其截止时间 |
+
+EDF 的理论性质是：**当系统的总利用率不超过 100% 时，EDF 是最优的**——它总能保证所有任务的截止时间被满足（前提是任务模型符合假设）。这个性质比固定优先级调度（如 `SCHED_FIFO`）强得多，后者在任务集不符合特定条件时可能无法调度。
+
+CBS 则负责"任务不守信用"的情况：一个任务如果实际消耗超过了它声明的 runtime，CBS 会推迟它的截止时间（相当于降低它的优先级），从而防止它破坏其它任务的保证。**没有 CBS，EDF 的调度保证会被一个超额使用的任务彻底破坏**。
+
+### 6.3 准入控制
+
+`SCHED_DEADLINE` 与其它策略最不同的地方在于它有**准入控制**（Admission Control）：设置参数时，内核会检查"加入这个任务后，所有 DL 任务的带宽之和是否超过上限"，超过则拒绝这次设置，返回 `EBUSY`。
+
+这个检查的存在让"声明即保证"成为可能：**如果一个任务被接受，那么它声明的截止时间就一定可以被满足**；如果不可满足，内核宁可拒绝，也不给出一个假的承诺。
+
+带宽上限由参数控制：
+
+```bash
+# 查看 DL 的总带宽上限（默认 95%）
+cat /proc/sys/kernel/sched_deadline_period_max_us 2>/dev/null
+cat /proc/sys/kernel/sched_rt_runtime_us   # RT 相关的另一处限制
+```
+
+95% 这个预留与 RT 节流的 5% 是同一个思路：**永远不给用户任务 100% 的 CPU 承诺**，内核必须保留一部分来处理中断、内核线程、以及提供最基本的系统响应能力。
+
+### 6.4 使用场景与限制
+
+`SCHED_DEADLINE` 适合的场景有明确的特征：**任务的 CPU 需求是周期性的、可预测的、有明确的截止时间**。典型例子包括音视频处理（每帧的编解码必须在帧间隔内完成）、工业控制循环、以及某些金融风控的定时计算。
+
+它不适合的场景同样明确：
+
+| 场景 | 为什么不适合 |
+| :--- | :--- |
+| 事件驱动的任务 | CPU 需求不可预测，无法声明 runtime |
+| 长跑型计算任务 | 没有"周期"这个概念 |
+| 与普通任务共享锁的实时任务 | DL 任务被优先级继承机制覆盖的范围有限 |
+| 吞吐优先的任务 | DL 保证的是延迟上限，不是吞吐最优 |
+
+`SCHED_DEADLINE` 与 `SCHED_FIFO` 之间还有一个容易忽略的差别：**DL 任务之间按 EDF 排序，而 DL 与 RT 之间是严格的类优先级**。也就是说，一个 DL 任务总能压过一个 RT 任务，无论它们各自的参数如何。这个顺序由第 2 章的调度类层次决定。
+
+### 6.5 与其它策略的对比
+
+| 策略 | 表达什么 | 保证什么 | 需要特权 |
+| :--- | :--- | :--- | :--- |
+| `SCHED_NORMAL` | 相对份额（nice） | 长期比例公平 | 否 |
+| `SCHED_BATCH` | 相对份额，且不追求响应性 | 同上，减少唤醒抢占 | 否 |
+| `SCHED_IDLE` | 只在系统空闲时运行 | 无 | 否 |
+| `SCHED_FIFO` | 相对优先级（1-99） | 同优先级先到先服务，可被更高抢占 | 是 |
+| `SCHED_RR` | 相对优先级 + 时间片 | 同优先级轮转 | 是 |
+| `SCHED_DEADLINE` | **绝对时间承诺** | 声明的截止时间被满足 | 是 |
+
+这张表最有价值的一行对比是"表达什么"：前五种策略表达的都是**相对关系**（谁比谁优先、谁拿多少份额），只有 `SCHED_DEADLINE` 表达的是**绝对承诺**（必须在什么时间内完成）。**从相对到绝对，这是实时调度能力的实质跃迁**，也是它能给出可验证保证的原因。
+
+### 6.6 DL 与 RT 的带宽是两套账
+
+第 4 章讲的 RT 节流与第 6.3 节讲的准入控制，看起来是同一件事的两种实现，实际上它们是**两套互相独立的带宽账**：
+
+| 维度 | RT 带宽 | DL 带宽 |
+| :--- | :--- | :--- |
+| 控制的策略 | `SCHED_FIFO`、`SCHED_RR` | `SCHED_DEADLINE` |
+| 控制方式 | 时间窗口节流（超支即停） | 准入控制（超支即拒绝） |
+| 统计口径 | 累计运行时间 / 周期 | 声明利用率之和 |
+| 全局参数 | `sched_rt_runtime_us` / `sched_rt_period_us` | root domain 的 DL 带宽上限 |
+| 超支后果 | 任务被强制挂起一段时间 | 设置参数的调用直接失败 |
+
+两套账互不影响：一个系统的 RT 任务用满了 95% 的 RT 预算，并不会减少 DL 任务可用的带宽——反过来也一样。这个设计的理由是两类任务的保证方式不同：RT 任务没有"声明"，内核只能事后节流；DL 任务有"声明"，内核可以事前拒绝。**一个必须事后补救，一个可以事前拦截**，这决定了它们无法共用同一套配额机制。
+
+从系统设计的角度看，这套"两套账"的安排有一个隐含的假设：**系统上不会同时存在大量的 RT 任务与大量的 DL 任务**。如果两者都接近各自的配额上限，那么在这个系统上，CFS 任务的可运行时间会被压缩到接近于零——从调度的角度看，这台机器已经不再是一个通用系统了。
 
 ---
 
-## 第 7 章 实时调度的生产实践
+## 第 7 章 其它调度策略
 
-### 7.1 实时进程的 CPU 隔离
+### 7.1 `SCHED_BATCH`
 
-在生产实时系统中，通常将特定 CPU 完全隔离出来，专门用于实时任务，防止任何普通进程的干扰：
+`SCHED_BATCH` 是一个语义被逐渐掏空的策略。它的设计意图是"批处理任务"：这类任务不追求响应性，应该允许它们多运行一会儿以减少切换开销。在早期实现里，它确实调整了唤醒抢占的判定，让批处理任务更不容易抢占交互式任务。
 
-```bash
-# 在内核启动参数（/boot/grub/grub.cfg 或 /etc/default/grub）中添加：
-# isolcpus=2,3    ← 将 CPU 2 和 CPU 3 从普通调度中隔离出来
-# rcu_nocbs=2,3  ← 防止 RCU 回调在这些 CPU 上运行
-# nohz_full=2,3  ← 在这些 CPU 上关闭周期性时钟中断（tickless）
+在 CFS 之后，`SCHED_BATCH` 与 `SCHED_NORMAL` 的差别被压缩到了很小：主要影响的是唤醒时的抢占判定与 `vruntime` 的对齐方式。实践中使用它的场景不多，多数情况下用 `nice` 值调整即可达到类似效果。
 
-# 启动后，被隔离的 CPU 不会有任何普通进程迁移进来
-# 验证
-cat /sys/devices/system/cpu/isolated
-# 2-3   ← 确认 CPU 2-3 已被隔离
+需要留意的是它有一个可见的副作用：**`SCHED_BATCH` 的任务在 `top` 里会被标记**，且某些工具会把它与低优先级任务的处理方式区分开。在排查时如果看到某个进程的策略是 `SCHED_BATCH`，它通常是某个明确声明了批处理意图的程序（如某些构建工具、数据库的维护任务）。
 
-# 将实时任务绑定到隔离的 CPU
-taskset -c 2 ./realtime_program &
-chrt -f -p 90 $(pgrep realtime_program)  # 设置 SCHED_FIFO 优先级 90
+### 7.2 `SCHED_IDLE`
+
+`SCHED_IDLE` 的语义非常明确：**只有当 CPU 上没有其它可运行任务时才运行**。它比 nice 19 还要低——nice 19 的任务仍然会在队列里与其它任务按权重竞争，而 `SCHED_IDLE` 的任务完全排在 CFS 任务之后。
+
+典型用途是后台的维护工作：日志压缩、索引重建、数据备份。这些任务没有时间要求，但也不该白白浪费空闲的 CPU。把它设为 `SCHED_IDLE` 是"充分利用空闲资源而不影响在线业务"这一目标的直接实现。
+
+有一个实践中的注意点：**`SCHED_IDLE` 的任务在高负载系统上可能长时间得不到运行**。如果一个"后台任务"实际上有完成时间的期望（比如每天必须完成的备份），把它设为 `SCHED_IDLE` 会导致它永远做不完。此时应该用 nice 值调低优先级而不是 `SCHED_IDLE`——**"没有时间要求"是一个需要认真确认的假设**。
+
+在 `ps` 里，`SCHED_IDLE` 与 `SCHED_BATCH` 都显示为策略缩写 `IDL` 与 `B`，配合 `ps -eo cls,ni,comm` 可以一次性盘点系统中所有非默认策略的任务。
+
+### 7.3 各策略的生效顺序
+
+把第 2 章的调度类层次与第 7 章的具体策略合起来，可以得到一个完整的执行顺序：
+
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+graph TD
+    A["stop / migration 线程"] --> B["SCHED_DEADLINE 任务"]
+    B --> C["SCHED_FIFO 高优先级"]
+    C --> D["SCHED_FIFO 低优先级"]
+    D --> E["SCHED_RR 各优先级"]
+    E --> F["SCHED_NORMAL / BATCH（按 nice）"]
+    F --> G["SCHED_IDLE"]
+    G --> H["idle 任务"]
 ```
 
-### 7.2 PREEMPT_RT：迈向真正的硬实时
-
-标准 Linux 内核中有一些不可抢占的临界区（持有自旋锁时、处于中断上下文时），这些区间会造成不确定的调度延迟。
-
-**PREEMPT_RT 补丁**（现已部分合并到主线内核）将这些临界区也变为可抢占，将中断处理线程化，使得 Linux 的最坏调度延迟从数毫秒降低到数十微秒：
-
-```bash
-# 检查内核是否带有 PREEMPT_RT
-uname -r
-# 5.15.0-1-rt-amd64   ← 带 -rt 的内核版本包含 PREEMPT_RT 补丁
-
-# 查看内核抢占配置
-cat /boot/config-$(uname -r) | grep PREEMPT
-# CONFIG_PREEMPT_RT=y           ← 完全抢占（硬实时内核）
-# CONFIG_PREEMPT=y              ← 普通抢占（标准服务器内核）
-# CONFIG_PREEMPT_VOLUNTARY=y    ← 自愿抢占（早期桌面内核）
-
-# 测量系统的调度延迟
-cyclictest -t1 -p 80 -n -i 10000 -l 10000
-# 输出示例：
-# T:  0 (12345) P:80 I:10000 C:10000 Min:   5 Act:   8 Max:  52
-# Min=5us, Max=52us（PREEMPT_RT 内核的典型值）
-# 对比标准内核：Max 可能达到 数ms 甚至更高
-```
-
-### 7.3 实时调度问题排查
-
-```bash
-# 查看系统中所有实时进程
-ps -eo pid,policy,rtprio,ni,comm | awk '$2!="TS" && $2!="-"'
-# 或
-chrt -a 2>/dev/null | grep -v "SCHED_OTHER"
-
-# 监控实时进程的调度延迟
-trace-cmd record -e sched_wakeup -e sched_switch -p function ./realtime_program
-trace-cmd report | head -50
-
-# 用 perf 分析调度延迟
-perf sched record ./realtime_program
-perf sched latency
-# 显示每个任务的最大调度延迟
-
-# 检查实时进程是否被 throttle（预算耗尽）
-cat /proc/sched_debug | grep -A5 "dl_rq\|rt_rq"
-# throttled：进程当前处于限流状态
-# throttle_count：历史被限流次数（越多说明预算设置不够）
-```
+这张图是理解"为什么我的任务拿不到 CPU"问题的最终依据。**排查这类问题的第一步永远是确认任务在图的哪一层**——很多"性能问题"追根究底是优先级配置问题，而解决方式往往只是把某个后台任务从 `SCHED_NORMAL` 改成 `SCHED_IDLE`。
 
 ---
 
-## 小结
+## 第 8 章 配置与观测
 
-Linux 调度策略体系形成了一个完整的优先级层次，从最高实时保证到最低空闲：
+### 8.1 一个完整的配置例子
 
-**三种实时调度策略的对比**：
+```bash
+# 把数据处理线程设为实时优先级 40（RR 策略）
+chrt -r -p 40 $(pgrep -t -f data_processor)
 
-| 维度 | `SCHED_FIFO` | `SCHED_RR` | `SCHED_DEADLINE` |
-|-----|-------------|-----------|----------------|
-| 优先级机制 | 固定（1-99）| 固定（1-99）| 基于截止期（动态）|
-| 时间片 | 无 | 有（默认100ms）| 预算（runtime）|
-| 调度依据 | 最高优先级 | 最高优先级 + 轮转 | 最早截止期（EDF）|
-| CPU 使用保证 | 无上限（受 rt_runtime_us 全局限制）| 同左 | 严格按 runtime/period |
-| 适用场景 | 单一关键任务 | 多个同级实时任务 | 周期性实时任务 |
-| 配置复杂度 | 低 | 低 | 中（需设置3个参数）|
+# 确认设置结果
+chrt -p $(pgrep -f data_processor)
+# pid 12345's current scheduling policy: SCHED_RR
+# pid 12345's current scheduling priority: 40
 
-**调度类优先级链**（从高到低）：`stop` > `dl`（DEADLINE）> `rt`（FIFO/RR）> `fair`（NORMAL/BATCH）> `idle`
+# 启动时直接指定策略（避免运行中途切换的窗口）
+chrt -r 40 ./data_processor
+```
 
-**优先级反转的应对**：使用支持优先级继承的 `rt_mutex`（内核）或 `PTHREAD_PRIO_INHERIT` 属性的 `pthread_mutex`（用户态）
+在服务化环境里，这些设置通常通过 systemd 的服务单元表达：
 
-下一篇 [[10 进程间通信全景——管道、信号、共享内存与 Socket 的内核实现]] 将以 IPC 机制的全面梳理作为本专栏的收官：管道的内核缓冲区、信号的投递与处理流程、System V 共享内存与 POSIX 共享内存的对比，以及 Unix Domain Socket 为何在本机通信中优于 TCP Socket。
+```ini
+# systemd 服务单元中的实时调度配置
+[Service]
+CPUSchedulingPolicy=rr
+CPUSchedulingPriority=40
+LimitRTPRIO=40
+CPUAffinity=2 3
+```
+
+这里的三项配置各司其职：前两项设置策略与优先级，`LimitRTPRIO` 提供所需的权限（`RLIMIT_RTPRIO`），`CPUAffinity` 限定运行范围。**把 RT 任务绑定到特定 CPU 是一种常见的做法**——它让实时任务不必与其它负载竞争，也避免了负载均衡把它迁移到缓存未预热的 CPU 上。
+
+### 8.2 观测 RT 任务
+
+| 手段 | 用途 |
+| :--- | :--- |
+| `chrt -p PID` | 确认策略与优先级 |
+| `ps -eo pid,cls,rtprio,comm` | 批量查看全系统的 RT 任务 |
+| `cat /proc/[pid]/sched` | 查看调度属性与统计 |
+| `/proc/sys/kernel/sched_rt_runtime_us` | 确认节流预算 |
+| `perf trace -e sched:sched_rt_throttle` | 观察节流事件 |
+| `cyclictest` | 测量调度延迟的抖动 |
+
+`ps -eo cls,rtprio` 是快速盘点系统里所有实时任务的手段：`CLS` 列显示策略缩写（`FF` 表示 FIFO、`RR` 表示 RR、`TS` 表示 CFS、`DLN` 表示 DEADLINE），`RTPRIO` 列显示 RT 优先级。**定期盘点 RT 任务是一份值得做的工作**——因为一个被遗忘的 RT 任务是运行时炸弹，它可能在某个特定条件下开始持续运行，然后夺走整个系统的 CPU。
+
+### 8.3 测量调度延迟
+
+`cyclictest` 是实时性测试的标准工具，它的原理是让一个线程周期性睡眠并测量实际唤醒时间的偏差：
+
+```bash
+# 测试最大调度延迟：50 微秒间隔，最高优先级，运行 60 秒
+cyclictest -p 90 -i 50 -d 60 -m -n
+# T: 0 ( 1234) P:90 I:50 C: 1200000 Min:    3 Act:    5 Avg:    4 Max:      42
+```
+
+输出里的 `Max` 是这段时间内的最坏延迟（单位微秒）。**这个数字才是实时性的真实指标**，`Avg` 几乎没有参考价值。
+
+一个需要注意的测量陷阱：`cyclictest` 在高负载下测量才有意义。空闲系统上的最大延迟可能只有几微秒，但这是因为它没有遇到任何竞争。**在一个模拟真实负载的环境里测量，得到的数字才有指导意义**。
+
+### 8.4 一个排查实例
+
+设想一个实时任务出现偶发的截止时间错过，现象是每隔几分钟出现一次延迟尖刺。排查思路如下：
+
+```bash
+# 第一步：确认延迟是否来自调度
+cyclictest -p 80 -i 1000 -d 300
+# 观察 Max 与延迟的分布
+
+# 第二步：确认是否发生 RT 节流
+perf trace -e sched:sched_rt_throttle -a -- sleep 300
+
+# 第三步：观察是否有其它 RT 任务在竞争
+ps -eo pid,cls,rtprio,comm | awk '$2 ~ /^(FF|RR|DLN)/'
+
+# 第四步：排除中断与内核线程的干扰
+cat /proc/interrupts | awk '{print $1, $NF}'
+```
+
+四步的排查逻辑是逐层排除：先确认问题在调度层（而非应用层），再排除节流（预算问题），再排除同层竞争（其它 RT 任务），最后考虑中断与内核线程的影响。**如果四步都没有找到原因，下一步就该怀疑内核本身**——某些内核路径（内存回收、文件系统日志提交、驱动中的长循环）会造成不可忽视的延迟，而这些只能通过 `ftrace` 的函数耗时分析来定位。
+
+### 8.5 `/proc/[pid]/sched` 的字段解读
+
+这个文件以"键 : 值"格式列出单个任务的调度状态，比 `stat` 可读得多：
+
+```bash
+cat /proc/12345/sched | head -n 20
+# dataplane (12345, #threads: 4)
+# ---------------------------------------------------------------
+# se.exec_start   :      1234567.890123
+# se.vruntime     :        123456.789
+# se.sum_exec_runtime :     45678.901234
+# nr_switches     :             12345
+# nr_voluntary_switches :      12000
+# nr_involuntary_switches :      345
+# prio            :               120
+# policy          :                 0
+```
+
+几个字段的用法：
+
+| 字段 | 含义 | 排障用途 |
+| :--- | :--- | :--- |
+| `se.sum_exec_runtime` | 累计实际运行时间（纳秒） | 精确的 CPU 消耗，精度高于 `stat` 的时钟滴答 |
+| `nr_voluntary_switches` | 主动让出次数 | 高说明频繁阻塞（等 I/O 或锁） |
+| `nr_involuntary_switches` | 被动抢占次数 | 高说明 CPU 竞争激烈 |
+| `prio` | 生效优先级 | 与 nice 值相差 20；PI 提升时会变化 |
+| `policy` | 调度策略编号 | 0=CFS，1=FIFO，2=RR，6=DEADLINE |
+
+其中 `nr_voluntary_switches` 与 `nr_involuntary_switches` 的组合特别有用。一个线程如果两个数字都很高，说明它在"阻塞-唤醒"之间高频往复，典型来源是细粒度的锁竞争或短轮询；如果只有 `involuntary` 高，说明它在被反复抢占，是 CPU 资源不足的信号——**这与第 06 篇讲的上下文切换分析是同一组指标，只是这里按线程给出了更精细的粒度**。
+
+---
+
+## 第 9 章 边界与反例
+
+### 9.1 实时调度不是性能优化
+
+一个反复出现的误解是"把任务设为实时会更快"。事实是：**RT 调度只改变"何时获得 CPU"，不改变"获得 CPU 后跑多快"**。
+
+一个每秒处理 1000 个请求的服务，改成 `SCHED_FIFO` 之后仍然是每秒 1000 个请求——它只是获得了"请求到来时立刻被处理"这一性质，代价是牺牲了其它任务的公平性。如果瓶颈在 CPU 算力本身，实时调度没有任何帮助。
+
+这个误解的危害在于它会导致错误的配置：把一个高吞吐的批处理任务设为 RT，结果是它抢走了所有 CPU，而批处理的实际完成时间并没有改善（因为它本来就受限于算力而非调度延迟）。
+
+### 9.2 一个 RT 任务如何让系统无响应
+
+最坏的情况值得具体描述一遍，以便在实际遇到时能快速判断：一个 `SCHED_FIFO` 的任务（优先级 99）进入了一个意外的死循环。此时：
+
+- 该任务会一直运行，因为没有任何任务比它优先级更高（除了 stop 类）；
+- 所有 CFS 任务（包括 `sshd`、`bash`）都拿不到 CPU；
+- 你无法通过 SSH 登录去杀掉它；
+- 唯一的缓解是 RT 节流——如果它启用了，50 毫秒的窗口里系统勉强能执行一点东西，可能足够让一个高优先级的登录会话挤进去。
+
+这个场景的处理办法有几条，各有适用条件：
+
+| 手段 | 前提 |
+| :--- | :--- |
+| 依赖 RT 节流的窗口登录 | 节流已启用 |
+| 通过带外管理（IPMI、串口）重启 | 有带外通道 |
+| 看门狗定时器自动重启 | 配置了硬件或软件看门狗 |
+| 保留一个高优先级的救援 shell | 预先配置 |
+
+**第四条是值得推荐的做法**：在系统启动时保留一个 `SCHED_FIFO` 的救援 shell（比如一个占用某个串口或特定 tty 的、优先级高于所有业务 RT 任务的 shell），这样即使业务 RT 任务失控，也还有一条救命的通道。这与内核保留 `stop_sched_class` 是同一个思路——**永远为自己留一条凌驾于所有用户任务之上的通道**。
+
+### 9.3 容器里的实时调度
+
+容器默认**不允许**设置 RT 优先级，这与 Linux 的能力模型有关：RT 权限由 `RLIMIT_RTPRIO` 控制，而容器运行时默认把它设为 0。
+
+要放开这个限制，需要显式配置：
+
+```bash
+# Docker：放开 RT 优先级上限
+docker run --ulimit rtprio=40 --cap-add SYS_NICE ...
+
+# Kubernetes：通过 Pod 的 securityContext 与 capability 配置
+```
+
+即使放开了权限，容器里使用 RT 还有一个更根本的问题：**cgroup 的 CPU 配额与 RT 类的关系**。RT 任务不受 CFS 带宽控制管辖，它绕过 `cpu.max` 的限制。因此一个容器内的 RT 任务可以超出容器的 CPU 配额，去抢夺宿主机上其它容器的 CPU 时间——这是一个跨容器的干扰路径，也是容器运行时默认收紧 RT 权限的核心原因。
+
+[[云原生/Docker/03 Cgroups 资源限制与控制]] 里讨论的 CPU 配额机制，适用的对象是 CFS 类任务；对 RT 任务，真正的约束是 `sched_rt_runtime_us` 这个全局参数。**理解这一点，才能解释为什么"容器 CPU 打满但宿主机很卡"这类现象会发生在 RT 任务上**。
+
+### 9.4 几个需要澄清的认知
+
+| 说法 | 澄清 |
+| :--- | :--- |
+| 实时意味着快 | 实时意味着确定，与速度无关 |
+| RT 优先级越高越好 | 越高意味着对系统其它部分的破坏力越大 |
+| 优先级继承能解决所有反转 | 它只对支持 PI 的锁有效，且不解决"锁被长期持有"这类设计问题 |
+| `SCHED_DEADLINE` 能保证任何任务按时完成 | 它的保证建立在声明准确且准入通过的基础上 |
+| 容器里设了 RT 就能获得实时性 | 宿主机上其它容器的负载同样影响你的调度延迟 |
+
+最后一条值得再强调一次：**实时性的保证是系统级的，不是进程级的**。一个容器里的 RT 任务，其实际调度延迟取决于宿主机的整体状态——包括其它容器的负载、宿主机的 RT 节流预算、以及内核版本带来的延迟特性。把它当成一个可以"配置出来"的属性，是对实时系统最常见的误解。
+
+### 9.5 一个渐进式的反模式
+
+有一种在工程实践中反复出现的模式值得记录：**每当某个任务出现延迟问题，就把它（或它依赖的模块）的优先级提高一点**。
+
+第一次调高解决了问题；第二次另一个模块出现延迟，于是也调高；如此反复几轮之后，系统上的 RT 任务越来越多，而每一个都必须在同一优先级序列里排出一个顺序。此时会出现两个后果：
+
+- **优先级反转的暴露面扩大**。原先只有一两个 RT 任务与普通任务共享锁，现在有十几个，每一次共享都是一次潜在的反转，而 PI 只对支持它的锁有效；
+- **调试变得困难**。当系统中所有重要任务都是 RT 时，"谁抢了谁的 CPU"这个问题的答案取决于一组精心的优先级数值，而这些数值的设定理由早已散落在多年的变更记录里。
+
+避免这个反模式的方法是在第一次准备调高优先级时就问一个问题：**这个任务的延迟要求是否可以用"声明"来表达**。如果它的 CPU 需求是周期性的、可预测的，那么 `SCHED_DEADLINE` 是比 `SCHED_FIFO` 更合适的选择——它不需要你在一个全局的优先级序列里给它找一个位置，只需要声明自己需要多少时间、必须在多久内完成。**从"抢位置"转向"报需求"，这是把优先级竞争转化为配额管理的关键一步**，也是第 6 章那套准入控制机制存在的意义。
+
+---
+
+## 第 10 章 小结：从相对到绝对
+
+Linux 的调度策略谱系可以按"表达能力的强度"排成一条线：`SCHED_IDLE` 表达"我不重要"，`SCHED_NORMAL` 表达"我占这个比例"，`SCHED_FIFO` 表达"我比它重要"，`SCHED_DEADLINE` 表达"我必须在这之前完成"。**从左到右，表达越来越精确，代价也越来越大**——精确的表达需要更多的参数、更复杂的准入检查、以及更强的权限约束。
+
+这条线上有一个关键的分界：前三种策略的表达都是**相对的**，它们的实际效果取决于系统上还有谁在竞争；只有 `SCHED_DEADLINE` 的表达是**绝对的**，它给出的是一个可以在设计阶段验证的承诺。这个从相对到绝对的跃迁，正是实时系统与通用系统在方法论上的分界线——通用系统通过"足够的容量 + 公平的分配"来保证服务质量，实时系统通过"准确的声明 + 可验证的准入"来保证截止时间。
+
+由此可见，本章讨论的全部机制——调度类的严格层次、RT 节流、优先级继承、准入控制——都是在为"确定性"这一个目标服务，而它们各自付出的代价（系统响应能力的牺牲、带宽的浪费、实现的复杂度）恰恰说明了一件事：**确定性在计算机系统里从来不是免费的，它必须用容量、复杂度或者灵活性去换取**。在什么场景下愿意付这笔代价，就是"因地制宜"这四个字在调度领域的具体含义。
+
+---
+
+## 参考资料
+
+1. *Linux Kernel Source* — `kernel/sched/rt.c`：RT 调度类实现与节流逻辑。
+2. *Linux Kernel Source* — `kernel/sched/deadline.c`：`SCHED_DEADLINE` 与 CBS 的实现。
+3. *Linux Kernel Source* — `kernel/sched/core.c`：`pick_next_task()`、调度类层次与 `sched_setattr` 的处理。
+4. *Linux Kernel Source* — `kernel/locking/rtmutex.c`：RT 互斥锁与优先级继承的实现。
+5. *Linux Kernel Documentation* — `Documentation/scheduler/sched-deadline.rst`：`SCHED_DEADLINE` 的设计文档与准入控制说明。
+6. *Liu, C. L., Layland, J. W. "Scheduling Algorithms for Multiprogramming in a Hard-Real-Time Environment."* JACM 1973：EDF 与速率单调调度的经典理论论文。
+7. *Abeni, L., Buttazzo, G. "Integrating Multimedia Applications in Hard Real-Time Systems."* RTSS 1998：CBS 算法的原始论文。
+8. *Jones, M. "What Really Happened on Mars?"* 1997：火星探路者号优先级反转事故的技术分析。
+9. *Sha, L., Rajkumar, R., Lehoczky, J. "Priority Inheritance Protocols."* IEEE Transactions on Computers 1990：优先级继承的理论基础。
+10. *cyclictest 与 rt-tests 项目文档*：实时性测量的标准方法。
 
 ---
 
 > [!note] 思考题
-> 1. 传统 Unix 信号（1-31）是不可靠的——如果同一信号在处理期间再次到达，可能被丢弃。实时信号（34-64）保证不丢失且按顺序排队。在什么场景下信号丢失会导致严重问题？为什么大多数应用仍然使用传统信号而非实时信号？
-> 2. `sigaction` 比 `signal` 更安全——它允许指定信号掩码（在信号处理函数执行期间阻塞哪些信号）和标志（如 `SA_RESTART` 自动重启被中断的系统调用）。如果不使用 `SA_RESTART`，`read()` 在被信号中断后会返回 EINTR——应用需要手动重试。在什么编程模式下忘记处理 EINTR 会导致 bug？
-> 3. 在多线程程序中，信号会被发送到'任意一个未阻塞该信号的线程'。这种不确定性使得多线程信号处理非常复杂。最佳实践是：在所有线程中阻塞信号，使用一个专门的 `sigwait` 线程同步处理信号。`signalfd` 将信号转换为 fd 事件——可以与 epoll 集成。这种方式相比 `sigwait` 有什么优势？
+> 1. `SCHED_DEADLINE` 的准入控制拒绝超额的声明，如果去掉这个检查、改为"尽力而为"，它相对于 `SCHED_FIFO` 还剩下什么优势？
+> 2. 优先级继承沿持有链传播，如果这个链条形成了环（死锁），PI 机制会遇到什么问题？内核如何检测这种情况？
+> 3. 容器默认禁止 RT 优先级是出于隔离考虑，那么在一个单租户、独占宿主机的高性能场景下，放开这个限制会带来哪些新的风险？
+> 4. RT 节流保留了 5% 的 CPU 给普通任务，这个比例在什么负载下会显得不够？如何判断应当提高还是保持？

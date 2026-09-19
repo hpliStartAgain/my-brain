@@ -1,3 +1,167 @@
+# Linux 进程管理专栏完全重写（content/Linux/进程管理/ 11 篇）
+
+---
+status: done
+branch: v5-migration
+owner: zcode
+updated: 2026-09-19
+tier: COMPLEX
+---
+
+## 1. 需求理解
+
+按 skill `writing-technical-article`（凤凰架构 DNA）与 AGENTS.md 交付硬指标，将 `content/Linux/进程管理/` 下 11 篇（00 导览 + 01-10 正文）**完全重写**（老板已明确授权清理内容从零写）。
+现状：正文 01-10 的 CJK 口径字数仅 4265-7725 字（达标 36%~64%），行数虽在 496-734 之间，但篇幅虚胖主要靠代码块与注释支撑，缺少机制级深度与凤凰架构叙事弧；01 篇为唯一接近达标者（7725 字）。
+硬约束：
+- **文件名一律保持不变**（`content/index.md`、Golang/Java/JVM/Redis/Docker/Hadoop/LLM/SRE 等 10+ 处存在入链；Docker 02 与 性能优化 03/10 引用具体篇目）。
+- **frontmatter 沿用原 title/date/tags/aliases 结构**。
+- **写作方式：老板指定由主 agent 串行撰写，禁止派发子 agent。**
+整改目标：
+- 单篇 12000-16000 中文字（CJK 口径）/ 500+ 行（00 导览除外）；论述五问齐全；凤凰架构六层 DNA 注入。
+- 严厉执行反灌水红线（摘要 ≤800 字、结语 ≤10%、思考题每条 ≤2 句、参考资料不堆砌、同义改写凑字数明令禁止）。
+- 全部 `[[链接]]` 仅使用已核实的真实目标；Mermaid 统一 dracula 主题；零感叹号。
+
+## 2. 写作批次（串行）
+
+01 → 02 → 03 → 04 → 05 → 06 → 07 → 08 → 09 → 10 → 00 导览（最后写以同步全稿）→ 统一验证 → CHANGELOG 记录
+
+## 3. 进度
+
+- [x] 01 进程的本质——从程序到进程，操作系统在背后做了什么（502 行 / 12188 字，Mermaid 2 图；多道批处理到分时的历史、进程双重身份、`task_struct` 与卫星结构、一次 `./hello` 全路径、进程树与 PID 复用、`/proc` 实战、fd 目录反推）
+- [x] 02 进程描述符 task_struct 深度拆解（569 行 / 12151 字，Mermaid 2 图；从静态进程表到指针化布局、八组字段逐组拆解、三套优先级与三个调度实体、`pid`/`tgid`、`cred` 与五集合 Capability、`mm_users`/`mm_count` 两级引用计数与懒 TLB、VMA 与 maple tree、`THREAD_INFO_IN_TASK` 的安全动机、`copy_thread` 初始栈帧、每个执行流 16KB 内核栈的隐性成本）
+- [x] 03 进程的诞生——fork 的内核之旅（613 行 / 12196 字，Mermaid 1 图；复制而非创建的哲学与反事实、`kernel_clone` 骨架与 `do_fork` 改名史、`copy_process` 三阶段与分级回滚、COW 四小节（页表复制/只读映射/引用计数/`MADV_DONTFORK`）与真实代价、fork 炸弹、多线程 fork 与 `malloc` 锁、`async-signal-safe` 约束、`vfork`/`posix_spawn`/`clone3`/`CLONE_INTO_CGROUP`、Redis COW 内存翻倍反例）
+- [x] 04 进程的灵魂替换——exec 家族与程序加载（646 行 / 12080 字，Mermaid 3 图；exec 六函数一系统调用与 `PATH` 查找位置、`linux_binprm` 与 `linux_binfmt` 注册表、ELF 段与节两套划分及 RELRO/`PT_GNU_STACK`、段的延迟装载、栈上 argv/envp/auxv、ELF 到 VMA、动态链接器交权与重定位、soname 与符号版本、`#!` 的两条限制与 setuid 脚本决策、`execveat` 与内存驻留执行、`execve` 保留/丢弃总账）
+- [x] 05 进程的终结与善后——exit、wait 与僵尸进程（715 行 / 12003 字，Mermaid 2 图；三次释放三段时间、`atexit` 四条规则、`do_exit` 释放顺序与 `exit_notify`、`exit_state` 与统计结算、退出状态位段编码与 `$?`、僵尸占用表与 `kill -9` 无效的原因、`wait4` 主子循环与 `EINTR`/`SA_RESTART`、`SIGCHLD` 三态与 `SA_NOCLDWAIT`、孤儿收养与 subreaper、容器 PID 1 三职责与 `pids.max` 叠加代价、`pidfd`、巡检脚本）
+- [x] 06 进程状态机——TASK_RUNNING 到 TASK_DEAD 的完整生命周期（736 行 / 12022 字，Mermaid 2 图；位掩码与单字母映射、修饰字符、状态全集与三个瞬态位、睡眠-唤醒的屏障与丢失唤醒、抢占四时机与 `PREEMPT_RT`、D 状态设计目的与成因分类、`load average` 口径与容器下的失真、D 状态雪崩四层扩散、`TASK_KILLABLE` 边界、等待队列与惊群、`schedule_timeout` 家族、`/proc` 状态解读、四类症状排查与聚合脚本、cgroup 冻结伪装的 `T` 状态）
+- [x] 07 线程的真相——Linux 为什么没有真正的线程（642 行 / 12012 字，Mermaid 3 图；说法的准确边界、LinuxThreads 四个缺陷与 NPTL 的解法、`LD_ASSUME_KERNEL` 迁移代价、clone flags 逐项与组合约束、`CLONE_PARENT_SETTID`/`CHILD_CLEARTID` 协议、天生不共享的属性、线程组三项语义与两种信号粒度、`/proc/task` 结构与按线程聚合脚本、pthread 层职责与栈大小来源（`RLIMIT_STACK` 陷阱）、四种 TLS 模型、futex 快速路径与 `FUTEX_WAIT` 原子性、1:1 与调度器激活的失败史、线程数决策与容器配额错配）
+- [x] 08 CFS 完全公平调度器——从 O(1) 到红黑树的演进（738 行 / 12019 字，Mermaid 3 图；三代调度器失效原因与 Con Kolivas 插曲、理想多任务处理器与 `vruntime` 的转化、nice 映射表与非线性意义、进程级与组级权重（`cpu.shares` vs `cpu.weight`）、时间片两段代码与三组算例、`cfs_rq` 与 `rb_leftmost`、新任务起点与睡眠补偿、`min_vruntime` 单调性、组调度分层、唤醒抢占与睡眠惩罚、EEVDF 替代与跨 CPU IPI 抢占、`schedstat`/`sched_debug`/`perf sched`、完整延迟排查、负载均衡与 CPU 绑定）
+- [x] 09 实时调度与调度策略全景（764 行 / 12008 字，Mermaid 3 图；实时不等于快与延迟四段构成、五种调度类层次与 `stop_sched_class` 存在理由、三个设置接口与 `sched_setattr` 的结构体参数模式、FIFO/RR 规则与两套优先级体系、`sched_yield` 的两种语义、RT 节流参数与代价、组级 RT 带宽与 cgroup v2 能力缺口、优先级反转与火星探路者、PI 实现与死锁检测边界、`SCHED_DEADLINE` 三参数/EDF+CBS/准入控制、DL 与 RT 两套带宽账、`SCHED_BATCH`/`SCHED_IDLE`、`cyclictest` 与延迟排查、容器 RT 权限收紧的根因、优先级层层加码反模式）
+- [x] 10 进程间通信全景——管道、信号、共享内存与 Socket 的内核实现（825 行 / 12040 字，Mermaid 4 图；三种中介形态与内核做中介的价值、SysV 与 POSIX 两代 IPC 及并存原因、`ipcs`/`proc/sysvipc` 观测与残留清理、管道环形缓冲/`PIPE_BUF` 原子性/`SIGPIPE`/EOF 引用计数 bug/`splice`、信号边界与实时信号与 `signalfd`、信号量从 Dijkstra 到 futex、共享内存零拷贝与 `/dev/shm` 容量陷阱与三个真实使用者、消息队列边界与优先级、UDS 传 fd/传凭证/抽象命名空间/性能差距来源、`eventfd`/`memfd`+密封/`pidfd`/`io_uring` 的共同思路、选型决策表与推演实例）
+- [x] 00 专栏导览（67 行 / 2267 字；重写专栏定位、四阶段主线、10 篇新内容描述、三类阅读路径、7 个关联专栏链接全部核实）
+- [x] 统一验证 + CHANGELOG（01-10 全部 ≥12000 中文字且 ≥500 行，篇均 12072 字 / 675 行；frontmatter 五字段完整；25 个 Mermaid 全部 dracula 主题且语法检查无风险；34 个 wiki 链接全部解析成功零死链；代码块全部闭合；零语气感叹号；摘要 351-488 字、结语占比 2.7%-3.8%，均符合反灌水红线）
+
+---
+
+# Docker 容器核心原理专栏完全重写（content/云原生/Docker/ 7 篇）
+
+---
+status: done
+branch: v5-migration
+owner: zcode
+updated: 2026-09-19
+tier: COMPLEX
+---
+
+## 1. 需求理解
+
+按 skill `writing-technical-article`（凤凰架构 DNA）与 AGENTS.md 交付硬指标，将 `content/云原生/Docker/` 下 7 篇（00 导览 + 01-06 正文）**完全重写**（老板已明确授权清理内容从零写）。
+现状：正文 01-06 篇均 CJK 字符仅 3967-6289 字（达标 33%~52%），且存在大量死链（[[Linux Namespace]]、[[Kubernetes]]、[[Cgroups]] 等裸名链接目标不存在）、思考题与所属章节错位、缺少凤凰架构叙事弧。
+硬约束：
+- **文件名一律保持不变**；frontmatter 沿用原 title/date/tags 结构。
+- **写作方式：老板指定由主 agent 串行撰写，禁止派发子 agent。**
+整改目标：
+- 单篇 12000-16000 中文字（CJK 口径）/ 500+ 行（00 导览除外）；论述五问齐全；凤凰架构六层 DNA 注入。
+- 严厉执行反灌水红线；全部 `[[链接]]` 仅使用已核实的真实目标；Mermaid 统一 dracula 主题；零感叹号。
+
+## 2. 写作批次（串行）
+
+01 → 02 → 03 → 04 → 05 → 06 → 00 导览（最后写以同步全稿）→ 统一验证 → CHANGELOG 记录
+
+## 3. 进度
+
+- [x] 01 容器的本质——从进程隔离到 OCI 标准（546 行 / 12026 字，Mermaid 5 图；容器演进四十年、Docker 产品化四贡献、OCI 三规范、运行时分层与 docker run 全路径、dockershim 移除、手工造容器实验）
+- [x] 02 Linux Namespace 深度解析（506 行 / 12056 字，Mermaid 1 图；nsproxy 内核实现、六大核心 Namespace 三段式拆解、clone/unshare/setns、五重隔离手工实验、pause 容器与 Pod 沙箱、视角-配额错位）
+- [x] 03 Cgroups 资源限制与控制（501 行 / 12526 字，Mermaid 2 图；v1→v2 架构修正、CFS 限流陷阱与配额推演、OOM 三级响应与 QoS、内核内存/swap/PSI、kubelet 驱逐、排查速查表）
+- [x] 04 UnionFS 与容器镜像原理（501 行 / 12195 字，Mermaid 3 图；OverlayFS 读/写/删三路径与手工实验、digest/diffID 双哈希、构建缓存链式失效与 BuildKit、分发两段式与懒加载、Volume 划界与节点镜像管理）
+- [x] 05 容器网络原理（501 行 / 12141 字，Mermaid 2 图；五类通信需求、veth/Bridge/NAT/conntrack 积木化、四网络模式、五类流量逐跳推演、VXLAN 与 CNI、Service 衔接、排障速查表）
+- [x] 06 容器安全边界与逃逸风险（501 行 / 13471 字，Mermaid 2 图；威胁模型分档、多层防御、Capabilities/Seccomp/MAC 四层机制、四个逃逸案例解剖、供应链防线、Rootless 与安全容器、加固清单与 PSS）
+- [x] 00 专栏导览（同步全稿主线与各篇新内容，关联专栏链接全部核实）
+- [x] 统一验证 + CHANGELOG（01-06 全部 ≥12000 中文字且 ≥500 行；frontmatter/摘要/参考资料/思考题齐全；全部 Mermaid 带 dracula；115 个 wiki 链接全部解析成功（修复 [[Kubernetes]]/[[Linux]]/[[Prometheus]] 三类死链共 34 处）；零感叹号；代码块全部闭合）
+
+---
+
+# Linux 网络协议栈与 IO 专栏完全重写（content/Linux/网络协议栈与IO/ 11 篇）
+
+---
+status: in-progress
+branch: v5-migration
+owner: zcode
+updated: 2026-09-19
+tier: COMPLEX
+---
+
+## 1. 需求理解
+
+按 skill `writing-technical-article`（凤凰架构 DNA）与 AGENTS.md 交付硬指标，将 `content/Linux/网络协议栈与IO/` 下 11 篇（00 导览 + 01-10 正文）**完全重写**（老板已明确授权清理内容从零写）。
+现状：正文 01-10 行数虽达 460-630 行，但 CJK 口径字数仅 3362-4839 字（达标 28%~40%），篇幅虚胖主要靠代码块支撑，叙述缺乏机制级深度与凤凰架构叙事弧。
+硬约束：
+- **文件名一律保持不变**（`content/index.md`、Go/Netty/Kafka/Redis/性能优化/K8s 网络等 8 处存在入链）；frontmatter 沿用原 title/date/tags/aliases。
+- **写作方式：老板指定由主 agent 串行撰写，禁止派发子 agent。**
+整改目标：
+- 单篇 12000-16000 中文字（CJK 口径）/ 500+ 行（00 导览除外）；论述五问齐全；凤凰架构六层 DNA 注入。
+- 严厉执行反灌水红线（摘要 ≤800 字、结语 ≤10%、思考题每条 ≤2 句、参考资料不堆砌、同义改写凑字数明令禁止）。
+- 全部 `[[链接]]` 仅使用已核实的真实文件名；Mermaid 统一 dracula 主题；零感叹号。
+
+## 2. 写作批次（串行）
+
+01 → 02 → 03 → 04 → 05 → 06 → 07 → 08 → 09 → 10 → 00 导览（最后写以同步全稿）→ 统一验证 → CHANGELOG 记录
+
+## 3. 进度
+
+- [ ] 01 网络 IO 的本质——从 socket() 到网卡 DMA
+- [ ] 02 TCP、IP 协议栈内核实现——sk_buff、协议层与连接状态机
+- [ ] 03 Socket 内核深度解析——struct sock、接收缓冲区与发送缓冲区
+- [ ] 04 epoll 深度解析——事件驱动 IO 的内核实现
+- [ ] 05 零拷贝技术全景——sendfile、splice 与 DMA gather
+- [ ] 06 TCP 性能调优——拥塞控制、Nagle 与缓冲区优化
+- [ ] 07 Linux 网络包的完整收发路径——软中断、NAPI 与 XDP
+- [ ] 08 高性能网络编程——io_uring 网络、SO_REUSEPORT 与多队列 NIC
+- [ ] 09 容器网络原理——veth、bridge、iptables 与 eBPF
+- [ ] 10 网络性能诊断——从 ss 到 perf 与 eBPF 的全套工具链
+- [ ] 00 专栏导览（同步新稿）
+- [ ] 统一验证（CJK 篇距/frontmatter/Mermaid/死链/零感叹号）+ CHANGELOG 记录
+
+---
+
+# 服务网格专栏全量重写（content/云原生/服务网格/ 8 篇）
+
+---
+status: done
+branch: v5-migration
+owner: zcode
+updated: 2026-09-20 01:30
+tier: COMPLEX
+---
+
+## 1. 需求理解
+
+按 skill `writing-technical-article`（凤凰架构 DNA）与 AGENTS.md 交付硬指标，将 `content/云原生/服务网格/` 下 8 篇（00 导览 + 01-07 正文）**全量重写**（老板已明确授权清理内容从零写）。
+现状：正文 01-07 篇均 CJK 仅 4026-6046 字（达标 34%~50%），叙述平铺、缺乏 xDS 协议/Envoy 线程模型/证书轮换/HBONE 等机制级深度，00 导览存在空格差异死链与模糊死链。
+整改目标：
+- 单篇 12000-16000 中文字 / 500+ 行（00 导览除外）；论述五问齐全；凤凰架构六层 DNA 注入。
+- 严厉执行反灌水红线（摘要 ≤800 字、结语 ≤10%、延伸思考 ≤3 句/条、参考资料不堆砌）。
+- 全部 `[[链接]]` 仅使用已核实的真实文件名；Mermaid 统一 dracula 主题。
+
+## 2. 批次规划
+
+- **第一批（概念与架构底座，3 篇）**：01 概述与 Sidecar 模式、02 Istio 架构与 xDS、03 Envoy 数据面
+- **第二批（能力层，3 篇）**：04 流量管理、05 安全 mTLS、06 可观测性
+- **第三批（演进与收官，2 篇）**：07 性能开销与 Ambient Mesh、00 专栏导览（修死链、同步新稿描述）
+
+## 3. 进度
+
+- [x] 01 服务网格概述——从微服务治理痛点到Sidecar模式（500 行 / 15346 字，Mermaid 4 图，零感叹号）
+- [x] 02 Istio架构——控制面与数据面的职责分离（501 行 / 12499 字，Mermaid 2 图；istiod 编译器模型、xDS/ADS 深潜、注入模板解剖、卸载退出）
+- [x] 03 Envoy代理——线程模型、Filter链与连接管理（500 行 / 12206 字，Mermaid 3 图；per-worker 定语、per-worker 连接池账、访问日志解剖、503 决策树、调优四科目）
+- [x] 04 流量管理——VirtualService、DestinationRule与灰度发布（506 行 / 12056 字，Mermaid 3 图；两块拼图松耦合、镜像影子世界、自动化金 Canary、retryOn 名单、超时推演）
+- [x] 05 安全——mTLS、认证与授权策略（501 行 / 13880 字，Mermaid 2 图；SPIFFE/CSR 信任链、四模式双轨迁移、授权求值推演、安全演练四科目）
+- [x] 06 可观测性——分布式追踪、指标与访问日志（517 行 / 12025 字，Mermaid 3 图；两层指标、基数三板斧、追踪传播接力、四站排障走位、盲区地图）
+- [x] 07 服务网格的性能开销与Ambient Mesh（500 行 / 12949 字，Mermaid 2 图；四笔账单、调优步骤表、ztunnel/waypoint/HBONE、四路线坐标系、部署矩阵）
+- [x] 00 专栏导览（全链接重写修复死链，描述同步新稿）
+- [x] 统一验证（01-07 全部 ≥12000 中文字且 ≥500 行；frontmatter/摘要/参考资料/思考题齐全；Mermaid 全 dracula；wiki 链接全解析零死链；全文零感叹号）
+
+---
+
 # Kubernetes 网络原理与插件专栏严肃重写（content/云原生/Kubernetes/kubernetes网络原理与插件/ 8 篇）
 
 ---
