@@ -230,7 +230,7 @@ backlog 参数还常被误解为"并发连接上限"。它只约束全连接队�
 
 `connect()` 的语义可以一句话概括：向内核发出指令，把一个 `TCP_CLOSE` 状态的 socket 推进到 `TCP_ESTABLISHED`，期间发生的一切（发 SYN、收 SYN+ACK、发 ACK）都由内核代劳。对阻塞式 socket 而言，`connect()` 在收到对端的 SYN+ACK 后即刻返回——注意，它不等对端应用做任何事情，甚至不等对端内核把连接放入 accept 队列被取走；第三方网络里"connect 成功但对端程序压根没 accept"的场景完全合法，全连接队列兜着这份时间差。
 
-若 SYN 没有得到回应，内核会按指数退避重发：Linux 的 `net.ipv4.tcp_syn_retries` 默认为 6，即 1s、2s、4s、8s、16s、32s、64s 共七次尝试，累计约 127 秒后才向应用报 `ETIMEDOUT`。这个数字解释了两个常见的生产现象：一是故障切换时"连接要卡两分钟才报错"——因为网络黑洞比拒绝服务更耗时；二是健康检查必须设置远小于 127 秒的超时，否则探活系统会失去意义。对非阻塞 socket，`connect()` 立即返回 `EINPROGRESS`，应用随后用 `epoll` 监听可写事件并调用 `getsockopt(SO_ERROR)` 确认结果——这是所有高性能客户端（譬如 Redis、gRPC 的连接器）的标准做法，Go 语言的 netpoller 与 Java NIO 都把这套流程封装成了看似同步的 API（参见 [[Golang/Go并发编程/08 Go 网络编程——netpoller 与 Goroutine-per-Connection]]）。
+若 SYN 没有得到回应，内核会按指数退避重发：Linux 的 `net.ipv4.tcp_syn_retries` 默认为 6，即 1s、2s、4s、8s、16s、32s、64s 共七次尝试，累计约 127 秒后才向应用报 `ETIMEDOUT`。这个数字解释了两个常见的生产现象：一是故障切换时"连接要卡两分钟才报错"——因为网络黑洞比拒绝服务更耗时；二是健康检查必须设置远小于 127 秒的超时，否则探活系统会失去意义。对非阻塞 socket，`connect()` 立即返回 `EINPROGRESS`，应用随后用 `epoll` 监听可写事件并调用 `getsockopt(SO_ERROR)` 确认结果——这是所有高性能客户端（譬如 Redis、gRPC 的连接器）的标准做法，Go 语言的 netpoller 与 Java NIO 都把这套流程封装成了看似同步的 API（参见 [[Golang/Go并发编程/12 Go 网络编程——netpoller 与 Goroutine-per-Connection]]）。
 
 非阻塞 connect 的骨架代码值得一看，它是理解"异步建连"的原始形态：
 

@@ -427,7 +427,7 @@ for (;;) {
 }
 ```
 
-这个骨架里每一行都对应本篇的一个机制点：`epoll_create1` 是第 2 章的实例、`EPOLL_CTL_ADD` 是第 3 章的哨兵、`epoll_wait` 是第 4 章的收割、两处"循环抽干"与"按需注销"是第 5 章的 ET 纪律。Java 的 Selector（[[Java/Netty/01 Java NIO基础——Channel、Buffer、Selector三大组件]]）与 Go 的 netpoller（[[Golang/Go并发编程/08 Go 网络编程——netpoller 与 Goroutine-per-Connection]]）都在此骨架之上做了各自的封装，读它们源码时同样能认出这副骨架。
+这个骨架里每一行都对应本篇的一个机制点：`epoll_create1` 是第 2 章的实例、`EPOLL_CTL_ADD` 是第 3 章的哨兵、`epoll_wait` 是第 4 章的收割、两处"循环抽干"与"按需注销"是第 5 章的 ET 纪律。Java 的 Selector（[[Java/Netty/01 Java NIO基础——Channel、Buffer、Selector三大组件]]）与 Go 的 netpoller（[[Golang/Go并发编程/12 Go 网络编程——netpoller 与 Goroutine-per-Connection]]）都在此骨架之上做了各自的封装，读它们源码时同样能认出这副骨架。
 
 > [!note] 阅读骨架的方法
 > 读任何事件驱动框架源码时，先找三样东西：事件循环（对应 epoll_wait）、注册表（对应 epoll_ctl 的调用点）、就绪分发（对应 events 数组的消费）。三样找到，框架的骨架就通了；剩下的编码器、定时器、内存池都是骨架上的器官。
@@ -448,7 +448,7 @@ epoll 解决的是"等"，但"收割—处理"路径上仍有不可消除的固�
 
 epoll 把"等待"变得廉价，却把"控制流"变得破碎。阻塞模型下一个函数顺序完成的"读—处理—写"，在事件模型里被拆成三个互不相连的回调，中间状态必须挂在连接对象上；一个业务流程跨越多个事件后，代码的可读性与调试难度陡增。
 
-协程（Go 的 Goroutine、各类用户态协程库）的流行正是对这一代价的回应：用同步的书写方式获得事件驱动的执行效率——底层仍是 epoll，人类却不必再直面回调地狱（[[Golang/Go并发编程/08 Go 网络编程——netpoller 与 Goroutine-per-Connection]] 的 netpoller 正是这个思路的教科书实现）。**技术选型时，epoll 的性能从来不是唯一变量，控制流的复杂度同样是真金白银的成本**。
+协程（Go 的 Goroutine、各类用户态协程库）的流行正是对这一代价的回应：用同步的书写方式获得事件驱动的执行效率——底层仍是 epoll，人类却不必再直面回调地狱（[[Golang/Go并发编程/12 Go 网络编程——netpoller 与 Goroutine-per-Connection]] 的 netpoller 正是这个思路的教科书实现）。**技术选型时，epoll 的性能从来不是唯一变量，控制流的复杂度同样是真金白银的成本**。
 
 几个主流实现与 epoll 的关系可以收进一张表，作为本篇通向框架世界的桥：
 
