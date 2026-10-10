@@ -521,7 +521,6 @@ Go 1.22 的 `ServeMux` 增强是一个显著的里程碑，但它不是路由技
 3. Russ Cox. *Go 1.22 ServeMux enhancements*, GitHub proposal issue #61410, 2023.
 4. Brad Fitzpatrick. *http: add Flusher interface clarification*, Go issue discussions, 2016.
 5. Julien Schmidt. *httprouter: A high performance HTTP request router*, 2013. https://github.com/julienschmidt/httprouter
-6. 周志明.《凤凰架构》第 6 章「服务通信」。http://icyfenix.cn
 
 ---
 

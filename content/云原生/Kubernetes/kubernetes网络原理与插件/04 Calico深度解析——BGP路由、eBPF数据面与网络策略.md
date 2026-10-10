@@ -586,7 +586,7 @@ calicoctl get bgppeer -A                     # BGP 邻居配置
 
 此外还有一个超出单集群的维度值得知道：因为底层就是 BGP，Calico 天然支持把多个集群的路由域直接对接——跨集群建立 BGP Peer 后，A 集群的节点能学到 B 集群的 Pod 块路由，多集群东西向流量无需经过额外的网关层翻译。对规划多集群联邦或混合云网络平面的架构师来说，这是纯路由方案在单集群边界之外继续兑现的红利。
 
-行文至此，Calico 的画像已经足够清晰：它把赌注押在"物理网络可以被说服"上——在能说服的地方（裸金属、开放云栈）收获纯路由的全部红利，在说不服的地方（公有云 VPC）退守 IPIP/VXLAN 的底线，并用 Felix 的策略引擎把 NetworkPolicy 做成本家的护城河。这不是一个处处最优的方案，却是一个把取舍写得明明白白的方案——正如周志明先生反复强调的，有利有弊才需要决策，有取有舍才需要权衡。
+行文至此，Calico 的画像已经足够清晰：它把赌注押在"物理网络可以被说服"上——在能说服的地方（裸金属、开放云栈）收获纯路由的全部红利，在说不服的地方（公有云 VPC）退守 IPIP/VXLAN 的底线，并用 Felix 的策略引擎把 NetworkPolicy 做成本家的护城河。这不是一个处处最优的方案，却是一个把取舍写得明明白白的方案——有利有弊才需要决策，有取有舍才需要权衡。
 
 下一篇我们将看到另一种极端：当 Cilium 决定让 eBPF 从第一天起就接管整个网络栈时，Kubernetes 网络又会被改写成什么模样——[[05 Cilium深度解析——eBPF驱动的下一代网络与可观测性]]。
 
@@ -605,7 +605,6 @@ calicoctl get bgppeer -A                     # BGP 邻居配置
    - [projectcalico/calico GitHub Repository](https://github.com/projectcalico/calico)
    - [BIRD Internet Routing Daemon](https://bird.network.cz/)
 3. **经典著作**：
-   - 周志明. 《凤凰架构：构建可靠的大型分布式系统》. 机械工业出版社, 2021.
 
 ---
 

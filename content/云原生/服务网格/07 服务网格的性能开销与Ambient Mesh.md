@@ -488,7 +488,6 @@ flowchart TD
 7. CNCF. Open Service Mesh 退役公告与生态回顾. 2023.
 8. Buoyant. State of Service Mesh 行业调研报告（历年）.
 9. Istio 官方文档：Ambient 安全模型（ztunnel 的信任边界说明）.
-10. 周志明. 凤凰架构：构建可靠的大型分布式系统. 机械工业出版社， 2021.（服务网格章节）
 
 ---
 

@@ -490,7 +490,6 @@ istiod 无状态，副本扩容在机制上很直白：多个副本共同挂在�
 5. Istio. Istio 1.5 发布公告（Pilot/Citadel/Galley 合并为 istiod，Mixer 废弃）. 2020-03. https://istio.io/latest/news/releases/1.5.x/announcing-1.5/
 6. Envoy 官方博客/文档：Incremental xDS 说明.
 7. CNCF. Istio 加入 CNCF（2022-04）与毕业（2023-07）公告.
-8. 周志明. 凤凰架构：构建可靠的大型分布式系统. 机械工业出版社， 2021.（服务网格章节）
 
 ---
 

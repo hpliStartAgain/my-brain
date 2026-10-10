@@ -666,7 +666,7 @@ Netty 为此建立了由顶至底的瀑布式销毁链路：
 
 ### 8.2 复杂性守恒定律与基础设施的担当
 
-正如周志明先生在《凤凰架构》中所深刻指出的：**软件系统的复杂性从来不会凭空凭空消失，它所能做到的极限，只是被安全地转移**。
+一个反复被验证的工程规律是：**软件系统的复杂性从来不会凭空消失，它所能做到的极限，只是被安全地转移**。
 
 假若 Netty 没有在底层扛起这套仿 jemalloc 的池化重担，那么这数以万计的并发系统调用、不可控的外部碎片整理、难以预料的堆外内存溢出，以及频繁的 GC 挂起停顿，就必须由无数编写上层业务逻辑的普通工程师在各自的业务代码中战战兢兢地手工应付。Netty 将所有的复杂性统统拦截并焊死在 `PooledByteBufAllocator` 这一座坚不可摧的铁盒之内，向上层业务只提供优雅纯粹的 `ByteBuf` 抽象。这不仅是一项工程实现的绝技，更是所有优秀基础设施软件对于分布式软件工业的最大担当与贡献。
 
@@ -689,12 +689,11 @@ Netty 为此建立了由顶至底的瀑布式销毁链路：
 
 1. Jason Evans. *A Scalable Concurrent malloc(3) Implementation for FreeBSD*. BSDCan Conference, 2006.
 2. Norman Maurer, Marvin Allen Wolfthal. *Netty in Action*, Chapter 5: ByteBuf. Manning Publications, 2016.
-3. 周志明.《凤凰架构：构建可靠的大型分布式系统》. 机械工业出版社, 2021.
-4. Netty Source Code: `io.netty.buffer.PooledByteBufAllocator`.
-5. Netty Source Code: `io.netty.buffer.PoolArena`.
-6. Netty Source Code: `io.netty.buffer.PoolChunk`.
-7. Netty Source Code: `io.netty.buffer.PoolSubpage`.
-8. Netty Source Code: `io.netty.buffer.PoolThreadCache`.
+3. Netty Source Code: `io.netty.buffer.PooledByteBufAllocator`.
+4. Netty Source Code: `io.netty.buffer.PoolArena`.
+5. Netty Source Code: `io.netty.buffer.PoolChunk`.
+6. Netty Source Code: `io.netty.buffer.PoolSubpage`.
+7. Netty Source Code: `io.netty.buffer.PoolThreadCache`.
 
 ---
 

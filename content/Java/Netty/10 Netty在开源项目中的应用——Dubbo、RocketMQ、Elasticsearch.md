@@ -641,7 +641,7 @@ Elasticsearch 依托其专用的 PING 连接通道，构建了底层的 **`Maste
 
 ### 6.2 软件工程成熟度模型的终极跃迁
 
-正如周志明先生在《凤凰架构》中所总结的，衡量一个软件系统架构成熟度的终极标准，在于它**对不可靠运行环境的包容度与韧性**。
+衡量一个软件系统架构成熟度的终极标准，往往在于它**对不可靠运行环境的包容度与韧性**。
 
 无论是 Dubbo 对业务线程池被打满时的平滑降级，还是 RocketMQ 在磁盘写入遭遇系统 PageCache 抖动时的流量限速，亦或是 Elasticsearch 在集群发生网络分区时的多优先级通道隔离与断路器熔断，它们无一不在向我们传递着同一个终极工程哲学：
 **物理硬件与网络环境的脆弱与动荡是绝对的客观现实，而软件工程师的全部崇高使命，就是在充满不确定性的物理地基之上，依靠严密的协议契约、严格的边界隔离与精密的反馈状态机，建立起确定性、高可用、坚不可摧的分布式系统秩序**。
@@ -664,11 +664,10 @@ Elasticsearch 依托其专用的 PING 连接通道，构建了底层的 **`Maste
 ## 参考资料
 
 1. Norman Maurer, Marvin Allen Wolfthal. *Netty in Action*. Manning Publications, 2016.
-2. 周志明.《凤凰架构：构建可靠的大型分布式系统》. 机械工业出版社, 2021.
-3. Apache Dubbo Official Documentation & Source Code (`dubbo-remoting-netty4`), 2024.
-4. Apache RocketMQ Official Documentation & Source Code (`rocketmq-remoting`), 2024.
-5. Elasticsearch Official Documentation & Source Code (`elasticsearch-transport`), 2024.
-6. Bruce Jay Nelson. *Remote Procedure Call*. Xerox PARC Technical Report, 1981.
+2. Apache Dubbo Official Documentation & Source Code (`dubbo-remoting-netty4`), 2024.
+3. Apache RocketMQ Official Documentation & Source Code (`rocketmq-remoting`), 2024.
+4. Elasticsearch Official Documentation & Source Code (`elasticsearch-transport`), 2024.
+5. Bruce Jay Nelson. *Remote Procedure Call*. Xerox PARC Technical Report, 1981.
 
 ---
 

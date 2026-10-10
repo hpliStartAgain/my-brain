@@ -631,7 +631,6 @@ NetworkPolicy 的边界在 L4——它管"谁连谁的哪个端口"，管不了 
    - [DNS for Services and Pods](https://kubernetes.io/docs/concepts/services-networking/dns-pod-service/)
    - [NodeLocal DNSCache](https://kubernetes.io/docs/tasks/administer-cluster/nodelocaldns/)
 2. **经典著作**：
-   - 周志明. 《凤凰架构：构建可靠的大型分布式系统》. 机械工业出版社, 2021.
 
 ---
 

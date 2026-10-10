@@ -494,7 +494,6 @@ outbound|9080|v2|reviews.default.svc.cluster.local ... (空集即标签错配)
 6. Istio 官方文档：Fault Injection 任务页.
 7. Flagger 与 Argo Rollouts 项目文档（自动化金丝雀实现）.
 8. Kubernetes SIG-Network. Gateway API 规范. https://gateway-api.sigs.k8s.io/
-9. 周志明. 凤凰架构：构建可靠的大型分布式系统. 机械工业出版社， 2021.（服务网格章节）
 
 ---
 

@@ -489,7 +489,6 @@ flowchart TD
 5. Matt Klein. The Universal Data Plane API. 2017-09.
 6. Istio 官方文档：Envoy sidecar 排障（proxy-config 与响应标志位）. https://istio.io/latest/docs/ops/diagnostic-tools/proxy-cmd/
 7. CNCF. Envoy 毕业公告. 2018-11.
-8. 周志明. 凤凰架构：构建可靠的大型分布式系统. 机械工业出版社， 2021.（服务网格章节）
 
 ---
 

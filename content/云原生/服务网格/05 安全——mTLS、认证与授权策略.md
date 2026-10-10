@@ -489,7 +489,6 @@ AuthorizationPolicy 的条件模型再细，也表达不了"调用风控引擎�
 4. CNCF. Cloud Native Security Whitepaper（零信任章节）.
 5. Istio 官方博客：Introducing Ambient Mesh（ztunnel 的 L4 安全模型，第 07 篇的前置）. 2022-09.
 6. Kubernetes 官方文档：ServiceAccount Token 与投影卷. https://kubernetes.io/docs/concepts/security/service-accounts/
-7. 周志明. 凤凰架构：构建可靠的大型分布式系统. 机械工业出版社， 2021.（服务网格章节）
 
 ---
 

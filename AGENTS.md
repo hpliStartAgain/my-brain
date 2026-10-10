@@ -28,7 +28,7 @@
 
 ## 2. 写作风格
 
-技术文章/专栏创作与重写，使用 skill `writing-technical-article`（`.devin/skills/`，已同步全局）：凤凰架构（周志明）六层风格 DNA + 写前校准 + 写后自检清单。风格规则与去 AI 味规则冲突时，以该 skill 为准。
+技术文章/专栏创作与重写，使用 skill `writing-technical-article`（`.devin/skills/`，已同步全局）：六层风格 DNA + 写前校准 + 写后自检清单。风格规则与去 AI 味规则冲突时，以该 skill 为准。
 
 ## 3. 变更记录惯例
 

@@ -498,7 +498,6 @@ Cilium 阵营的论点很直接：既然 eBPF 能在内核完成转发、观测�
 3. **内核文档**：
    - Linux Kernel Documentation: BPF/XDP/TC 相关章节（`Documentation/bpf/`、`Documentation/networking/`）
 4. **经典著作**：
-   - 周志明. 《凤凰架构：构建可靠的大型分布式系统》. 机械工业出版社, 2021.
 
 ---
 

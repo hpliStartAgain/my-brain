@@ -672,9 +672,8 @@ func useMethodValue() {
 2. Cytron, R., et al. (1991). *Efficiently Computing Static Single Assignment Form and the Control Dependence Graph*. ACM TOPLAS — SSA 形态的奠基论文。
 3. Choi, J.-D., et al. (1993). *Efficient Analysis of Pointer Escapes and Their Uses*. — 连接图分析算法的原始论文。
 4. Go 语言官方文档：[GOSSAFUNC 与 SSA 可视化](https://go.dev/doc/asm) — 编译器调试环境变量说明。
-5.《凤凰架构》周志明，2020 — 关于"编译优化是静态分析与动态成本的权衡"一节的写作风格参考。
-6. 参见 [[Golang/Go工程实践/08 Go 编译与链接——从源码到二进制]] 对链接阶段与 linker plugin 的延伸讨论。
-7. 参见 [[Golang/Go运行时进阶与底层机制/00 专栏导览|Go 运行时进阶与底层机制]] 专栏整体脉络。
+5. 参见 [[Golang/Go工程实践/08 Go 编译与链接——从源码到二进制]] 对链接阶段与 linker plugin 的延伸讨论。
+6. 参见 [[Golang/Go运行时进阶与底层机制/00 专栏导览|Go 运行时进阶与底层机制]] 专栏整体脉络。
 
 ---
 

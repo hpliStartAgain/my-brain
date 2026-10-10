@@ -579,7 +579,6 @@ Service 的故事还有一个更长的余韵值得收个尾：它证明了"虚�
    - Linux Kernel Documentation: netfilter / IPVS（`Documentation/networking/`）
    - [LVS 项目官网](http://www.linuxvirtualserver.org/)
 3. **经典著作**：
-   - 周志明. 《凤凰架构：构建可靠的大型分布式系统》. 机械工业出版社, 2021.
 
 ---
 

@@ -41,7 +41,7 @@ aliases: [Kubernetes网络模型, 从Linux网络命名空间到Pod IP]
 
 然而，理念的优雅必须依托坚实的工程实现。在同一台物理宿主机上密集运行着数十个 Pod 时，这些 Pod 共享着宿主机的同一颗 CPU 与同一张物理网卡；整个集群更可能横跨数百台分布在不同可用区的物理节点。在这样高度虚拟化的环境下，Kubernetes 究竟是如何凭空为每一个 Pod 创造出看似独立的真实 IP？这个 IP 又凭借什么机制能够跨越物理边界自由穿梭？
 
-这绝非凭空降临的黑魔法，而是一场在 Linux 内核网络协议栈上持续了数十年的搭积木工程。为了彻底拆解这一精巧系统，本文遵循周志明先生在《凤凰架构》中所倡导的技术溯源路线，自底向上建立推导逻辑：
+这绝非凭空降临的黑魔法，而是一场在 Linux 内核网络协议栈上持续了数十年的搭积木工程。为了彻底拆解这一精巧系统，本文采用技术溯源的路线，自底向上建立推导逻辑：
 
 首先深入 Linux 内核网络栈，探寻 **Network Namespace（网络命名空间）** 在内核数据结构中的资源视图隔离本质；接着剖析 **veth pair（虚拟以太网设备对）** 穿透命名空间的数据包重定向驱动实现；随后在单机尺度分析 **Linux Bridge（软件网桥）** 如何扮演二层交换机并应对 MAC 学习与 ARP 广播风暴；在此基础上，将视角拉升至分布式系统高度，推导 **Kubernetes 网络四大约束** 的反事实设计动机与 **Pause 容器** 的生命周期解耦智慧；最后直面跨节点鸿沟，解析 **CNI（Container Network Interface）** 极简管道规范的诞生动因，并剖析生产中经典的 MTU 错配与内核参数故障。
 
@@ -879,7 +879,6 @@ graph TD
    - [Container Network Interface (CNI) Specification v1.0.0](https://github.com/containernetworking/cni/blob/spec-v1.0.0/SPEC.md)
    - [The Kubernetes Network Model](https://kubernetes.io/docs/concepts/services-networking/)
 4. **经典著作**:
-   - 周志明. 《凤凰架构：构建可靠的大型分布式系统》. 机械工业出版社, 2021.
    - Abhishek Verma, et al. "Large-scale cluster management at Google with Borg". EuroSys 2015.
 
 ---

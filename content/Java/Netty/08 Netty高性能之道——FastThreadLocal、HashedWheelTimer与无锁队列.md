@@ -743,7 +743,7 @@ Netty 之所以能爆发出数倍于 JDK 原生实现的性能，核心还在于
 
 ### 7.2 复杂性转移定律在高性能基础设施中的具象表达
 
-正如周志明先生在《凤凰架构》中所深刻指出的：**软件系统的复杂性如同物质守恒定律，它从来不会凭空消失，它所能做到的极限，只是被安全、优雅地转移**。
+一个反复被验证的工程规律是：**软件系统的复杂性如同物质守恒定律，它从来不会凭空消失，它所能做到的极限，只是被安全、优雅地转移**。
 
 如果 Netty 没有在其内部以极其复杂的底层代码构筑起这套充斥着 JNI、Unsafe、指针算术、伪共享对齐与无锁状态机的微观武器库，那么千千万万依赖 Netty 构建上层分布式系统的普通工程师，就必须在各自的业务代码中直面并发锁争用、GC 停顿抖动、定时器任务积压与多核总线风暴的致命摧残。
 
@@ -771,12 +771,11 @@ Netty 研发团队以极其深厚的技术造诣，将所有的复杂性统统�
 1. George Varghese, Anthony Lauck. *Hashed and Hierarchical Timing Wheels: Data Structures for the Efficient Implementation of a Timer Facility*. IEEE/ACM Transactions on Networking, 1996.
 2. Nitsan Wakart. *Lock Free Queues: A Single Consumer Story*. JCTools Project, 2013-2020.
 3. Norman Maurer, Marvin Allen Wolfthal. *Netty in Action*, Chapter 10: Unit Testing and Component Deep Dive. Manning Publications, 2016.
-4. 周志明.《凤凰架构：构建可靠的大型分布式系统》. 机械工业出版社, 2021.
-5. Martin Thompson. *Mechanical Sympathy: False Sharing and Cache Concurrency*. Mechanical Sympathy Blog, 2011.
-6. Netty Source Code: `io.netty.util.concurrent.FastThreadLocal`.
-7. Netty Source Code: `io.netty.util.HashedWheelTimer`.
-8. Netty Source Code: `io.netty.util.Recycler`.
-9. JCTools Source Code: `org.jctools.queues.MpscArrayQueue`.
+4. Martin Thompson. *Mechanical Sympathy: False Sharing and Cache Concurrency*. Mechanical Sympathy Blog, 2011.
+5. Netty Source Code: `io.netty.util.concurrent.FastThreadLocal`.
+6. Netty Source Code: `io.netty.util.HashedWheelTimer`.
+7. Netty Source Code: `io.netty.util.Recycler`.
+8. JCTools Source Code: `org.jctools.queues.MpscArrayQueue`.
 
 ---
 

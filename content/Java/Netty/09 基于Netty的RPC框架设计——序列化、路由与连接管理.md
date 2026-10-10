@@ -530,7 +530,8 @@ public class TitanHeartbeatClientHandler extends ChannelDuplexHandler {
 ```
 
 当通道在 `channelInactive` 钩子中感知到关闭时，系统立即启动**自适应指数退避重连（Exponential Backoff with Jitter）**算法：
-$$	ext{Delay} = \min\left(	ext{MaxDelay}, \ 	ext{InitialDelay} 	imes 2^{	ext{retryCount}}ight) \pm 	ext{RandomJitter}$$
+$$	ext{Delay} = \min\left(	ext{MaxDelay}, \ 	ext{InitialDelay} 	imes 2^{	ext{retryCount}}
+ight) \pm 	ext{RandomJitter}$$
 通过引入随机扰动因子（Jitter），防止当某个大型机房发生网络抖动恢复时，上万个客户端在同一个毫秒瞬间并发向服务端发起建连重试，引发所谓的「惊群风暴（Thundering Herd Problem）」。
 
 ### 5.4 服务端优雅停机与背压机制
@@ -741,10 +742,9 @@ sequenceDiagram
 1. Andrew D. Birrell, Bruce Jay Nelson. *Implementing Remote Procedure Calls*. ACM Transactions on Computer Systems (TOCS), 1984.
 2. Peter Deutsch. *The Eight Fallacies of Distributed Computing*. Sun Microsystems, 1991.
 3. Norman Maurer, Marvin Allen Wolfthal. *Netty in Action*, Chapter 8-11. Manning Publications, 2016.
-4. 周志明.《凤凰架构：构建可靠的大型分布式系统》. 机械工业出版社, 2021.
-5. Google. *Protocol Buffers Documentation: Encoding*. developers.google.com, 2024.
-6. Apache Dubbo Source Code: `org.apache.dubbo.remoting.transport.netty4`.
-7. Apache Dubbo Source Code: `org.apache.dubbo.rpc.protocol.dubbo`.
+4. Google. *Protocol Buffers Documentation: Encoding*. developers.google.com, 2024.
+5. Apache Dubbo Source Code: `org.apache.dubbo.remoting.transport.netty4`.
+6. Apache Dubbo Source Code: `org.apache.dubbo.rpc.protocol.dubbo`.
 
 ---
 

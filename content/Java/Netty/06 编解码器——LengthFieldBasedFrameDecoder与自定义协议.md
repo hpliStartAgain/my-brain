@@ -936,7 +936,7 @@ public class StateMachineDecoder extends ReplayingDecoder<RpcParseState> {
 
 ### 8.1 协议的向前向后兼容性设计
 
-任何一套网络协议从诞生那一刻起，便注定要面对残酷的演进法则。随着业务边界的不断拓展，协议头中必然需要承载新的元数据属性。倘若协议在初始设计阶段缺乏足够的远见，哪怕仅仅是增加一个 2 字节的灰度路由标识，都可能导致整套集群中老版本节点因无法识别新格式而发生全网通信雪崩。在周志明先生于《凤凰架构》中所反复强调的演进思想中，**架构从来不是一蹴而就的发明，而是在不断包容变化中演化出来的形态**。在设计私有二进制协议时，保证版本向前与向后兼容的核心策略通常包含两项工程准则：
+任何一套网络协议从诞生那一刻起，便注定要面对残酷的演进法则。随着业务边界的不断拓展，协议头中必然需要承载新的元数据属性。倘若协议在初始设计阶段缺乏足够的远见，哪怕仅仅是增加一个 2 字节的灰度路由标识，都可能导致整套集群中老版本节点因无法识别新格式而发生全网通信雪崩。从架构演进的视角看，**架构从来不是一蹴而就的发明，而是在不断包容变化中演化出来的形态**。在设计私有二进制协议时，保证版本向前与向后兼容的核心策略通常包含两项工程准则：
 
 第一项准则是**保留字段（Reserved Fields）的合理预留**。在我们在 `Titan-RPC` 协议中规划的 16 字节头部中，专门预留了 2 字节的 `Reserved` 空间并强制填充全零。这绝非无谓的内存浪费，在计算机内存对齐体系中，16 字节恰好契合 64 位机器总线周期的自然对齐边界，能够最大化内存读写的吞吐效率。更为关键的是，当未来需要引入流量染色（Traffic Coloring）或链路超时透传功能时，新的协议实现可以直接占用这 2 字节的语义而完全无需改变固定头部的物理几何跨度，老版本的解码器依然能够基于 `skipBytes(2)` 正常解析剩余部分，平稳完成全网的平滑升级。
 
@@ -995,11 +995,10 @@ graph TD
 1. Postel, J. *Transmission Control Protocol (RFC 793)*. Internet Engineering Task Force (IETF), 1981.
 2. Nagle, J. *Congestion Control in IP/TCP Internetworks (RFC 896)*. Internet Engineering Task Force (IETF), 1984.
 3. Norman Maurer, Marvin Allen Wolfthal. *Netty in Action*, Chapter 10: The Codec Framework. Manning Publications, 2016.
-4. 周志明.《凤凰架构：构建可靠的大型分布式系统》. 机械工业出版社, 2021.
-5. Netty Source Code: `io.netty.handler.codec.ByteToMessageDecoder`.
-6. Netty Source Code: `io.netty.handler.codec.LengthFieldBasedFrameDecoder`.
-7. Netty Source Code: `io.netty.handler.codec.MessageToByteEncoder`.
-8. Netty Source Code: `io.netty.handler.codec.ReplayingDecoder`.
+4. Netty Source Code: `io.netty.handler.codec.ByteToMessageDecoder`.
+5. Netty Source Code: `io.netty.handler.codec.LengthFieldBasedFrameDecoder`.
+6. Netty Source Code: `io.netty.handler.codec.MessageToByteEncoder`.
+7. Netty Source Code: `io.netty.handler.codec.ReplayingDecoder`.
 
 ---
 

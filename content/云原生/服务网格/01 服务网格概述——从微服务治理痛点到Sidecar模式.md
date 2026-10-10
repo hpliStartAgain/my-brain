@@ -490,7 +490,6 @@ graph LR
 9. CNCF. Linkerd 毕业公告（首个从 CNCF 毕业的服务网格）. 2021-07.
 10. Netflix. Hystrix 项目状态说明（GitHub README：转入维护模式，推荐 Resilience4j）. 2018-12.
 11. Peter Deutsch 等. Fallacies of Distributed Computing. 1994-1997.
-12. 周志明. 凤凰架构：构建可靠的大型分布式系统. 机械工业出版社， 2021.（服务网格章节）
 
 ---
 

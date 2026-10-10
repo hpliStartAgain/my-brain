@@ -590,8 +590,7 @@ rate.Limiter 内部用一把 `sync.Mutex` 保护所有状态。在单核 gorouti
 3. Google. (2021). *golang.org/x/time/rate* 文档与源码. Go Authors.
 4. Hoare, C. A. R. (1978). *Communicating Sequential Processes*. Communications of the ACM, 21(8), 666-677.
 5. Turner, J. (1986). *Two approaches to traffic modelling using the Leaky Bucket algorithm*. ICCC.
-6. 周志明. (2021). *凤凰架构：构建可靠的大型分布式系统*. 第 8 章「服务治理」.
-7. Go Team. (2022). *Go 1.20 Release Notes* —— errgroup.SetLimit 引入.
+6. Go Team. (2022). *Go 1.20 Release Notes* —— errgroup.SetLimit 引入.
 
 ---
 
