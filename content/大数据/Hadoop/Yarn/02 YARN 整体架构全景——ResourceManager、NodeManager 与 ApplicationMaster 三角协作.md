@@ -191,7 +191,7 @@ NM 的完整职责：
 
 **本地资源管理**：
 - 管理 Container 的本地化资源（Localization）：在 Container 启动前，从 HDFS 下载应用所需的 JAR 包、配置文件、用户 Token 到本地磁盘，并维护本地资源缓存
-- 通过 [[Linux CGroups]] 对 Container 的 CPU 和内存使用进行硬性限制（在 `LinuxContainerExecutor` 模式下）
+- 通过 Linux CGroups 对 Container 的 CPU 和内存使用进行硬性限制（在 `LinuxContainerExecutor` 模式下）
 - 监控 Container 的内存使用，超过限制的 Container 会被强制杀死
 
 NM **不负责**的事情：

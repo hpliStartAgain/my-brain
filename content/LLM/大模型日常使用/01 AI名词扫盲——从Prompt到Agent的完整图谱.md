@@ -43,13 +43,13 @@ aliases: []
 
 本文按照从底层到高层的顺序组织：越靠前的概念越基础，越靠后的概念越依赖前面的基础。如果你是第一次系统梳理这些概念，建议顺序阅读。如果你对某个特定层次有疑问，可以直接跳到对应章节，但请确保你对前置概念已有基本了解。
 
-文中所有关键概念都用 `[[双重中括号]]` 标注，方便在知识图谱中建立链接。架构图使用 Mermaid 绘制，表格使用标准 Markdown 格式。
+文中所有关键概念都用 `双重中括号` 标注，方便在知识图谱中建立链接。架构图使用 Mermaid 绘制，表格使用标准 Markdown 格式。
 
 ---
 
 ## 第 2 章 基础层：模型交互原语
 
-### 2.1 [[Token]]——LLM 的最小计算单元
+### 2.1 Token——LLM 的最小计算单元
 
 #### 是什么
 
@@ -84,17 +84,17 @@ Token 是一个模型内部的概念，不同模型的 Token 计数不可直接�
 
 ---
 
-### 2.2 [[Prompt]]——模型的"指令语言"
+### 2.2 Prompt——模型的"指令语言"
 
 Prompt 是你发给模型的输入文本。听起来简单，但现代 LLM API 的 Prompt 系统有三个不同的角色，混淆它们会导致系统行为不符合预期。
 
-#### 2.2.1 [[User Prompt]]（用户消息）
+#### 2.2.1 User Prompt（用户消息）
 
 **是什么**：对话中用户角色发送的消息。在 API 调用中，`role: "user"` 对应的内容。这是你最熟悉的部分——用户在对话框里输入的问题、指令、内容，都是 User Prompt。
 
 **为什么重要**：这是模型感知当前任务的主要输入。User Prompt 的质量直接影响输出质量。但 User Prompt 的局限是它没有持久性——每次对话请求都需要重新构造，适合表达当次请求的具体内容，不适合表达不变的系统级行为要求。
 
-#### 2.2.2 [[System Prompt]]（系统提示词）
+#### 2.2.2 System Prompt（系统提示词）
 
 **是什么**：在 API 调用中，`role: "system"` 对应的内容，位于对话上下文的最顶部。System Prompt 用于定义模型在整个对话中的角色、行为规则、输出格式要求、知识边界声明等全局约束。
 
@@ -139,7 +139,7 @@ Prompt 是你发给模型的输入文本。听起来简单，但现代 LLM API �
 > [!note] 关于 System Prompt 长度
 > System Prompt 过长会消耗宝贵的上下文窗口，且模型对超长 System Prompt 的遵循度会下降（"Lost in the Middle"现象）。建议将静态的、不变的规则放在 System Prompt，将动态的、按请求变化的内容放在 User Prompt 或通过 RAG 动态注入。
 
-#### 2.2.3 [[Assistant Prompt]]（助手预填充）
+#### 2.2.3 Assistant Prompt（助手预填充）
 
 **是什么**：在 API 调用中，`role: "assistant"` 对应的预填充内容。这是一个较少被提及但在某些场景下极为有用的技巧：在发送请求时，在对话历史的末尾附上一段"助手已经开始回复"的内容，强制模型从这个位置继续生成。
 
@@ -152,7 +152,7 @@ Prompt 是你发给模型的输入文本。听起来简单，但现代 LLM API �
 
 ---
 
-### 2.3 [[上下文窗口]]（Context Window）——模型的"工作内存"
+### 2.3 上下文窗口（Context Window）——模型的"工作内存"
 
 #### 是什么
 
@@ -212,7 +212,7 @@ XML 风格的标签（尤其是 Claude 推荐的风格）帮助模型识别信�
 
 大模型的知识来自预训练数据，有两个天然的局限：**知识截止日期**（训练数据的时间边界）和**私有数据盲区**（公司内部文档、个人数据从未出现在训练集中）。本章介绍的三个概念都是为了打破这两个限制。
 
-### 3.1 [[Embedding]]——把文字变成数字
+### 3.1 Embedding——把文字变成数字
 
 #### 是什么
 
@@ -244,7 +244,7 @@ Embedding（嵌入）是将文本（词、句子、段落）映射到高维向�
 | BGE 系列 | BAAI | 768/1024 | 开源，中文效果好 |
 | m3e-base | 开源 | 768 | 专为中文优化 |
 
-Embedding 生成后通常存入向量数据库（[[Vector Database]]），如 Pinecone、Weaviate、Qdrant、pgvector（PostgreSQL 插件）。
+Embedding 生成后通常存入向量数据库（Vector Database），如 Pinecone、Weaviate、Qdrant、pgvector（PostgreSQL 插件）。
 
 #### 边界与反例
 
@@ -252,7 +252,7 @@ Embedding 只捕捉语义相似性，不捕捉逻辑关系。"猫吃鱼"和"鱼�
 
 ---
 
-### 3.2 [[RAG]]（检索增强生成）——"开卷考试"的本质
+### 3.2 RAG（检索增强生成）——"开卷考试"的本质
 
 #### 是什么
 
@@ -311,7 +311,7 @@ Fine-tuning（微调）是另一种让模型"知道更多"的方法：在预训�
 
 ---
 
-### 3.3 [[Memory]]——让模型"记住你"
+### 3.3 Memory——让模型"记住你"
 
 #### 是什么
 
@@ -356,7 +356,7 @@ Memory 是让模型在跨越上下文窗口、跨越多个会话之间，保留�
 
 前面三章讨论的是如何让模型"知道更多"——扩充它的知识边界。本章讨论的是如何让模型"做更多"——让模型不只是生成文字，还能与外部世界交互：调用 API、执行代码、查询数据库、控制外部系统。
 
-### 4.1 [[Function Calling]]——模型的"手"
+### 4.1 Function Calling——模型的"手"
 
 #### 是什么
 
@@ -435,7 +435,7 @@ Function Calling 不适合以下场景：
 
 ---
 
-### 4.2 [[Tool Use]]——Function Calling 的泛化
+### 4.2 Tool Use——Function Calling 的泛化
 
 #### Tool 和 Function Calling 的关系与区别
 
@@ -460,7 +460,7 @@ Anthropic Claude 早期使用的 XML 标签格式调用工具，与 OpenAI 的 J
 
 ---
 
-### 4.3 [[MCP]]（Model Context Protocol）——工具连接的"USB 标准"
+### 4.3 MCP（Model Context Protocol）——工具连接的"USB 标准"
 
 #### 为什么需要 MCP
 
@@ -560,7 +560,7 @@ MCP 的通信方式支持两种传输层：
 
 Agent 要解决的问题是**让模型自主规划和执行多步任务**，无需人在每一步介入。
 
-### 5.1 [[AI Agent]]——能自主完成任务的"程序"
+### 5.1 AI Agent——能自主完成任务的"程序"
 
 #### 是什么
 
@@ -570,7 +570,7 @@ AI Agent 是一种以 LLM 为核心推理引擎、能够自主感知环境、规
 
 **感知（Perception）**：Agent 接收输入的能力。输入可以是用户的文字指令、环境的状态（当前目录、数据库状态）、工具执行的结果、其他 Agent 的消息。感知层决定了 Agent"看到了什么"。
 
-**推理（Reasoning）**：LLM 的核心能力，将感知到的信息转化为行动计划。现代 Agent 普遍采用 **[[ReAct]]**（Reasoning + Acting）范式：
+**推理（Reasoning）**：LLM 的核心能力，将感知到的信息转化为行动计划。现代 Agent 普遍采用 **ReAct**（Reasoning + Acting）范式：
 
 ```
 Thought: 我需要先查询用户的账户余额，再决定是否可以执行转账
@@ -617,7 +617,7 @@ graph TD
 
 ---
 
-### 5.2 [[Multi-Agent]]——协作完成复杂任务
+### 5.2 Multi-Agent——协作完成复杂任务
 
 #### 是什么
 
@@ -643,7 +643,7 @@ graph TD
 
 **Pipeline（管道架构）**：每个 Agent 处理任务的一个阶段，输出作为下一个 Agent 的输入，适合线性的处理流程，如数据清洗 → 分析 → 报告生成。
 
-#### [[A2A]]（Agent-to-Agent）协议简介
+#### A2A（Agent-to-Agent）协议简介
 
 A2A 是 Google 于 2025 年提出的 Agent 间通信协议，旨在解决跨框架、跨厂商的 Multi-Agent 系统中 Agent 间如何发现彼此能力、传递任务、交换结果的标准化问题。与 MCP（解决 Agent-工具连接）不同，A2A 解决的是 Agent-Agent 连接问题。
 
@@ -657,7 +657,7 @@ A2A 的核心概念：
 
 ---
 
-### 5.3 [[Skills]]（Claude Code Skills）——可复用的 Agent 行为模式
+### 5.3 Skills（Claude Code Skills）——可复用的 Agent 行为模式
 
 #### 是什么
 
@@ -692,7 +692,7 @@ Skills 与 System Prompt 的区别在于粒度：System Prompt 定义 Agent 的�
 
 前面的章节讨论的主要是"输入侧"的增强（更多知识、更多工具）。本章讨论"推理侧"的增强：如何让模型在给出最终答案之前，做更深入、更系统的思考。
 
-### 6.1 [[Chain-of-Thought]]（CoT）——逐步推理
+### 6.1 Chain-of-Thought（CoT）——逐步推理
 
 #### 是什么
 
@@ -720,7 +720,7 @@ CoT 并不总是有益的。对于简单的事实查询（"法国的首都是哪
 
 ---
 
-### 6.2 [[Extended Thinking]] / [[Reasoning]]——模型的"草稿纸"
+### 6.2 Extended Thinking / Reasoning——模型的"草稿纸"
 
 #### 是什么
 
@@ -765,45 +765,45 @@ Extended Thinking 不是万能提升器。它在以下任务上提升显著：�
 ```mermaid
 graph TD
     subgraph "基础层 (模型交互原语)"
-        T["[[Token]]\n最小计算单元"]
-        P["[[Prompt]]"]
-        P --> SP["[[System Prompt]]"]
-        P --> UP["[[User Prompt]]"]
-        P --> AP["[[Assistant Prompt]]"]
-        CW["[[上下文窗口]]\nContext Window"]
+        T["Token\n最小计算单元"]
+        P["Prompt"]
+        P --> SP["System Prompt"]
+        P --> UP["User Prompt"]
+        P --> AP["Assistant Prompt"]
+        CW["上下文窗口\nContext Window"]
     end
 
     subgraph "知识增强层"
-        E["[[Embedding]]\n语义向量化"]
-        RAG["[[RAG]]\n检索增强生成"]
-        MEM["[[Memory]]\n短期/长期记忆"]
-        VDB["[[Vector Database]]"]
+        E["Embedding\n语义向量化"]
+        RAG["RAG\n检索增强生成"]
+        MEM["Memory\n短期/长期记忆"]
+        VDB["Vector Database"]
         E --> VDB
         VDB --> RAG
     end
 
     subgraph "能力扩展层"
-        FC["[[Function Calling]]\n结构化工具调用"]
-        TU["[[Tool Use]]\nFunction Calling 的泛化"]
-        MCP["[[MCP]]\nModel Context Protocol"]
+        FC["Function Calling\n结构化工具调用"]
+        TU["Tool Use\nFunction Calling 的泛化"]
+        MCP["MCP\nModel Context Protocol"]
         FC --> TU
         TU --> MCP
     end
 
     subgraph "自主决策层"
-        AG["[[AI Agent]]\n感知-推理-行动-循环"]
-        REACT["[[ReAct]]\n推理范式"]
-        MAG["[[Multi-Agent]]"]
-        SKL["[[Skills]]\n可复用行为模式"]
-        A2A["[[A2A]]\nAgent间协议"]
+        AG["AI Agent\n感知-推理-行动-循环"]
+        REACT["ReAct\n推理范式"]
+        MAG["Multi-Agent"]
+        SKL["Skills\n可复用行为模式"]
+        A2A["A2A\nAgent间协议"]
         REACT --> AG
         AG --> MAG
         MAG --> A2A
     end
 
     subgraph "高级推理层"
-        COT["[[Chain-of-Thought]]"]
-        ET["[[Extended Thinking]]"]
+        COT["Chain-of-Thought"]
+        ET["Extended Thinking"]
     end
 
     T --> CW
@@ -821,26 +821,26 @@ graph TD
 
 | 名词 | 层级 | 一句话定义 | 典型工具/产品 |
 |------|------|-----------|-------------|
-| [[Token]] | 基础层 | LLM 处理文本的最小单位，由分词器切分 | tiktoken, tokenizer |
-| [[Prompt]] | 基础层 | 发送给模型的输入文本的总称 | - |
-| [[System Prompt]] | 基础层 | 定义模型全局行为的系统级指令 | - |
-| [[User Prompt]] | 基础层 | 用户角色发送的即时请求消息 | - |
-| [[Assistant Prompt]] | 基础层 | 预填充的助手回复起始内容 | - |
-| [[上下文窗口]] | 基础层 | 模型单次推理能处理的最大 Token 数 | - |
-| [[Embedding]] | 知识增强层 | 将文本映射到语义向量空间的技术 | text-embedding-3, BGE, m3e |
-| [[Vector Database]] | 知识增强层 | 存储和检索向量的专用数据库 | Pinecone, Qdrant, pgvector |
-| [[RAG]] | 知识增强层 | 检索外部知识后再生成回答的范式 | LlamaIndex, LangChain |
-| [[Memory]] | 知识增强层 | 跨越上下文窗口和会话的信息持久化 | Mem0, Zep |
-| [[Function Calling]] | 能力扩展层 | 模型声明调用函数意图的结构化机制 | OpenAI API, Claude API |
-| [[Tool Use]] | 能力扩展层 | 模型使用外部工具的泛化能力 | LangChain Tools |
-| [[MCP]] | 能力扩展层 | 工具连接的标准协议（Anthropic提出） | MCP SDK, Claude Desktop |
-| [[AI Agent]] | 自主决策层 | 以 LLM 为核心的自主任务执行程序 | LangChain Agent, AutoGPT |
-| [[ReAct]] | 自主决策层 | 将推理和行动交替执行的 Agent 范式 | - |
-| [[Multi-Agent]] | 自主决策层 | 多个 Agent 协作完成复杂任务的架构 | CrewAI, AutoGen |
-| [[A2A]] | 自主决策层 | Agent 间通信和协作的标准协议（Google提出） | A2A SDK |
-| [[Skills]] | 自主决策层 | Claude Code 中预定义的可复用行为模式 | Claude Code |
-| [[Chain-of-Thought]] | 高级推理层 | 通过展示推理步骤提升复杂任务准确率 | - |
-| [[Extended Thinking]] | 高级推理层 | 模型在内部进行大量思考后再输出答案 | OpenAI o系列, Claude 3.7 |
+| Token | 基础层 | LLM 处理文本的最小单位，由分词器切分 | tiktoken, tokenizer |
+| Prompt | 基础层 | 发送给模型的输入文本的总称 | - |
+| System Prompt | 基础层 | 定义模型全局行为的系统级指令 | - |
+| User Prompt | 基础层 | 用户角色发送的即时请求消息 | - |
+| Assistant Prompt | 基础层 | 预填充的助手回复起始内容 | - |
+| 上下文窗口 | 基础层 | 模型单次推理能处理的最大 Token 数 | - |
+| Embedding | 知识增强层 | 将文本映射到语义向量空间的技术 | text-embedding-3, BGE, m3e |
+| Vector Database | 知识增强层 | 存储和检索向量的专用数据库 | Pinecone, Qdrant, pgvector |
+| RAG | 知识增强层 | 检索外部知识后再生成回答的范式 | LlamaIndex, LangChain |
+| Memory | 知识增强层 | 跨越上下文窗口和会话的信息持久化 | Mem0, Zep |
+| Function Calling | 能力扩展层 | 模型声明调用函数意图的结构化机制 | OpenAI API, Claude API |
+| Tool Use | 能力扩展层 | 模型使用外部工具的泛化能力 | LangChain Tools |
+| MCP | 能力扩展层 | 工具连接的标准协议（Anthropic提出） | MCP SDK, Claude Desktop |
+| AI Agent | 自主决策层 | 以 LLM 为核心的自主任务执行程序 | LangChain Agent, AutoGPT |
+| ReAct | 自主决策层 | 将推理和行动交替执行的 Agent 范式 | - |
+| Multi-Agent | 自主决策层 | 多个 Agent 协作完成复杂任务的架构 | CrewAI, AutoGen |
+| A2A | 自主决策层 | Agent 间通信和协作的标准协议（Google提出） | A2A SDK |
+| Skills | 自主决策层 | Claude Code 中预定义的可复用行为模式 | Claude Code |
+| Chain-of-Thought | 高级推理层 | 通过展示推理步骤提升复杂任务准确率 | - |
+| Extended Thinking | 高级推理层 | 模型在内部进行大量思考后再输出答案 | OpenAI o系列, Claude 3.7 |
 
 ### 7.3 一张图理解选型逻辑
 
@@ -852,22 +852,22 @@ flowchart TD
     Q1 -->|"是"| Q2{"知识更新\n是否频繁？"}
     Q1 -->|"否"| Q5{"需要调用\n外部系统？"}
 
-    Q2 -->|"是（小时级）"| RAG2["[[RAG]] + 增量更新管道"]
+    Q2 -->|"是（小时级）"| RAG2["RAG + 增量更新管道"]
     Q2 -->|"否（月级）"| FT["考虑 Fine-tuning\n或静态 RAG"]
 
     Q5 -->|"是"| Q6{"工具数量？"}
     Q5 -->|"否"| Q9{"推理复杂度？"}
 
-    Q6 -->|"1-5 个，自建"| FC2["[[Function Calling]]"]
-    Q6 -->|"多个，或需复用"| MCP2["[[MCP]] 生态"]
+    Q6 -->|"1-5 个，自建"| FC2["Function Calling"]
+    Q6 -->|"多个，或需复用"| MCP2["MCP 生态"]
 
     Q9 -->|"简单，单步"| BASIC["普通 LLM 调用\n好的 System Prompt"]
-    Q9 -->|"中等，多步固定"| WF["[[Workflow]] (固定管道)"]
-    Q9 -->|"复杂，动态规划"| AGENT["[[Agent]] (ReAct循环)"]
-    Q9 -->|"极复杂，数学/证明"| ET2["[[Extended Thinking]] 模型"]
+    Q9 -->|"中等，多步固定"| WF["Workflow (固定管道)"]
+    Q9 -->|"复杂，动态规划"| AGENT["Agent (ReAct循环)"]
+    Q9 -->|"极复杂，数学/证明"| ET2["Extended Thinking 模型"]
 
     AGENT --> Q7{"是否需要\n多人协作模式？"}
-    Q7 -->|"是"| MAAG["[[Multi-Agent]] 架构"]
+    Q7 -->|"是"| MAAG["Multi-Agent 架构"]
     Q7 -->|"否"| AGENT
 
     style RAG2 fill:#e8f5e9

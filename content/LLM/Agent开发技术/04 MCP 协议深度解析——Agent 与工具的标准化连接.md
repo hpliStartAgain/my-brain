@@ -425,7 +425,7 @@ MCP 不是要替代 Function Calling——Function Calling 是 LLM API 层面的
 
 ### 8.1 Agent 调用 Agent
 
-随着多 Agent 系统的普及（详见 [[08 多 Agent 系统与 A2A 协议]]），MCP 正在从"工具协议"演进为"Agent 互操作协议"。
+随着多 Agent 系统的普及（详见 08 多 Agent 系统与 A2A 协议），MCP 正在从"工具协议"演进为"Agent 互操作协议"。
 
 一个 Agent（作为 MCP Client）可以通过 MCP 调用另一个 Agent（作为 MCP Server）提供的能力——这与调用普通工具完全相同的接口，但背后运行的是一个具有自主推理能力的 Sub-Agent。
 
@@ -443,7 +443,7 @@ Google 在 2025 年提出的 **A2A（Agent-to-Agent）协议** 与 MCP 在设计
 - **MCP**：聚焦于 Agent 与**工具和数据资源**的连接（垂直方向）——让 Agent 能调用各种工具
 - **A2A**：聚焦于 **Agent 与 Agent** 之间的协调和任务委派（水平方向）——让 Agent 能互相合作
 
-在 [[08 多 Agent 系统与 A2A 协议]] 中，我们会详细讨论这两个协议如何在多 Agent 系统中协同使用。
+在 08 多 Agent 系统与 A2A 协议 中，我们会详细讨论这两个协议如何在多 Agent 系统中协同使用。
 
 ---
 

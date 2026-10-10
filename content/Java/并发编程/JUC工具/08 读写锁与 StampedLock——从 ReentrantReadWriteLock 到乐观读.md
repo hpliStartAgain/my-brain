@@ -431,7 +431,7 @@ public boolean validate(long stamp) {
 
 **无 Condition 支持**：`StampedLock` 没有 `Condition` 机制，不能用于需要 `await()`/`signal()` 的场景。
 
-**锁超时需要关注 Pinning**：在 JDK 21 虚拟线程环境下（[[JUC工具/16 JDK 21 虚拟线程——Project Loom 的协程实现]]），`StampedLock` 在阻塞时会 pin 住载体线程（因为底层用的是 `LockSupport.park`，JDK 19+ 虚拟线程对 `park` 有优化，但 `StampedLock` 的 `readLock()` 阻塞路径仍需注意）。
+**锁超时需要关注 Pinning**：在 JDK 21 虚拟线程环境下（JUC工具/16 JDK 21 虚拟线程——Project Loom 的协程实现），`StampedLock` 在阻塞时会 pin 住载体线程（因为底层用的是 `LockSupport.park`，JDK 19+ 虚拟线程对 `park` 有优化，但 `StampedLock` 的 `readLock()` 阻塞路径仍需注意）。
 
 **stamp 不能被随意传递**：`stamp` 本质上是一个能力令牌（capability token），解锁时必须传入获取锁时返回的那个 `stamp`，传错了会有奇怪行为（或抛异常）。
 
@@ -490,7 +490,7 @@ public boolean validate(long stamp) {
 
 `StampedLock` 的乐观读通过**版本号（stamp）检测冲突而非加锁**，在冲突概率极低时代价接近零，是高性能只读访问的终极方案。
 
-下一篇 [[JUC工具/09 并发容器（上）——ConcurrentHashMap 从 JDK7 到 JDK8 的重构]] 将展示这些锁理论在实际数据结构中的应用——`ConcurrentHashMap` 从 Segment 分段锁到 CAS + synchronized 的重构历程。
+下一篇 [[09 并发容器（上）——ConcurrentHashMap 从 JDK7 到 JDK8 的重构]] 将展示这些锁理论在实际数据结构中的应用——`ConcurrentHashMap` 从 Segment 分段锁到 CAS + synchronized 的重构历程。
 
 ---
 

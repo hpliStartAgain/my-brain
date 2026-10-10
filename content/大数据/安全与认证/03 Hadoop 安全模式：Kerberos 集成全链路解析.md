@@ -27,7 +27,7 @@ Hadoop 的安全模式（Secure Mode）并非简单地"开启 Kerberos"那么轻
 **授权（Authorization）**：确认身份后，"你能做什么"？
 - HDFS 文件权限（POSIX 权限 + ACL）
 - YARN 队列权限（哪些用户可以提交到哪些队列）
-- Hive/HBase 的行级、列级权限（由 [[Apache Ranger]] 管控，详见第 04 篇）
+- Hive/HBase 的行级、列级权限（由 Apache Ranger 管控，详见第 04 篇）
 
 **传输安全（Wire Security）**：数据在网络上传输时是否加密？
 - RPC 通信的完整性验证（Integrity）和加密（Privacy）
@@ -36,7 +36,7 @@ Hadoop 的安全模式（Secure Mode）并非简单地"开启 Kerberos"那么轻
 
 **审计（Audit）**：谁做了什么操作，留下了记录？
 - HDFS 审计日志
-- [[Apache Ranger]] 的统一审计体系（详见第 04 篇）
+- Apache Ranger 的统一审计体系（详见第 04 篇）
 
 本文聚焦**认证**这一核心环节，沿着 Spark on YARN 作业提交这条主线，把 HDFS、YARN 的认证流程完整串联起来。
 
@@ -142,7 +142,7 @@ Kerberos Principal 的格式是 `primary/instance@REALM`，而 Linux 系统和 H
 
 ### 3.1 SASL 是什么，为什么 Hadoop 选它
 
-在深入 Hadoop 认证流程之前，需要理解 [[SASL]]（Simple Authentication and Security Layer，简单认证与安全层）。SASL 是一个认证框架，定义于 RFC 4422，它的核心设计是**将认证机制与应用协议解耦**。
+在深入 Hadoop 认证流程之前，需要理解 SASL（Simple Authentication and Security Layer，简单认证与安全层）。SASL 是一个认证框架，定义于 RFC 4422，它的核心设计是**将认证机制与应用协议解耦**。
 
 **为什么需要 SASL？** 考虑 Hadoop 的 IPC（RPC 框架）需要支持多种认证方式：
 - Simple 模式（无加密，仅凭用户名）

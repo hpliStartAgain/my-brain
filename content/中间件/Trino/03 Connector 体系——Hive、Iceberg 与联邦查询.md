@@ -356,7 +356,7 @@ Trino 采用以下策略优化联邦 JOIN 的性能：
 
 ### 5.1 Delta Lake Connector
 
-**[[Delta Lake]]** 是 Databricks 开源的表格式，类似于 Iceberg，提供 ACID 事务、Schema 演变、时间旅行能力。与 Iceberg 的主要区别：
+**Delta Lake** 是 Databricks 开源的表格式，类似于 Iceberg，提供 ACID 事务、Schema 演变、时间旅行能力。与 Iceberg 的主要区别：
 - Delta Lake 使用 `_delta_log/` 目录下的 JSON 文件记录事务日志（Transaction Log），而非 Iceberg 的 Avro Manifest 文件
 - Delta Lake 的社区和 Databricks 生态绑定更紧（Databricks Runtime 是首要支持目标）
 - Trino 的 Delta Lake Connector 支持读取 Delta 表，包括时间旅行查询

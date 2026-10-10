@@ -42,7 +42,7 @@ public void handleRequest(Runnable task) {
 - **流量控制**：通过有界队列和拒绝策略，限制积压的任务数，防止无限创建线程导致 OOM。
 - **线程管理**：统一管理线程的生命周期、监控线程数量和任务执行状态。
 
-线程池的本质是一个**生产者-消费者模型**：提交任务的代码是生产者，池中的工作线程是消费者，`BlockingQueue` 是中间的缓冲队列（详见上篇 [[JUC工具/10 并发容器（下）——CopyOnWriteArrayList、BlockingQueue 家族]]）。
+线程池的本质是一个**生产者-消费者模型**：提交任务的代码是生产者，池中的工作线程是消费者，`BlockingQueue` 是中间的缓冲队列（详见上篇 [[10 并发容器（下）——CopyOnWriteArrayList、BlockingQueue 家族]]）。
 
 ---
 
@@ -190,7 +190,7 @@ static int ctlOf(int rs, int wc) { return rs | wc; }           // 合并
 
 **为什么用一个字段编码两个信息？**
 
-这与 [[JUC工具/08 读写锁与 StampedLock——从 ReentrantReadWriteLock 到乐观读]] 中 `ReentrantReadWriteLock` 的 `state` 高低位分割、[[JUC工具/09 并发容器（上）——ConcurrentHashMap 从 JDK7 到 JDK8 的重构]] 中 `sizeCtl` 的多语义复用是同一种设计思路：将两个相关的状态压缩到一个原子变量中，用一次 CAS 就能原子地同时更新两者，避免两个独立原子变量的更新出现中间不一致状态。
+这与 [[08 读写锁与 StampedLock——从 ReentrantReadWriteLock 到乐观读]] 中 `ReentrantReadWriteLock` 的 `state` 高低位分割、[[09 并发容器（上）——ConcurrentHashMap 从 JDK7 到 JDK8 的重构]] 中 `sizeCtl` 的多语义复用是同一种设计思路：将两个相关的状态压缩到一个原子变量中，用一次 CAS 就能原子地同时更新两者，避免两个独立原子变量的更新出现中间不一致状态。
 
 ### 3.2 线程池的生命周期
 
@@ -527,7 +527,7 @@ executor.setKeepAliveTime(60, TimeUnit.SECONDS); // 动态调整存活时间
 
 **Worker 继承 AQS**：用不可重入锁区分 Worker 的"空闲"和"执行中"状态，让 `shutdown()` 只中断空闲线程，实现了真正的优雅停机。
 
-下一篇 [[线程池/12 线程池（下）——ForkJoinPool 与工作窃取算法]] 将介绍另一种截然不同的线程池设计——`ForkJoinPool` 的工作窃取算法（Work-Stealing），它是 `CompletableFuture` 和并行流（`parallelStream`）的底层引擎。
+下一篇 [[12 线程池（下）——ForkJoinPool 与工作窃取算法]] 将介绍另一种截然不同的线程池设计——`ForkJoinPool` 的工作窃取算法（Work-Stealing），它是 `CompletableFuture` 和并行流（`parallelStream`）的底层引擎。
 
 ---
 

@@ -426,4 +426,4 @@ LIS 背后有一个更深的数学定理——**Dilworth 定理**：
 | LeetCode 673 Number of LIS | LIS 计数 | 额外维护 `cnt[i]` = 以 i 结尾的 LIS 数量 |
 | LeetCode 1143 Longest Common Subsequence | 另一类子序列 DP | 见下一篇 |
 
-下一篇[[最长公共子序列与字符串编辑距离]]将介绍另一大类子序列 DP——两个序列之间的最优匹配，包括 LCS 和 Edit Distance。
+下一篇最长公共子序列与字符串编辑距离将介绍另一大类子序列 DP——两个序列之间的最优匹配，包括 LCS 和 Edit Distance。

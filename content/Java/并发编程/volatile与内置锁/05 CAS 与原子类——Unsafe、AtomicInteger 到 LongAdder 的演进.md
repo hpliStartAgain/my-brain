@@ -17,7 +17,7 @@ aliases: []
 
 ### 1.1 为什么需要 CAS
 
-在 [[volatile与内置锁/03 volatile 的实现原理——内存屏障与禁止重排序]] 中我们看到，`volatile` 保证了单次读写的可见性，但不保证"读-改-写"的原子性。对于 `i++` 这类需要原子性的复合操作，我们需要额外的机制。
+在 [[03 volatile 的实现原理——内存屏障与禁止重排序]] 中我们看到，`volatile` 保证了单次读写的可见性，但不保证"读-改-写"的原子性。对于 `i++` 这类需要原子性的复合操作，我们需要额外的机制。
 
 悲观的方案是 `synchronized`：加锁 → 读 → 改 → 写 → 解锁，任何时刻只有一个线程能操作。代价是：其他线程必须阻塞等待，涉及操作系统调度，代价高昂。
 
@@ -473,11 +473,11 @@ long max = maxTracker.get();
 
 **乐观锁 vs 悲观锁**：CAS（乐观）在低竞争时远优于 `synchronized`（悲观），但在极高竞争时 CAS 的重试循环会退化，性能可能不如直接加锁。没有绝对的好坏，只有适合的场景。
 
-**分段的力量**：`LongAdder` vs `AtomicLong` 的性能差距，核心是"一个热点 vs 多个冷点"。相同的思想在 `ConcurrentHashMap`（[[JUC工具/09 并发容器（上）——ConcurrentHashMap 从 JDK7 到 JDK8 的重构]]，分桶锁）、`Striped<>` 等数据结构中都有体现。
+**分段的力量**：`LongAdder` vs `AtomicLong` 的性能差距，核心是"一个热点 vs 多个冷点"。相同的思想在 `ConcurrentHashMap`（[[09 并发容器（上）——ConcurrentHashMap 从 JDK7 到 JDK8 的重构]]，分桶锁）、`Striped<>` 等数据结构中都有体现。
 
 **@Contended 的重要性**：分段的前提是不同段不在同一缓存行。忘记防伪共享，分段的效果会大打折扣甚至适得其反。
 
-下一篇 [[JUC工具/06 AQS 框架——AbstractQueuedSynchronizer 的设计与实现]] 将展示 CAS 在更复杂场景下的应用——AQS 用一个 `volatile int state` 变量和 CAS 操作，构建出了整个 JUC 并发工具包的基础框架。
+下一篇 [[06 AQS 框架——AbstractQueuedSynchronizer 的设计与实现]] 将展示 CAS 在更复杂场景下的应用——AQS 用一个 `volatile int state` 变量和 CAS 操作，构建出了整个 JUC 并发工具包的基础框架。
 
 ---
 

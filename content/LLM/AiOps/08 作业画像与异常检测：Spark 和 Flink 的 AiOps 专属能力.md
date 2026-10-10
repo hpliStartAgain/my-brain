@@ -61,7 +61,7 @@ Spark 作业画像系统的数据来源有三个：
 - 作业的 YARN Application 信息（Application ID、队列、申请的 vCPU 和内存、实际使用的 vCPU 和内存）
 - 作业的 Container 日志 URL（用于快速跳转到 Driver 和 Executor 日志）
 
-**[[Prometheus]] / [[VictoriaMetrics]] JMX 指标**（实时监控，弥补 History Server 只有历史数据的局限）：
+**Prometheus / VictoriaMetrics JMX 指标**（实时监控，弥补 History Server 只有历史数据的局限）：
 - `spark_executor_jvm_memory_used_bytes`：Executor JVM 内存实时使用量
 - `spark_executor_jvm_gc_time_millis`：GC 时间（判断 GC 风暴用）
 - `spark_sql_streaming_batchDuration`：Spark Structured Streaming 的 Batch 执行时长
@@ -382,7 +382,7 @@ Checkpoint 延迟的根因通常是：算子 State 过大（历史数据积累�
 | 层次 | 数据类型 | 存储介质 | 保留周期 |
 |------|---------|---------|---------|
 | **实时作业状态** | 正在运行的作业的当前状态（进度、已用时间） | Redis | 24 小时 |
-| **作业执行快照** | 每次作业执行的汇总数据（基线计算用） | [[Doris]] / PostgreSQL | 180 天 |
+| **作业执行快照** | 每次作业执行的汇总数据（基线计算用） | Doris / PostgreSQL | 180 天 |
 | **作业画像基线** | 按（作业名, 数据量桶）的百分位基线 | PostgreSQL | 持久化（每日更新） |
 | **Stage 级别明细** | 每个 Stage 的 Task 分布数据（倾斜检测用） | Parquet / Doris | 30 天 |
 

@@ -305,7 +305,7 @@ class ObjectMonitor {
 
 ### 5.3 Monitor 的内存可见性保证
 
-`synchronized` 不只是互斥，它还提供了 [[线程安全问题/02 Java 内存模型（JMM）——happens-before 与可见性保证]] 中的监视器锁规则：**解锁 happens-before 后续的加锁**。
+`synchronized` 不只是互斥，它还提供了 [[02 Java 内存模型（JMM）——happens-before 与可见性保证]] 中的监视器锁规则：**解锁 happens-before 后续的加锁**。
 
 在 HotSpot 的实现中：
 
@@ -387,7 +387,7 @@ sb.append("c");
 
 JDK 15 废弃偏向锁，是锁优化机制随着硬件发展和 JDK 自身演进做出的自我调整——现代 CPU 上 CAS 代价已经足够小，偏向锁带来的收益已不足以覆盖其维护复杂度和偶发的 SafePoint 开销。
 
-下一篇 [[JUC工具/05 CAS 与原子类——Unsafe、AtomicInteger 到 LongAdder 的演进]] 将深入探讨 CAS 本身的实现原理，以及 JDK 在 CAS 基础上构建的原子类家族——这是轻量级锁的基础原语，也是无锁编程的核心工具。
+下一篇 [[05 CAS 与原子类——Unsafe、AtomicInteger 到 LongAdder 的演进]] 将深入探讨 CAS 本身的实现原理，以及 JDK 在 CAS 基础上构建的原子类家族——这是轻量级锁的基础原语，也是无锁编程的核心工具。
 
 ---
 

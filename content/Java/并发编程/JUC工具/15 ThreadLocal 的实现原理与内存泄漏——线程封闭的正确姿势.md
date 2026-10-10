@@ -538,7 +538,7 @@ private void resize() {
 
 **跨线程池传递**：`InheritableThreadLocal` 只在线程创建时继承一次，不适用线程池场景；`TransmittableThreadLocal`（TTL）通过在任务提交时捕获、执行前恢复的方式解决了这个问题，是工程实践中的标准方案。
 
-下一篇 [[JUC工具/16 JDK 21 虚拟线程——Project Loom 的协程实现与平台线程的边界]] 将进入 Java 并发编程的最新前沿——JDK 21 正式发布的虚拟线程（Virtual Threads），解析它如何通过 Continuation 和 Carrier Thread 实现轻量级协程，以及它对现有并发代码的影响。
+下一篇 [[16 JDK 21 虚拟线程——Project Loom 的协程实现与平台线程的边界]] 将进入 Java 并发编程的最新前沿——JDK 21 正式发布的虚拟线程（Virtual Threads），解析它如何通过 Continuation 和 Carrier Thread 实现轻量级协程，以及它对现有并发代码的影响。
 
 ---
 

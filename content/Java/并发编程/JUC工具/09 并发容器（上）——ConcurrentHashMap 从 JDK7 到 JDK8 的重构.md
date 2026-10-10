@@ -413,7 +413,7 @@ private final void transfer(Node<K,V>[] tab, Node<K,V>[] nextTab) {
 
 ### 5.1 为什么 size() 不能用单个 volatile 字段
 
-简单地用一个 `volatile long size` 字段来记录元素数量，在高并发写的场景下会产生严重的性能问题：所有 `put`/`remove` 操作都要 CAS 更新这个字段，造成全局 CAS 热点（与 `AtomicLong` 在高竞争下的问题完全相同，参见 [[volatile与内置锁/05 CAS 与原子类——Unsafe、AtomicInteger 到 LongAdder 的演进]]）。
+简单地用一个 `volatile long size` 字段来记录元素数量，在高并发写的场景下会产生严重的性能问题：所有 `put`/`remove` 操作都要 CAS 更新这个字段，造成全局 CAS 热点（与 `AtomicLong` 在高竞争下的问题完全相同，参见 [[05 CAS 与原子类——Unsafe、AtomicInteger 到 LongAdder 的演进]]）。
 
 ### 5.2 baseCount + CounterCell 的分段设计
 
@@ -513,7 +513,7 @@ map.computeIfAbsent(0, k -> map.computeIfAbsent(0, k2 -> 42));
 
 JDK 8 的重构本质是：用**更细粒度**（单桶）替代**中等粒度**（Segment），并将锁从 `ReentrantLock`（相对重）换成 `synchronized`（JDK 6+ 经过锁升级优化后，在低竞争场景下极轻量）。同时，将链表改为红黑树解决了哈希冲突严重时的性能退化问题（JDK 7 的链表在最坏情况下查找是 O(n)）。
 
-下一篇 [[JUC工具/10 并发容器（下）——CopyOnWriteArrayList、BlockingQueue 家族]] 将讨论另一类并发容器——`CopyOnWriteArrayList` 的写时复制语义，以及 `BlockingQueue` 家族的各种实现与适用场景。
+下一篇 [[10 并发容器（下）——CopyOnWriteArrayList、BlockingQueue 家族]] 将讨论另一类并发容器——`CopyOnWriteArrayList` 的写时复制语义，以及 `BlockingQueue` 家族的各种实现与适用场景。
 
 ---
 

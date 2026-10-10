@@ -173,7 +173,7 @@ val currentState: UnsafeRow = store.get(keyRow)
 
 **为什么需要删除标记而不是真的删除？**
 
-因为 delta 文件是追加写入的（Append-only），无法从已写入的文件中"撤销"一条记录。用 tombstone（墓碑标记）表示删除，在恢复时加载 delta 后，遇到 tombstone 就从 HashMap 中删除对应的 key。这是 [[LSM Tree]]（Log-Structured Merge Tree）风格的经典设计。
+因为 delta 文件是追加写入的（Append-only），无法从已写入的文件中"撤销"一条记录。用 tombstone（墓碑标记）表示删除，在恢复时加载 delta 后，遇到 tombstone 就从 HashMap 中删除对应的 key。这是 LSM Tree（Log-Structured Merge Tree）风格的经典设计。
 
 ### 3.3 提交（commit）：将增量写入 HDFS
 

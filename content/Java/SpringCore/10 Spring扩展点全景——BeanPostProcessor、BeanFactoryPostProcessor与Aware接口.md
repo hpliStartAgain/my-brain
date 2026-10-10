@@ -777,7 +777,7 @@ sequenceDiagram
 
 掌握了这张知识地图，你不仅能读懂 Spring 源码，更能在此基础上为自己的项目构建符合 Spring 惯用模式的框架扩展。
 
-SpringCore 专栏至此完结。SpringBoot 专栏将以此为基础，继续探索 Spring Boot 如何通过自动装配、条件注解、内嵌容器等机制，在 Spring Framework 之上构建"开箱即用"的现代应用开发体验：[[SpringBoot/00 专栏导览]]。
+SpringCore 专栏至此完结。SpringBoot 专栏将以此为基础，继续探索 Spring Boot 如何通过自动装配、条件注解、内嵌容器等机制，在 Spring Framework 之上构建"开箱即用"的现代应用开发体验：[[00 专栏导览]]。
 
 ---
 

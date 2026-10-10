@@ -138,7 +138,7 @@ EditLog 文件也以 txid 命名，分为两种状态：
 
 EditLog 采用**顺序追加写**（Sequential Append）的方式，这是磁盘 I/O 性能最高的写入模式（顺序写的速度比随机写快 1~2 个数量级）。NameNode 的每次元数据写操作，只需在 EditLog 文件末尾追加一条记录，延迟极低。
 
-但 EditLog 的持久化写入涉及一个关键问题：**`fsync()` 的代价**。POSIX 的 `write()` 系统调用只是把数据写入了操作系统的 [[Page Cache]]，并不保证数据落到了物理磁盘。只有调用 `fsync()`（或 `fdatasync()`）才能强制把 Page Cache 中的数据刷到磁盘。`fsync()` 的代价是几毫秒的磁盘寻道和写入时间。
+但 EditLog 的持久化写入涉及一个关键问题：**`fsync()` 的代价**。POSIX 的 `write()` 系统调用只是把数据写入了操作系统的 Page Cache，并不保证数据落到了物理磁盘。只有调用 `fsync()`（或 `fdatasync()`）才能强制把 Page Cache 中的数据刷到磁盘。`fsync()` 的代价是几毫秒的磁盘寻道和写入时间。
 
 如果每次 EditLog 追加都同步调用 `fsync()`，写入延迟会很高，NameNode 的元数据写吞吐量会被 `fsync()` 的延迟严重制约。HDFS 对此做了**批量 `fsync()` 优化**：
 
@@ -180,7 +180,7 @@ Checkpoint 之后，NameNode 重启时只需要加载这个新的 FsImage（它�
 
 ### 4.2 在 NameNode 自身上做 Checkpoint 为什么不合适
 
-为什么不直接在 NameNode 上做 Checkpoint？原因很简单：Checkpoint 的合并过程计算量很大（需要遍历整个 INode 树并序列化），会占用大量 CPU 和内存，并且会引发大规模的 [[JVM GC]]。如果在 NameNode 自身上执行，会严重影响 NameNode 的正常服务响应——在 Checkpoint 执行期间，NameNode 响应 Client 的元数据请求会出现明显的延迟抖动，在大规模集群下甚至可能触发 GC Stop-The-World 导致服务短暂不可用。
+为什么不直接在 NameNode 上做 Checkpoint？原因很简单：Checkpoint 的合并过程计算量很大（需要遍历整个 INode 树并序列化），会占用大量 CPU 和内存，并且会引发大规模的 JVM GC。如果在 NameNode 自身上执行，会严重影响 NameNode 的正常服务响应——在 Checkpoint 执行期间，NameNode 响应 Client 的元数据请求会出现明显的延迟抖动，在大规模集群下甚至可能触发 GC Stop-The-World 导致服务短暂不可用。
 
 因此，HDFS 把 Checkpoint 工作**转移到一个独立的辅助进程**上执行，这就是 **Secondary NameNode（SNN）** 的由来。
 

@@ -7,7 +7,7 @@ aliases: ["Paimon诞生背景", "流式写湖延迟", "LSM-Tree数据湖", "Flin
 
 **摘要：**
 
-本文从一个在 2021 年前后困扰着大量实时数仓工程师的真实问题出发：**为什么用 [[Apache Flink]] 向数据湖（[[Apache Hudi]]、[[Apache Iceberg]]）写入数据，数据新鲜度始终无法突破 5-10 分钟的瓶颈？** 分析根本原因后，我们将理解这不是 Flink 的问题，也不是 Hudi/Iceberg 的问题，而是"不可变文件 + 微批提交"这个根本架构模式在高频写入场景下的天花板。[[Apache Paimon]] 用一个来自数据库领域已有 40 年历史的设计——**[[LSM-Tree]]（Log-Structured Merge-Tree）**——打破了这个天花板。理解 Paimon 为什么选择 LSM-Tree，是理解它与 Hudi/Iceberg 所有架构差异的起点。
+本文从一个在 2021 年前后困扰着大量实时数仓工程师的真实问题出发：**为什么用 Apache Flink 向数据湖（Apache Hudi、Apache Iceberg）写入数据，数据新鲜度始终无法突破 5-10 分钟的瓶颈？** 分析根本原因后，我们将理解这不是 Flink 的问题，也不是 Hudi/Iceberg 的问题，而是"不可变文件 + 微批提交"这个根本架构模式在高频写入场景下的天花板。Apache Paimon 用一个来自数据库领域已有 40 年历史的设计——**LSM-Tree（Log-Structured Merge-Tree）**——打破了这个天花板。理解 Paimon 为什么选择 LSM-Tree，是理解它与 Hudi/Iceberg 所有架构差异的起点。
 
 ---
 
@@ -83,7 +83,7 @@ Checkpoint 间隔 = 10 分钟：
 
 ### 1.3 为什么 Hudi MoR 也解决不了这个问题
 
-[[Apache Hudi]] 的 MoR（Merge-on-Read）表在每次 deltacommit 时只追加日志文件，写入很快——但这只解决了"写放大"问题，没有解决"提交延迟"问题。
+Apache Hudi 的 MoR（Merge-on-Read）表在每次 deltacommit 时只追加日志文件，写入很快——但这只解决了"写放大"问题，没有解决"提交延迟"问题。
 
 ```
 Hudi MoR 的 deltacommit 流程（Flink 场景）：
@@ -115,7 +115,7 @@ Paimon 团队（最初是阿里巴巴 Flink 团队）对这个问题的分析是
 
 ### 2.1 LSM-Tree 解决的问题
 
-[[LSM-Tree]] 最初由 Patrick O'Neil 等人于 1996 年提出，被 [[LevelDB]]、[[RocksDB]]、[[Apache HBase]]、[[Apache Cassandra]] 等系统广泛使用。它的设计目标是：**在随机写入（如按主键更新）场景下，实现接近顺序写的吞吐量**。
+LSM-Tree 最初由 Patrick O'Neil 等人于 1996 年提出，被 LevelDB、RocksDB、Apache HBase、Apache Cassandra 等系统广泛使用。它的设计目标是：**在随机写入（如按主键更新）场景下，实现接近顺序写的吞吐量**。
 
 为什么传统存储对随机写慢？以 B-Tree（关系数据库的标准索引）为例：
 
@@ -347,7 +347,7 @@ LSM-Tree 的固有代价（Paimon 继承）：
 
 ## 小结
 
-Paimon 的诞生解决了 Flink 实时写湖场景中"不可变文件模型的分钟级延迟天花板"问题，其核心武器是 LSM-Tree——这个在 [[RocksDB]]、[[HBase]]、[[Cassandra]] 中已经被广泛验证的存储设计，第一次被系统性地应用到数据湖场景。
+Paimon 的诞生解决了 Flink 实时写湖场景中"不可变文件模型的分钟级延迟天花板"问题，其核心武器是 LSM-Tree——这个在 RocksDB、HBase、Cassandra 中已经被广泛验证的存储设计，第一次被系统性地应用到数据湖场景。
 
 **Paimon 的核心价值主张**：在 Flink 流计算生态中，提供秒级延迟的流式 Upsert + ACID 语义 + 可查询的存储层——这是 Hudi 和 Iceberg 在 2022 年之前无法达到的。
 

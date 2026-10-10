@@ -124,7 +124,7 @@ I/O 放大比：1000MB / 几KB ≈ 10 万倍
 
 ### 2.2 Merge-on-Read（MoR）：写时代价低，读时需合并
 
-**Merge-on-Read（MoR）** 的思路是：写入时只记录变更（不重写文件），读取时合并原始文件和变更记录。这是 [[Apache Hudi]] 的原始设计，Delta Lake 2.0 通过 **Deletion Vector** 引入了 MoR 语义的部分特性。
+**Merge-on-Read（MoR）** 的思路是：写入时只记录变更（不重写文件），读取时合并原始文件和变更记录。这是 Apache Hudi 的原始设计，Delta Lake 2.0 通过 **Deletion Vector** 引入了 MoR 语义的部分特性。
 
 MoR 的写入模式：
 - **DELETE/UPDATE**：不重写 Parquet 文件，只在旁边创建一个 Delta 文件（记录哪些行被删除/修改）

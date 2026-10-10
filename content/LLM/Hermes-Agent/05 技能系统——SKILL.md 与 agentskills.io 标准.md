@@ -8,7 +8,7 @@ aliases: [Hermes 技能系统, SKILL.md 格式, agentskills.io 标准, Skills Hu
 # 05 技能系统——SKILL.md 与 agentskills.io 标准
 
 > [!abstract] 摘要
-> [[04 学习闭环——Observe-Distill-Reuse-Refine|上一篇]]拆解了学习闭环的"过程"——技能如何从经验中生长。本文聚焦技能系统的"文档层面"——技能的格式、标准和生态。文章从 SKILL.md 的标准格式开始——front-matter（name/description/version/platforms/metadata）+ 四段正文（When to Use / Procedure / Pitfalls / Verification）——逐字段解释含义和编写要点。然后深入 agentskills.io 开放标准——这个由 Hermes 推动的标准让技能可以跨 Agent 共享——Claude Code、Cursor、OpenHands、Gemini CLI、GitHub Copilot 等 18+ Agent 都支持——形成了"88k+ 技能"的共享生态。接着讨论技能的进阶特性：平台特定性（macOS/Linux/Windows 自动隐藏）、技能输出与媒体投递（`[[as_document]]` 和 `[[audio_as_voice]]` 指令）、外部技能目录、技能包（Skill Bundle）、技能的 opt-out 机制。最后对比 Hermes 技能与 MCP 的定位差异——技能是"知识"（告诉 Agent 怎么做），MCP 是"工具"（让 Agent 能做新事）——两者互补。核心认知：agentskills.io 标准的意义不亚于 MCP——MCP 标准化了"Agent 与工具的连接"，agentskills.io 标准化了"Agent 与知识的连接"——两者共同构成 Agent 生态的"双标准"。
+> [[04 学习闭环——Observe-Distill-Reuse-Refine|上一篇]]拆解了学习闭环的"过程"——技能如何从经验中生长。本文聚焦技能系统的"文档层面"——技能的格式、标准和生态。文章从 SKILL.md 的标准格式开始——front-matter（name/description/version/platforms/metadata）+ 四段正文（When to Use / Procedure / Pitfalls / Verification）——逐字段解释含义和编写要点。然后深入 agentskills.io 开放标准——这个由 Hermes 推动的标准让技能可以跨 Agent 共享——Claude Code、Cursor、OpenHands、Gemini CLI、GitHub Copilot 等 18+ Agent 都支持——形成了"88k+ 技能"的共享生态。接着讨论技能的进阶特性：平台特定性（macOS/Linux/Windows 自动隐藏）、技能输出与媒体投递（`as_document` 和 `audio_as_voice` 指令）、外部技能目录、技能包（Skill Bundle）、技能的 opt-out 机制。最后对比 Hermes 技能与 MCP 的定位差异——技能是"知识"（告诉 Agent 怎么做），MCP 是"工具"（让 Agent 能做新事）——两者互补。核心认知：agentskills.io 标准的意义不亚于 MCP——MCP 标准化了"Agent 与工具的连接"，agentskills.io 标准化了"Agent 与知识的连接"——两者共同构成 Agent 生态的"双标准"。
 
 ---
 
@@ -261,13 +261,13 @@ WSL2 的例子还提示了一个通用原则：**平台判断应该跟随"工具
 
 当技能响应（或任何 Agent 响应）包含裸的绝对路径指向媒体文件——如 `/home/user/screenshots/diagram.png`——网关自动检测它，从可见文本中剥离，并把文件原生投递到用户的聊天中（Telegram photo、Discord attachment 等）——而不是在消息中留下原始路径。
 
-**`[[as_document]]` 指令**：有时你想要"相反"的行为——把文件作为"可下载附件"投递，而非"内联预览"。经典场景是"高分辨率截图或图表"——Telegram 的 `sendPhoto` 会重压缩到 ~200KB / 1280px，破坏可读性。1-2MB 的 PNG 用 `sendDocument` 保持原始字节不变。如果响应包含字面指令 `[[as_document]]`，该响应的所有媒体路径作为文档/文件附件投递而非图片气泡。
+**`as_document` 指令**：有时你想要"相反"的行为——把文件作为"可下载附件"投递，而非"内联预览"。经典场景是"高分辨率截图或图表"——Telegram 的 `sendPhoto` 会重压缩到 ~200KB / 1280px，破坏可读性。1-2MB 的 PNG 用 `sendDocument` 保持原始字节不变。如果响应包含字面指令 `as_document`，该响应的所有媒体路径作为文档/文件附件投递而非图片气泡。
 
-**`[[audio_as_voice]]` 指令**：对于音频，`[[audio_as_voice]]` 把音频文件提升为"原生语音消息气泡"——在支持的平台上（Telegram、WhatsApp）。
+**`audio_as_voice` 指令**：对于音频，`audio_as_voice` 把音频文件提升为"原生语音消息气泡"——在支持的平台上（Telegram、WhatsApp）。
 
 **自动检测的工程价值**：这种"路径自动检测 + 原生投递"设计让技能（和 Agent）不需要"知道"目标平台的媒体投递机制——如技能不需要写"如果是 Telegram 用 sendPhoto，如果是 Discord 用 attachment"——只需要在响应中包含文件路径，网关自动处理。这种"平台无关的媒体投递"让技能可以跨平台工作——同一个技能在 Telegram 和 Discord 上都能正确投递媒体——不需要为每个平台写特殊逻辑。
 
-媒体投递指令还有一个值得点破的设计细节——**它们是"建议"而非"命令"**。`[[as_document]]` 表达的是投递意图，真正的投递决策在网关：平台不支持文档投递时，指令被安全忽略，媒体按默认方式处理。这种"意图声明 + 平台裁决"的分层，让指令体系可以自由扩展（未来可以有更多 `[[...]]` 指令）而不破坏任何平台——**扩展点留在语义层，适配留在网关层**。
+媒体投递指令还有一个值得点破的设计细节——**它们是"建议"而非"命令"**。`as_document` 表达的是投递意图，真正的投递决策在网关：平台不支持文档投递时，指令被安全忽略，媒体按默认方式处理。这种"意图声明 + 平台裁决"的分层，让指令体系可以自由扩展（未来可以有更多 `...` 指令）而不破坏任何平台——**扩展点留在语义层，适配留在网关层**。
 
 从用户体验的角度回看这套机制，它解决的是一个"最后一公里"问题：Agent 的产出质量再高，如果交付形态不对——高清图被压成糊图、语音报告变成文件附件——用户感知到的价值就打了折。媒体投递机制把"内容生产"与"交付形态"解耦，让前者专注质量、后者专注适配——**用户对 Agent 的满意度，往往取决于这类不起眼的交付细节，而非模型能力本身**。
 
@@ -454,7 +454,7 @@ Hermes 兼容 `CLAUDE.md`、`.cursorrules`、`AGENTS.md` 等多种上下文格�
 2. **agentskills.io 开放标准**——18+ Agent 支持（Claude Code/Cursor/OpenHands/Gemini CLI/GitHub Copilot 等）——88k+ 技能的共享生态
 3. **技能 vs MCP 的定位差异**——技能是"知识"（怎么做），MCP 是"工具"（能做什么）——两者互补——构成 Agent 生态"双标准"
 4. **平台特定性**——`platforms` 字段让技能在不兼容 OS 上自动隐藏
-5. **媒体投递指令**——`[[as_document]]`（文档附件 vs 图片气泡）、`[[audio_as_voice]]`（语音消息气泡）
+5. **媒体投递指令**——`as_document`（文档附件 vs 图片气泡）、`audio_as_voice`（语音消息气泡）
 6. **外部技能目录**——支持团队共享技能和项目特定技能
 7. **技能包**——一个短命令加载多个技能——用于反复使用的技能组合
 8. **opt-out 机制**——`hermes skills opt-out` 停止捆绑技能种子化——安全默认不删除已修改技能
@@ -479,7 +479,7 @@ Hermes 兼容 `CLAUDE.md`、`.cursorrules`、`AGENTS.md` 等多种上下文格�
 
 ### 6.3 下一篇导读
 
-下一篇 [[06 持久记忆——MEMORY.md/USER.md/Honcho]] 将从"程序性记忆"（技能）转向"陈述性记忆"（事实）——深入 Hermes 的持久记忆系统。基于 MEMORY.md（2200 字符限制）和 USER.md（1375 字符限制）的"高密度约束"设计、快照缓存机制（会话开始时冻结快照注入系统提示，支持 prefix cache）、Honcho 辩证法用户建模（跨会话用户理解的 Memory Provider 插件）、以及 8 种 Memory Provider 插件（Honcho/OpenViking/Mem0/Hindsight/Holographic/RetainDB/ByteRover/Supermemory）。
+下一篇 06 持久记忆——MEMORY.md/USER.md/Honcho 将从"程序性记忆"（技能）转向"陈述性记忆"（事实）——深入 Hermes 的持久记忆系统。基于 MEMORY.md（2200 字符限制）和 USER.md（1375 字符限制）的"高密度约束"设计、快照缓存机制（会话开始时冻结快照注入系统提示，支持 prefix cache）、Honcho 辩证法用户建模（跨会话用户理解的 Memory Provider 插件）、以及 8 种 Memory Provider 插件（Honcho/OpenViking/Mem0/Hindsight/Holographic/RetainDB/ByteRover/Supermemory）。
 
 > [!info] 专栏导航
 > 本文是 [[00 专栏导览|Hermes Agent 专栏]] 的第 5 篇，"核心架构"部分的第 3 篇。
@@ -502,4 +502,4 @@ Hermes 兼容 `CLAUDE.md`、`.cursorrules`、`AGENTS.md` 等多种上下文格�
 
 2. **Skills Hub 有 88k+ 技能——但质量参差不齐。如何防止"低质量技能"污染生态？是否需要"技能审核"机制？** 提示：考虑"开源生态的质量控制"——如 npm 有"下载量"和"star"作为质量信号，但没有"审核"。agentskills.io 可能采用类似模式——用"安装量"和"用户评分"作为质量信号——而非"中心化审核"。但"技能"比"代码包"风险更高——一个"跳过测试"的技能可能导致用户的生产系统故障——可能需要"危险技能"标记。
 
-3. **技能的 `[[as_document]]` 和 `[[audio_as_voice]]` 指令是 Hermes 特定的——不是 agentskills.io 标准。这是否违反了"跨 Agent 共享"的理念？如果 Claude Code 不认识这些指令，会怎样？** 提示：考虑"指令的降级处理"——好的指令设计应该"不认识时安全降级"。`[[as_document]]` 如果不认识，最坏情况是"作为文本显示在消息中"——不会导致错误。这种"安全降级"让 Hermes 特定指令可以"向前兼容"——不破坏跨 Agent 共享——但 Hermes 用户获得"增强体验"。
+3. **技能的 `as_document` 和 `audio_as_voice` 指令是 Hermes 特定的——不是 agentskills.io 标准。这是否违反了"跨 Agent 共享"的理念？如果 Claude Code 不认识这些指令，会怎样？** 提示：考虑"指令的降级处理"——好的指令设计应该"不认识时安全降级"。`as_document` 如果不认识，最坏情况是"作为文本显示在消息中"——不会导致错误。这种"安全降级"让 Hermes 特定指令可以"向前兼容"——不破坏跨 Agent 共享——但 Hermes 用户获得"增强体验"。

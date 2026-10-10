@@ -9,7 +9,7 @@ aliases: []
 
 **摘要：**
 
-JUC 包中除了锁和线程池，还提供了四个专用的**并发协调工具**：`CountDownLatch`（一次性倒计时门闩）、`CyclicBarrier`（可复用的循环屏障）、`Semaphore`（信号量，控制并发资源访问数量）和 `Exchanger`（双方数据交换）。这四个工具覆盖了并发编程中最常见的四种协调模式：等待多个事件全部完成（门闩）、让多个线程在某个时间点同步汇合（屏障）、限制同时进入某段代码的线程数（信号量）、两个线程互换数据（交换器）。本文在 [[JUC工具/06 AQS 框架——AbstractQueuedSynchronizer 的设计与实现]] 的基础上，深入剖析这四个工具的内部 AQS 实现，重点分析 `CountDownLatch` 与 `CyclicBarrier` 的本质差异（一次性 vs 可复用，等待者角色不同），`Semaphore` 公平/非公平模式的性能权衡，以及 `CyclicBarrier` 的 barrierAction 在哪个线程执行的陷阱。
+JUC 包中除了锁和线程池，还提供了四个专用的**并发协调工具**：`CountDownLatch`（一次性倒计时门闩）、`CyclicBarrier`（可复用的循环屏障）、`Semaphore`（信号量，控制并发资源访问数量）和 `Exchanger`（双方数据交换）。这四个工具覆盖了并发编程中最常见的四种协调模式：等待多个事件全部完成（门闩）、让多个线程在某个时间点同步汇合（屏障）、限制同时进入某段代码的线程数（信号量）、两个线程互换数据（交换器）。本文在 [[06 AQS 框架——AbstractQueuedSynchronizer 的设计与实现]] 的基础上，深入剖析这四个工具的内部 AQS 实现，重点分析 `CountDownLatch` 与 `CyclicBarrier` 的本质差异（一次性 vs 可复用，等待者角色不同），`Semaphore` 公平/非公平模式的性能权衡，以及 `CyclicBarrier` 的 barrierAction 在哪个线程执行的陷阱。
 
 ---
 
@@ -602,7 +602,7 @@ semaphore.release();
 
 **`Exchanger`**：双线程数据交换，基于无锁 CAS 竞技场。适合流水线模式中生产者与消费者的 buffer 交换。
 
-下一篇 [[JUC工具/15 ThreadLocal 的实现原理与内存泄漏——线程封闭的正确姿势]] 将剖析 `ThreadLocal` 的数据结构（`Thread.threadLocals` 字段的 `ThreadLocalMap`）以及 `Entry` 的弱引用设计为什么仍然会导致内存泄漏。
+下一篇 [[15 ThreadLocal 的实现原理与内存泄漏——线程封闭的正确姿势]] 将剖析 `ThreadLocal` 的数据结构（`Thread.threadLocals` 字段的 `ThreadLocalMap`）以及 `Entry` 的弱引用设计为什么仍然会导致内存泄漏。
 
 ---
 

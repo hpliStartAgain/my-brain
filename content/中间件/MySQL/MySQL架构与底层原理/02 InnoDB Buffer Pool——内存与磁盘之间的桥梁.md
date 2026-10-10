@@ -7,7 +7,7 @@ aliases: [Buffer Pool, InnoDB缓冲池]
 
 # 02 InnoDB Buffer Pool——内存与磁盘之间的桥梁
 
-**摘要：** 数据库的性能瓶颈几乎总是在磁盘 I/O 上。[[InnoDB]] 的 Buffer Pool 就是为解决这个问题而生的——它在内存中维护了一块巨大的缓存区域，将最近访问的数据页和索引页缓存在内存中，使得绝大多数的读操作可以直接从内存完成，写操作也先修改内存中的页再异步刷回磁盘。本文从"为什么需要 Buffer Pool"出发，深入剖析其内存布局、改良 LRU 算法（Young/Old 分区设计的精妙之处）、Free List 与 Flush List 的协作机制、预读（Read-Ahead）策略、Checkpoint 与脏页刷新、以及多实例并发优化。每一个设计决策背后都有明确的工程权衡——理解了这些权衡，你才能真正理解 `innodb_buffer_pool_size` 这个"最重要的 MySQL 配置参数"的调优逻辑。
+**摘要：** 数据库的性能瓶颈几乎总是在磁盘 I/O 上。InnoDB 的 Buffer Pool 就是为解决这个问题而生的——它在内存中维护了一块巨大的缓存区域，将最近访问的数据页和索引页缓存在内存中，使得绝大多数的读操作可以直接从内存完成，写操作也先修改内存中的页再异步刷回磁盘。本文从"为什么需要 Buffer Pool"出发，深入剖析其内存布局、改良 LRU 算法（Young/Old 分区设计的精妙之处）、Free List 与 Flush List 的协作机制、预读（Read-Ahead）策略、Checkpoint 与脏页刷新、以及多实例并发优化。每一个设计决策背后都有明确的工程权衡——理解了这些权衡，你才能真正理解 `innodb_buffer_pool_size` 这个"最重要的 MySQL 配置参数"的调优逻辑。
 
 ---
 
@@ -29,7 +29,7 @@ aliases: [Buffer Pool, InnoDB缓冲池]
 
 ### 1.2 缓存的核心思想：局部性原理
 
-Buffer Pool 的理论基础是**局部性原理（Principle of Locality）**，这一原理在计算机科学中无处不在——CPU Cache、操作系统的 [[Page Cache]]、浏览器缓存，背后都是同一个逻辑。
+Buffer Pool 的理论基础是**局部性原理（Principle of Locality）**，这一原理在计算机科学中无处不在——CPU Cache、操作系统的 Page Cache、浏览器缓存，背后都是同一个逻辑。
 
 **时间局部性（Temporal Locality）**：刚被访问过的数据，在短期内很可能再次被访问。例如，一个热门商品的详情页在被一个用户查看后，很快会被其他用户再次查看。
 
@@ -44,7 +44,7 @@ Buffer Pool 的理论基础是**局部性原理（Principle of Locality）**，�
 
 - **SELECT 查询**：执行器通过 Handler API 请求一行数据 → InnoDB 先检查目标数据页是否在 Buffer Pool 中 → 在就直接从内存读取（**缓存命中**），不在就从磁盘读入 Buffer Pool 再返回（**缓存未命中**）
 - **UPDATE 写入**：InnoDB 先将目标数据页加载到 Buffer Pool（如果不在的话），然后**直接在内存中修改**数据页，被修改的页成为"脏页（Dirty Page）"，后台线程在合适的时机将脏页异步刷回磁盘
-- **索引查找**：[[B+Tree]] 从根节点到叶子节点的查找路径上，每一层都是一次页的访问，这些页也是通过 Buffer Pool 来缓存的
+- **索引查找**：B+Tree 从根节点到叶子节点的查找路径上，每一层都是一次页的访问，这些页也是通过 Buffer Pool 来缓存的
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#4A90D9', 'primaryTextColor': '#fff', 'primaryBorderColor': '#2A6CB8', 'lineColor': '#5C6BC0', 'secondaryColor': '#81C784', 'tertiaryColor': '#FFB74D'}}}%%
@@ -105,7 +105,7 @@ Buffer Pool 并不是一个无结构的大内存块。它被划分为一个个**
 | `io_fix` | 该页的 I/O 状态（正在读取/正在写入/空闲） |
 | `is_old` | 该页是否在 LRU 链表的 Old 区域 |
 | `access_time` | 该页最近一次被访问的时间 |
-| `modification_lsn` | 该页最近一次被修改时的 [[LSN]]（Log Sequence Number） |
+| `modification_lsn` | 该页最近一次被修改时的 LSN（Log Sequence Number） |
 | `oldest_modification_lsn` | 该页首次被修改时的 LSN |
 
 控制块本身也需要内存空间（每个约 800 字节），所以 Buffer Pool 的实际可用空间比 `innodb_buffer_pool_size` 的设置值略小。这也是为什么你在 `SHOW ENGINE INNODB STATUS` 中看到的 `Buffer pool size`（以页为单位）可能比简单的 `pool_size / 16KB` 略小。
@@ -269,7 +269,7 @@ SHOW STATUS LIKE 'Innodb_buffer_pool_read_ahead_evicted'; -- 预读后从未被�
 
 在上一篇文章中，我们知道 UPDATE 操作修改的是 Buffer Pool 中的数据页（变成脏页），而不是直接修改磁盘上的数据文件。为什么不立刻刷回磁盘？
 
-1. **随机 I/O 代价太高**：不同的修改可能涉及不同位置的数据页，立即刷盘意味着大量随机写。[[Redo Log]] 的 [[WAL]] 协议已经保证了持久性（即使 MySQL 崩溃也能通过 Redo Log 恢复），所以数据页的刷盘可以延迟。
+1. **随机 I/O 代价太高**：不同的修改可能涉及不同位置的数据页，立即刷盘意味着大量随机写。Redo Log 的 WAL 协议已经保证了持久性（即使 MySQL 崩溃也能通过 Redo Log 恢复），所以数据页的刷盘可以延迟。
 2. **合并写入**：同一个脏页可能在短时间内被多次修改（比如同一页中的多行被不同事务依次更新）。如果每次修改都刷盘，就要写入多次；延迟刷盘可以**将多次修改合并为一次写入**，减少 I/O 次数。
 3. **批量写入**：InnoDB 可以将多个脏页收集起来，通过一次大的顺序 I/O 操作批量写入磁盘，比逐个页随机写入高效得多。
 
@@ -423,7 +423,7 @@ Load 过程是在后台异步执行的，不会阻塞 MySQL 的正常服务。�
 | 与应用共享服务器 | 物理内存的 **50%-60%** |
 | 开发/测试环境 | 512MB - 2GB |
 
-为什么不设成 90% 甚至 95%？因为操作系统本身需要内存（内核、文件系统缓存、网络缓冲区），MySQL 的其他组件也需要内存（连接线程栈、Redo Log Buffer、Join Buffer、Sort Buffer、临时表等）。如果 Buffer Pool 设得太大，导致操作系统开始使用 [[Swap]]，性能反而会急剧下降——磁盘上的 Swap 比 Buffer Pool 缓存未命中从数据文件读取还要慢。
+为什么不设成 90% 甚至 95%？因为操作系统本身需要内存（内核、文件系统缓存、网络缓冲区），MySQL 的其他组件也需要内存（连接线程栈、Redo Log Buffer、Join Buffer、Sort Buffer、临时表等）。如果 Buffer Pool 设得太大，导致操作系统开始使用 Swap，性能反而会急剧下降——磁盘上的 Swap 比 Buffer Pool 缓存未命中从数据文件读取还要慢。
 
 ### 8.2 如何判断当前 Buffer Pool 是否够用
 
@@ -467,7 +467,7 @@ MySQL 5.7+ 支持**在线调整** Buffer Pool 大小（`SET GLOBAL innodb_buffer
 7. **预热与持久化**：Buffer Pool Dump & Load 解决冷启动问题
 8. **调优**：`innodb_buffer_pool_size` 设为物理内存的 70%-80%，通过命中率和 `wait_free` 等指标持续监控
 
-Buffer Pool 是 InnoDB 所有读写操作的"必经之路"——理解了它的运作机制，就理解了 InnoDB 性能表现的底层逻辑。下一篇文章我们将深入 [[Redo Log]] 和 [[WAL]] 协议，解析 InnoDB 如何在 Buffer Pool 中修改数据的同时保证崩溃安全性。
+Buffer Pool 是 InnoDB 所有读写操作的"必经之路"——理解了它的运作机制，就理解了 InnoDB 性能表现的底层逻辑。下一篇文章我们将深入 Redo Log 和 WAL 协议，解析 InnoDB 如何在 Buffer Pool 中修改数据的同时保证崩溃安全性。
 
 ---
 

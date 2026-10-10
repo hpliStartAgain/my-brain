@@ -152,7 +152,7 @@ Copy-on-Write 的代价：如果在异步阶段期间，Task 继续处理数据�
 
 `HashMapStateBackend` 的核心局限是"状态容量受 JVM 堆限制"。当业务状态需要超过堆内存上限时，唯一的出路是将状态移到 JVM 堆外，甚至移到磁盘。
 
-[[RocksDB]] 是 Facebook 开源的基于 LSM-Tree（Log-Structured Merge-Tree）的嵌入式 KV 存储引擎，正好满足这个需求：
+RocksDB 是 Facebook 开源的基于 LSM-Tree（Log-Structured Merge-Tree）的嵌入式 KV 存储引擎，正好满足这个需求：
 - **嵌入式**：以库的形式嵌入 JVM 进程，通过 JNI 调用，不需要独立的数据库进程
 - **持久化**：数据存储在本地磁盘（SSD），容量远超 JVM 堆
 - **高性能**：LSM-Tree 写入速度极快（顺序写），读取有 Block Cache 加速

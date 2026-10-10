@@ -9,7 +9,7 @@ aliases: [Linux隔离原语, namespace详解, cgroups详解, seccomp详解, 隔�
 
 **摘要：**
 
-[[../01 Agent 沙箱全景——威胁模型、六层技术栈与逻辑演进|第 01 篇]] 建立了威胁模型与六层技术栈，指出"隔离运行时"是沙箱的第四层、也是爆炸半径控制的关键。本文深入这一层的地基：Linux 内核从 2002 年到 2020 年逐步引入的四类隔离原语——**namespaces**（视图隔离）、**cgroups**（资源限制）、**seccomp**（系统调用过滤）、**capabilities**（权限分权）。文章逐一拆解 8 种 namespace 的隔离资源、引入版本与反例场景；剖析 clone/unshare/setns 三个系统调用的正交设计；深入 user namespace"无特权创建"带来的安全争议（CVE-2024-1086 与 Ubuntu 24.04 的三次绕过）；说明容器标准 namespace 组合与 Agent 沙箱的额外需求（网络 namespace 是 Egress 控制的前提、user namespace 是不可信代码的关键防御）；打通"namespace 到运行时"的完整 CRI 链路（RuntimeClass→kubelet→CRI→containerd→shim→agent 七跳）；最后论证为什么这四类原语叠加仍不足以构成对抗性沙箱——共享内核是它们共同的天花板。核心认知：**隔离原语解决"视图、账本、入口、权限"四个维度，但都不解决"内核攻击面"——这正是 gVisor/Kata/Firecracker 存在的理由，也是[[隔离原语/03 隔离边界的光谱——从共享内核到 MicroVM 的四档技术路线|第 03 篇]]的起点**。
+[[01 Agent 沙箱全景——威胁模型、六层技术栈与逻辑演进]] 建立了威胁模型与六层技术栈，指出"隔离运行时"是沙箱的第四层、也是爆炸半径控制的关键。本文深入这一层的地基：Linux 内核从 2002 年到 2020 年逐步引入的四类隔离原语——**namespaces**（视图隔离）、**cgroups**（资源限制）、**seccomp**（系统调用过滤）、**capabilities**（权限分权）。文章逐一拆解 8 种 namespace 的隔离资源、引入版本与反例场景；剖析 clone/unshare/setns 三个系统调用的正交设计；深入 user namespace"无特权创建"带来的安全争议（CVE-2024-1086 与 Ubuntu 24.04 的三次绕过）；说明容器标准 namespace 组合与 Agent 沙箱的额外需求（网络 namespace 是 Egress 控制的前提、user namespace 是不可信代码的关键防御）；打通"namespace 到运行时"的完整 CRI 链路（RuntimeClass→kubelet→CRI→containerd→shim→agent 七跳）；最后论证为什么这四类原语叠加仍不足以构成对抗性沙箱——共享内核是它们共同的天花板。核心认知：**隔离原语解决"视图、账本、入口、权限"四个维度，但都不解决"内核攻击面"——这正是 gVisor/Kata/Firecracker 存在的理由，也是[[03 隔离边界的光谱——从共享内核到 MicroVM 的四档技术路线]]的起点**。
 
 ---
 
@@ -66,7 +66,7 @@ setns(fd_net, CLONE_NEWNET)              // 当前进程加入fd指向的网络n
 > [!note] 设计哲学：clone/unshare/setns 的"正交设计"
 > 三个系统调用覆盖了 namespace 操纵的三个维度：clone 是"创建新进程 + 新空间"，unshare 是"已有进程 + 新空间"，setns 是"已有进程 + 已有空间"。这种正交设计让 namespace 可以灵活组合——你可以创建新进程进新空间（容器启动）、让已有进程进新空间（运行时隔离）、或让已有进程加入已有空间（docker exec 进入运行中的容器）。这种灵活性是容器运行时能够实现"启动→执行→进入"完整工作流的基础。
 >
-> 对 Agent 沙箱而言，这个设计还有一个更深的意义：**沙箱内的"注入"机制依赖 setns**。OpenSandbox 的 execd 要进入沙箱进程的 namespace 执行命令、查看文件，本质上就是打开目标进程的 `/proc/[pid]/ns/*` fd 再 setns——理解这三个调用，才能理解 [[平台与协议/08 OpenSandbox 数据面——execd 与 egress 的盒内世界|execd 数据面]] 的实现原理。
+> 对 Agent 沙箱而言，这个设计还有一个更深的意义：**沙箱内的"注入"机制依赖 setns**。OpenSandbox 的 execd 要进入沙箱进程的 namespace 执行命令、查看文件，本质上就是打开目标进程的 `/proc/[pid]/ns/*` fd 再 setns——理解这三个调用，才能理解 [[08 OpenSandbox 数据面——execd 与 egress 的盒内世界]] 的实现原理。
 
 ### 1.3 创建 namespace 需要什么权限
 
@@ -117,7 +117,7 @@ setns(fd_net, CLONE_NEWNET)              // 当前进程加入fd指向的网络n
 
 **不这样会怎样**：如果没有 IPC namespace，所有进程共享同一个 IPC 资源空间——容器 A 和容器 B 可能因为使用了相同的 IPC key 而产生冲突（一个容器创建的共享内存段被另一个容器意外访问）。
 
-**实际影响较小**：在现代应用中，System V IPC 的使用频率远低于 POSIX IPC 和其他消息传递机制（如 Redis、RabbitMQ）。很多容器化应用甚至不使用 System V IPC，因此 IPC namespace 的实际影响较小——但它仍然是容器隔离的一个维度。IPC namespace 与 [[隔离原语/04 KVM 与硬件虚拟化——MicroVM 隔离的硬件基石|硬件虚拟化]] 的对比最能说明"视图隔离 vs 真实隔离"的差异：VM 之间连 CPU 寄存器都不共享，IPC namespace 只是让共享内存段"看起来"是私有的。
+**实际影响较小**：在现代应用中，System V IPC 的使用频率远低于 POSIX IPC 和其他消息传递机制（如 Redis、RabbitMQ）。很多容器化应用甚至不使用 System V IPC，因此 IPC namespace 的实际影响较小——但它仍然是容器隔离的一个维度。IPC namespace 与 [[04 KVM 与硬件虚拟化——MicroVM 隔离的硬件基石]] 的对比最能说明"视图隔离 vs 真实隔离"的差异：VM 之间连 CPU 寄存器都不共享，IPC namespace 只是让共享内存段"看起来"是私有的。
 
 ### 2.4 PID Namespace（CLONE_NEWPID，Linux 2.6.24，2008）
 
@@ -127,7 +127,7 @@ setns(fd_net, CLONE_NEWNET)              // 当前进程加入fd指向的网络n
 
 **PID 1 的特殊职责**：在 PID namespace 中，PID 1 有特殊职责——它是"init 进程"，负责回收孤儿进程（reaping zombies）和处理信号。如果 PID 1 退出，该 namespace 中的所有进程都会被 SIGKILL。这就是为什么 Docker 容器需要"init 进程"（如 `tini`）——如果你的应用不是为做 PID 1 设计的（不回收僵尸进程），可能导致进程泄漏。
 
-**Agent 沙箱视角——PID 1 与 execd 的进程拓扑**：在 OpenSandbox 的沙箱中，进程拓扑是"bootstrap 启动 execd + 用户 entrypoint"——bootstrap 成为 PID 1，execd 与用户进程是它的子进程（[[平台与协议/08 OpenSandbox 数据面——execd 与 egress 的盒内世界|第 08 篇]] 详细展开）。这个设计不是随意的：**bootstrap 做 PID 1 保证了沙箱退出时所有进程（包括 execd 和 Agent 进程）能被完整回收**，避免了"沙箱已删、进程残留"的僵尸问题——这正是素材中 PoC 验收"残留 0"的底层机制。
+**Agent 沙箱视角——PID 1 与 execd 的进程拓扑**：在 OpenSandbox 的沙箱中，进程拓扑是"bootstrap 启动 execd + 用户 entrypoint"——bootstrap 成为 PID 1，execd 与用户进程是它的子进程（[[08 OpenSandbox 数据面——execd 与 egress 的盒内世界]] 详细展开）。这个设计不是随意的：**bootstrap 做 PID 1 保证了沙箱退出时所有进程（包括 execd 和 Agent 进程）能被完整回收**，避免了"沙箱已删、进程残留"的僵尸问题——这正是素材中 PoC 验收"残留 0"的底层机制。
 
 **不这样会怎样**：如果没有 PID namespace，容器中的进程可以看到宿主机上的所有进程——`ps aux` 在容器中会列出宿主机的所有进程。这不仅泄露了宿主机的进程信息（安全风险），还可能导致依赖 PID 的应用行为异常。
 
@@ -144,7 +144,7 @@ setns(fd_net, CLONE_NEWNET)              // 当前进程加入fd指向的网络n
 
 **网络 namespace 的连接**：独立的 network namespace 是隔离的——默认无法与外部通信。容器网络（如 Docker bridge、Kubernetes CNI）通过虚拟以太网对（veth pair）连接不同的 network namespace——一端在容器 namespace 中，另一端在宿主机 namespace 中，数据在两端之间传递。
 
-**对 Agent 沙箱的特殊意义——Egress 控制的前提**：Network namespace 是 Agent 沙箱 Egress 过滤的基础——通过把 Agent 放入独立的 network namespace，可以对其网络流量做独立控制（iptables/eBPF 规则只作用于该 namespace）。如果 Agent 与宿主机共享网络栈，任何出站过滤都无法"只针对这个沙箱"生效。OpenSandbox 的 egress sidecar 正是利用 network namespace 边界，在沙箱网络命名空间内注入策略（[[平台与协议/08 OpenSandbox 数据面——execd 与 egress 的盒内世界|第 08 篇]]）。**这是"为什么沙箱必须有独立网络 namespace"的硬性理由：不是可选的隔离增强，而是数据外泄控制（攻击链第 4 步）的结构性前提**。
+**对 Agent 沙箱的特殊意义——Egress 控制的前提**：Network namespace 是 Agent 沙箱 Egress 过滤的基础——通过把 Agent 放入独立的 network namespace，可以对其网络流量做独立控制（iptables/eBPF 规则只作用于该 namespace）。如果 Agent 与宿主机共享网络栈，任何出站过滤都无法"只针对这个沙箱"生效。OpenSandbox 的 egress sidecar 正是利用 network namespace 边界，在沙箱网络命名空间内注入策略（[[08 OpenSandbox 数据面——execd 与 egress 的盒内世界]]）。**这是"为什么沙箱必须有独立网络 namespace"的硬性理由：不是可选的隔离增强，而是数据外泄控制（攻击链第 4 步）的结构性前提**。
 
 ### 2.6 User Namespace（CLONE_NEWUSER，Linux 3.8，2013）
 
@@ -178,7 +178,7 @@ setns(fd_net, CLONE_NEWNET)              // 当前进程加入fd指向的网络n
 
 **不这样会怎样**：如果没有 time namespace，所有进程共享同一个时钟——容器 checkpoint/restore 后，单调时钟会跳跃（从 checkpoint 时的值跳到 restore 时的值），可能导致依赖时间间隔的应用行为异常。
 
-**Agent 沙箱的价值**：对于需要 checkpoint/restore 的 Agent 沙箱（如 GKE Agent Sandbox 的 Pod Snapshots、OpenSandbox 的 pause/resume），time namespace 让恢复后的 Agent 看到连续的时间流逝而非时间跳跃——这对测量执行时间、设置超时等场景很重要。不过截至 2026 年，主流 Agent 沙箱的 pause/resume 都以"容器 rootfs 保存/恢复"为主（[[平台与协议/09 OpenSandbox 编排面——BatchSandbox、WarmPool 与快照|第 09 篇]]），time namespace 主要服务于 CRIU 类内存级 checkpoint 方案。
+**Agent 沙箱的价值**：对于需要 checkpoint/restore 的 Agent 沙箱（如 GKE Agent Sandbox 的 Pod Snapshots、OpenSandbox 的 pause/resume），time namespace 让恢复后的 Agent 看到连续的时间流逝而非时间跳跃——这对测量执行时间、设置超时等场景很重要。不过截至 2026 年，主流 Agent 沙箱的 pause/resume 都以"容器 rootfs 保存/恢复"为主（[[09 OpenSandbox 编排面——BatchSandbox、WarmPool 与快照]]），time namespace 主要服务于 CRIU 类内存级 checkpoint 方案。
 
 ### 2.9 8 种 namespace 全景表
 
@@ -374,7 +374,7 @@ graph LR
 
 ### 5.4 RuntimeClass 与 Pod Overhead：调度器的盲区
 
-七跳链路之外还有一个被素材标记为 GAP-011 的调度问题：**RuntimeClass 的 `overhead` 字段没有被 OpenSandbox 的调度正确使用**。gVisor 空闲时 PSS 约 127.2MiB，Kata 约 392.7MiB（[[工程实践/12 沙箱性能工程——Runtime 基准与 WarmPool 容量管理|第 12 篇]] 的实测数据），但调度器按普通容器（几十 MiB）计算节点容量——强隔离运行时的真实内存开销被"漏记"了。结果：节点上调度了大量 Kata 沙箱后，实际内存占用远超调度器的账本，OOM 风险被系统性低估。这是"隔离运行时引入 K8s"时特有的记账问题，也是 [[隔离原语/03 隔离边界的光谱——从共享内核到 MicroVM 的四档技术路线|第 03 篇]] 与生产化章节反复强调"overhead 必须按镜像族×运行时×节点机型实测"的原因。
+七跳链路之外还有一个被素材标记为 GAP-011 的调度问题：**RuntimeClass 的 `overhead` 字段没有被 OpenSandbox 的调度正确使用**。gVisor 空闲时 PSS 约 127.2MiB，Kata 约 392.7MiB（[[12 沙箱性能工程——Runtime 基准与 WarmPool 容量管理]] 的实测数据），但调度器按普通容器（几十 MiB）计算节点容量——强隔离运行时的真实内存开销被"漏记"了。结果：节点上调度了大量 Kata 沙箱后，实际内存占用远超调度器的账本，OOM 风险被系统性低估。这是"隔离运行时引入 K8s"时特有的记账问题，也是 [[03 隔离边界的光谱——从共享内核到 MicroVM 的四档技术路线]] 与生产化章节反复强调"overhead 必须按镜像族×运行时×节点机型实测"的原因。
 
 ---
 
@@ -394,7 +394,7 @@ graph LR
 
 一个内核漏洞（如 Dirty Pipe CVE-2022-0847）可以让容器进程绕过所有 namespace 隔离——因为漏洞在内核层面，namespace 也在内核层面，绕过 namespace 的内核漏洞直接访问真实资源。
 
-这就是为什么 [[../01 Agent 沙箱全景——威胁模型、六层技术栈与逻辑演进|第 01 篇]] 讨论的 gVisor 和 Kata/Firecracker 要把信任边界从"共享内核"移开——它们不依赖 namespace 的视图隔离，而是用用户空间内核或硬件虚拟化提供真正的"独立内核"。隔离原语是沙箱的"第一层"，但不是"唯一层"。
+这就是为什么 [[01 Agent 沙箱全景——威胁模型、六层技术栈与逻辑演进]] 讨论的 gVisor 和 Kata/Firecracker 要把信任边界从"共享内核"移开——它们不依赖 namespace 的视图隔离，而是用用户空间内核或硬件虚拟化提供真正的"独立内核"。隔离原语是沙箱的"第一层"，但不是"唯一层"。
 
 **不足二：缺少资源限制**
 
@@ -469,7 +469,7 @@ graph TD
 | **中档** | 四重原语 + gVisor | 中风险（代码解释器）、需要容器速度 | syscall 兼容性子集、性能损耗 |
 | **高档** | 四重原语 + Kata/Firecracker | 高风险（多租户不可信代码） | 启动慢、内存开销大 |
 
-注意三个档位都"包含"四重隔离原语——**档位差异在于信任边界是否移出宿主内核**，而不是要不要 namespace。这个框架正是 [[隔离原语/03 隔离边界的光谱——从共享内核到 MicroVM 的四档技术路线|第 03 篇]] 的完整展开。
+注意三个档位都"包含"四重隔离原语——**档位差异在于信任边界是否移出宿主内核**，而不是要不要 namespace。这个框架正是 [[03 隔离边界的光谱——从共享内核到 MicroVM 的四档技术路线]] 的完整展开。
 
 ---
 
@@ -488,10 +488,10 @@ graph TD
 
 ### 7.2 下一篇导读
 
-本文深入了隔离原语——容器隔离的"地基"层。下一篇 [[隔离原语/03 隔离边界的光谱——从共享内核到 MicroVM 的四档技术路线|03 隔离边界的光谱]] 将回答一个关键问题：**当四重隔离原语不够时，信任边界应该画在哪里？** 系统调用过滤（seccomp 的极致化）？用户态内核（gVisor 的 Sentry 拦截）？还是硬件虚拟化（Kata/Firecracker 的完整 VM）？三档方案在启动时间、内存开销、兼容性上的实测数据对比，以及"按威胁等级选档位"的决策框架，将在下一篇展开。
+本文深入了隔离原语——容器隔离的"地基"层。下一篇 [[03 隔离边界的光谱——从共享内核到 MicroVM 的四档技术路线]] 将回答一个关键问题：**当四重隔离原语不够时，信任边界应该画在哪里？** 系统调用过滤（seccomp 的极致化）？用户态内核（gVisor 的 Sentry 拦截）？还是硬件虚拟化（Kata/Firecracker 的完整 VM）？三档方案在启动时间、内存开销、兼容性上的实测数据对比，以及"按威胁等级选档位"的决策框架，将在下一篇展开。
 
 > [!info] 专栏导航
-> 本文是 [[../00 专栏导览|Agent 沙箱技术专栏]] 的第 02 篇。上一篇 [[../01 Agent 沙箱全景——威胁模型、六层技术栈与逻辑演进|01 Agent 沙箱全景]] 建立了威胁模型与六层技术栈；本文深入了隔离原语层；接下来第 03-05 篇将完成隔离边界光谱、KVM 硬件虚拟化与 VMM 家族的讨论，构成"隔离运行时"层的完整图景。
+> 本文是 [[00 专栏导览]] 的第 02 篇。上一篇 [[01 Agent 沙箱全景——威胁模型、六层技术栈与逻辑演进]] 建立了威胁模型与六层技术栈；本文深入了隔离原语层；接下来第 03-05 篇将完成隔离边界光谱、KVM 硬件虚拟化与 VMM 家族的讨论，构成"隔离运行时"层的完整图景。
 
 ---
 

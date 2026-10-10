@@ -454,4 +454,4 @@ Word Ladder 是一道把 BFS 的所有核心要素都体现出来的题目：隐
 
 ---
 
-*关联文章：[[BFS 与 DFS 全景导览：搜索算法的本质与适用边界]] | [[双向 BFS 与路径还原：Word Ladder II 深度解析]]*
+*关联文章：BFS 与 DFS 全景导览：搜索算法的本质与适用边界 | 双向 BFS 与路径还原：Word Ladder II 深度解析*

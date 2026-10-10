@@ -450,7 +450,7 @@ Executor 是 Spark 执行模型的"物理载体"，其设计体现了在多维�
 - **BlockManager**：统一管理 Cache、广播变量、Shuffle 数据，是 Executor 的数据中枢
 - **心跳机制**：10 秒一次的心跳是 Driver 感知 Executor 健康状态的唯一窗口，超时触发级联 Executor Lost 处理
 
-在 **[[08 推测执行（Speculative Execution）：分布式环境下"长尾"任务的自动修复机制|下一篇文章]]** 中，我们将深入 Spark 应对"长尾 Task"问题的核心机制——推测执行，理解它如何识别慢 Task、启动副本、以及与 Executor 线程模型的配合。
+在 **下一篇文章** 中，我们将深入 Spark 应对"长尾 Task"问题的核心机制——推测执行，理解它如何识别慢 Task、启动副本、以及与 Executor 线程模型的配合。
 
 ---
 

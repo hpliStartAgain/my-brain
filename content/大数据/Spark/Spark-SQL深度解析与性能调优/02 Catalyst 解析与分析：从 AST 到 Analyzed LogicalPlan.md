@@ -38,7 +38,7 @@ aliases: []
 
 ### 2.1 Antlr4 是什么
 
-**[[Antlr4]]（Another Tool for Language Recognition，v4）** 是业界广泛使用的解析器生成工具。开发者编写**语法文件**（`.g4` 格式），描述语言的词法规则（Token）和语法规则（Grammar），Antlr4 自动生成对应的 Lexer（词法分析器）和 Parser（语法分析器）代码。
+**Antlr4（Another Tool for Language Recognition，v4）** 是业界广泛使用的解析器生成工具。开发者编写**语法文件**（`.g4` 格式），描述语言的词法规则（Token）和语法规则（Grammar），Antlr4 自动生成对应的 Lexer（词法分析器）和 Parser（语法分析器）代码。
 
 Spark SQL 的语法文件位于：
 `sql/catalyst/src/main/antlr4/org/apache/spark/sql/catalyst/parser/SqlBase.g4`
@@ -299,7 +299,7 @@ SessionCatalog（会话级封装）
 
 ### 4.2 Hive Metastore 集成
 
-在生产环境中，几乎所有 Spark SQL 应用都对接 **[[Hive Metastore]]** 作为持久化 Catalog。Hive Metastore 是一个独立的服务（通常基于 MySQL 或 PostgreSQL），存储所有表的元数据。
+在生产环境中，几乎所有 Spark SQL 应用都对接 **Hive Metastore** 作为持久化 Catalog。Hive Metastore 是一个独立的服务（通常基于 MySQL 或 PostgreSQL），存储所有表的元数据。
 
 **Spark 读取 Hive 表的流程**：
 

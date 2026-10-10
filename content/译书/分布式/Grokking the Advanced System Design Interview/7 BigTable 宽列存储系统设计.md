@@ -8,9 +8,9 @@
 
 ### 什么是 BigTable？
 
-[[BigTable]] 是 Google 开发的分布式、大规模可扩展的宽列存储。它被设计为存储海量的结构化数据集。顾名思义，BigTable 为非常大的表提供存储（通常达到 TB 级别）。
+BigTable 是 Google 开发的分布式、大规模可扩展的宽列存储。它被设计为存储海量的结构化数据集。顾名思义，BigTable 为非常大的表提供存储（通常达到 TB 级别）。
 
-用 [[CAP 定理]] 的术语来说，BigTable 是一个 **CP 系统**，即它提供严格一致的读写。BigTable 可以用作 [[MapReduce]] 作业的输入源或输出目标。
+用 CAP 定理 的术语来说，BigTable 是一个 **CP 系统**，即它提供严格一致的读写。BigTable 可以用作 MapReduce 作业的输入源或输出目标。
 
 ![BigTable 简介](images/chapter-007/page288.png)
 
@@ -20,7 +20,7 @@ BigTable 由 Google 开发，自 2005 年以来已在数十个 Google 服务中�
 
 BigTable 是一个高可用、高性能的数据库，为 Google 的多个应用程序提供支持——每个应用程序在数据大小和延迟要求方面有不同的需求。
 
-虽然 BigTable 本身不是开源的，但其论文对启发强大的开源数据库起到了关键作用，例如 [[Cassandra]]（借用 BigTable 的数据模型）、[[HBase]]（分布式非关系型数据库）和 Hypertable。
+虽然 BigTable 本身不是开源的，但其论文对启发强大的开源数据库起到了关键作用，例如 Cassandra（借用 BigTable 的数据模型）、HBase（分布式非关系型数据库）和 Hypertable。
 
 ### BigTable 的用例
 
@@ -169,9 +169,9 @@ BigTable 集群的架构由三个主要组件组成：
 
 BigTable 构建在 Google 基础设施的几个其他组件之上：
 
-1. **[[GFS]]**：BigTable 使用 Google 文件系统存储其数据和日志文件
-2. **[[SSTable]]**：Google 的 SSTable 文件格式用于存储 BigTable 数据。SSTable 提供从键到值的持久化、有序、不可变的映射（稍后详细讨论）。SSTable 的设计使得任何数据访问至多需要一次磁盘访问
-3. **[[Chubby]]**：BigTable 使用名为 Chubby 的高可用、持久的分布式锁服务来处理同步问题并存储配置信息
+1. **GFS**：BigTable 使用 Google 文件系统存储其数据和日志文件
+2. **SSTable**：Google 的 SSTable 文件格式用于存储 BigTable 数据。SSTable 提供从键到值的持久化、有序、不可变的映射（稍后详细讨论）。SSTable 的设计使得任何数据访问至多需要一次磁盘访问
+3. **Chubby**：BigTable 使用名为 Chubby 的高可用、持久的分布式锁服务来处理同步问题并存储配置信息
 4. **集群调度系统**：Google 有一个集群管理系统，用于调度、监控和管理 BigTable 的集群
 
 ---
@@ -245,7 +245,7 @@ Chubby 是一个高可用、持久的分布式锁服务，允许数千节点的 
 
 - Chubby 通常运行五个活动副本，其中一个被选为主服务器来服务请求。要保持存活，必须运行大多数 Chubby 副本
 - BigTable 非常依赖 Chubby，如果 Chubby 长时间不可用，BigTable 也将变得不可用
-- Chubby 使用 [[Paxos]] 算法在故障情况下保持其副本一致
+- Chubby 使用 Paxos 算法在故障情况下保持其副本一致
 - Chubby 提供由文件和目录组成的命名空间。每个文件或目录可以用作锁
 - 对 Chubby 文件的读写访问是原子的
 - 每个 Chubby 客户端与 Chubby 服务维护一个会话。如果客户端无法在租约到期时间内续约其会话租约，会话将过期。当客户端会话过期时，它会失去所有锁和打开的句柄。Chubby 客户端还可以在 Chubby 文件和目录上注册回调，以接收更改或会话过期的通知
@@ -484,9 +484,9 @@ BigTable 性能和流行背后的一些原因：
 
 Google 的 BigTable 启发了许多 NoSQL 系统：
 
-1. **[[HBase]]**：HBase 是一个开源的分布式非关系型数据库，以 BigTable 为模型。它构建在 Hadoop 分布式文件系统（HDFS）之上
+1. **HBase**：HBase 是一个开源的分布式非关系型数据库，以 BigTable 为模型。它构建在 Hadoop 分布式文件系统（HDFS）之上
 2. **Hypertable**：与 HBase 类似，Hypertable 是 BigTable 的开源实现，用 C++ 编写。与仅使用一个存储层（即 GFS）的 BigTable 不同，Hypertable 能够运行在任何文件系统之上（例如 HDFS、GlusterFS 或 CloudStore）。为实现这一点，系统通过将所有数据请求发送到分布式文件系统代理进程来抽象文件系统的接口
-3. **[[Cassandra]]**：Cassandra 是一个分布式、去中心化、高可用的 NoSQL 数据库。其架构基于 Dynamo 和 BigTable。Cassandra 可以描述为在 Dynamo 类基础设施上运行的 BigTable 类数据存储。Cassandra 也是宽列存储，并利用 BigTable 的存储模型，即 SSTable 和 MemTable
+3. **Cassandra**：Cassandra 是一个分布式、去中心化、高可用的 NoSQL 数据库。其架构基于 Dynamo 和 BigTable。Cassandra 可以描述为在 Dynamo 类基础设施上运行的 BigTable 类数据存储。Cassandra 也是宽列存储，并利用 BigTable 的存储模型，即 SSTable 和 MemTable
 
 ---
 

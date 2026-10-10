@@ -61,7 +61,7 @@ sequenceDiagram
 
 ### 2.1 BlockCache 是什么，为什么以 Block 为粒度缓存
 
-[[BlockCache]] 是 RegionServer 级别的读缓存，缓存最近从 HFile 读取的数据块（Block）。
+BlockCache 是 RegionServer 级别的读缓存，缓存最近从 HFile 读取的数据块（Block）。
 
 缓存粒度是 **Block**（默认 64KB），而不是单个 KeyValue，也不是整个 HFile。这个设计与 HFile 的实际 I/O 单元对齐：HDFS 读取的最小单位就是 Block，以 Block 为缓存粒度没有任何额外开销。
 
@@ -283,7 +283,7 @@ HBase 的 Filter 机制允许在 RegionServer 端执行数据过滤，只将满�
 | `SingleColumnValueFilter(cf, cq, op, value)` | 按特定列的值过滤整行 | 类似 SQL WHERE，但本质是全行扫描 |
 
 > [!warning] 生产避坑
-> `SingleColumnValueFilter` 和 `ValueFilter` 虽然减少了网络传输，但**不能减少服务端的 I/O 扫描量**——它们仍然需要读取所有数据后才能判断是否满足条件。如果业务频繁需要按非 RowKey 字段查询，正确做法是建立二级索引（[[Apache Phoenix]]）或设计更合理的 RowKey，而不是依赖 ValueFilter 扫表。
+> `SingleColumnValueFilter` 和 `ValueFilter` 虽然减少了网络传输，但**不能减少服务端的 I/O 扫描量**——它们仍然需要读取所有数据后才能判断是否满足条件。如果业务频繁需要按非 RowKey 字段查询，正确做法是建立二级索引（Apache Phoenix）或设计更合理的 RowKey，而不是依赖 ValueFilter 扫表。
 
 **Filter 组合（FilterList）：**
 

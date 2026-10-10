@@ -82,7 +82,7 @@ mem_allocator:jemalloc-5.3.0  # 内存分配器
 | **evicted_keys**（在 Stats Section）| 被淘汰的 key 数 | > 0 告警——说明内存不足已触发淘汰 |
 
 > [!warning] mem_fragmentation_ratio < 1.0 的严重性
-> 碎片率小于 1 意味着 `used_memory > used_memory_rss`——Redis 使用的逻辑内存超过了物理内存，操作系统将部分内存页交换到了 [[磁盘 Swap]]。Redis 是内存数据库，任何 swap 都会导致延迟从微秒级暴涨到毫秒甚至秒级——这是**最严重的性能事故之一**。需要立即增加物理内存或减少数据量。
+> 碎片率小于 1 意味着 `used_memory > used_memory_rss`——Redis 使用的逻辑内存超过了物理内存，操作系统将部分内存页交换到了 磁盘 Swap。Redis 是内存数据库，任何 swap 都会导致延迟从微秒级暴涨到毫秒甚至秒级——这是**最严重的性能事故之一**。需要立即增加物理内存或减少数据量。
 
 ### 1.5 Stats Section——命令统计
 

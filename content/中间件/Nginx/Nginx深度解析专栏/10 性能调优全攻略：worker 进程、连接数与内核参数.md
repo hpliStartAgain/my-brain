@@ -61,7 +61,7 @@ worker_processes 8;
 
 **为什么 CPU 亲和性能提升性能？**
 
-答案在于 [[CPU 缓存]]（L1/L2 Cache）的工作方式：
+答案在于 CPU 缓存（L1/L2 Cache）的工作方式：
 
 每个 CPU 核心有独立的 L1 Cache（通常 32KB，4 周期延迟）和 L2 Cache（通常 256KB，12 周期延迟），多核共享 L3 Cache（通常 8-32MB，30-40 周期延迟）。从 L1 Cache 读数据比从 L3 读快 10 倍，比从内存（RAM）读快 100-300 倍。
 
@@ -96,7 +96,7 @@ worker_cpu_affinity 00000001 00000010 00000100 00001000
 ```
 
 > [!info] 核心概念：NUMA 与 CPU 亲和性
-> 在多处理器服务器（如 Intel Xeon 双路系统）上，内存分为多个 [[NUMA（Non-Uniform Memory Access）]] 节点，每个处理器优先访问本地内存（延迟约 70ns），跨节点访问远端内存延迟更高（约 130ns）。
+> 在多处理器服务器（如 Intel Xeon 双路系统）上，内存分为多个 NUMA（Non-Uniform Memory Access） 节点，每个处理器优先访问本地内存（延迟约 70ns），跨节点访问远端内存延迟更高（约 130ns）。
 >
 > 如果 Nginx Worker 绑定在 NUMA Node 0 的 CPU 核心，但其连接状态数据被分配在 NUMA Node 1 的内存上，每次内存访问都会产生 NUMA 远端访问惩罚。
 >
@@ -110,7 +110,7 @@ worker_cpu_affinity 00000001 00000010 00000100 00001000
 worker_priority -10;
 ```
 
-Linux 进程调度（[[CFS 调度器]]）基于 `nice` 值分配 CPU 时间片。`nice=-10` 使 Worker 获得约普通进程 2 倍的 CPU 时间。在 Nginx 与其他应用共享同一台服务器时（如运行了 Logstash、监控 Agent 等），提高 Nginx 的调度优先级可以减少因 CPU 竞争带来的抖动。
+Linux 进程调度（CFS 调度器）基于 `nice` 值分配 CPU 时间片。`nice=-10` 使 Worker 获得约普通进程 2 倍的 CPU 时间。在 Nginx 与其他应用共享同一台服务器时（如运行了 Logstash、监控 Agent 等），提高 Nginx 的调度优先级可以减少因 CPU 竞争带来的抖动。
 
 ---
 
@@ -448,7 +448,7 @@ http {
 >
 > 在持续部署（CI/CD）场景中，如果经常需要快速更新静态资源（如每次构建后部署新的 CSS/JS），`open_file_cache_valid` 的值应该设置较小（如 5s-10s）；如果静态资源几乎不变（使用 hash 文件名，永久缓存），可以设置较大值（60s-300s）。
 >
-> 特别注意：对于用 [[inotify]] 监听文件变化并热更新的系统，`open_file_cache` 会导致 Nginx 对文件变化不敏感，可能需要在更新后执行 `nginx -s reload` 强制刷新缓存。
+> 特别注意：对于用 inotify 监听文件变化并热更新的系统，`open_file_cache` 会导致 Nginx 对文件变化不敏感，可能需要在更新后执行 `nginx -s reload` 强制刷新缓存。
 
 ---
 

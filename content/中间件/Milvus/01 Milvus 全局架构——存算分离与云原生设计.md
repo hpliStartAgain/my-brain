@@ -17,7 +17,7 @@ Milvus 是 Zilliz 于 2019 年开源的向量数据库，2021 年捐献给 Linux
 
 ### 1.1 从关键词检索到语义检索的演变
 
-传统的信息检索系统（如 [[Elasticsearch]]）基于**关键词匹配**：用户输入"苹果手机价格"，系统在倒排索引中查找包含"苹果"、"手机"、"价格"这三个词的文档，返回包含这些词的结果。这种方法在精确匹配场景下表现良好，但有一个根本性的缺陷：**它无法理解语义**。
+传统的信息检索系统（如 Elasticsearch）基于**关键词匹配**：用户输入"苹果手机价格"，系统在倒排索引中查找包含"苹果"、"手机"、"价格"这三个词的文档，返回包含这些词的结果。这种方法在精确匹配场景下表现良好，但有一个根本性的缺陷：**它无法理解语义**。
 
 例如，用户搜索"Smartphone cost"，关键词匹配系统可能不会返回包含"手机价格"的中文文档，因为两种语言的字面表示完全不同，即使语义完全一致。更极端的例子是图片搜索——"查找与这张狗的图片相似的照片"，关键词检索根本无从处理。
 
@@ -85,7 +85,7 @@ Milvus 2.0（2021 年）完全重写，确立了三个核心设计目标：
 
 **目标二：读写分离（Separation of Read and Write Paths）**：写入路径（Data Node 负责持久化写入的向量数据）与读取路径（Query Node 负责执行查询）完全分离，互不干扰。写入高峰不影响查询延迟，查询压力不影响写入吞吐。
 
-**目标三：云原生（Cloud-Native）**：基于 Kubernetes 部署，每个组件是独立的微服务，可以单独扩缩容。依赖 [[etcd]] 做分布式协调，依赖 [[Kafka]] / [[Pulsar]] 做消息队列，依赖 MinIO/S3 做对象存储——充分利用云环境的基础设施。
+**目标三：云原生（Cloud-Native）**：基于 Kubernetes 部署，每个组件是独立的微服务，可以单独扩缩容。依赖 etcd 做分布式协调，依赖 Kafka / Pulsar 做消息队列，依赖 MinIO/S3 做对象存储——充分利用云环境的基础设施。
 
 ---
 
@@ -152,7 +152,7 @@ Proxy 通过**消息队列（Pulsar/Kafka）** 而非直接 RPC 来发送数据�
 - 管理 Collection、Partition、Segment 的 Schema 定义和状态
 - 分配全局唯一的 ID（如 Collection ID、Segment ID）
 - 管理 Timestamp Oracle（时间戳分配），保证全局有序的写入时间戳
-- 将元数据持久化到 [[etcd]]
+- 将元数据持久化到 etcd
 
 **Query Coordinator（QC）**：查询路由与负载均衡
 - 维护 Query Node 的拓扑信息（哪些 Segment 被加载到哪些 Query Node）
@@ -171,7 +171,7 @@ Proxy 通过**消息队列（Pulsar/Kafka）** 而非直接 RPC 来发送数据�
 - 监控哪些已 Flushed 的 Segment 还没有索引（或索引已过期），调度 Index Node 构建索引
 - 管理索引任务的执行状态和结果（索引文件存储在对象存储中的位置）
 
-四个 Coordinator 都是**无状态的业务逻辑层**——真正的状态（元数据）存储在 [[etcd]] 中。Coordinator 可以多副本部署（Active-Standby 模式），主节点故障后从节点接管，恢复时间约秒级。
+四个 Coordinator 都是**无状态的业务逻辑层**——真正的状态（元数据）存储在 etcd 中。Coordinator 可以多副本部署（Active-Standby 模式），主节点故障后从节点接管，恢复时间约秒级。
 
 > [!note] 设计哲学
 > Milvus 将传统单体数据库中"一个 Master 管所有事"的模式，拆分为四个职责单一的 Coordinator。这种职责分离的好处是：每个 Coordinator 只需关注自己负责的资源，状态更简单，故障影响范围更小（QC 故障不影响写入，DC 故障不影响查询）。代价是系统整体的分布式协调复杂度上升——四个 Coordinator 之间需要通过消息队列和 etcd 协调状态，调试和排障难度增加。
@@ -252,7 +252,7 @@ sequenceDiagram
     Note over QN: "Growing Segment 中的向量立即可查"
 ```
 
-**关键细节——Timestamp Oracle（时间戳服务）**：每次写入都需要向 Root Coordinator 获取一个全局单调递增的时间戳（TSO，类似于 [[TiDB]] 的 TSO 设计）。这个时间戳有两个用途：
+**关键细节——Timestamp Oracle（时间戳服务）**：每次写入都需要向 Root Coordinator 获取一个全局单调递增的时间戳（TSO，类似于 TiDB 的 TSO 设计）。这个时间戳有两个用途：
 1. **顺序保证**：所有写入操作按时间戳全局有序，Data Node 和 Query Node 按时间戳顺序消费消息，不会出现写入顺序错乱
 2. **一致性读取**：查询时可以指定一个时间戳 T，只看 T 时刻之前写入的数据（类似数据库的 MVCC Snapshot Read）
 
@@ -290,7 +290,7 @@ sequenceDiagram
    - 返回最终 Top-K 结果给 SDK
 ```
 
-**分布式查询的精度保证**：每个 QueryNode 返回其持有的 Segment 上的局部 Top-K 结果，Proxy 做全局归并。为了保证全局精度，每个 QueryNode 实际需要返回比 K 更多的候选（通常是 `K × 扩展因子`），以防止真正的全局 Top-K 被某个节点遗漏。这与 [[Elasticsearch]] 的分布式查询精度问题本质相同。
+**分布式查询的精度保证**：每个 QueryNode 返回其持有的 Segment 上的局部 Top-K 结果，Proxy 做全局归并。为了保证全局精度，每个 QueryNode 实际需要返回比 K 更多的候选（通常是 `K × 扩展因子`），以防止真正的全局 Top-K 被某个节点遗漏。这与 Elasticsearch 的分布式查询精度问题本质相同。
 
 ---
 
@@ -298,7 +298,7 @@ sequenceDiagram
 
 ### 5.1 Segment 是什么
 
-**Segment** 是 Milvus 中数据管理的基本单元，类似于 [[Elasticsearch]] 的 Segment 或 [[Kafka]] 的 Partition。每个 Segment 包含一批向量数据及其对应的标量字段，大小通常在 512MB~2GB 之间。
+**Segment** 是 Milvus 中数据管理的基本单元，类似于 Elasticsearch 的 Segment 或 Kafka 的 Partition。每个 Segment 包含一批向量数据及其对应的标量字段，大小通常在 512MB~2GB 之间。
 
 Collection 的数据按照 Partition → Segment 两级组织：
 - Collection（最高层，类比数据库的表）

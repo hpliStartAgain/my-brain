@@ -199,13 +199,13 @@ cpu  33589978 1032 19238457 89823456 2348923 0 456782 0 0 0
 | MemFree | 完全未使用的内存 | **单独看无意义**（见下方解释） |
 | MemAvailable | 估算的可用内存 | 判断内存压力的首选指标 |
 | Buffers | 块设备缓冲区 | 内核对块 I/O 的缓存 |
-| Cached | [[Page Cache]] | 文件数据的缓存 |
+| Cached | Page Cache | 文件数据的缓存 |
 | SwapCached | 被 swap 出又 swap 回的页 | 高 → 内存压力导致频繁 swap |
 | Active/Inactive | 活跃/非活跃页链表 | Inactive 高 → 有可回收内存 |
 | Slab | 内核 slab 分配器占用 | 高 → 内核对象缓存占用大 |
 | Mapped | 被映射到用户地址空间的页 | mmap 相关分析 |
 
-**为什么 MemFree 单独看无意义。** Linux 的内存管理哲学是"闲着的内存是浪费的内存"。内核会主动把空闲内存用于 [[Page Cache]]——缓存磁盘文件数据，加速后续的文件读取。因此一个健康运行的 Linux 系统，MemFree 通常很低（可能只有几百 MB），但这不代表内存紧张——因为 Page Cache 在内存压力时可以被回收。
+**为什么 MemFree 单独看无意义。** Linux 的内存管理哲学是"闲着的内存是浪费的内存"。内核会主动把空闲内存用于 Page Cache——缓存磁盘文件数据，加速后续的文件读取。因此一个健康运行的 Linux 系统，MemFree 通常很低（可能只有几百 MB），但这不代表内存紧张——因为 Page Cache 在内存压力时可以被回收。
 
 MemAvailable 是 Linux 3.14 引入的字段，它估算的是"如果需要分配内存，能拿到多少"——包括 MemFree 加上可回收的 Page Cache 和可回收的 Slab。这个数字比 MemFree 更能反映真实的内存可用性。
 
@@ -456,7 +456,7 @@ sudo perf report --stdio --no-children
 
 ### 3.6 perf 的火焰图：可视化调用栈
 
-`perf record` 的数据可以用 [[Brendan Gregg]] 的 FlameGraph 工具可视化成火焰图。火焰图的横轴是采样次数（即 CPU 占比），纵轴是调用栈深度，每个矩形代表一个函数。
+`perf record` 的数据可以用 Brendan Gregg 的 FlameGraph 工具可视化成火焰图。火焰图的横轴是采样次数（即 CPU 占比），纵轴是调用栈深度，每个矩形代表一个函数。
 
 ```bash
 # 采集数据
@@ -654,7 +654,7 @@ echo 'stacktrace:1' > /sys/kernel/tracing/events/sched/sched_switch/trigger
 **第三，环形缓冲区的容量限制。** Ftrace 的环形缓冲区大小有限（默认每 CPU 几 MB），在高事件率下会很快填满。填满后新事件会覆盖旧事件（默认行为）或停止记录（取决于配置）。这意味着 Ftrace 捕获的是"最近的事件窗口"，不是完整历史。如果问题发生在一小时前，Ftrace 的缓冲区早就被后续事件覆盖了。
 
 > [!warning] 生产避坑：Ftrace 需要 root 和 debugfs
-> Ftrace 的配置接口在 debugfs（`/sys/kernel/debug/tracing/`）或 tracefs（`/sys/kernel/tracing/`），需要 root 权限访问。在容器环境中，debugfs/tracefs 通常不挂载或不可访问，导致 Ftrace 无法在容器内使用。如果需要在容器中做内核追踪，通常需要在宿主机上操作。这也是 [[eBPF]] 工具（如 bpftrace）在某些场景下更方便的原因——部分 eBPF 工具支持非 root 用户（通过 BPF capability）。
+> Ftrace 的配置接口在 debugfs（`/sys/kernel/debug/tracing/`）或 tracefs（`/sys/kernel/tracing/`），需要 root 权限访问。在容器环境中，debugfs/tracefs 通常不挂载或不可访问，导致 Ftrace 无法在容器内使用。如果需要在容器中做内核追踪，通常需要在宿主机上操作。这也是 eBPF 工具（如 bpftrace）在某些场景下更方便的原因——部分 eBPF 工具支持非 root 用户（通过 BPF capability）。
 
 ---
 
@@ -816,7 +816,7 @@ strace 的开销有多大？Brendan Gregg 曾做过一个经典实验：用 stra
 
 > [!warning] 生产避坑：strace 绝不能在生产环境对高负载服务使用
 > strace 的开销与系统调用频率成正比。I/O 密集和网络密集型应用（数据库、Web 服务、消息队列）的系统调用频率极高，strace 会让它们性能下降一个数量级。在 生产 环境 对这类服务执行 `strace -p <pid>`，等同于发起一次"性能攻击"——服务可能直接超时雪崩。
-> **正确做法**：生产环境用 [[eBPF]] 工具替代 strace。`bpftrace` 或 BCC 的 `execsnoop`、`opensnoop`、`biosnoop` 能在不使用 ptrace 的情况下追踪系统调用，开销在 1-5% 而非 90%+。strace 留给开发/测试环境对低频进程的排障使用。
+> **正确做法**：生产环境用 eBPF 工具替代 strace。`bpftrace` 或 BCC 的 `execsnoop`、`opensnoop`、`biosnoop` 能在不使用 ptrace 的情况下追踪系统调用，开销在 1-5% 而非 90%+。strace 留给开发/测试环境对低频进程的排障使用。
 
 ### 6.4 strace 的替代方案
 
@@ -824,7 +824,7 @@ strace 的开销有多大？Brendan Gregg 曾做过一个经典实验：用 stra
 |------|------|------|---------|
 | strace | ptrace（暂停-恢复） | 极高（10x 降速） | 开发环境、低频进程 |
 | perf trace | tracepoint + ring buffer | 中等（取决于事件率） | 生产环境、短时间追踪 |
-| bpftrace | [[eBPF]] 内核态过滤 | 低（1-5%） | 生产环境、高频追踪 |
+| bpftrace | eBPF 内核态过滤 | 低（1-5%） | 生产环境、高频追踪 |
 | BCC tools | eBPF + Python 前端 | 低（1-5%） | 生产环境、预构建工具 |
 | perf trace -e | tracepoint 事件 | 中等 | 特定事件追踪 |
 
@@ -955,7 +955,7 @@ graph TD
 
 本文覆盖的 perf 和 Ftrace 是 Linux 性能观测的传统主力工具。但它们有一个共同局限：**追踪能力受限于内核已有设施**——perf 依赖 PMC 和 tracepoint，Ftrace 依赖函数插桩和 tracepoint。如果你想追踪一个"没有现成 tracepoint、没有函数入口可插桩"的自定义逻辑（如"统计每个 TCP 连接的建连延迟分布"），perf 和 Ftrace 都难以直接做到。
 
-这正是 [[eBPF 与动态追踪：性能观测的革命|eBPF]] 要解决的问题。eBPF 允许在内核中运行用户定义的观测程序，实现内核态聚合和自定义逻辑，把追踪的开销从"随事件率线性增长"降到"固定低开销"。eBPF 不是 perf 和 Ftrace 的替代品，而是它们的补充——perf 擅长 PMC 采样，Ftrace 擅长函数追踪，eBPF 擅长自定义聚合。三者结合，构成了 Linux 性能观测的完整工具栈。
+这正是 eBPF 要解决的问题。eBPF 允许在内核中运行用户定义的观测程序，实现内核态聚合和自定义逻辑，把追踪的开销从"随事件率线性增长"降到"固定低开销"。eBPF 不是 perf 和 Ftrace 的替代品，而是它们的补充——perf 擅长 PMC 采样，Ftrace 擅长函数追踪，eBPF 擅长自定义聚合。三者结合，构成了 Linux 性能观测的完整工具栈。
 
 > [!note] 设计哲学：观测工具的"瑞士军刀"不是一把刀
 > Linux 性能观测没有"银弹"——没有一个工具能解决所有问题。perf、Ftrace、eBPF、strace、/proc，每个工具有自己的设计目标和能力边界。优秀的性能工程师不是"精通某个工具"，而是"理解每个工具的底层机制和适用场景，能在正确的时间选择正确的工具"。本文的核心目标不是教你每个工具的用法（手册页做得更好），而是帮你建立工具选型的思维框架——为什么用这个工具、它的代价是什么、什么时候该换工具。
@@ -986,9 +986,9 @@ graph TD
 
 - [[03 eBPF 与动态追踪：性能观测的革命]]
 - [[01 性能工程的本质：延迟、吞吐与资源饱和的三角]]
-- [[Page Cache]]
-- [[CPU 调度器]]
-- [[内存管理]]
+- Page Cache
+- CPU 调度器
+- 内存管理
 
 ---
 

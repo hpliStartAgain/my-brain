@@ -9,7 +9,7 @@ aliases: [HDFS HA, QJM高可用, NameNode高可用]
 
 ## 摘要
 
-本文深度解析 HDFS NameNode 高可用（HA）的完整工程方案。前三篇文章已经揭示了 NameNode 作为单点的致命风险：一旦宕机，整个 HDFS 集群立即不可用。本文从"HA 的本质问题是什么"出发，逐步推导出 HDFS HA 的核心设计——Active/Standby 双 NameNode 架构、用 QJM（Quorum Journal Manager）共享 EditLog 解决状态同步问题、用 [[ZooKeeper]] 实现故障检测与自动切换（ZKFC）、以及用 Fencing 机制彻底消灭"脑裂（Split-Brain）"风险。每一个机制背后都有具体的工程推导：为什么需要 Quorum 写入、Fencing 不到位会发生什么、Standby 如何在不中断服务的情况下保持与 Active 完全同步。
+本文深度解析 HDFS NameNode 高可用（HA）的完整工程方案。前三篇文章已经揭示了 NameNode 作为单点的致命风险：一旦宕机，整个 HDFS 集群立即不可用。本文从"HA 的本质问题是什么"出发，逐步推导出 HDFS HA 的核心设计——Active/Standby 双 NameNode 架构、用 QJM（Quorum Journal Manager）共享 EditLog 解决状态同步问题、用 ZooKeeper 实现故障检测与自动切换（ZKFC）、以及用 Fencing 机制彻底消灭"脑裂（Split-Brain）"风险。每一个机制背后都有具体的工程推导：为什么需要 Quorum 写入、Fencing 不到位会发生什么、Standby 如何在不中断服务的情况下保持与 Active 完全同步。
 
 ---
 
@@ -47,7 +47,7 @@ Hadoop 社区在 2.0 版本引入了 **QJM（Quorum Journal Manager）** 作为�
 
 ### 2.2 QJM 的核心思想：Quorum 写入
 
-QJM 的核心思想来自于分布式系统中经典的 **Quorum（多数派）机制**，与 [[Paxos]] 协议的思想一脉相承：
+QJM 的核心思想来自于分布式系统中经典的 **Quorum（多数派）机制**，与 Paxos 协议的思想一脉相承：
 
 > 将 EditLog 写入一组 JournalNode（通常是 3 个或 5 个），只有当**多数派（Quorum）JournalNode 都确认写入成功**，这次写操作才被认为是持久化成功的。
 
@@ -479,7 +479,7 @@ zookeeper-client -server localhost:2181 get /hadoop-ha/<nameservice>/ActiveStand
 
 回顾 HDFS HA 的完整设计，几个核心工程决策值得反复回味：
 
-**QJM 的本质**：用 Quorum 机制将 EditLog 的"写入可靠性"与任何单个存储节点解耦——只要多数派 JournalNode 存活，EditLog 就不会丢失。这与 [[Raft]] 和 [[Paxos]] 的核心思想完全一致：多数派确认 = 安全提交。
+**QJM 的本质**：用 Quorum 机制将 EditLog 的"写入可靠性"与任何单个存储节点解耦——只要多数派 JournalNode 存活，EditLog 就不会丢失。这与 Raft 和 Paxos 的核心思想完全一致：多数派确认 = 安全提交。
 
 **Fencing 的本质**：HA 系统的正确性比可用性更重要。宁可因为 Fencing 操作消耗额外的 10 秒，也不能冒脑裂风险。QJM 的 Epoch 机制提供了一层"无论如何都不会真正脑裂"的软保护，让系统在物理 Fencing 失败时仍然保持数据一致性。
 

@@ -9,7 +9,7 @@ aliases: [DataNode存储引擎, FsDataset, HDFS磁盘管理]
 
 ## 摘要
 
-本文深入 DataNode 的存储引擎层，剖析 DataNode 如何在本地磁盘上管理 Block 数据的完整机制。`FsDataset` 如何管理多块磁盘上的 Block 数据、Block 的完整生命周期状态机（`TEMPORARY` → `RBW` → `RWR` → `FINALIZED`）、校验和机制如何实现端到端数据完整性保证、DataNode 如何利用操作系统 [[Page Cache]] 最大化 I/O 吞吐量、以及磁盘故障检测与热坏盘隔离的工程实现。理解 DataNode 存储引擎，是生产环境中做 HDFS 磁盘配置优化、故障排查和性能调优的必要知识基础。
+本文深入 DataNode 的存储引擎层，剖析 DataNode 如何在本地磁盘上管理 Block 数据的完整机制。`FsDataset` 如何管理多块磁盘上的 Block 数据、Block 的完整生命周期状态机（`TEMPORARY` → `RBW` → `RWR` → `FINALIZED`）、校验和机制如何实现端到端数据完整性保证、DataNode 如何利用操作系统 Page Cache 最大化 I/O 吞吐量、以及磁盘故障检测与热坏盘隔离的工程实现。理解 DataNode 存储引擎，是生产环境中做 HDFS 磁盘配置优化、故障排查和性能调优的必要知识基础。
 
 ---
 
@@ -21,7 +21,7 @@ aliases: [DataNode存储引擎, FsDataset, HDFS磁盘管理]
 - **磁盘故障隔离**：某块磁盘出现坏扇区时，如何只隔离这块磁盘而不影响其他磁盘？
 - **崩溃恢复**：DataNode 重启时，如何区分已完成写入的 Block（可信）和写到一半的 Block（需恢复）？
 - **静默数据损坏检测**：磁盘数据被悄悄修改但没有报错，如何发现？
-- **I/O 路径优化**：如何利用 [[Page Cache]]、`sendfile()` 减少数据拷贝，提高读取吞吐量？
+- **I/O 路径优化**：如何利用 Page Cache、`sendfile()` 减少数据拷贝，提高读取吞吐量？
 
 HDFS 的 `FsDataset` 正是为解决这些问题设计的专用存储引擎。
 
@@ -156,7 +156,7 @@ CRC32C 在 x86 CPU 的 SSE4.2 指令集中有硬件加速（`crc32` 指令），
 
 ### 5.1 DataNode 为什么不自建缓存
 
-DataNode 不在 JVM 堆内存中维护 Block 缓存，而是完全依赖操作系统的 **[[Page Cache]]**。原因：
+DataNode 不在 JVM 堆内存中维护 Block 缓存，而是完全依赖操作系统的 **Page Cache**。原因：
 - JVM GC 会对大对象（Block 数据 byte[]）造成频繁停顿
 - JVM 堆通常只有 4~8GB，而操作系统 Page Cache 可以使用机器全部空闲内存（几十到上百 GB）
 - Page Cache 是内核管理的，零额外代码复杂度

@@ -18,7 +18,7 @@ MergeTree 是 ClickHouse 生产表中使用率最高的存储引擎家族，几�
 
 理解 MergeTree 的设计，首先要理解它要解决的核心矛盾：**如何在保证高写入吞吐的同时，实现高效的范围查询**。这个矛盾在数据库领域由来已久——传统 B+ 树选择了"查询优先"，用维护全局有序的索引结构换取点查和范围查的效率，代价是每次插入都要在已有数据中"找位置"并维护树结构，写入吞吐受随机 IO 限制。对于 OLTP 场景（写入量不大、查询以点查为主），这个取舍是合理的。但对于 ClickHouse 面对的 OLAP 场景（每秒千万行级别的批量写入、查询以范围扫描为主），B+ 树的写入代价成了瓶颈。
 
-2010 年前后，LSM-Tree（Log-Structured Merge-Tree）的写优化思想开始在工业界流行——Google 的 Bigtable、Facebook 的 RocksDB、[[Leveldb|LevelDB]] 都采用了这个思路。LSM-Tree 的核心改动是**把"写入时找位置插入"变成"写入时追加 + 后台合并"**——新数据先写入内存表（MemTable），积累到一定大小后刷盘成一个有序的不可变文件（SSTable），后台再异步把多个小 SSTable 合并成大 SSTable。写入变成了顺序追加，吞吐大幅提升；查询时需要扫描多个 SSTable，但通过布隆过滤器和索引可以快速跳过不相关的文件。
+2010 年前后，LSM-Tree（Log-Structured Merge-Tree）的写优化思想开始在工业界流行——Google 的 Bigtable、Facebook 的 RocksDB、LevelDB 都采用了这个思路。LSM-Tree 的核心改动是**把"写入时找位置插入"变成"写入时追加 + 后台合并"**——新数据先写入内存表（MemTable），积累到一定大小后刷盘成一个有序的不可变文件（SSTable），后台再异步把多个小 SSTable 合并成大 SSTable。写入变成了顺序追加，吞吐大幅提升；查询时需要扫描多个 SSTable，但通过布隆过滤器和索引可以快速跳过不相关的文件。
 
 ClickHouse 的 MergeTree 借鉴了 LSM-Tree 的这个核心思路，但做了针对 OLAP 场景的重要改造——**没有 MemTable**。ClickHouse 的写入模式是批量 INSERT（每批几万到几十万行），不是单行 PUT。每次批量 INSERT 直接在磁盘上创建一个新的有序 **Part**（数据片段）——跳过了 LSM-Tree 的"内存表 → 刷盘"阶段，直接从批量写入落到有序文件。这个改造的合理性在于：ClickHouse 的用户本来就习惯批量写入（从 Kafka 消费一批、从文件导入一批），单行写入不是它的目标场景——省掉 MemTable 反而减少了内存管理复杂度和刷盘的随机性。
 
@@ -72,7 +72,7 @@ graph LR
 ```
 
 > [!info] 核心概念：Part 与 SSTable 的同构
-> ClickHouse 的 Part 与 [[Elasticsearch]] 的 Segment、LevelDB 的 SSTable 是同类概念——都是"不可变的、内部有序的数据文件"，通过后台合并来优化查询性能和存储空间。这是 LSM-Tree 思想在不同系统中的实例化，区别只在于"有没有 MemTable"和"合并策略的细节"。
+> ClickHouse 的 Part 与 Elasticsearch 的 Segment、LevelDB 的 SSTable 是同类概念——都是"不可变的、内部有序的数据文件"，通过后台合并来优化查询性能和存储空间。这是 LSM-Tree 思想在不同系统中的实例化，区别只在于"有没有 MemTable"和"合并策略的细节"。
 
 ### 1.2 Part 的物理文件结构
 
@@ -412,7 +412,7 @@ INSERT INTO orders VALUES (1001, 600.0, 'paid', 1);   -- 写入新行
 
 Merge 时，`sign=+1` 和 `sign=-1` 的相同 `order_id` 行互相抵消，只保留净效果——上面的例子中，旧行的 `+1` 被新写入的 `-1` 抵消，只剩下 `600.0` 那行。
 
-CollapsingMergeTree 的应用场景是**实现类似于 [[Doris]] Unique Key 模型的数据更新语义**——用"写入增量变化"的方式模拟更新，不修改已有数据。但它的局限比 ReplacingMergeTree 更多：
+CollapsingMergeTree 的应用场景是**实现类似于 Doris Unique Key 模型的数据更新语义**——用"写入增量变化"的方式模拟更新，不修改已有数据。但它的局限比 ReplacingMergeTree 更多：
 
 **要求成对写入**——每次"更新"都要先写一条 `-1` 的旧行、再写一条 `+1` 的新行。如果 `-1` 丢失（譬如写入失败），数据就会不一致——`+1` 没有被抵消，旧行和新行都保留。这个"成对写入"的约束让上游 ETL 必须很小心。
 
@@ -542,7 +542,7 @@ TTL date + INTERVAL 30 DAY RECOMPRESS CODEC(ZSTD(9)),
 
 ### 4.6 分区与副本的协同
 
-在 ReplicatedMergeTree（带副本的 MergeTree）场景下，分区还有一个与副本相关的协同效应——**分区是副本同步的最小单元**。ClickHouse 的副本机制通过 [[Zookeeper]] / Keeper 协调，每个分区的 Part 变化（新增、合并、删除）都会记录到 ZooKeeper 的副本队列里，其他副本从队列拉取变化并在本地执行。
+在 ReplicatedMergeTree（带副本的 MergeTree）场景下，分区还有一个与副本相关的协同效应——**分区是副本同步的最小单元**。ClickHouse 的副本机制通过 Zookeeper / Keeper 协调，每个分区的 Part 变化（新增、合并、删除）都会记录到 ZooKeeper 的副本队列里，其他副本从队列拉取变化并在本地执行。
 
 这个"分区为同步单元"的设计有两个影响。第一，**跨分区的操作是独立的**——分区 A 的 Part 合并不会阻塞分区 B 的查询，不同分区的 Merge 可以并行执行。第二，**单个分区的 Part 变化是串行同步的**——如果一个分区频繁写入产生大量 Part 变化，ZooKeeper 的同步队列会堆积，副本延迟增大。这也是为什么"分区太细 + 写入频繁"的问题在副本场景下更严重——不仅本地 Part 碎片化，ZooKeeper 同步也跟不上。
 
@@ -560,7 +560,7 @@ TTL date + INTERVAL 30 DAY RECOMPRESS CODEC(ZSTD(9)),
 
 **不擅长点查**。稀疏索引的粒度是 8192 行——`WHERE id = 12345` 要读整个 Granule（8192 行）进来过滤。对偶尔的点查可以接受，对高并发的点查（每秒数千次）就是灾难——每次点查都读 8192 行，IO 和 CPU 都浪费在"不需要的 8191 行"上。**点查应该用 MySQL/Elasticsearch，不应该用 ClickHouse**——这是第 01 篇选型框架的具体落地，也是 ClickHouse 与 OLTP 数据库最清晰的分界线。
 
-**不擅长强一致性的去重/更新**。ReplacingMergeTree 的去重是异步的（Merge 时才发生），CollapsingMergeTree 的抵消也是异步的——查询时可能看到"还没去重/抵消"的中间状态。如果业务要求"写入后立即可见去重结果"，MergeTree 系列都做不到——要么用 `FINAL`（性能差），要么在 SQL 里自己做（`argMax`/`sumIf`），要么换一个支持强一致更新的引擎（譬如 [[Doris]] Unique 模型）。**ClickHouse 的数据一致性模型是"最终一致"——这是 append-only + 异步 Merge 的必然结果，不是 bug**。理解了这个一致性模型，才能理解为什么 ClickHouse 不适合做"状态表"（订单状态、库存状态）——状态表要求"写入后立即可见最新状态"，ClickHouse 做不到。
+**不擅长强一致性的去重/更新**。ReplacingMergeTree 的去重是异步的（Merge 时才发生），CollapsingMergeTree 的抵消也是异步的——查询时可能看到"还没去重/抵消"的中间状态。如果业务要求"写入后立即可见去重结果"，MergeTree 系列都做不到——要么用 `FINAL`（性能差），要么在 SQL 里自己做（`argMax`/`sumIf`），要么换一个支持强一致更新的引擎（譬如 Doris Unique 模型）。**ClickHouse 的数据一致性模型是"最终一致"——这是 append-only + 异步 Merge 的必然结果，不是 bug**。理解了这个一致性模型，才能理解为什么 ClickHouse 不适合做"状态表"（订单状态、库存状态）——状态表要求"写入后立即可见最新状态"，ClickHouse 做不到。
 
 **不擅长小 Part 的频繁写入**。每次 INSERT 生成一个 Part，Part 太多会触发 "Too many parts" 错误。如果业务必须高频写入（譬如每秒 100 批），需要在 ClickHouse 前面加缓冲——Kafka 消费攒批、Buffer 表引擎、或异步写入中间件。**ClickHouse 的写入模型要求"少批大量"——每批几万到几十万行，每分钟几批到几十批**，这是它的舒适区。第 03 篇会详细展开写入频率与 Part 数量的平衡关系。
 

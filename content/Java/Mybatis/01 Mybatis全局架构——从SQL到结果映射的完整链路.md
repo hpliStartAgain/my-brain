@@ -9,7 +9,7 @@ aliases: []
 
 ## 摘要
 
-Mybatis 是 Java 生态中使用最广泛的半自动 ORM 框架。与 [[Hibernate]] 的"全自动"路线不同，Mybatis 的设计哲学是：**让开发者完全掌控 SQL，框架只负责参数绑定、结果映射和连接管理**。这种"半自动"定位，使得 Mybatis 在复杂查询、SQL 调优、存储过程调用等场景下比 Hibernate 更灵活、更可控。本文从 Mybatis 的整体架构出发，剖析其四层结构（接口层/数据处理层/框架支撑层/引导层）的职责边界，深入讲解 `Configuration` 全局配置对象的组成，并以一条 SQL 的完整执行链路（`Mapper` 接口调用 → `SqlSession` → `Executor` → `StatementHandler` → JDBC → 结果映射）为主线，将所有核心组件串联起来，建立对 Mybatis 工作原理的整体认知。
+Mybatis 是 Java 生态中使用最广泛的半自动 ORM 框架。与 Hibernate 的"全自动"路线不同，Mybatis 的设计哲学是：**让开发者完全掌控 SQL，框架只负责参数绑定、结果映射和连接管理**。这种"半自动"定位，使得 Mybatis 在复杂查询、SQL 调优、存储过程调用等场景下比 Hibernate 更灵活、更可控。本文从 Mybatis 的整体架构出发，剖析其四层结构（接口层/数据处理层/框架支撑层/引导层）的职责边界，深入讲解 `Configuration` 全局配置对象的组成，并以一条 SQL 的完整执行链路（`Mapper` 接口调用 → `SqlSession` → `Executor` → `StatementHandler` → JDBC → 结果映射）为主线，将所有核心组件串联起来，建立对 Mybatis 工作原理的整体认知。
 
 ---
 
@@ -17,7 +17,7 @@ Mybatis 是 Java 生态中使用最广泛的半自动 ORM 框架。与 [[Hiberna
 
 ### 1.1 原生 JDBC 的七宗罪
 
-理解 Mybatis 的价值，必须先理解它要解决的问题。在 Mybatis 出现之前，Java 程序员用原生 [[JDBC]] 操作数据库，这段代码几乎所有人都写过：
+理解 Mybatis 的价值，必须先理解它要解决的问题。在 Mybatis 出现之前，Java 程序员用原生 JDBC 操作数据库，这段代码几乎所有人都写过：
 
 ```java
 Connection conn = null;
@@ -375,7 +375,7 @@ public <E> List<E> selectList(String statement, Object parameter, RowBounds rowB
 - **`ReuseExecutor`**：在同一 `SqlSession` 内，相同 SQL 的 `PreparedStatement` 会被复用（通过 Map 缓存已编译的 Statement）；
 - **`BatchExecutor`**：将多个写操作合并为批量执行（`addBatch()`/`executeBatch()`），适用于批量插入/更新场景。
 
-**`CachingExecutor`** 是一个**装饰器**，包装在上述任意一种基础 Executor 外层，负责二级缓存的查询和写入。这是[[装饰器模式]]在 Mybatis 中的经典应用。
+**`CachingExecutor`** 是一个**装饰器**，包装在上述任意一种基础 Executor 外层，负责二级缓存的查询和写入。这是装饰器模式在 Mybatis 中的经典应用。
 
 当 `cacheEnabled=true`（默认）时，`Executor` 的实际类型是 `CachingExecutor`，它的查询逻辑：
 

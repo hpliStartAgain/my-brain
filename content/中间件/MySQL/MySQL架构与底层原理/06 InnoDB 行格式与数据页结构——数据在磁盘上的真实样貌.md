@@ -13,7 +13,7 @@ aliases: [行格式, COMPACT格式, 数据页结构]
 
 ## 第 1 章 InnoDB 支持的四种行格式
 
-[[InnoDB]] 的行格式（Row Format）是数据行在磁盘页中的物理编码方式。不同的行格式在空间利用率、变长字段处理、大对象存储等方面有不同的取舍。
+InnoDB 的行格式（Row Format）是数据行在磁盘页中的物理编码方式。不同的行格式在空间利用率、变长字段处理、大对象存储等方面有不同的取舍。
 
 MySQL 5.7+ 默认行格式是 **DYNAMIC**，MySQL 5.6 默认是 **COMPACT**：
 
@@ -129,7 +129,7 @@ DYNAMIC 格式对大字段溢出的处理更彻底：**完全不在数据页中�
 这是一个重要的设计改进：
 - 数据页不再被大字段的前缀数据"污染"，页的空间完全用于存储紧凑的行记录
 - 每个数据页可以容纳更多的行（因为每行更小了）
-- [[Buffer Pool]] 的缓存效率更高
+- Buffer Pool 的缓存效率更高
 
 > [!note] 设计哲学
 > DYNAMIC 格式体现了"职责分离"的设计思想：数据页专注于存储结构化的行数据（键值、ID、状态等），大对象的内容存储在溢出页中，两者完全隔离。这使得针对结构化字段的扫描查询可以完全在数据页上完成，不会因为大字段而被迫读取溢出页。这也是为什么"不在数据库中存大文件"不只是经验之谈，而是有物理存储层面的理论依据。
@@ -146,14 +146,14 @@ DYNAMIC 格式对大字段溢出的处理更彻底：**完全不在数据页中�
 - `FIL_PAGE_SPACE_ID`：页所属的表空间 ID
 - `FIL_PAGE_OFFSET`：页在表空间中的编号（页号）
 - `FIL_PAGE_PREV`、`FIL_PAGE_NEXT`：前后相邻页的页号（构成叶子节点的双向链表）
-- `FIL_PAGE_LSN`：页最后一次被修改时的 [[LSN]]（用于崩溃恢复中的幂等判断）
+- `FIL_PAGE_LSN`：页最后一次被修改时的 LSN（用于崩溃恢复中的幂等判断）
 - `FIL_PAGE_TYPE`：页类型（数据页、索引页、Undo 页、系统页等）
 - `FIL_PAGE_CHECKSUM`：页的校验和
 
 **File Trailer（文件尾，8 字节）** 包含：
 - 与 File Header 相同的校验和
 
-InnoDB 在刷脏页时，先写数据，最后写 File Trailer 的 Checksum。如果 MySQL 在写页的中途崩溃，File Header 的 Checksum 和 File Trailer 的 Checksum 不匹配——InnoDB 在重启时检测到这个不一致，会从 [[Redo Log]] 中重新应用这个页的修改，而不是使用磁盘上的损坏版本。这是 InnoDB 对抗"部分写（Partial Write）"问题的机制。
+InnoDB 在刷脏页时，先写数据，最后写 File Trailer 的 Checksum。如果 MySQL 在写页的中途崩溃，File Header 的 Checksum 和 File Trailer 的 Checksum 不匹配——InnoDB 在重启时检测到这个不一致，会从 Redo Log 中重新应用这个页的修改，而不是使用磁盘上的损坏版本。这是 InnoDB 对抗"部分写（Partial Write）"问题的机制。
 
 > [!info] 核心概念
 > **双写缓冲（Doublewrite Buffer）** 是 InnoDB 处理部分写问题的另一个机制：在将脏页刷写到数据文件之前，先将其写入一块专用的双写缓冲区（位于系统表空间中）。如果在写数据文件时崩溃，可以从双写缓冲区中恢复完整的页，再重新应用 Redo Log。MySQL 8.0.20 将双写缓冲区从系统表空间独立出来，成为独立文件。

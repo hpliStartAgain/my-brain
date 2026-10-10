@@ -514,7 +514,7 @@ class EmailNotificationServiceTest {
 
 内嵌数据库（H2）虽然方便，但与生产数据库（MySQL、PostgreSQL）在 SQL 语法、函数、事务行为上存在差异，可能导致"测试通过，生产出错"的问题。
 
-[[Testcontainers]] 通过 Docker 在测试时启动真实的数据库容器，提供与生产环境完全一致的数据库行为，同时保持测试的隔离性（每次测试完毕自动清理容器）。
+Testcontainers 通过 Docker 在测试时启动真实的数据库容器，提供与生产环境完全一致的数据库行为，同时保持测试的隔离性（每次测试完毕自动清理容器）。
 
 ```xml
 <!-- pom.xml -->

@@ -63,7 +63,7 @@ batchId=6：
 **关键点：Static DataFrame 在每个批次中重新读取**。如果 dim_users 在 batchId=5 和 batchId=6 之间有更新（如有新用户注册），batchId=6 会读到最新的维表数据，自动感知维表变化。这与流-流 Join 完全不同——不需要任何额外机制来"刷新"维表。
 
 > [!info] 核心概念
-> 这里"重新读取"是对 `spark.table("dim_users")` 而言的逻辑读取。实际上如果维表被 [[Spark Cache|Spark 缓存]]（`.cache()` 或 `.persist()`），重新读取会命中缓存，不走真实 I/O。但缓存的数据是静态的，不会感知维表更新——需要手动 `unpersist()` 再重新读取才能刷新。
+> 这里"重新读取"是对 `spark.table("dim_users")` 而言的逻辑读取。实际上如果维表被 Spark 缓存（`.cache()` 或 `.persist()`），重新读取会命中缓存，不走真实 I/O。但缓存的数据是静态的，不会感知维表更新——需要手动 `unpersist()` 再重新读取才能刷新。
 
 ---
 

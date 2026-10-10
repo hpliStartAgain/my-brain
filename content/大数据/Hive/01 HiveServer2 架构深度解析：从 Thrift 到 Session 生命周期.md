@@ -110,7 +110,7 @@ HS2 进程内部有四个主要的线程组，它们各司其职：
 
 **服务处理层（Worker 线程池）**：真正执行 Thrift API 调用的线程。线程数由 `hive.server2.async.exec.threads`（默认 100）控制。这层线程负责处理所有 Thrift 接口调用——`OpenSession`、`ExecuteStatement`、`FetchResults` 等。对于同步模式的查询，Worker 线程会阻塞直到查询完成；对于异步模式，Worker 线程快速返回后由 Driver 异步执行。
 
-**Driver 执行层**：每个 HS2 Session 对应一个独立的 [[Hive Driver]] 实例，Driver 内部包含 Compiler（SQL 解析 + 优化）和 Executor（MR/Tez 任务提交）。Driver 是 HS2 中资源消耗最重的部分——编译一条复杂 SQL 需要大量 CPU 和内存（尤其是大型 JOIN 的优化），提交 MR/Tez 任务需要与 YARN ResourceManager 交互。
+**Driver 执行层**：每个 HS2 Session 对应一个独立的 Hive Driver 实例，Driver 内部包含 Compiler（SQL 解析 + 优化）和 Executor（MR/Tez 任务提交）。Driver 是 HS2 中资源消耗最重的部分——编译一条复杂 SQL 需要大量 CPU 和内存（尤其是大型 JOIN 的优化），提交 MR/Tez 任务需要与 YARN ResourceManager 交互。
 
 **后台维护层**：一组守护线程，负责清理过期的 Session 和 Operation，以及在 HA 模式下维护 ZooKeeper 心跳。这些线程不参与正常的请求处理，但对 HS2 的稳定运行至关重要——如果 Session 没有被正确清理，连接数会持续增长直到 JVM 内存耗尽。
 

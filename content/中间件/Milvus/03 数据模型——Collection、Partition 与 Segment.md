@@ -195,7 +195,7 @@ Segment 的大小由 `dataCoord.segment.maxSize` 参数控制（默认 512MB，�
 
 ### 4.1 什么是 Binlog
 
-**Binlog** 是 Milvus 中对象存储中数据的实际存储格式，类似于 [[MySQL InnoDB]] 的 binlog 或 [[Kafka]] 的日志文件。每个 Segment 的数据在对象存储中表示为多个 Binlog 文件，分为三类：
+**Binlog** 是 Milvus 中对象存储中数据的实际存储格式，类似于 MySQL InnoDB 的 binlog 或 Kafka 的日志文件。每个 Segment 的数据在对象存储中表示为多个 Binlog 文件，分为三类：
 
 1. **Insert Binlog**：存储插入操作的向量和标量字段数据
 2. **Delete Binlog（Delta Log）**：存储删除操作的主键 ID 列表
@@ -203,7 +203,7 @@ Segment 的大小由 `dataCoord.segment.maxSize` 参数控制（默认 512MB，�
 
 ### 4.2 Insert Binlog 的文件结构
 
-每个 Insert Binlog 文件对应一个 Segment 的**单个字段**（列存格式）——不同字段存储在不同的 Binlog 文件中。这种列存（Column Store）设计与 [[Clickhouse]] 的列存引擎类似：
+每个 Insert Binlog 文件对应一个 Segment 的**单个字段**（列存格式）——不同字段存储在不同的 Binlog 文件中。这种列存（Column Store）设计与 Clickhouse 的列存引擎类似：
 
 ```
 对象存储中的 Segment 文件组织（Segment ID = 1001）：
@@ -231,7 +231,7 @@ root_path/
 
 ### 4.3 Delete Binlog（Delta Log）的处理
 
-Milvus 的删除操作与 [[LevelDB]] 的 Tombstone 机制类似——不直接从存储中移除数据，而是记录一条"删除标记"。
+Milvus 的删除操作与 LevelDB 的 Tombstone 机制类似——不直接从存储中移除数据，而是记录一条"删除标记"。
 
 **Delete 流程**：
 1. 客户端调用 `collection.delete(expr="doc_id in [1001, 1002, 1003]")`

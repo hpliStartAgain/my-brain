@@ -183,7 +183,7 @@ Core Container 由四个核心模块构成，它们是 Spring 一切能力的来
 
 从 Spring 5 开始，Web 层形成了两条并行的轨道：
 - **spring-webmvc**：基于 Servlet API 的传统同步阻塞模型，`DispatcherServlet` 是核心；
-- **spring-webflux**：基于 [[Reactor]] 响应式编程模型的非阻塞框架，适合 I/O 密集型高并发场景。
+- **spring-webflux**：基于 Reactor 响应式编程模型的非阻塞框架，适合 I/O 密集型高并发场景。
 
 两套模型在注解层面高度相似（`@RestController`、`@GetMapping` 等注解在两套框架中通用），但底层的 I/O 模型、线程模型截然不同。
 
@@ -468,13 +468,13 @@ Spring 6 强制要求 Jakarta EE 9（`jakarta.*`），这也是 **Spring Boot 3.
 
 ### 7.2 AOT（提前编译）支持与 GraalVM Native Image
 
-Spring 6 是 Spring 生态支持 [[GraalVM]] Native Image 的关键里程碑。传统的 JVM 模式下，Spring 的大量机制依赖运行时反射（`Class.forName()`、`Method.invoke()`）——而 Native Image 在编译期就需要知道所有可能用到的反射调用，不支持动态反射。
+Spring 6 是 Spring 生态支持 GraalVM Native Image 的关键里程碑。传统的 JVM 模式下，Spring 的大量机制依赖运行时反射（`Class.forName()`、`Method.invoke()`）——而 Native Image 在编译期就需要知道所有可能用到的反射调用，不支持动态反射。
 
 Spring 6 引入了 AOT（Ahead-Of-Time）处理阶段：在构建期分析 Spring 应用，生成反射 Hint 配置文件，将原本运行时才能确定的反射信息提前固化。这使得 Spring 应用能够被 GraalVM 编译成本地可执行文件，启动时间从秒级降至毫秒级，内存占用大幅降低。
 
 ### 7.3 虚拟线程（Project Loom）支持
 
-Spring 6.1（对应 Spring Boot 3.2）引入了对 JDK 21 [[虚拟线程]] 的正式支持。虚拟线程是 JDK 21 的重量级特性，它允许创建数百万个轻量级线程，彻底改变了传统的"每请求一线程"的 I/O 模型。
+Spring 6.1（对应 Spring Boot 3.2）引入了对 JDK 21 虚拟线程 的正式支持。虚拟线程是 JDK 21 的重量级特性，它允许创建数百万个轻量级线程，彻底改变了传统的"每请求一线程"的 I/O 模型。
 
 在 Spring Boot 3.2 中，只需一行配置即可启用：
 ```yaml
@@ -547,7 +547,7 @@ graph TD
 - **五大设计哲学**：选择权、包容性、向后兼容、API 品质、代码质量——这五条原则解释了 Spring 为什么能存活并持续繁荣 20 年；
 - **Spring 6.x 变化**：Jakarta EE 命名空间迁移、AOT 编译支持、虚拟线程集成是三个最重要的现代化升级。
 
-下一篇，我们将深入 IoC 容器的第一个核心问题：[[02 IoC 容器——BeanFactory 与 ApplicationContext 的层次设计]]。
+下一篇，我们将深入 IoC 容器的第一个核心问题：02 IoC 容器——BeanFactory 与 ApplicationContext 的层次设计。
 
 ---
 

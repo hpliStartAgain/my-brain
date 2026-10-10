@@ -229,7 +229,7 @@ val query = df.writeStream
 
 ### 5.1 Delta Lake 为什么天然适合 Exactly-once
 
-[[Delta Lake]] 是 Databricks 开源的存储层，基于 Parquet 格式并增加了事务日志（`_delta_log/`）。它的事务语义使得 Exactly-once 的实现极为自然：
+Delta Lake 是 Databricks 开源的存储层，基于 Parquet 格式并增加了事务日志（`_delta_log/`）。它的事务语义使得 Exactly-once 的实现极为自然：
 
 **Delta Lake 的事务提交协议**：
 1. 每次写出操作对应一个 Delta 事务，事务有一个版本号（从 0 单调递增）

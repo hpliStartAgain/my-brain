@@ -7,7 +7,7 @@ aliases: ["Iceberg事务", "Iceberg并发控制", "乐观并发控制", "Snapsho
 
 **摘要：**
 
-[[Apache Iceberg]] 的事务机制建立在一个简洁而优雅的基础上：**原子地切换 Catalog 中"当前元数据文件"的指针**。这个操作要么成功（新 Snapshot 对所有读者可见），要么失败（原 Snapshot 不受任何影响）——永远不存在"写了一半"的中间状态。在此基础上，Iceberg 通过**乐观并发控制（OCC）**处理多个 Writer 的并发冲突：先各自写入，最后提交时检查是否有冲突，无冲突则成功，有冲突则按策略重试或失败。本文深入剖析 Iceberg 事务的底层实现（Catalog 原子操作如何保证 ACID）、OCC 的冲突检测算法（哪些操作互相兼容、哪些不兼容）、Snapshot 隔离级别的语义，并与 [[Delta Lake]] 的事务隔离级别机制做精准的机制对比。
+Apache Iceberg 的事务机制建立在一个简洁而优雅的基础上：**原子地切换 Catalog 中"当前元数据文件"的指针**。这个操作要么成功（新 Snapshot 对所有读者可见），要么失败（原 Snapshot 不受任何影响）——永远不存在"写了一半"的中间状态。在此基础上，Iceberg 通过**乐观并发控制（OCC）**处理多个 Writer 的并发冲突：先各自写入，最后提交时检查是否有冲突，无冲突则成功，有冲突则按策略重试或失败。本文深入剖析 Iceberg 事务的底层实现（Catalog 原子操作如何保证 ACID）、OCC 的冲突检测算法（哪些操作互相兼容、哪些不兼容）、Snapshot 隔离级别的语义，并与 Delta Lake 的事务隔离级别机制做精准的机制对比。
 
 ---
 
@@ -15,7 +15,7 @@ aliases: ["Iceberg事务", "Iceberg并发控制", "乐观并发控制", "Snapsho
 
 ### 1.1 一切事务的根基：Catalog 的原子指针切换
 
-在 [[Apache Iceberg]] 的架构中，"提交一个事务"在物理层面等价于：**原子地将 Catalog 中某张表的元数据指针，从旧版本的 `metadata.json` 切换到新版本的 `metadata.json`**。
+在 Apache Iceberg 的架构中，"提交一个事务"在物理层面等价于：**原子地将 Catalog 中某张表的元数据指针，从旧版本的 `metadata.json` 切换到新版本的 `metadata.json`**。
 
 ```
 事务提交前：
@@ -298,7 +298,7 @@ result = reader_df.count()
 
 ### 3.3 与 Delta Lake 事务隔离级别的对比
 
-[[Delta Lake]] 提供了更细粒度的事务隔离级别配置（Databricks Delta Lake 的特性）：
+Delta Lake 提供了更细粒度的事务隔离级别配置（Databricks Delta Lake 的特性）：
 
 **Delta Lake 的三种隔离级别**：
 

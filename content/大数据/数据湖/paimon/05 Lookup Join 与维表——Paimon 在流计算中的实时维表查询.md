@@ -7,7 +7,7 @@ aliases: ["Paimon维表", "Lookup Join", "实时维表查询", "Paimon Lookup Ca
 
 **摘要：**
 
-在 [[Apache Flink]] 流计算中，**Lookup Join（维表关联）** 是一个极其高频的操作——将实时流数据与维度数据（如用户资料、商品信息、地域映射）进行关联，丰富流记录的维度信息。传统方案依赖 [[Apache HBase]] 或 [[Redis]] 作为维表存储（提供低延迟的点查能力），但这引入了额外的存储系统和运维成本。[[Apache Paimon]] 的主键表凭借 [[LSM-Tree]] 的高效点查能力和内置的 Lookup Cache 机制，可以直接作为 Flink Lookup Join 的维表来源——在绝大多数场景下替代 HBase，同时支持维表数据的实时更新（这是 HBase 的常规能力）和分析查询（这是 HBase 的弱项）。本文深入剖析 Paimon Lookup Join 的工作机制、三种 Cache 策略（全量缓存、LRU 缓存、无缓存）的适用场景、Partial Update 与 Lookup Join 的协同模式，以及 Paimon 作为维表与 HBase/Redis 在性能、运维和功能上的系统对比。
+在 Apache Flink 流计算中，**Lookup Join（维表关联）** 是一个极其高频的操作——将实时流数据与维度数据（如用户资料、商品信息、地域映射）进行关联，丰富流记录的维度信息。传统方案依赖 Apache HBase 或 Redis 作为维表存储（提供低延迟的点查能力），但这引入了额外的存储系统和运维成本。Apache Paimon 的主键表凭借 LSM-Tree 的高效点查能力和内置的 Lookup Cache 机制，可以直接作为 Flink Lookup Join 的维表来源——在绝大多数场景下替代 HBase，同时支持维表数据的实时更新（这是 HBase 的常规能力）和分析查询（这是 HBase 的弱项）。本文深入剖析 Paimon Lookup Join 的工作机制、三种 Cache 策略（全量缓存、LRU 缓存、无缓存）的适用场景、Partial Update 与 Lookup Join 的协同模式，以及 Paimon 作为维表与 HBase/Redis 在性能、运维和功能上的系统对比。
 
 ---
 

@@ -397,7 +397,7 @@ FINISHED                            FAILED
 
 ### 6.2 基于 ZooKeeper 的 HA 机制
 
-Flink 通过 [[ZooKeeper]] 实现 JobManager 的 Leader 选举：
+Flink 通过 ZooKeeper 实现 JobManager 的 Leader 选举：
 
 ```
 启动多个 JobManager 进程（通常 2-3 个）

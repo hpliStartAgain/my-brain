@@ -335,7 +335,7 @@ ClickHouse 在较新版本（22.x+）引入了几项对 Mutation 的优化，值
 
 **分区级 Mutation 短路**。如果 `DELETE` 的 WHERE 条件覆盖整个分区（譬如 `DELETE WHERE date = '2024-01-01'`，且表按天分区），ClickHouse 直接 DROP 对应分区，不做 Mutation 重写——性能从"小时级"降到"毫秒级"。**这是分区设计影响 Mutation 性能的典型例子**——按天分区的表，按天删除是毫秒级；按月分区的表，按天删除仍要 Mutation 重写整个月。
 
-**Lightweight Delete（轻量级删除）**。使用一个隐藏的删除标记列而不是立即重写 Part——`DELETE FROM events WHERE user_id = 12345` 只在标记列里标记"这些行已删除"，查询时过滤掉标记的行，Part 本身不重写。后续 Merge 时，标记的行自然不会写入新 Part。**Lightweight Delete 把"删除的即时代价"从"重写 Part"降到"写标记列"**——类似 [[Doris]] 的 Delete Bitmap 机制。但它的查询代价上升了——每次查询都要过滤标记列，即使大部分行没被删除。
+**Lightweight Delete（轻量级删除）**。使用一个隐藏的删除标记列而不是立即重写 Part——`DELETE FROM events WHERE user_id = 12345` 只在标记列里标记"这些行已删除"，查询时过滤掉标记的行，Part 本身不重写。后续 Merge 时，标记的行自然不会写入新 Part。**Lightweight Delete 把"删除的即时代价"从"重写 Part"降到"写标记列"**——类似 Doris 的 Delete Bitmap 机制。但它的查询代价上升了——每次查询都要过滤标记列，即使大部分行没被删除。
 
 Lightweight Delete 的实现机制值得多看一层——它在 Part 的列数据里加一个隐藏的 `_row_exists` 列（或类似机制），`DELETE` 时把对应行的 `_row_exists` 标记为 false，查询时默认带 `WHERE _row_exists = true` 过滤。**这个标记列是"行级"的，不是"Part 级"的**——一个 Part 里可能只有少数行被标记删除，大部分行仍然有效。这与"DROP PARTITION"的"整块删除"不同——Lightweight Delete 的粒度更细，但代价是每次查询都要扫描标记列。
 
@@ -368,7 +368,7 @@ Lightweight Delete 与传统 Mutation DELETE 的对比值得展开：
 | **按任意条件删除** | Mutation | 重写整表 | 无替代，最后手段 |
 | **按任意条件更新** | Mutation | 重写整表 | 无替代，最后手段 |
 
-这张表的洞察是：**前五种替代方案覆盖了 90% 的"数据修改"需求**——只有"按任意条件删除/更新"这种无法用分区键、主键、时间表达的需求，才必须用 Mutation。如果你的业务里 Mutation 频繁，通常说明**表设计或引擎选择不匹配业务**——应该重新设计表（用 ReplacingMergeTree 替代频繁 UPDATE）或换引擎（用 [[Doris]] Unique 模型替代高频更新）。**Mutation 频繁是"设计问题"的信号，不是"ClickHouse 性能问题"**。
+这张表的洞察是：**前五种替代方案覆盖了 90% 的"数据修改"需求**——只有"按任意条件删除/更新"这种无法用分区键、主键、时间表达的需求，才必须用 Mutation。如果你的业务里 Mutation 频繁，通常说明**表设计或引擎选择不匹配业务**——应该重新设计表（用 ReplacingMergeTree 替代频繁 UPDATE）或换引擎（用 Doris Unique 模型替代高频更新）。**Mutation 频繁是"设计问题"的信号，不是"ClickHouse 性能问题"**。
 
 ### 3.6 Mutation 的生产运维实践
 
@@ -516,7 +516,7 @@ TTL 和 Mutation 都能"删除数据"，但机制和代价完全不同：
 | **适用场景** | 按时间过期（日志、事件） | 按任意条件删除（user_id、订单状态） |
 | **生效时间** | 取决于 Merge 时机 | 取决于 Mutation 队列 |
 
-这张表的关键洞察是：**TTL 是"免费的删除"，Mutation 是"昂贵的删除"**——能用 TTL 就别用 Mutation。如果你的数据是时序的（日志、事件、指标），按时间过期，TTL 是完美匹配；如果你的删除条件是"按 user_id 删""按订单状态删"，TTL 帮不上忙，只能用 Mutation——但这通常意味着你的场景不适合 ClickHouse，应该考虑 [[Doris]] Unique 模型或 MySQL。
+这张表的关键洞察是：**TTL 是"免费的删除"，Mutation 是"昂贵的删除"**——能用 TTL 就别用 Mutation。如果你的数据是时序的（日志、事件、指标），按时间过期，TTL 是完美匹配；如果你的删除条件是"按 user_id 删""按订单状态删"，TTL 帮不上忙，只能用 Mutation——但这通常意味着你的场景不适合 ClickHouse，应该考虑 Doris Unique 模型或 MySQL。
 
 ---
 

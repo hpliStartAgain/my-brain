@@ -9,7 +9,7 @@ aliases: [AiOps数据地基, 可观测三支柱]
 
 ## 摘要
 
-本文是专栏第二篇，聚焦 AiOps 落地最关键的前置条件：数据底座建设。文章从"Garbage In, Garbage Out"这一铁律出发，系统拆解可观测三支柱（Metrics / Logs / Traces）在大数据集群场景中的适配策略与工程实现。重点深度解析：Prometheus Exporter 采集质量治理的核心指标与调优方法，[[Loki]] 日志流水线在大数据集群中的完整设计（从 [[Grafana Alloy]] 采集到日志标签体系），[[Drain3]] 日志模板化算法的数学原理与工程落地，以及服务拓扑数据（SCMDB）对 AiOps 决策层的根本性支撑。本文的核心主张：在任何智能化分析模块上线之前，先把数据质量治理做到位，是一切 AiOps 投资的最高性价比保障。
+本文是专栏第二篇，聚焦 AiOps 落地最关键的前置条件：数据底座建设。文章从"Garbage In, Garbage Out"这一铁律出发，系统拆解可观测三支柱（Metrics / Logs / Traces）在大数据集群场景中的适配策略与工程实现。重点深度解析：Prometheus Exporter 采集质量治理的核心指标与调优方法，Loki 日志流水线在大数据集群中的完整设计（从 Grafana Alloy 采集到日志标签体系），Drain3 日志模板化算法的数学原理与工程落地，以及服务拓扑数据（SCMDB）对 AiOps 决策层的根本性支撑。本文的核心主张：在任何智能化分析模块上线之前，先把数据质量治理做到位，是一切 AiOps 投资的最高性价比保障。
 
 ---
 
@@ -46,7 +46,7 @@ aliases: [AiOps数据地基, 可观测三支柱]
 
 在微服务架构中，Traces 是指分布式链路追踪——每一个 HTTP 请求都携带一个唯一的 Trace ID，请求流经各个服务时，每个服务都记录自己的处理时间和调用关系，最终形成一棵完整的调用树。这使得故障定位变得非常直观：沿着 Trace 树找到最早出现异常的节点，就是根因。
 
-大数据集群的内部通信完全不走 HTTP。NameNode 与 DataNode 之间用的是 [[Hadoop RPC]]（基于 Protocol Buffers 的自定义二进制协议），ResourceManager 与 NodeManager 之间用的是 YARN 的 Heartbeat 协议，HiveServer2 接受用户的 JDBC 连接后内部走 Thrift 协议。这些协议都没有原生的 Trace ID 概念，也没有成熟的 OpenTelemetry instrumentation。
+大数据集群的内部通信完全不走 HTTP。NameNode 与 DataNode 之间用的是 Hadoop RPC（基于 Protocol Buffers 的自定义二进制协议），ResourceManager 与 NodeManager 之间用的是 YARN 的 Heartbeat 协议，HiveServer2 接受用户的 JDBC 连接后内部走 Thrift 协议。这些协议都没有原生的 Trace ID 概念，也没有成熟的 OpenTelemetry instrumentation。
 
 这意味着，大数据集群的 AiOps 必须放弃"基于 Trace 的根因分析"这条在微服务中最有效的路径，转而依赖**手工建模的组件依赖关系图（SCMDB）+ 多维指标关联分析**来还原故障传播路径。这个话题将在[[04 组件依赖拓扑：SCMDB 是大数据集群 AiOps 的骨架]]中深度展开。
 
@@ -102,7 +102,7 @@ graph TD
     class A1,A2 job
 ```
 
-这四个层次中，第一层和第二层是各个 Exporter 都会采集的通用指标，第三层是各个大数据组件通过 [[JMX Exporter]] 暴露的专属指标，第四层是从 [[Spark History Server]] / [[Flink REST API]] 获取的作业运行时数据。
+这四个层次中，第一层和第二层是各个 Exporter 都会采集的通用指标，第三层是各个大数据组件通过 JMX Exporter 暴露的专属指标，第四层是从 Spark History Server / Flink REST API 获取的作业运行时数据。
 
 **哪些是 AiOps 最关键的指标？**
 
@@ -137,7 +137,7 @@ graph TD
 
 ## 第 3 章 Loki 日志流水线：大数据集群的工程实现
 
-[[Loki]] 是 Grafana Labs 开源的分布式日志聚合系统，它的设计哲学与 [[Prometheus]] 高度一致：**用标签（Labels）而不是全文索引来组织日志，低存储成本，高查询效率**。这个设计非常适合大数据集群场景——我们不需要对每一行日志都做全文索引（那样成本太高），我们需要的是按 `component`、`hostname`、`cluster`、`log_level` 这些维度快速过滤。
+Loki 是 Grafana Labs 开源的分布式日志聚合系统，它的设计哲学与 Prometheus 高度一致：**用标签（Labels）而不是全文索引来组织日志，低存储成本，高查询效率**。这个设计非常适合大数据集群场景——我们不需要对每一行日志都做全文索引（那样成本太高），我们需要的是按 `component`、`hostname`、`cluster`、`log_level` 这些维度快速过滤。
 
 ### 3.1 整体架构
 
@@ -199,7 +199,7 @@ graph LR
 
 ### 3.3 Grafana Alloy 配置要点
 
-[[Grafana Alloy]] 是 Grafana Labs 的下一代遥测数据采集器（原 Grafana Agent Flow 的继任者），在 2024 年之后成为推荐的日志采集方案。
+Grafana Alloy 是 Grafana Labs 的下一代遥测数据采集器（原 Grafana Agent Flow 的继任者），在 2024 年之后成为推荐的日志采集方案。
 
 以 NameNode 日志采集为例，Alloy 配置的核心逻辑包括：
 
@@ -270,7 +270,7 @@ IOException writing block <*> to mirror <*>
 
 ### 4.2 Drain3 算法：前缀树 + 相似度匹配
 
-[[Drain3]] 是目前工业界应用最广泛的日志模板化算法，由 IBM 研究院（Liu Wei 等人）在论文《Drain: An Online Log Parsing Approach with Fixed Depth Tree》中提出，Drain3 是其 Python 实现的第三代版本。
+Drain3 是目前工业界应用最广泛的日志模板化算法，由 IBM 研究院（Liu Wei 等人）在论文《Drain: An Online Log Parsing Approach with Fixed Depth Tree》中提出，Drain3 是其 Python 实现的第三代版本。
 
 Drain 的核心数据结构是一棵**固定深度的前缀树（Fixed-depth Prefix Tree）**：
 
@@ -335,13 +335,13 @@ Drain3 需要针对不同的日志格式进行配置。对于大数据集群日�
 
 ## 第 5 章 Exporter 采集质量治理
 
-[[Prometheus Exporter]] 是大数据集群指标采集的核心组件。从 AiOps 的视角，Exporter 采集质量有三个关键维度需要持续治理。
+Prometheus Exporter 是大数据集群指标采集的核心组件。从 AiOps 的视角，Exporter 采集质量有三个关键维度需要持续治理。
 
 ### 5.1 采集延迟与稳定性
 
 AiOps 的异常检测算法通常假设指标是以固定频率采集的（如每 30 秒一个 sample）。如果采集延迟不稳定（有时 15s，有时 90s，有时因为 JMX 超时而跳过），算法就会把"采集间隔变化"误判为"指标突变"。
 
-对于 Hadoop JMX Exporter，采集延迟不稳定最常见的原因是 JMX 端口的 GC 影响：当 NameNode 发生 Full GC 时，JMX 查询会超时，导致该轮次的采集失败。这个问题的缓解方案是：在 Exporter 侧设置合理的超时时间（建议 10-20s），并在 [[VictoriaMetrics]] / [[Prometheus]] 侧配置 `staleness` 处理，将缺失的采集 point 标记为 NaN 而不是直接用上一个 sample 填充（flatline 填充会导致后续的 rate 计算严重失真）。
+对于 Hadoop JMX Exporter，采集延迟不稳定最常见的原因是 JMX 端口的 GC 影响：当 NameNode 发生 Full GC 时，JMX 查询会超时，导致该轮次的采集失败。这个问题的缓解方案是：在 Exporter 侧设置合理的超时时间（建议 10-20s），并在 VictoriaMetrics / Prometheus 侧配置 `staleness` 处理，将缺失的采集 point 标记为 NaN 而不是直接用上一个 sample 填充（flatline 填充会导致后续的 rate 计算严重失真）。
 
 **关键治理指标**：
 - `scrape_duration_seconds`：每个 Exporter 的采集耗时，P99 应 < 5s
@@ -378,7 +378,7 @@ AiOps 的异常检测算法通常假设指标是以固定频率采集的（如�
 
 **角色二：告警降噪的上下文**。某些情况下的指标抖动不是故障，而是正常的变更行为（比如集群扩容时 DataNode 数量变化会触发 Block 重分配，这段时间内的 IO 指标波动是正常的）。如果 AiOps 系统知道当前有扩容操作，它就可以将相关的告警标记为"变更相关，低优先级"，而不是产生误报。
 
-对于 [[Ambari]] 管理的集群，变更数据可以通过 Ambari 的审计日志 API 获取。但 Ambari 审计日志的结构化程度不高（很多信息藏在 JSON 字符串里），需要做一层 ETL，提取出变更类型、变更组件、变更时间、操作人等关键字段，写入一个结构化的变更台账数据库，供 AiOps 的决策层查询。
+对于 Ambari 管理的集群，变更数据可以通过 Ambari 的审计日志 API 获取。但 Ambari 审计日志的结构化程度不高（很多信息藏在 JSON 字符串里），需要做一层 ETL，提取出变更类型、变更组件、变更时间、操作人等关键字段，写入一个结构化的变更台账数据库，供 AiOps 的决策层查询。
 
 ---
 

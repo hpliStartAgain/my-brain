@@ -11,7 +11,7 @@ aliases:
 
 **摘要：**
 
-本文从 Google 2006 年发表的 [[BigTable]] 论文出发，深入剖析 HBase 诞生的历史必然性。通过分析互联网数据爆炸时代关系型数据库的扩展困境、[[HDFS]] 的随机读写盲区，以及半结构化数据对存储模型的全新要求，逐步推导出"列族存储"这一设计哲学的内在逻辑。文章重点回答三个核心问题：大规模互联网数据究竟遇到了什么样的存储危机？为什么 HDFS + MapReduce 的批处理模型无法解决随机访问问题？列族模型相较于行存储、纯列存储，在工程实践上做了哪些深思熟虑的取舍？理解这些问题，是读懂 HBase 所有后续设计决策的根基。
+本文从 Google 2006 年发表的 BigTable 论文出发，深入剖析 HBase 诞生的历史必然性。通过分析互联网数据爆炸时代关系型数据库的扩展困境、HDFS 的随机读写盲区，以及半结构化数据对存储模型的全新要求，逐步推导出"列族存储"这一设计哲学的内在逻辑。文章重点回答三个核心问题：大规模互联网数据究竟遇到了什么样的存储危机？为什么 HDFS + MapReduce 的批处理模型无法解决随机访问问题？列族模型相较于行存储、纯列存储，在工程实践上做了哪些深思熟虑的取舍？理解这些问题，是读懂 HBase 所有后续设计决策的根基。
 
 ---
 
@@ -19,7 +19,7 @@ aliases:
 
 ### 1.1 一个具体的工程问题：Google 究竟要存什么
 
-2003 年到 2006 年，Google 陆续发表了三篇奠定大数据时代基础的论文——[[GFS]]（Google File System）、[[MapReduce]] 和 [[BigTable]]。这三篇论文不是偶然出现的，而是 Google 工程师在解决真实业务问题时逼出来的工程结晶。要理解 HBase 为什么诞生，必须先理解 Google 当时面临的是什么样的具体问题。
+2003 年到 2006 年，Google 陆续发表了三篇奠定大数据时代基础的论文——GFS（Google File System）、MapReduce 和 BigTable。这三篇论文不是偶然出现的，而是 Google 工程师在解决真实业务问题时逼出来的工程结晶。要理解 HBase 为什么诞生，必须先理解 Google 当时面临的是什么样的具体问题。
 
 彼时 Google 的核心业务是全球最大规模的网页爬虫与索引系统。每天，Google 的爬虫要抓取数十亿个网页，对每一个 URL，它需要存储以下数据：
 
@@ -35,7 +35,7 @@ aliases:
 
 ### 1.2 关系型数据库的扩展边界：不是 MySQL 不好，而是场景不对
 
-关系型数据库（[[RDBMS]]，如 MySQL、PostgreSQL、Oracle）是 20 世纪软件工程的伟大成就。它们解决了结构化数据的存储、事务、一致性和查询问题，支撑了整整一代企业级应用。但互联网的崛起将一批全新的工程挑战带到了数据库系统面前。
+关系型数据库（RDBMS，如 MySQL、PostgreSQL、Oracle）是 20 世纪软件工程的伟大成就。它们解决了结构化数据的存储、事务、一致性和查询问题，支撑了整整一代企业级应用。但互联网的崛起将一批全新的工程挑战带到了数据库系统面前。
 
 **挑战一：数据规模的量变引发质变**
 
@@ -84,7 +84,7 @@ HBase 属于"列族存储"（Column-Family Store）这一类，而它的直接�
 
 在理解 HBase 为什么在 HDFS 之上构建之前，我们需要非常清晰地理解 HDFS 自身的设计边界——它能做什么，更重要的，它不能做什么。
 
-[[HDFS]]（Hadoop Distributed File System）是 Google GFS 论文的开源实现。GFS 的设计论文明确写道，它的目标是服务于以下工作负载：
+HDFS（Hadoop Distributed File System）是 Google GFS 论文的开源实现。GFS 的设计论文明确写道，它的目标是服务于以下工作负载：
 
 - 文件大小通常在 GB 到 TB 量级，存储数量在百万级别（而非十亿级别的小文件）
 - 主要的读操作是**大批量流式读取**，极少有随机读
@@ -101,7 +101,7 @@ HBase 属于"列族存储"（Column-Family Store）这一类，而它的直接�
 
 ### 2.2 HDFS + MapReduce 的批处理模型：完美的离线世界
 
-HDFS 搭配 [[MapReduce]]（以及后来的 [[Apache Spark]]），构建了一套完美的大规模批处理解决方案。它能处理的问题有一个共同特征：
+HDFS 搭配 MapReduce（以及后来的 Apache Spark），构建了一套完美的大规模批处理解决方案。它能处理的问题有一个共同特征：
 
 **问题的输入是全量数据集，输出是计算结果，不需要针对单条记录进行随机访问。**
 
@@ -125,7 +125,7 @@ HDFS 搭配 [[MapReduce]]（以及后来的 [[Apache Spark]]），构建了一�
 
 为什么关系型数据库能做到随机读写，而 HDFS 不能？这需要从存储系统的基本原理出发来理解。
 
-**随机访问的关键是索引（Index）**。关系型数据库之所以能在毫秒级返回 `SELECT * FROM orders WHERE id = 12345`，是因为它在磁盘上维护了一棵 [[B+树]] 索引。B+树 的每个节点对应磁盘上的一个固定大小的 Page（通常 4KB 或 16KB），根据键的大小比较，可以在 O(log N) 次磁盘 I/O 内定位到目标记录。
+**随机访问的关键是索引（Index）**。关系型数据库之所以能在毫秒级返回 `SELECT * FROM orders WHERE id = 12345`，是因为它在磁盘上维护了一棵 B+树 索引。B+树 的每个节点对应磁盘上的一个固定大小的 Page（通常 4KB 或 16KB），根据键的大小比较，可以在 O(log N) 次磁盘 I/O 内定位到目标记录。
 
 HDFS 没有这样的索引机制。它的元数据（NameNode 中的 FsImage）只记录了每个文件被切分成哪些 Block、每个 Block 在哪些 DataNode 上。要找到文件内某个特定位置的数据，你必须知道它的字节偏移量——而对于一个存储了海量记录的大文件，你根本不知道"用户 12345 的记录"在哪个字节偏移处，除非把文件全部扫描一遍。
 
@@ -201,13 +201,13 @@ HBase 是 BigTable 的开源实现，两者在设计理念上高度对应，但�
 
 | BigTable 概念 | HBase 对应概念 | 说明 |
 |---------------|----------------|------|
-| GFS | [[HDFS]] | 底层分布式文件系统 |
-| Chubby（分布式锁服务）| [[ZooKeeper]] | 协调服务 |
-| SSTable（Sorted String Table）| [[HFile]] | 磁盘上的有序不可变文件 |
+| GFS | HDFS | 底层分布式文件系统 |
+| Chubby（分布式锁服务）| ZooKeeper | 协调服务 |
+| SSTable（Sorted String Table）| HFile | 磁盘上的有序不可变文件 |
 | Tablet | Region | 表的水平分片 |
 | Tablet Server | RegionServer | 负责若干 Region 的服务节点 |
 | Master | HMaster | 负责元数据管理的主节点 |
-| Memtable | [[MemStore]] | 内存中的写缓冲区 |
+| Memtable | MemStore | 内存中的写缓冲区 |
 
 HBase 于 2007 年作为 Apache Hadoop 的子项目启动，2010 年成为 Apache 顶级项目。它的核心贡献是将 BigTable 的设计思想与 Hadoop 生态无缝结合，使得大数据处理（HDFS + MapReduce）与在线随机访问（HBase）能够共享同一套基础设施。
 
@@ -281,7 +281,7 @@ HBase 于 2007 年作为 Apache Hadoop 的子项目启动，2010 年成为 Apach
 
 理解列族模型的关键，在于理解 HBase 的核心场景是**高并发随机写入 + 随机点查**，而不是 OLAP 分析查询。
 
-纯列存储（如 [[Apache Parquet]]、[[Apache ORC]]）为什么不适合 HBase 的场景？
+纯列存储（如 Apache Parquet、Apache ORC）为什么不适合 HBase 的场景？
 
 **问题根源：纯列存储的不可变性**
 
@@ -407,7 +407,7 @@ com.cnn.www/anchor:my.look.ca/t8 →  "CNN.com"
 
 ### 6.1 HBase vs. Cassandra：同根异枝的架构分歧
 
-[[Apache Cassandra]] 同样是受 BigTable 启发的列族存储系统（还受 Amazon [[Dynamo]] 论文影响），但两者在架构上有根本性的差异：
+Apache Cassandra 同样是受 BigTable 启发的列族存储系统（还受 Amazon Dynamo 论文影响），但两者在架构上有根本性的差异：
 
 | 维度 | HBase | Cassandra |
 |------|-------|-----------|
@@ -426,7 +426,7 @@ HBase 选择强一致性和主从架构，牺牲了部分可用性（HMaster 故
 
 ### 6.2 HBase vs. Redis：不同抽象层次的存储系统
 
-有工程师会问：HBase 和 [[Redis]] 都能做随机键值查询，为什么不用 Redis 来替代 HBase？
+有工程师会问：HBase 和 Redis 都能做随机键值查询，为什么不用 Redis 来替代 HBase？
 
 这是一个对两个系统的定位有根本性误解的问题：
 
@@ -450,7 +450,7 @@ HBase 不是万能的，以下场景中，传统 RDBMS 是更好的选择：
 
 **场景 1：需要复杂 SQL 查询和多表 JOIN**
 
-HBase 没有 SQL 引擎（虽然有 [[Apache Phoenix]] 这个 SQL 层），不支持多表 JOIN，不支持聚合函数的实时计算（需要 MapReduce 离线处理）。如果你的业务逻辑依赖复杂的关联查询，RDBMS 是更合适的选择。
+HBase 没有 SQL 引擎（虽然有 Apache Phoenix 这个 SQL 层），不支持多表 JOIN，不支持聚合函数的实时计算（需要 MapReduce 离线处理）。如果你的业务逻辑依赖复杂的关联查询，RDBMS 是更合适的选择。
 
 **场景 2：需要 ACID 多行事务**
 
@@ -473,7 +473,7 @@ HBase 的唯一内置索引是行键（主键）。如果你需要按非行键�
 
 ### 7.1 Lambda 架构中的 HBase
 
-[[Lambda 架构]] 是大数据领域经典的架构模式，它将数据处理分为三层：
+Lambda 架构 是大数据领域经典的架构模式，它将数据处理分为三层：
 
 - **批处理层（Batch Layer）**：用 MapReduce/Spark 对全量历史数据进行离线计算，结果准确但延迟高（小时级）
 - **速度层（Speed Layer）**：用 Storm/Flink 对实时增量数据进行流计算，延迟低（秒级）但数据不完整
@@ -489,7 +489,7 @@ HBase 同时支持大批量写入（用于批处理层的结果写入）和随�
 
 ### 7.2 实时 OLAP 架构中的 HBase
 
-随着业务对数据时效性要求的提高，[[Kappa 架构]] 逐渐替代 Lambda 架构，HBase 在其中的角色也随之演化。
+随着业务对数据时效性要求的提高，Kappa 架构 逐渐替代 Lambda 架构，HBase 在其中的角色也随之演化。
 
 在实时数仓场景中，常见的技术栈是：
 
@@ -506,7 +506,7 @@ HBase 在国内外互联网大厂中有着广泛的生产应用：
 
 **阿里巴巴**：阿里云 HBase 服务支撑了阿里内部交易、日志、用户画像等众多业务。据阿里 2019 年的技术分享，其 HBase 集群总规模超过 100PB，日写入量超过 100 万亿条记录。
 
-**Facebook（Meta）**：Facebook 的消息系统使用了类 HBase 的系统（实际上是 Facebook 自研的 [[Apache Cassandra]]，但底层思想与 HBase 相同），存储数千亿条消息记录。
+**Facebook（Meta）**：Facebook 的消息系统使用了类 HBase 的系统（实际上是 Facebook 自研的 Apache Cassandra，但底层思想与 HBase 相同），存储数千亿条消息记录。
 
 **小米**：小米的用户行为数据平台使用 HBase 存储用户行为日志，支撑了小米 Push 推送系统的个性化推荐能力。
 

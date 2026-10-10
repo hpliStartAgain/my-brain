@@ -9,7 +9,7 @@ aliases: []
 
 ## 摘要
 
-Delta Lake 与 [[Structured Streaming]] 的深度集成是 Lakehouse 架构"流批一体"愿景的核心实现——同一份 Delta 表，既可以作为 Spark Streaming 的 Sink（接收实时写入），也可以作为 Source（以增量方式读取新到达的数据），且两种模式都提供完整的 Exactly-once 语义保证。这种能力的基础依然是 Delta Log：Delta Log 的版本号天然是一个单调递增的"水位线"，Streaming 每次微批处理后将处理到的 Delta Log 版本号写入 Checkpoint，下次重启从这个版本号继续——不需要 Kafka 的 Offset 管理，不需要外部协调服务。本文系统讲解四个核心主题：**Delta 作为 Streaming Sink**（Exactly-once 的三层保证：Parquet 文件幂等写入 + Delta Log 原子提交 + Checkpoint 版本记录）、**Delta 作为 Streaming Source**（基于 Delta Log 版本差异的增量文件发现，`maxFilesPerTrigger` 等流量控制参数）、**Change Data Feed 在流式场景中的应用**（行级别增量，比文件级别增量精度更高）、以及**流批一体架构设计**（一张 Delta 表同时被 Streaming 写入和批处理读取的并发安全性）。
+Delta Lake 与 Structured Streaming 的深度集成是 Lakehouse 架构"流批一体"愿景的核心实现——同一份 Delta 表，既可以作为 Spark Streaming 的 Sink（接收实时写入），也可以作为 Source（以增量方式读取新到达的数据），且两种模式都提供完整的 Exactly-once 语义保证。这种能力的基础依然是 Delta Log：Delta Log 的版本号天然是一个单调递增的"水位线"，Streaming 每次微批处理后将处理到的 Delta Log 版本号写入 Checkpoint，下次重启从这个版本号继续——不需要 Kafka 的 Offset 管理，不需要外部协调服务。本文系统讲解四个核心主题：**Delta 作为 Streaming Sink**（Exactly-once 的三层保证：Parquet 文件幂等写入 + Delta Log 原子提交 + Checkpoint 版本记录）、**Delta 作为 Streaming Source**（基于 Delta Log 版本差异的增量文件发现，`maxFilesPerTrigger` 等流量控制参数）、**Change Data Feed 在流式场景中的应用**（行级别增量，比文件级别增量精度更高）、以及**流批一体架构设计**（一张 Delta 表同时被 Streaming 写入和批处理读取的并发安全性）。
 
 ---
 

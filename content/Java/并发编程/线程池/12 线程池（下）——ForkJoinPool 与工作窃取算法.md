@@ -422,7 +422,7 @@ protected Long compute() {
 
 **Common Pool 的角色**：JDK 8+ 中，`parallelStream()` 和无 Executor 的 `CompletableFuture` 默认使用 common pool，这是 JDK 标准库中被动使用最广泛的线程池。理解 common pool 的大小和限制，是避免生产性能问题的关键。
 
-下一篇 [[线程池/13 CompletableFuture 与异步编程模型——从 Future 到响应式]] 将在 `ForkJoinPool` 的基础上，深入剖析 `CompletableFuture` 的链式异步编程模型：如何将多个异步操作用 `thenApply`、`thenCompose`、`allOf`、`anyOf` 串联和组合，以及它与响应式编程的关系。
+下一篇 [[13 CompletableFuture 与异步编程模型——从 Future 到响应式]] 将在 `ForkJoinPool` 的基础上，深入剖析 `CompletableFuture` 的链式异步编程模型：如何将多个异步操作用 `thenApply`、`thenCompose`、`allOf`、`anyOf` 串联和组合，以及它与响应式编程的关系。
 
 ---
 

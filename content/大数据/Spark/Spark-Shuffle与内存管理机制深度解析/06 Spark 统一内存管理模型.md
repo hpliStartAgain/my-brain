@@ -153,7 +153,7 @@ spark.memory.offHeap.size = 4g  # 堆外内存大小
 **原因二：更紧凑的内存布局**。JVM 对象有对象头开销（16 字节）、引用开销（8 字节）和对齐填充。对于大量小对象（如 Shuffle 的 `(key, value)` 对），这些开销可能比数据本身还大。堆外内存以原始字节方式存储序列化数据，完全没有这些额外开销，内存利用率更高。
 
 > [!warning] 生产避坑
-> 开启堆外内存时，`spark.executor.memory` 设置的是 JVM 堆内存，`spark.memory.offHeap.size` 设置的是堆外内存，两者相加才是 Executor 进程的实际物理内存消耗。在 [[Hadoop YARN]] 集群上，Container 的内存上限（`yarn.nodemanager.resource.memory-mb` 和每个 Container 的内存）必须能容纳两者之和，否则会被 YARN 的 OOM Killer 杀死。常见配置错误：设了大堆外内存但没有相应增大 YARN Container 内存限制，导致 Executor 进程频繁被 Kill。
+> 开启堆外内存时，`spark.executor.memory` 设置的是 JVM 堆内存，`spark.memory.offHeap.size` 设置的是堆外内存，两者相加才是 Executor 进程的实际物理内存消耗。在 Hadoop YARN 集群上，Container 的内存上限（`yarn.nodemanager.resource.memory-mb` 和每个 Container 的内存）必须能容纳两者之和，否则会被 YARN 的 OOM Killer 杀死。常见配置错误：设了大堆外内存但没有相应增大 YARN Container 内存限制，导致 Executor 进程频繁被 Kill。
 
 ---
 

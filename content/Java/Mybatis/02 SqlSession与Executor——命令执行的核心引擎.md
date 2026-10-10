@@ -209,7 +209,7 @@ public interface Executor {
 
 ### 2.2 BaseExecutor：模板方法模式的典范
 
-`BaseExecutor` 是三种基础 Executor 的公共抽象父类，使用了[[模板方法模式]]：将一级缓存查询、延迟加载处理等**通用逻辑**放在 `BaseExecutor` 中，将真正与 JDBC 交互的**具体逻辑**抽象为 `doUpdate()`、`doQuery()` 等模板方法，由子类实现：
+`BaseExecutor` 是三种基础 Executor 的公共抽象父类，使用了模板方法模式：将一级缓存查询、延迟加载处理等**通用逻辑**放在 `BaseExecutor` 中，将真正与 JDBC 交互的**具体逻辑**抽象为 `doUpdate()`、`doQuery()` 等模板方法，由子类实现：
 
 ```java
 public abstract class BaseExecutor implements Executor {

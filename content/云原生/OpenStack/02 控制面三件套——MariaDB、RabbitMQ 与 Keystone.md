@@ -395,7 +395,7 @@ Galera 的单写者形态还给连接池添了一个拓扑要求：写连接池�
 
 ### 5.4 监控关键指标
 
-三件套的监控指标可以收拢成一张清单，采集方式建议统一走 [[可观测/指标/02 Prometheus 数据模型与采集原理|Prometheus 的指标体系]]（RabbitMQ 与 MariaDB 都有成熟的 exporter，Keystone 可从 API 探活与日志指标入手）：
+三件套的监控指标可以收拢成一张清单，采集方式建议统一走 [[可观测/指标/02 指标数据模型与采集——vmagent 与 Prometheus 协议|Prometheus 的指标体系]]（RabbitMQ 与 MariaDB 都有成熟的 exporter，Keystone 可从 API 探活与日志指标入手）：
 
 | 组件 | 指标 | 异常意味着什么 |
 |---|---|---|

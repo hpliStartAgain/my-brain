@@ -17,9 +17,9 @@ zo
 
 ### 1.1 分布式计算的基本假设
 
-学习 Spark 的人往往很早就接触到一句话："移动计算而非移动数据"。这句话来自 [[Hadoop]] 时代的设计哲学，它的背后是一个朴素的直觉：网络传输比磁盘本地 I/O 慢，比内存计算更慢，因此应当尽量让计算任务调度到数据所在的节点上执行，而不是把数据搬到计算节点来。
+学习 Spark 的人往往很早就接触到一句话："移动计算而非移动数据"。这句话来自 Hadoop 时代的设计哲学，它的背后是一个朴素的直觉：网络传输比磁盘本地 I/O 慢，比内存计算更慢，因此应当尽量让计算任务调度到数据所在的节点上执行，而不是把数据搬到计算节点来。
 
-这个直觉在绝大多数场景下都是对的。Spark 的数据本地性调度（[[Data Locality]]）正是这一哲学的工程实现——调度器会优先将 Task 分配给持有该分区数据的节点，依次按照 `PROCESS_LOCAL` → `NODE_LOCAL` → `RACK_LOCAL` → `ANY` 的优先级降级。
+这个直觉在绝大多数场景下都是对的。Spark 的数据本地性调度（Data Locality）正是这一哲学的工程实现——调度器会优先将 Task 分配给持有该分区数据的节点，依次按照 `PROCESS_LOCAL` → `NODE_LOCAL` → `RACK_LOCAL` → `ANY` 的优先级降级。
 
 然而，"移动计算"这个原则有一个根本的前提：**数据的分布方式与计算的访问模式必须吻合**。
 
@@ -31,7 +31,7 @@ zo
 
 更精确地说，Shuffle 发生的条件是：**下游 Task 需要消费的输入数据，不能由单个上游 Task 的输出完整提供**。
 
-在 [[Spark RDD]] 的世界里，这对应着「宽依赖」（Wide Dependency）的概念：一个下游分区需要来自多个上游分区的数据，而这些上游分区分属不同的 Task，运行在不同的节点上。
+在 Spark RDD 的世界里，这对应着「宽依赖」（Wide Dependency）的概念：一个下游分区需要来自多个上游分区的数据，而这些上游分区分属不同的 Task，运行在不同的节点上。
 
 常见的触发 Shuffle 的算子包括：
 
@@ -106,11 +106,11 @@ Shuffle Write 阶段，Map Task 必须将数据写到本地磁盘，而不能仅
 
 数据在内存中是 JVM 对象的形式，但要写入磁盘文件或通过网络传输，就必须先序列化成字节流，读取时再反序列化回对象。对于大数据量场景，这个过程的 CPU 开销相当可观。
 
-Spark 支持 Java 原生序列化和 [[Kryo]] 序列化两种方式。Kryo 的速度约是 Java 序列化的 10 倍，生成的字节流也更小，对 Shuffle 性能的提升非常显著。这也是为什么 Spark 官方文档将 `spark.serializer=org.apache.spark.serializer.KryoSerializer` 列为最重要的性能参数之一。
+Spark 支持 Java 原生序列化和 Kryo 序列化两种方式。Kryo 的速度约是 Java 序列化的 10 倍，生成的字节流也更小，对 Shuffle 性能的提升非常显著。这也是为什么 Spark 官方文档将 `spark.serializer=org.apache.spark.serializer.KryoSerializer` 列为最重要的性能参数之一。
 
 **代价三：网络传输**
 
-Reduce Task 通过 [[Netty]] 框架，以 HTTP 协议从远程节点拉取 Shuffle 数据块。在一个中等规模的作业中，一次 Shuffle 可能产生数 GB 甚至数十 GB 的网络流量，这对集群的网络带宽形成直接压力。
+Reduce Task 通过 Netty 框架，以 HTTP 协议从远程节点拉取 Shuffle 数据块。在一个中等规模的作业中，一次 Shuffle 可能产生数 GB 甚至数十 GB 的网络流量，这对集群的网络带宽形成直接压力。
 
 更糟糕的是，多个 Reduce Task 可能同时从同一个 Map Task 的输出文件中拉取数据，形成并发读取的热点。这也是 Shuffle 优化中需要重点关注的资源争用场景。
 
@@ -120,7 +120,7 @@ Reduce Task 拉取数据后，需要在内存中进行聚合操作（例如 `red
 
 **代价五：同步等待（Barrier 效应）**
 
-如前所述，下游 Stage 必须等待上游 Stage 全部完成。在一个有数百个 Task 的 Stage 中，只要有少数几个 Task 因为数据倾斜（[[Data Skew]]）、节点故障重试或 GC 停顿而运行缓慢，整个 Stage 的完成时间就会被拖长。这被称为"长尾任务"问题（Straggler Problem），是 Shuffle 优化中最难处理的问题之一。
+如前所述，下游 Stage 必须等待上游 Stage 全部完成。在一个有数百个 Task 的 Stage 中，只要有少数几个 Task 因为数据倾斜（Data Skew）、节点故障重试或 GC 停顿而运行缓慢，整个 Stage 的完成时间就会被拖长。这被称为"长尾任务"问题（Straggler Problem），是 Shuffle 优化中最难处理的问题之一。
 
 ### 2.3 一次 Shuffle 的全链路开销定量感知
 
@@ -149,7 +149,7 @@ Reduce Task 拉取数据后，需要在内存中进行聚合操作（例如 `red
 
 ### 3.1 MapReduce 的 Shuffle 遗产
 
-在理解 Spark Shuffle 的演进之前，有必要了解它的"祖先"——[[MapReduce]] 的 Shuffle 机制，因为 Spark 的早期实现深受其影响，甚至直接继承了它的很多问题。
+在理解 Spark Shuffle 的演进之前，有必要了解它的"祖先"——MapReduce 的 Shuffle 机制，因为 Spark 的早期实现深受其影响，甚至直接继承了它的很多问题。
 
 MapReduce 的 Shuffle 流程如下：
 
@@ -208,7 +208,7 @@ Spark 1.2 将 Sort Shuffle 设为默认行为，Hash Shuffle 逐渐退出历史�
 
 ### 3.4 Tungsten 计划：更深层的优化
 
-Spark 1.4 引入了 **[[Tungsten]]** 项目，这是对 Shuffle 乃至整个 Spark 执行引擎的一次底层重构。Tungsten 的核心切入点是：**JVM 对象模型对大数据处理来说开销太大**。
+Spark 1.4 引入了 **Tungsten** 项目，这是对 Shuffle 乃至整个 Spark 执行引擎的一次底层重构。Tungsten 的核心切入点是：**JVM 对象模型对大数据处理来说开销太大**。
 
 一个 Java `String` 对象，假设其内容是 "hello"，在 JVM 堆内存中占用的空间远超 5 个字节——它还包含对象头（16 字节）、char 数组对象头（16 字节）、以及 char 数组本身（10 字节，每个 char 占 2 字节），总计约 56 字节，是字符串实际内容的 11 倍。
 
@@ -244,7 +244,7 @@ graph TD
 
 ### 4.1 Stage 边界与 Shuffle 的关系
 
-在 [[Spark 调度系统]] 中，DAGScheduler 负责将一个 Job 的 RDD 计算图（DAG）切分成多个 Stage。切分的依据正是：**宽依赖就是 Stage 的边界**。
+在 Spark 调度系统 中，DAGScheduler 负责将一个 Job 的 RDD 计算图（DAG）切分成多个 Stage。切分的依据正是：**宽依赖就是 Stage 的边界**。
 
 每一个宽依赖（即 Shuffle 依赖）都会导致 DAGScheduler 在该处划出一条 Stage 边界，前一个 Stage 的 Task 执行 Shuffle Write，后一个 Stage 的 Task 执行 Shuffle Read。这就是为什么在 Spark UI 中，你总能在 Stage 的起点看到 "Shuffle Read" 指标，在 Stage 的终点看到 "Shuffle Write" 指标。
 
@@ -288,7 +288,7 @@ trait ShuffleManager {
 
 在 Shuffle Read 阶段，拉取到的数据在 `ExternalAppendOnlyMap`（用于聚合）或 `ExternalSorter`（用于排序）中处理，同样面临内存不足时 Spill 的问题。
 
-这些内存的使用，都由 [[UnifiedMemoryManager]]（统一内存管理器）统一调度。Shuffle 需要的内存从 Execution Memory 池中分配；如果 Execution Memory 不足，需要向 Storage Memory 借用。这个借还机制的设计细节，直接决定了 Spark 在内存受限场景下的稳定性。
+这些内存的使用，都由 UnifiedMemoryManager（统一内存管理器）统一调度。Shuffle 需要的内存从 Execution Memory 池中分配；如果 Execution Memory 不足，需要向 Storage Memory 借用。这个借还机制的设计细节，直接决定了 Spark 在内存受限场景下的稳定性。
 
 理解了这个耦合关系，你才能真正明白：为什么 OOM 经常在 Shuffle 阶段发生？为什么调大 `spark.memory.fraction` 有时能解决 OOM 但有时反而更糟？为什么某些作业反复 Spill 但就是不 OOM？这些问题的答案，都深藏在 Shuffle 与内存管理的交互机制中。
 
@@ -321,7 +321,7 @@ Shuffle 优化有两个层面：
 
 ### 5.2 理解"数据倾斜"为什么是 Shuffle 独有的问题
 
-数据倾斜（[[Data Skew]]）是 Shuffle 性能问题中最棘手的一类，它不是参数调优能解决的，需要算法层面的干预。
+数据倾斜（Data Skew）是 Shuffle 性能问题中最棘手的一类，它不是参数调优能解决的，需要算法层面的干预。
 
 倾斜的根本原因是：**数据的实际分布不均匀，而 Shuffle 的分区规则恰好将大量数据集中到少数分区**。
 
@@ -357,7 +357,7 @@ Shuffle 优化有两个层面：
 - 如果要支持按城市查询，数据就需要再按城市分区存储一份
 - 如果要支持 join，两张表就必须预先按相同的 key 分区
 
-这不是虚构的——这正是 **OLAP 列式存储**（如 [[ClickHouse]]、[[Doris]]）的设计思路：通过精心设计的分区键和排序键，让常见查询模式尽量命中本地数据，避免跨节点扫描。ClickHouse 的 `Distributed Table` + `Local Table` 架构、Doris 的 `Bucket Shuffle Join`，都是这一思路的工程实践。
+这不是虚构的——这正是 **OLAP 列式存储**（如 ClickHouse、Doris）的设计思路：通过精心设计的分区键和排序键，让常见查询模式尽量命中本地数据，避免跨节点扫描。ClickHouse 的 `Distributed Table` + `Local Table` 架构、Doris 的 `Bucket Shuffle Join`，都是这一思路的工程实践。
 
 但这个思路的局限性也很明显：**它牺牲了通用性，换取特定访问模式下的极致性能**。当访问模式改变，或者查询需求超出了预先设计的访问模式时，就必须全量扫描或建立新的物化视图。
 
@@ -395,4 +395,4 @@ Spark 之所以接受 Shuffle 的高代价，是因为它需要提供**通用的
 - [Spark Architecture: Shuffle](https://0x0fff.com/spark-architecture-shuffle/) — 深度解析 Spark Shuffle 架构
 - [Optimizing Shuffle Performance in Spark (UC Berkeley, 2013)](https://people.eecs.berkeley.edu/~kubitron/courses/cs262a-F13/projects/reports/project16_report.pdf) — Spark Shuffle 优化的学术研究
 - Apache Spark 官方文档 [Shuffle Behavior](https://spark.apache.org/docs/latest/configuration.html#shuffle-behavior)
-- [[MapReduce]] — Google MapReduce 论文（Jeffrey Dean & Sanjay Ghemawat, 2004）
+- MapReduce — Google MapReduce 论文（Jeffrey Dean & Sanjay Ghemawat, 2004）

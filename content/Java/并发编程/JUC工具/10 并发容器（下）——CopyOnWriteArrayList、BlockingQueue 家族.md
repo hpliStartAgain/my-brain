@@ -17,7 +17,7 @@ aliases: []
 
 ### 1.1 设计动机：让读操作永远无锁
 
-在 [[JUC工具/08 读写锁与 StampedLock——从 ReentrantReadWriteLock 到乐观读]] 中，我们看到读写锁如何让读-读并发，`StampedLock` 如何通过乐观读进一步降低读的代价。这两种方案的共同点是：读操作仍然需要与写操作协调（要么通过 volatile 读，要么通过版本号验证）。
+在 [[08 读写锁与 StampedLock——从 ReentrantReadWriteLock 到乐观读]] 中，我们看到读写锁如何让读-读并发，`StampedLock` 如何通过乐观读进一步降低读的代价。这两种方案的共同点是：读操作仍然需要与写操作协调（要么通过 volatile 读，要么通过版本号验证）。
 
 `CopyOnWriteArrayList` 走了另一条路：**让读操作完全不关心写操作的存在**——读线程访问的是一个不会被修改的快照，写线程在修改时创建新快照替换旧快照。读写路径完全分离，读操作真正做到了零锁、零屏障（在 JDK 9+ 中，读甚至是 Plain Load，没有任何内存屏障）。
 
@@ -604,7 +604,7 @@ public E take() throws InterruptedException {
 > [!note] 设计哲学
 > `BlockingQueue` 家族的设计体现了一个重要原则：**没有万能的队列，只有适合特定场景的队列**。`ArrayBlockingQueue` 用数组换内存局部性，`LinkedBlockingQueue` 用链表换双锁并发，`SynchronousQueue` 用零缓冲换同步握手，`PriorityBlockingQueue` 用堆换优先级排序，`DelayQueue` 用堆换延迟到期。每种实现都是在内存、吞吐量、延迟、有序性之间的精确权衡。
 
-下一篇 [[线程池/11 线程池（上）——ThreadPoolExecutor 的七大参数与执行流程]] 将展示 `BlockingQueue` 在线程池中的核心作用——线程池正是依靠 `BlockingQueue` 来缓冲和分发任务的。
+下一篇 [[11 线程池（上）——ThreadPoolExecutor 的七大参数与执行流程]] 将展示 `BlockingQueue` 在线程池中的核心作用——线程池正是依靠 `BlockingQueue` 来缓冲和分发任务的。
 
 ---
 

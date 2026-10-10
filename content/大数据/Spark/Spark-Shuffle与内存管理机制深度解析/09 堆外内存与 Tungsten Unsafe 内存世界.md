@@ -29,7 +29,7 @@ Project Tungsten 是 Spark 历史上最深刻的底层性能重构，其核心�
 
 **开销二：对齐填充（Alignment Padding）**
 
-[[JVM]] 要求每个对象的大小必须是 8 字节的整数倍（64 位 JVM，开启指针压缩时）。即使对象的有效数据只有 5 字节，也会被填充到 8 字节。这种填充在大量小对象场景下造成显著的内存浪费。
+JVM 要求每个对象的大小必须是 8 字节的整数倍（64 位 JVM，开启指针压缩时）。即使对象的有效数据只有 5 字节，也会被填充到 8 字节。这种填充在大量小对象场景下造成显著的内存浪费。
 
 **开销三：引用开销（Reference Overhead）**
 
@@ -64,7 +64,7 @@ GC 对 Spark 性能的影响是系统性的：
 
 **影响一：GC 停顿直接延迟 Task 执行**
 
-[[JVM GC]] 的 Stop-The-World（STW）停顿会暂停 Task 的所有线程。在处理大量数据的 Spark Task 中，Young GC 可能每隔几秒触发一次（每次停顿 10-100ms），Full GC 可能每隔几分钟触发（每次停顿 1-30 秒）。对于一个运行 10 分钟的 Task，GC 时间可能占总时间的 10-30%。
+JVM GC 的 Stop-The-World（STW）停顿会暂停 Task 的所有线程。在处理大量数据的 Spark Task 中，Young GC 可能每隔几秒触发一次（每次停顿 10-100ms），Full GC 可能每隔几分钟触发（每次停顿 1-30 秒）。对于一个运行 10 分钟的 Task，GC 时间可能占总时间的 10-30%。
 
 **影响二：GC 停顿触发 Shuffle Fetch 超时**
 
@@ -424,7 +424,7 @@ Tungsten 的代价是显著增加了代码复杂度：
 
 ### 7.2 Java 21 的 Vector API 与 Panama 项目
 
-Java 的 [[Panama 项目]]（JEP 442 等）正在提供官方的堆外内存 API（`MemorySegment`、`Arena`）和 SIMD 向量化 API（`VectorAPI`），这些将是 `sun.misc.Unsafe` 的合法替代：
+Java 的 Panama 项目（JEP 442 等）正在提供官方的堆外内存 API（`MemorySegment`、`Arena`）和 SIMD 向量化 API（`VectorAPI`），这些将是 `sun.misc.Unsafe` 的合法替代：
 
 - `MemorySegment`：官方的堆外内存分配和访问 API，与 Unsafe 相比更安全（有边界检查选项）
 - `VectorAPI`：允许 Java 程序利用 CPU 的 SIMD 指令并行处理多个数据

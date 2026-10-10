@@ -123,7 +123,7 @@ NodePort 范围是 30000-32767，共 2767 个端口。如果集群同时运行�
 
 ### 4.1 Ingress 的工作原理
 
-**[[Kubernetes Ingress]]** 是 K8s 的 HTTP/HTTPS 流量路由层：外部 HTTP 请求到达 Ingress Controller（通常是 nginx 或 Traefik），Controller 根据 Ingress 规则（域名 + 路径）将请求路由到对应的 Service，Service 再转发到 Pod。
+**Kubernetes Ingress** 是 K8s 的 HTTP/HTTPS 流量路由层：外部 HTTP 请求到达 Ingress Controller（通常是 nginx 或 Traefik），Controller 根据 Ingress 规则（域名 + 路径）将请求路由到对应的 Service，Service 再转发到 Pod。
 
 ```
 外部用户

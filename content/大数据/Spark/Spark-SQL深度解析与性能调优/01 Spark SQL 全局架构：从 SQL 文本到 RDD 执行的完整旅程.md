@@ -117,7 +117,7 @@ graph TD
 
 **解析**将 SQL 文本转为**抽象语法树（AST）**，再转为 Spark 的 **Unresolved LogicalPlan**（未分析的逻辑计划）。"Unresolved"是指：此时计划中的列名、表名都只是字符串标识符，尚未被解析为实际的数据类型或存储位置。
 
-Spark SQL 使用 **[[Antlr4]]** 作为语法解析框架，语法规则定义在 `SqlBase.g4` 文件中（Spark 源码目录 `sql/catalyst/src/main/antlr4/`）。对于一条 SQL：
+Spark SQL 使用 **Antlr4** 作为语法解析框架，语法规则定义在 `SqlBase.g4` 文件中（Spark 源码目录 `sql/catalyst/src/main/antlr4/`）。对于一条 SQL：
 
 ```sql
 SELECT userId, SUM(amount) FROM orders WHERE amount > 100 GROUP BY userId
@@ -229,7 +229,7 @@ Filter 被下推到 Join 之前各自的数据源处，减少了 Join 处理的�
 
 **向量化执行（第 08 篇详解）**：以列为单位批量处理数据（`ColumnarBatch`），替代逐行处理（`InternalRow`），利用 CPU 的 SIMD 指令集并行处理多行数据。
 
-最终，物理计划通过 `execute()` 方法转化为 `RDD[InternalRow]`（或 `RDD[ColumnarBatch]`），提交给 Spark 的调度系统（[[DAGScheduler]]、[[TaskScheduler]]）执行。
+最终，物理计划通过 `execute()` 方法转化为 `RDD[InternalRow]`（或 `RDD[ColumnarBatch]`），提交给 Spark 的调度系统（DAGScheduler、TaskScheduler）执行。
 
 ---
 

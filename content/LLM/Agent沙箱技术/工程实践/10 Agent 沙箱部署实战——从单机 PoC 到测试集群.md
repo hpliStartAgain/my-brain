@@ -35,7 +35,7 @@ aliases: [OpenSandbox部署, PoC部署手册, 测试集群建设, Gate验收]
 | :--- | :--- | :--- |
 | **OS** | RHEL 9.x 优先 | cgroup v2、内核 ≥4.18、gVisor 兼容性好 |
 | **兼容闸门** | RHEL 8.7（最低） | 老集群迁移的兼容底线 |
-| **硬件** | 物理机优先（KVM/EPT 可用） | Kata/MicroVM 需要 VT-x；CVM 嵌套需过门禁（[[隔离原语/04 KVM 与硬件虚拟化——MicroVM 隔离的硬件基石|第 04 篇]]） |
+| **硬件** | 物理机优先（KVM/EPT 可用） | Kata/MicroVM 需要 VT-x；CVM 嵌套需过门禁（[[04 KVM 与硬件虚拟化——MicroVM 隔离的硬件基石]]） |
 | **内存** | ≥64GB（PoC）/ 按容量模型 | 三运行时基准显示 Kata 空闲 397MiB/槽 |
 | **存储** | imagefs 与 kubelet 分开（SSD） | 镜像拉取与容器写层互不干扰 |
 
@@ -106,13 +106,13 @@ graph TD
 
 **containerd 配置要点**（1.7.29，CRI v1）：
 - `SystemdCgroup = true`（与 kubelet 的 cgroup driver 一致——**不一致会导致节点 NotReady**）；
-- 后续接入 Kata/gVisor 时在 config.toml 注册 runtime 插件（[[隔离原语/02 Linux 隔离原语——namespace、cgroups、seccomp 与 capabilities 的安全地基|第 02 篇]] 的七跳链路第 5 跳）。
+- 后续接入 Kata/gVisor 时在 config.toml 注册 runtime 插件（[[02 Linux 隔离原语——namespace、cgroups、seccomp 与 capabilities 的安全地基]] 的七跳链路第 5 跳）。
 
 **kubeadm 初始化**（1.34.10）：
 - Pod CIDR 172.29.0.0/16、Service CIDR 172.28.0.0/16（与 Flannel 配置一致）；
 - 单节点部署需移除控制面污点（taint）让 Worker 负载可调度。
 
-**Flannel 0.28.4**：overlay 网络（VXLAN 后端）——**注意 Flannel 不执行 NetworkPolicy**（[[平台与协议/08 OpenSandbox 数据面——execd 与 egress 的盒内世界|第 08 篇]] 的策略真伪问题）：PoC 阶段可接受，生产必须换 Calico/Cilium 或先做真伪实验。
+**Flannel 0.28.4**：overlay 网络（VXLAN 后端）——**注意 Flannel 不执行 NetworkPolicy**（[[08 OpenSandbox 数据面——execd 与 egress 的盒内世界]] 的策略真伪问题）：PoC 阶段可接受，生产必须换 Calico/Cilium 或先做真伪实验。
 
 ### 2.3 平台层（Phase 5-6）
 
@@ -135,8 +135,8 @@ graph TD
 
 **运行时接入（Phase 6）**：
 - **runc**：默认，零配置；
-- **Kata 3.31.0**：Helm chart 安装 + containerd 注册 `kata-qemu-runtime-rs` handler + RuntimeClass 创建 + 节点标签（[[隔离原语/02 Linux 隔离原语|七跳链路]] 的四层一致性）；
-- **gVisor**：runsc release-20260810.0 + containerd 注册 + RuntimeClass——**注意 platform 选择**（裸金属 kvm、VM 里 systrap，[[隔离原语/03 隔离边界的光谱——从共享内核到 MicroVM 的四档技术路线|第 03 篇]] 的门禁二）。
+- **Kata 3.31.0**：Helm chart 安装 + containerd 注册 `kata-qemu-runtime-rs` handler + RuntimeClass 创建 + 节点标签（七跳链路 的四层一致性）；
+- **gVisor**：runsc release-20260810.0 + containerd 注册 + RuntimeClass——**注意 platform 选择**（裸金属 kvm、VM 里 systrap，[[03 隔离边界的光谱——从共享内核到 MicroVM 的四档技术路线]] 的门禁二）。
 
 ### 2.4 部署的脚本化：素材的 24 个脚本
 
@@ -176,8 +176,8 @@ graph TD
 | :--- | :--- | :--- |
 | **Server/Controller** | Helm upgrade | **发布物冻结**（digest 锁定）；升级后验证 CRD 兼容（DEF-005 的教训） |
 | **execd** | 注入版本变化 | 新沙箱生效（旧沙箱保持旧版本）——**execd 升级不破坏运行中沙箱** |
-| **Runtime（Kata/gVisor）** | containerd 注册 + RuntimeClass | 四层一致性重验（[[隔离原语/02 Linux 隔离原语|第 02 篇]]） |
-| **镜像** | Registry 推送 | **镜像更新 → 新池预热 → 切流**（[[平台与协议/09 OpenSandbox 编排面|第 09 篇]] 的池运维经验三） |
+| **Runtime（Kata/gVisor）** | containerd 注册 + RuntimeClass | 四层一致性重验（第 02 篇） |
+| **镜像** | Registry 推送 | **镜像更新 → 新池预热 → 切流**（第 09 篇 的池运维经验三） |
 
 **升级的三个原则**：**先验证后切换**（测试集群先升级验证再动 PoC/生产）、**可回滚**（Helm 历史版本 + 发布物冻结保证回退路径）、**验证即归档**（升级后的冒烟结果归档——"升级成功"要有证据，不是感觉）。
 
@@ -210,7 +210,7 @@ graph TD
 
 ### 3.2 API 语义类
 
-**坑 4：CLI 假成功（DEF-001）**。`osb sandbox pause` 返回 ok 不等于最终成功——**必须轮询到 Paused 终态**（[[平台与协议/07 OpenSandbox 架构深度解析——协议优先与六责任面|第 07 篇]] 的 202 语义）。
+**坑 4：CLI 假成功（DEF-001）**。`osb sandbox pause` 返回 ok 不等于最终成功——**必须轮询到 Paused 终态**（[[07 OpenSandbox 架构深度解析——协议优先与六责任面]] 的 202 语义）。
 
 **坑 5：创建 180 秒超时 504**。创建坏镜像时 API 挂起约 180 秒返回 504，**sandbox_id 只在错误 message 中**（正则提取）。客户端超时设置必须大于 180 秒，否则"平台还在等，客户端已放弃"。
 
@@ -218,17 +218,17 @@ graph TD
 
 ### 3.3 运行时类
 
-**坑 7：Runtime 切换的生效路径**。`secure_runtime` 是 Server 级配置——**切换后不仅 rollout restart，还要验证新创建的沙箱确实用了新运行时**（隔离证据链，[[隔离原语/02 Linux 隔离原语|第 02 篇]] 5.3 节）。
+**坑 7：Runtime 切换的生效路径**。`secure_runtime` 是 Server 级配置——**切换后不仅 rollout restart，还要验证新创建的沙箱确实用了新运行时**（隔离证据链，第 02 篇 5.3 节）。
 
 **坑 8：Kata 的四层一致性**。RuntimeClass handler 与 containerd 插件名不一致 → Pod 创建失败；节点标签缺失 → Pod 一直 Pending——**四层任何一层断，症状都是"创建失败"，排查顺序固定**（Server 配置→CR→RuntimeClass→containerd）。
 
-**坑 9：gVisor 的 platform 选择**。默认 platform 在 VM 环境可能错误——**显式设置 systrap**（CVM 场景），裸金属用 kvm（[[隔离原语/03 隔离边界的光谱——从共享内核到 MicroVM 的四档技术路线|第 03 篇]] 门禁二）。
+**坑 9：gVisor 的 platform 选择**。默认 platform 在 VM 环境可能错误——**显式设置 systrap**（CVM 场景），裸金属用 kvm（[[03 隔离边界的光谱——从共享内核到 MicroVM 的四档技术路线]] 门禁二）。
 
 ### 3.4 安全与运维类
 
 **坑 10：Registry 单点 HTTP**。Snapshot Registry 单副本 + HTTP + NodePort（POC-004）——**快照功能依赖 Registry，Registry 挂了快照全挂**。生产必须企业 TLS Registry + 多副本。
 
-**坑 11：共享平台 Key**。PoC 用共享 Key——**MCP 打穿后父 Agent 能枚举全部沙箱**（[[生产化/14 沙箱安全体系——三层防护、短期凭据与多租户|第 14 篇]] 的凭据治理）。
+**坑 11：共享平台 Key**。PoC 用共享 Key——**MCP 打穿后父 Agent 能枚举全部沙箱**（[[14 沙箱安全体系——三层防护、短期凭据与多租户]] 的凭据治理）。
 
 **坑 12：NodePort 直露**。直接暴露 HTTP NodePort（POC-007）——**生产入口必须 Gateway + SSO**。
 
@@ -244,7 +244,7 @@ graph TD
 | **SELinux 当时 Disabled** | 基线未达生产要求（生产要求 Enforcing） | 生产环境启用 SELinux 并重跑验证 |
 | **cgroup v1 → v2** | 部署前基线确认不充分 | 部署时确认并固化基线 |
 | **Registry HTTP 单点** | 快照链路的单点依赖 | 企业 TLS Registry（生产） |
-| **CNI 策略未证实** | Flannel 不执行 NetworkPolicy | 真伪实验（[[平台与协议/08 OpenSandbox 数据面|第 08 篇]] 4.4 节） |
+| **CNI 策略未证实** | Flannel 不执行 NetworkPolicy | 真伪实验（第 08 篇 4.4 节） |
 
 **环境问题与平台缺陷的区分价值**：处理路径不同——平台缺陷等上游/绕行，环境问题**必须自己修**（基础设施是自己的责任）。**台账分类的准确性直接决定问题能否被消除**。
 
@@ -305,7 +305,7 @@ graph TD
 | **集群** | DomeOS panther-dev（ID 153），Kubernetes 1.28.2 |
 | **节点** | 3×8C/15.5GiB（agent-manager）+ 3×4C/7.64GiB（test-lqh）+ 新建独占资源包 |
 | **Profile** | Core HA（双副本，Snapshot/Pause 关闭） |
-| **运行时** | 仅 runc（不装 Kata/gVisor——"runc Profile 先行"决策，[[隔离原语/03 隔离边界的光谱|第 03 篇]] 7.4 节） |
+| **运行时** | 仅 runc（不装 Kata/gVisor——"runc Profile 先行"决策，第 03 篇 7.4 节） |
 | **结果** | Server/Controller 双副本 Ready；三类 Agent 验收通过；**残留 0** |
 
 **"仅 runc"的决策值得细品**：测试集群的目标是验证"治理"（HA/发布/配额），不是"隔离"（那是 PoC 已验证的）——**每个环境只验证它的目标，是资源效率与故障隔离的统一**。
@@ -376,7 +376,7 @@ Gate 验收的产出不只是"通过/不通过"——**每一关的通过证据�
 
 ### 5.2 从测试集群到生产的转化清单
 
-素材 Phase5-10 的"从测试集群到生产"给出了转化清单的骨架（T 级与 P 级，[[生产化/15 生产化深水区——十个盲区与行业共识|第 15 篇]] 展开），本文先给摘要版：
+素材 Phase5-10 的"从测试集群到生产"给出了转化清单的骨架（T 级与 P 级，[[15 生产化深水区——十个盲区与行业共识]] 展开），本文先给摘要版：
 
 | 转化项 | 测试集群状态 | 生产要求 |
 | :--- | :--- | :--- |
@@ -384,7 +384,7 @@ Gate 验收的产出不只是"通过/不通过"——**每一关的通过证据�
 | **运行时** | 仅 runc | 三 Profile（runc/gVisor/Kata）独立域名 |
 | **网络** | Flannel（不执行策略） | 先做策略真伪实验，再写租户隔离 |
 | **Registry** | HTTP 单副本 | 企业 TLS Registry + 快照 blob GC |
-| **凭据** | 共享平台 Key | 短期凭据 + 租户绑定（[[生产化/14 沙箱安全体系|第 14 篇]]） |
+| **凭据** | 共享平台 Key | 短期凭据 + 租户绑定（第 14 篇） |
 | **入口** | NodePort | Gateway + SSO |
 | **观测** | 基础接入 | SLO + 告警 + 审计链路 |
 | **发布** | Gate 验收 | 版本化发布 + 升级回滚演练 |
@@ -400,9 +400,9 @@ Gate 验收的产出不只是"通过/不通过"——**每一关的通过证据�
 | **imagefs** | 每 Worker 400GiB+ SSD | 镜像缓存（2.6GB 级镜像 × 多版本）+ 快照临时空间 |
 | **OS** | RHEL 9.6、cgroup v2、SELinux Enforcing、swap off、chrony | 生产基线（SELinux 从 Disabled 转 Enforcing 是必须项） |
 | **网络** | 25G 网络 | 大镜像拉取 + 批量交付的带宽需求 |
-| **虚拟化** | KVM 透传（Kata 节点） | [[隔离原语/04 KVM 与硬件虚拟化|第 04 篇]] 的嵌套门禁 |
+| **虚拟化** | KVM 透传（Kata 节点） | 第 04 篇 的嵌套门禁 |
 | **故障域** | ≥3 个物理故障域 | 单故障域不丢多数派 |
-| **身份** | 独立资源包/租户隔离 | 多租户边界（[[生产化/14 沙箱安全体系|第 14 篇]]） |
+| **身份** | 独立资源包/租户隔离 | 多租户边界（第 14 篇） |
 
 **清单的使用**：生产资源申请直接引用此清单——**"按清单申请"比"按感觉申请"更容易获批**（每一行都有理由，每一行都可审计）。
 
@@ -417,7 +417,7 @@ Gate 验收的产出不只是"通过/不通过"——**每一关的通过证据�
 | 能力缺口 | 16 | 排入自研路线图（WarmPool SLI、快照 HA、凭据治理） |
 | 环境问题 | 4 | 基础设施补齐（Registry TLS、CNI 升级、观测接入） |
 
-**台账的使用**：**每一项都要有"归属"（上游/自研/绕行）与"截止"（哪个阶段消除）**——无归属的项会在生产事故中现身（[[生产化/15 生产化深水区——十个盲区与行业共识|第 15 篇]] 的 T/P 路线）。
+**台账的使用**：**每一项都要有"归属"（上游/自研/绕行）与"截止"（哪个阶段消除）**——无归属的项会在生产事故中现身（[[15 生产化深水区——十个盲区与行业共识]] 的 T/P 路线）。
 
 ---
 
@@ -443,8 +443,8 @@ Gate 验收的产出不只是"通过/不通过"——**每一关的通过证据�
 | **基础设施部署** | 1-2 天 | 存储/containerd/kubeadm/Flannel 冒烟 |
 | **平台安装** | 1 天 | OpenSandbox 四组件 + 生命周期冒烟 |
 | **运行时接入** | 1-2 天 | Kata/gVisor 安装 + 隔离证据链 |
-| **Agent 适配** | 2-3 天 | 三类 Agent 镜像化（[[工程实践/11 三类 Agent 沙箱落地|第 11 篇]]） |
-| **性能基准** | 1-2 天 | 三运行时基准 + WarmPool 验证（[[工程实践/12 沙箱性能工程|第 12 篇]]） |
+| **Agent 适配** | 2-3 天 | 三类 Agent 镜像化（第 11 篇） |
+| **性能基准** | 1-2 天 | 三运行时基准 + WarmPool 验证（第 12 篇） |
 | **差距台账** | 1 天 | POC/DEF/GAP/环境四类清单 |
 | **测试集群** | 3-5 天 | Gate 0-9 分阶段验收 |
 
@@ -471,10 +471,10 @@ Gate 验收的产出不只是"通过/不通过"——**每一关的通过证据�
 
 ### 6.4 下一篇导读
 
-平台部署完成、验收通过之后，下一个问题：**沙箱里跑什么？** [[工程实践/11 三类 Agent 沙箱落地——OpenCode、Hermes 与 LangChain 镜像化实战|11 三类 Agent 沙箱落地]] 将完整还原三类真实 Agent 的镜像化与跑通路径——父沙箱保活、execd 配置注入、原生 Server 接口 vs PTY、MCP 创建子沙箱的完整链路（创建→执行→回收），以及"4950"这个验证数字背后的完整证据链。
+平台部署完成、验收通过之后，下一个问题：**沙箱里跑什么？** [[11 三类 Agent 沙箱落地——OpenCode、Hermes 与 LangChain 镜像化实战]] 将完整还原三类真实 Agent 的镜像化与跑通路径——父沙箱保活、execd 配置注入、原生 Server 接口 vs PTY、MCP 创建子沙箱的完整链路（创建→执行→回收），以及"4950"这个验证数字背后的完整证据链。
 
 > [!info] 专栏导航
-> 本文是 [[../00 专栏导览|Agent 沙箱技术专栏]] 的第 10 篇，工程实践开篇。07-09 篇建立 OpenSandbox 架构认知；本文完成部署；11 篇 Agent 落地；12 篇性能工程。13-15 篇进入生产化。
+> 本文是 [[00 专栏导览]] 的第 10 篇，工程实践开篇。07-09 篇建立 OpenSandbox 架构认知；本文完成部署；11 篇 Agent 落地；12 篇性能工程。13-15 篇进入生产化。
 
 ---
 

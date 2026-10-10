@@ -204,10 +204,10 @@ graph LR
 
 ## 延伸阅读
 
-- [[Saga Pattern Original Paper]]：Garcia-Molina & Salem 的 1987 年 Saga 原始论文
-- [[Microservices Patterns]] 第 4 章：Chris Richardson 关于 Saga 实现的详细讲解，包含 Axon Framework 和 Eventuate Tram 的代码示例
-- [[Temporal.io]]：现代化的工作流编排平台，将 Saga 状态机的实现大幅简化
-- [[Zeebe]]：Camunda 的云原生工作流引擎，适合实现 Fairy Tale Saga 模式
+- Saga Pattern Original Paper：Garcia-Molina & Salem 的 1987 年 Saga 原始论文
+- Microservices Patterns 第 4 章：Chris Richardson 关于 Saga 实现的详细讲解，包含 Axon Framework 和 Eventuate Tram 的代码示例
+- Temporal.io：现代化的工作流编排平台，将 Saga 状态机的实现大幅简化
+- Zeebe：Camunda 的云原生工作流引擎，适合实现 Fairy Tale Saga 模式
 
 ---
 

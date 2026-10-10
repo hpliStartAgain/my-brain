@@ -9,7 +9,7 @@ aliases: []
 
 ## 摘要
 
-Spark on Kubernetes 的 Driver 在运行期间需要动态创建和删除 Executor Pod——这意味着 Driver 进程本身需要持有调用 K8s API 的权限。在 [[Kubernetes]] 的 RBAC（Role-Based Access Control）体系中，这通过 **ServiceAccount + Role + RoleBinding** 三件套来实现。权限配置看似简单，却有两个容易犯错的方向：一是**权限过大**（直接使用 `cluster-admin`，Driver 拥有操作整个 K8s 集群的权限，安全风险极高）；二是**权限不足**（缺少某些操作的权限，Driver 无法创建 Executor Pod 或 Watch Pod 状态，作业失败）。本文精确给出 Spark Driver 所需的最小 RBAC 权限集合，讲解 [[Kubernetes Namespace|Namespace]] 隔离多个 Spark 团队的方案，以及 ResourceQuota 和 LimitRange 如何防止单个作业或单个团队耗尽集群资源，实现生产级的 Spark on K8s 多租户资源管控。
+Spark on Kubernetes 的 Driver 在运行期间需要动态创建和删除 Executor Pod——这意味着 Driver 进程本身需要持有调用 K8s API 的权限。在 Kubernetes 的 RBAC（Role-Based Access Control）体系中，这通过 **ServiceAccount + Role + RoleBinding** 三件套来实现。权限配置看似简单，却有两个容易犯错的方向：一是**权限过大**（直接使用 `cluster-admin`，Driver 拥有操作整个 K8s 集群的权限，安全风险极高）；二是**权限不足**（缺少某些操作的权限，Driver 无法创建 Executor Pod 或 Watch Pod 状态，作业失败）。本文精确给出 Spark Driver 所需的最小 RBAC 权限集合，讲解 Namespace 隔离多个 Spark 团队的方案，以及 ResourceQuota 和 LimitRange 如何防止单个作业或单个团队耗尽集群资源，实现生产级的 Spark on K8s 多租户资源管控。
 
 ---
 

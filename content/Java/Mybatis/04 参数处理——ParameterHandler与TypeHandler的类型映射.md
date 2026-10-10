@@ -280,7 +280,7 @@ typeHandler.setParameter(ps, i + 1, value, jdbcType);
 
 ### 4.1 TypeHandler 是什么，为什么需要它
 
-[[JDBC]] 的 `PreparedStatement` 提供了一系列 `setXxx()` 方法（`setInt()`、`setString()`、`setTimestamp()`……），调用哪个方法取决于 Java 参数的类型。同样，`ResultSet` 提供了 `getInt()`、`getString()`、`getTimestamp()` 等方法。
+JDBC 的 `PreparedStatement` 提供了一系列 `setXxx()` 方法（`setInt()`、`setString()`、`setTimestamp()`……），调用哪个方法取决于 Java 参数的类型。同样，`ResultSet` 提供了 `getInt()`、`getString()`、`getTimestamp()` 等方法。
 
 如果没有 `TypeHandler`，每次参数绑定都需要写这样的分支代码：
 

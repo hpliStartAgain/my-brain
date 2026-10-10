@@ -52,7 +52,7 @@ graph TD
 
 kubelet 与三个关键接口交互：
 
-- **CRI（Container Runtime Interface）**：与容器运行时（如 [[containerd]]）通信，管理容器的生命周期
+- **CRI（Container Runtime Interface）**：与容器运行时（如 containerd）通信，管理容器的生命周期
 - **CNI（Container Network Interface）**：配置 Pod 的网络（创建 [[05 容器网络原理|veth pair]]、分配 IP）
 - **CSI（Container Storage Interface）**：挂载 Pod 需要的存储卷（PV）
 

@@ -9,7 +9,7 @@ aliases: [YARN资源隔离, YARN CGroups, LinuxContainerExecutor, Container隔�
 
 ## 摘要
 
-本文深度解析 YARN 的资源隔离机制：为什么 YARN 的默认配置并不能真正隔离 Container 的资源、`LinuxContainerExecutor` 与 `DefaultContainerExecutor` 的本质区别在哪里、[[Linux CGroups]] 如何被 YARN 用于对 Container 进行硬性的 CPU 和内存限制、以及 YARN 的内存超限检测与 CGroups OOM Killer 两种内存限制机制的工作路径有何不同。文章还深入介绍了 YARN 对 Docker 容器的支持（`DockerContainerExecutor`），分析其带来的隔离增强和运维成本。理解 YARN 的资源隔离机制，是确保多租户集群稳定运行、防止"坏邻居"效应的工程基础。
+本文深度解析 YARN 的资源隔离机制：为什么 YARN 的默认配置并不能真正隔离 Container 的资源、`LinuxContainerExecutor` 与 `DefaultContainerExecutor` 的本质区别在哪里、Linux CGroups 如何被 YARN 用于对 Container 进行硬性的 CPU 和内存限制、以及 YARN 的内存超限检测与 CGroups OOM Killer 两种内存限制机制的工作路径有何不同。文章还深入介绍了 YARN 对 Docker 容器的支持（`DockerContainerExecutor`），分析其带来的隔离增强和运维成本。理解 YARN 的资源隔离机制，是确保多租户集群稳定运行、防止"坏邻居"效应的工程基础。
 
 ---
 

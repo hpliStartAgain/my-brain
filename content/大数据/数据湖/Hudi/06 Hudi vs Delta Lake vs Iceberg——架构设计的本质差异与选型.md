@@ -7,7 +7,7 @@ aliases: ["数据湖三剑客对比", "Hudi vs Delta Lake", "Hudi vs Iceberg", "
 
 **摘要：**
 
-[[Apache Hudi]]、[[Delta Lake]]、[[Apache Iceberg]] 并称数据湖"三剑客"，在中国大数据社区还需加上 [[Apache Paimon]]。它们都宣称解决了"数据湖 ACID 事务"问题，但在架构哲学、设计取舍和最适合的场景上存在本质差异。本文基于本专栏前五篇对 Hudi 内部机制的深度解析，结合对 Delta Lake 和 Iceberg 核心设计的理解，从六个关键维度（事务实现、索引机制、增量消费、引擎生态、存储格式、运维复杂度）进行架构级的精准对比，并给出明确的场景化选型决策矩阵。理解三者的差异，不是为了选出"最好的"，而是为了在具体的业务约束下选出"最合适的"。
+Apache Hudi、Delta Lake、Apache Iceberg 并称数据湖"三剑客"，在中国大数据社区还需加上 Apache Paimon。它们都宣称解决了"数据湖 ACID 事务"问题，但在架构哲学、设计取舍和最适合的场景上存在本质差异。本文基于本专栏前五篇对 Hudi 内部机制的深度解析，结合对 Delta Lake 和 Iceberg 核心设计的理解，从六个关键维度（事务实现、索引机制、增量消费、引擎生态、存储格式、运维复杂度）进行架构级的精准对比，并给出明确的场景化选型决策矩阵。理解三者的差异，不是为了选出"最好的"，而是为了在具体的业务约束下选出"最合适的"。
 
 ---
 
@@ -360,7 +360,7 @@ Iceberg 正在成为云数据湖的事实标准：
 | **生态广度** | 中 | 中（Databricks 强，其他弱）| 最广 |
 | **未来方向** | 全局索引 + 更好多引擎 | UniForm 开放性 | 云原生标准化 |
 
-Hudi 专栏到此完结。下一步将进入 [[Apache Iceberg]] 专栏，深入 Iceberg 的三层元数据架构（Snapshot → Manifest List → Manifest File）、Hidden Partitioning 的实现原理，以及它如何在不依赖任何特定计算引擎的前提下，成为多引擎数据湖的开放标准。
+Hudi 专栏到此完结。下一步将进入 Apache Iceberg 专栏，深入 Iceberg 的三层元数据架构（Snapshot → Manifest List → Manifest File）、Hidden Partitioning 的实现原理，以及它如何在不依赖任何特定计算引擎的前提下，成为多引擎数据湖的开放标准。
 
 
 > [!note] 思考题

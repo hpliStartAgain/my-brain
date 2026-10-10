@@ -122,7 +122,7 @@ Trino 的 Delta 连接器会：
 
 ### 3.1 Flink 写入 Delta 的场景
 
-[[Apache Flink]] 是另一个常见的流处理引擎，在某些场景下比 Spark Structured Streaming 更适合：
+Apache Flink 是另一个常见的流处理引擎，在某些场景下比 Spark Structured Streaming 更适合：
 
 - **低延迟流处理**（毫秒级）：Flink 的原生流处理（逐条处理，非微批）延迟比 Spark Micro-batch 低 10-100 倍
 - **复杂有状态流处理**：Flink 的 State Backend 和 ProcessFunction 比 Spark 的 `flatMapGroupsWithState` 更灵活
@@ -212,7 +212,7 @@ DeltaSource<RowData> deltaStreamSource = DeltaSource
 
 ### 4.1 为什么还需要 Hive 支持 Delta
 
-在很多大型互联网公司，[[Apache Hive]] 依然是重要的 SQL 查询引擎：
+在很多大型互联网公司，Apache Hive 依然是重要的 SQL 查询引擎：
 - 大量历史 ETL 脚本和报表 SQL 是用 HiveQL 编写的，迁移代价高
 - 运营和数据分析团队熟悉 Hive 的 SQL 方言
 - 与 Hadoop 生态（YARN、HDFS）集成成熟

@@ -299,7 +299,7 @@ Key 的超时时间戳 = T
 
 ### 5.1 状态对象的序列化
 
-`GroupState[S]` 中的状态对象 `S` 需要在 State Store（通常是 RocksDB 或 HDFS）中序列化存储。Spark 使用 [[Java 序列化]] 或 [[Kryo]] 序列化状态对象。
+`GroupState[S]` 中的状态对象 `S` 需要在 State Store（通常是 RocksDB 或 HDFS）中序列化存储。Spark 使用 Java 序列化 或 Kryo 序列化状态对象。
 
 **性能优化建议**：
 - 状态对象应该尽量小（只存必要字段）

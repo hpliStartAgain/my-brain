@@ -66,7 +66,7 @@ DataStream<Long> s4 = env.fromSequence(1, 100);  // 生成 1 到 100
 
 ### 2.2 Kafka Source：生产环境最常用
 
-Flink 与 [[Apache Kafka]] 的集成是生产中最常见的组合。Flink 1.14 后推荐使用新版的 `KafkaSource`（FLIP-27 格式），旧版的 `FlinkKafkaConsumer` 已被废弃：
+Flink 与 Apache Kafka 的集成是生产中最常见的组合。Flink 1.14 后推荐使用新版的 `KafkaSource`（FLIP-27 格式），旧版的 `FlinkKafkaConsumer` 已被废弃：
 
 ```xml
 <!-- pom.xml 中添加 Kafka Connector 依赖 -->

@@ -168,7 +168,7 @@ Trino 的磁盘 IO 是 Hive 的 1/4~1/6，加上所有 Stage 并发执行（不�
 
 ### 3.2 数据流动模型：Page 与 Block
 
-Trino 的所有数据处理以 **Page** 为单位（类似 [[Apache Arrow]] 的批量列存格式）：
+Trino 的所有数据处理以 **Page** 为单位（类似 Apache Arrow 的批量列存格式）：
 
 - **Page**：一批行数据，默认大小约 1MB（最多约 1 万行）
 - **Block**：Page 中一列的数据，列存格式（所有行的同一列数据连续存储）
@@ -373,7 +373,7 @@ Trino 社区（以及 Meta 的 Velox 项目）正在将 Worker 的核心算子�
 - C++ 直接操作内存，可以使用 SIMD（如 AVX-512）指令对列存 Block 做向量化计算，批量处理性能远超 Java
 - 无 GC Pause 问题（Java 的 GC 可能导致查询延迟 P99 偶发性飙升）
 
-**[[Velox]]** 是 Meta 开源的 C++ 向量化执行引擎，被 Trino Native Worker、Spark Gluten、Presto Native Worker 等多个项目复用。Velox 统一了这些系统的底层算子实现，形成了向量化执行引擎的事实标准。
+**Velox** 是 Meta 开源的 C++ 向量化执行引擎，被 Trino Native Worker、Spark Gluten、Presto Native Worker 等多个项目复用。Velox 统一了这些系统的底层算子实现，形成了向量化执行引擎的事实标准。
 
 ---
 

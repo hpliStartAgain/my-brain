@@ -35,7 +35,7 @@ Omega 是 Google 对 Borg 调度架构的一次重大实验。Borg 使用集中�
 
 Omega 的核心创新是**共享状态调度（Shared-state Scheduling）**——多个调度器并行工作，共享一份集群状态的副本，各自独立做出调度决策，然后通过乐观并发控制（Optimistic Concurrency Control）解决冲突。这个设计思想部分影响了 Kubernetes 的架构——K8s 的 Scheduler 是一个独立组件，可以被替换或扩展，而不是 API Server 或 Controller Manager 的一部分。
 
-Omega 还强化了一个重要理念：**所有集群状态存储在一个中心化的、支持事务的存储系统中**。在 Kubernetes 中，这个角色由 [[etcd]] 承担。
+Omega 还强化了一个重要理念：**所有集群状态存储在一个中心化的、支持事务的存储系统中**。在 Kubernetes 中，这个角色由 etcd 承担。
 
 **第三代：Kubernetes（2014 年）**
 
@@ -269,7 +269,7 @@ status:                        # 控制器更新的：当前状态
 
 #### Hub-and-Spoke 模型
 
-K8s 的组件之间**不直接通信**——所有通信都通过 [[API Server]] 作为中心枢纽进行。这被称为 **Hub-and-Spoke（辐射轮毂）** 架构。
+K8s 的组件之间**不直接通信**——所有通信都通过 API Server 作为中心枢纽进行。这被称为 **Hub-and-Spoke（辐射轮毂）** 架构。
 
 ```mermaid
 %%{init: {'theme': 'dracula'}}%%
@@ -336,7 +336,7 @@ K8s 不关心你的代码仓库在哪里、如何编译、如何打包成镜像�
 
 ### 3.3 不提供应用级服务
 
-日志收集、监控告警、服务网格——这些都不是 K8s 内核的一部分。K8s 提供的是可扩展的接口（如 Metrics API、自定义资源），由生态系统中的项目（[[Prometheus]]、Fluentd、[[Istio]]）来实现这些功能。
+日志收集、监控告警、服务网格——这些都不是 K8s 内核的一部分。K8s 提供的是可扩展的接口（如 Metrics API、自定义资源），由生态系统中的项目（Prometheus、Fluentd、Istio）来实现这些功能。
 
 这种"只做编排，不做上层"的定位使得 K8s 成为了一个**可组合的平台**——用户根据自己的需求选择和组合生态中的组件，而不是被迫接受一个全家桶式的解决方案。
 

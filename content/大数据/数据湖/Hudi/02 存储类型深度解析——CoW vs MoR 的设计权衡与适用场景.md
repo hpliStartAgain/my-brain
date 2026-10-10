@@ -15,7 +15,7 @@ aliases: ["Hudi CoW", "Hudi MoR", "Copy-on-Write vs Merge-on-Read"]
 
 ### 1.1 数据湖 Upsert 的根本困境
 
-在 [[Apache Hudi]] 的语境里，每次 Upsert 操作都面临一个基本困境：**Parquet 文件是不可变的（immutable）**。你无法"打开一个 Parquet 文件，找到第 1234 行，修改 status 字段，然后保存"——这在 HDFS 和 S3 的文件模型中根本不支持。
+在 Apache Hudi 的语境里，每次 Upsert 操作都面临一个基本困境：**Parquet 文件是不可变的（immutable）**。你无法"打开一个 Parquet 文件，找到第 1234 行，修改 status 字段，然后保存"——这在 HDFS 和 S3 的文件模型中根本不支持。
 
 既然不能原地修改，那么对一条已存在记录的更新，只有两条路可走：
 
@@ -36,7 +36,7 @@ Hudi 的 **Copy-on-Write（CoW）** 就是路径 A，**Merge-on-Read（MoR）** 
 这个写入时合并 vs 读取时合并的权衡，在数据库领域同样存在：
 
 - **PostgreSQL 的 MVCC**：更新时写新版本行（类似 CoW），旧版本行保留直到 VACUUM 清理——写放大，但读取时无需合并
-- **[[RocksDB]] / LevelDB（LSM-Tree）**：更新写入 MemTable，后台 Compaction 合并——类似 MoR，写入快，读取时需要合并多层 SST 文件
+- **RocksDB / LevelDB（LSM-Tree）**：更新写入 MemTable，后台 Compaction 合并——类似 MoR，写入快，读取时需要合并多层 SST 文件
 
 Hudi 把同样的权衡搬到了数据湖的文件级别。
 
@@ -359,7 +359,7 @@ Incremental Query（增量查询）：
 
 ### 4.3 与 Delta Lake 存储模型的对比
 
-理解 CoW/MoR 后，可以更清晰地看到 Hudi 与 [[Delta Lake]] 的存储层差异：
+理解 CoW/MoR 后，可以更清晰地看到 Hudi 与 Delta Lake 的存储层差异：
 
 **Delta Lake 只有一种存储模型**，类似 Hudi 的 CoW，但有重要差异：
 

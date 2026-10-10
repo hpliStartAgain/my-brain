@@ -7,7 +7,7 @@ aliases: [MVCC, ReadView, 版本链]
 
 # 04 Undo Log 与 MVCC——多版本并发控制的实现真相
 
-**摘要：** [[InnoDB]] 最精妙的设计之一是：**读不阻塞写，写不阻塞读**。一个事务在修改一行数据时，另一个事务仍然可以读取这行数据的旧版本——两者之间没有任何锁等待。这个能力的底层实现，是 [[Undo Log]] 构建的多版本链（Version Chain）和 [[ReadView]] 的可见性判断机制，合称 **MVCC（Multi-Version Concurrency Control，多版本并发控制）**。本文从 Undo Log 的物理结构和双重角色出发，深入剖析版本链的构建过程、ReadView 的四个边界值如何判定一行数据的可见性，以及 RC 和 RR 两种隔离级别在 MVCC 层面的唯一差异。最后分析长事务导致 Undo 膨胀的根因，以及 Purge 线程的清理机制。
+**摘要：** InnoDB 最精妙的设计之一是：**读不阻塞写，写不阻塞读**。一个事务在修改一行数据时，另一个事务仍然可以读取这行数据的旧版本——两者之间没有任何锁等待。这个能力的底层实现，是 Undo Log 构建的多版本链（Version Chain）和 ReadView 的可见性判断机制，合称 **MVCC（Multi-Version Concurrency Control，多版本并发控制）**。本文从 Undo Log 的物理结构和双重角色出发，深入剖析版本链的构建过程、ReadView 的四个边界值如何判定一行数据的可见性，以及 RC 和 RR 两种隔离级别在 MVCC 层面的唯一差异。最后分析长事务导致 Undo 膨胀的根因，以及 Purge 线程的清理机制。
 
 ---
 
@@ -23,7 +23,7 @@ MVCC 的设计思路是：**不用锁来协调读写，而是给每次写入都�
 
 ### 1.2 版本的物理载体：Undo Log
 
-数据的旧版本不是凭空存在的——它们存储在 **[[Undo Log]]** 中。每次对一行数据做 UPDATE 或 DELETE 操作，InnoDB 都会将修改前的旧值写入 Undo Log，并在数据页的行记录中保留指向 Undo Log 旧版本的指针（`DB_ROLL_PTR`）。这样，多次修改后，一行数据的所有历史版本就通过 `DB_ROLL_PTR` 指针链接成一条**版本链（Version Chain）**。
+数据的旧版本不是凭空存在的——它们存储在 **Undo Log** 中。每次对一行数据做 UPDATE 或 DELETE 操作，InnoDB 都会将修改前的旧值写入 Undo Log，并在数据页的行记录中保留指向 Undo Log 旧版本的指针（`DB_ROLL_PTR`）。这样，多次修改后，一行数据的所有历史版本就通过 `DB_ROLL_PTR` 指针链接成一条**版本链（Version Chain）**。
 
 ---
 

@@ -382,7 +382,7 @@ public class ApplicationStateManager {
 
 在 Spring Boot 2.x 之前，Java 生态的指标库是一片混乱：Spring Framework 自带 `CounterService`/`GaugeService`（已废弃）；Dropwizard Metrics 是事实标准但与 Spring 集成需要适配层；Prometheus 的 Java 客户端又是另一套 API……每次切换监控后端（比如从 Dropwizard 切换到 Prometheus），都需要修改大量业务代码。
 
-[[Micrometer]] 的定位是"指标领域的 SLF4J"——它提供了一套**与监控后端无关**的指标 API，通过 `MeterRegistry` 实现对接不同后端：
+Micrometer 的定位是"指标领域的 SLF4J"——它提供了一套**与监控后端无关**的指标 API，通过 `MeterRegistry` 实现对接不同后端：
 
 ```
 应用代码  → Micrometer API（Counter, Timer, Gauge...）

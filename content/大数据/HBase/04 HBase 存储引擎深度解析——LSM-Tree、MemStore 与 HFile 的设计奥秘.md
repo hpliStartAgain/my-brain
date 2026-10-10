@@ -9,7 +9,7 @@ aliases: [HBase存储引擎, LSM-Tree原理, HFile格式]
 
 **摘要：**
 
-HBase 的高吞吐写入能力，根源在于它选择了 [[LSM-Tree]]（Log-Structured Merge Tree）作为存储引擎，而不是关系型数据库普遍采用的 [[B+Tree]]。本文从磁盘 I/O 的物理本质出发，逐步推导出为什么"顺序写优于随机写"，以及 LSM-Tree 如何将所有写操作转化为顺序写从而获得极致的写入吞吐量——同时也揭示了这种选择所必须承担的代价：读放大（Read Amplification）、写放大（Write Amplification）和空间放大（Space Amplification）。在此基础上，深入拆解 HBase 中 LSM-Tree 的两个核心落地组件：**MemStore**（内存层，以 `ConcurrentSkipListMap` 实现的有序写缓冲）和 **HFile**（磁盘层，多级块索引 + BloomFilter 的有序不可变文件），帮助读者建立从理论到实现的完整认知链路。
+HBase 的高吞吐写入能力，根源在于它选择了 LSM-Tree（Log-Structured Merge Tree）作为存储引擎，而不是关系型数据库普遍采用的 B+Tree。本文从磁盘 I/O 的物理本质出发，逐步推导出为什么"顺序写优于随机写"，以及 LSM-Tree 如何将所有写操作转化为顺序写从而获得极致的写入吞吐量——同时也揭示了这种选择所必须承担的代价：读放大（Read Amplification）、写放大（Write Amplification）和空间放大（Space Amplification）。在此基础上，深入拆解 HBase 中 LSM-Tree 的两个核心落地组件：**MemStore**（内存层，以 `ConcurrentSkipListMap` 实现的有序写缓冲）和 **HFile**（磁盘层，多级块索引 + BloomFilter 的有序不可变文件），帮助读者建立从理论到实现的完整认知链路。
 
 ---
 
@@ -50,7 +50,7 @@ HBase 的高吞吐写入能力，根源在于它选择了 [[LSM-Tree]]（Log-Str
 
 **B+Tree：读优化，随机写接受**
 
-B+Tree 是传统关系型数据库（[[MySQL]] InnoDB、[[PostgreSQL]]）的存储引擎核心，也是绝大多数单机文件系统索引的基础数据结构。
+B+Tree 是传统关系型数据库（MySQL InnoDB、PostgreSQL）的存储引擎核心，也是绝大多数单机文件系统索引的基础数据结构。
 
 B+Tree 的核心思想是：将数据组织成一棵高度为 3~4 层的平衡多叉树，每个节点对应磁盘上的一个 Page（通常 4KB 或 16KB）。查询时从根节点开始，每次 I/O 读取一个 Page，经过 3~4 次 I/O 就能定位到目标记录——这是 O(log N) 的查询复杂度，查询性能极优。
 
@@ -144,7 +144,7 @@ HBase 没有严格的"层级"概念（不像 LevelDB/RocksDB 的 Leveled Compact
 
 ### 3.1 MemStore 是什么，它在哪里
 
-[[MemStore]] 是 LSM-Tree C0 层在 HBase 中的具体实现，是内存中的写缓冲区。
+MemStore 是 LSM-Tree C0 层在 HBase 中的具体实现，是内存中的写缓冲区。
 
 **定位精确**：每个列族（Column Family）对应一个 Store 对象，每个 Store 中有**且仅有一个** MemStore。这意味着：
 
@@ -279,7 +279,7 @@ MemStore Flush 是 LSM-Tree 从内存层（C0）到磁盘层（C1）的关键操
 
 ### 4.1 HFile 的设计目标
 
-[[HFile]] 是 HBase 在 HDFS 上存储数据的文件格式，对应 BigTable 论文中的 SSTable（Sorted String Table）。它的设计目标直接由 HBase 的使用场景决定：
+HFile 是 HBase 在 HDFS 上存储数据的文件格式，对应 BigTable 论文中的 SSTable（Sorted String Table）。它的设计目标直接由 HBase 的使用场景决定：
 
 - **支持随机点查**：给定一个 RowKey，能够在不扫描整个文件的情况下快速定位到目标数据
 - **支持范围扫描**：给定起止 RowKey，能够顺序读取区间内的所有数据
@@ -395,7 +395,7 @@ HFile 的最后 4KB（固定大小）是 Trailer，包含：
 
 ### 4.4 Bloom Filter：用"可能"换取"一定不"
 
-[[Bloom Filter]]（布隆过滤器）是 HBase 读性能优化中最重要的技术之一，它直接影响随机点查（Get）在有大量 HFile 时的性能。
+Bloom Filter（布隆过滤器）是 HBase 读性能优化中最重要的技术之一，它直接影响随机点查（Get）在有大量 HFile 时的性能。
 
 **布隆过滤器的本质问题：如何以极小的空间代价判断元素是否存在于集合中**
 
@@ -494,7 +494,7 @@ HBase 支持两种 Bloom Filter 粒度，通过列族的 `BLOOMFILTER` 属性配
 
 ### 5.3 BlockCache：缓解读放大的第一道防线
 
-[[BlockCache]] 是 RegionServer 级别的读缓存，缓存最近从 HFile 读取的 Block（Data Block、Index Block、Bloom Block）。它是缓解读放大的最重要机制。
+BlockCache 是 RegionServer 级别的读缓存，缓存最近从 HFile 读取的 Block（Data Block、Index Block、Bloom Block）。它是缓解读放大的最重要机制。
 
 BlockCache 的存储量（默认 JVM 堆内存的 40%）与 MemStore 形成竞争：两者的总内存不能超过可用堆内存（通常约 80%，留 20% 给其他用途）。
 

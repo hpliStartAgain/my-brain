@@ -23,7 +23,7 @@ aliases: [SCMDB, 大数据拓扑, 组件依赖图]
 
 大数据集群的内部情况完全不同：
 
-- NameNode 与 DataNode 之间通过 [[Hadoop RPC]] 通信，没有 HTTP，没有 Trace
+- NameNode 与 DataNode 之间通过 Hadoop RPC 通信，没有 HTTP，没有 Trace
 - ResourceManager 通过心跳协议管理 NodeManager，同样没有 Trace 可观测
 - Spark Driver 通过 Spark 自有的 BlockManager 协议与 Executor 通信
 - HiveServer2 通过 JDBC 接受用户请求，通过 Thrift 与 HiveMetaStore 交互，通过 HDFS API 读写数据
@@ -180,7 +180,7 @@ SCMDB 的数据模型围绕四个核心实体展开：
 
 ### 3.2 关系型数据库 vs 图数据库的选型
 
-SCMDB 的数据本质上是一个图（节点是组件实例，边是依赖关系）。用图数据库（如 [[Neo4j]] / JanusGraph）存储图数据是最自然的选择，但在 AiOps Phase 1 阶段，引入图数据库会带来运维复杂性和学习成本。
+SCMDB 的数据本质上是一个图（节点是组件实例，边是依赖关系）。用图数据库（如 Neo4j / JanusGraph）存储图数据是最自然的选择，但在 AiOps Phase 1 阶段，引入图数据库会带来运维复杂性和学习成本。
 
 对于大多数大数据集群 SRE 团队，**Phase 1 用关系型数据库（PostgreSQL / MySQL）存储 SCMDB 是更实际的选择**，理由如下：
 
@@ -236,10 +236,10 @@ SCMDB 的最大挑战不是设计，而是**保持数据的准确性和时效性
 
 **自动发现 + 人工确认的混合模式**：
 - 物理机实例（ComponentInstance）的增减可以通过 Ambari API 自动同步（Ambari 有集群节点列表和组件分配信息）
-- 实例状态（Active/Standby/Running/Down）可以从 [[ZooKeeper]] 的 NameNode HA 选举节点、ResourceManager HA 节点实时读取
+- 实例状态（Active/Standby/Running/Down）可以从 ZooKeeper 的 NameNode HA 选举节点、ResourceManager HA 节点实时读取
 - 依赖关系（Dependency）**必须人工建模和验证**——这是一次性的工作量，但此后只需要在架构变更时更新
 
-**变更事件触发更新**：当 [[Ambari]] 的变更 API 检测到集群拓扑变化（新增节点、下线节点、服务迁移），自动触发一个"SCMDB 更新提醒"，让 SRE 确认依赖关系是否需要同步更新。
+**变更事件触发更新**：当 Ambari 的变更 API 检测到集群拓扑变化（新增节点、下线节点、服务迁移），自动触发一个"SCMDB 更新提醒"，让 SRE 确认依赖关系是否需要同步更新。
 
 **定期一致性校验**：每周运行一个脚本，对比 SCMDB 中记录的组件实例列表与 Ambari API 返回的实际集群状态，找出差异并发出提醒。
 

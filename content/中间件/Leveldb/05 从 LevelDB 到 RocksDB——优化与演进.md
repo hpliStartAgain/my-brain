@@ -9,7 +9,7 @@ aliases: []
 
 ## 摘要
 
-RocksDB 是 Facebook 于 2012 年基于 LevelDB fork 并持续演进的高性能嵌入式存储引擎，已成为业界最广泛使用的 LSM-Tree 存储引擎。它在 LevelDB 的优雅架构基础上，针对生产环境中暴露的真实瓶颈做了大量工程改进：**Column Family** 使同一数据库实例支持多个独立键空间，**多线程 Compaction** 解决了单线程 Compaction 在大规模写入下的追赶问题，**Universal Compaction** 提供了写放大更低的替代策略，**Rate Limiter** 防止 Compaction IO 冲击前台业务，**Write Ahead Log Pipeline** 提升了写入吞吐量。本文系统分析 RocksDB 对 LevelDB 的核心改进，并探讨 RocksDB 在 [[TiKV]]、[[Kafka Streams]]、[[Flink]] 等系统中的应用实践，勾勒 LSM-Tree 存储引擎的演进方向。
+RocksDB 是 Facebook 于 2012 年基于 LevelDB fork 并持续演进的高性能嵌入式存储引擎，已成为业界最广泛使用的 LSM-Tree 存储引擎。它在 LevelDB 的优雅架构基础上，针对生产环境中暴露的真实瓶颈做了大量工程改进：**Column Family** 使同一数据库实例支持多个独立键空间，**多线程 Compaction** 解决了单线程 Compaction 在大规模写入下的追赶问题，**Universal Compaction** 提供了写放大更低的替代策略，**Rate Limiter** 防止 Compaction IO 冲击前台业务，**Write Ahead Log Pipeline** 提升了写入吞吐量。本文系统分析 RocksDB 对 LevelDB 的核心改进，并探讨 RocksDB 在 TiKV、Kafka Streams、Flink 等系统中的应用实践，勾勒 LSM-Tree 存储引擎的演进方向。
 
 ---
 
@@ -82,7 +82,7 @@ graph TD
 
 ### 2.2 Column Family 的工程价值
 
-**隔离不同访问模式**：在 [[TiKV]] 中，RocksDB 实例通常包含三个 CF：`default`（用户数据）、`lock`（事务锁信息）、`write`（MVCC 版本信息）。用户数据的 value 通常较大，适合 Leveled Compaction + 较大的 Block 大小；锁信息的 key/value 均很小，访问频繁，适合 Universal Compaction + 较小 Block 大小。Column Family 让这两种完全不同的数据在同一个 RocksDB 实例中各自优化，而不需要维护两个独立的 RocksDB 实例（后者会增加运维复杂度和资源开销）。
+**隔离不同访问模式**：在 TiKV 中，RocksDB 实例通常包含三个 CF：`default`（用户数据）、`lock`（事务锁信息）、`write`（MVCC 版本信息）。用户数据的 value 通常较大，适合 Leveled Compaction + 较大的 Block 大小；锁信息的 key/value 均很小，访问频繁，适合 Universal Compaction + 较小 Block 大小。Column Family 让这两种完全不同的数据在同一个 RocksDB 实例中各自优化，而不需要维护两个独立的 RocksDB 实例（后者会增加运维复杂度和资源开销）。
 
 **原子性跨 CF 写入**：通过 `WriteBatch` 跨 CF 写入，可以原子地同时写入多个 CF——要么全部成功，要么全部失败。这对于需要维护跨 CF 数据一致性的场景（如 TiKV 中同时写用户数据和 MVCC 版本信息）至关重要。
 
@@ -322,7 +322,7 @@ Compaction 时（触发 PartialMerge）：
 
 ### 8.1 TiKV：分布式 KV 存储的基石
 
-[[TiKV]] 是 PingCAP 开源的分布式键值存储，是 [[TiDB]] 的底层存储引擎。每个 TiKV 节点上运行多个 RocksDB 实例（称为 Region），每个 Region 存储一段连续 key range 的数据，通过 [[Raft]] 协议在多个节点间复制。
+TiKV 是 PingCAP 开源的分布式键值存储，是 TiDB 的底层存储引擎。每个 TiKV 节点上运行多个 RocksDB 实例（称为 Region），每个 Region 存储一段连续 key range 的数据，通过 Raft 协议在多个节点间复制。
 
 TiKV 对 RocksDB 的使用方式非常有代表性：
 
@@ -331,11 +331,11 @@ TiKV 对 RocksDB 的使用方式非常有代表性：
 - `lock` CF：存储事务的悲观锁/乐观锁信息，小 KV，访问频繁，使用 Universal Compaction
 - `write` CF：存储 MVCC 版本信息（每个写操作的版本链），是数据量最大的 CF
 
-**Titan 扩展（大 Value 分离）**：TiKV 在 RocksDB 基础上开发了 [[Titan]] 扩展，实现了 WiscKey 论文中的 Key-Value 分离思想：当 Value 大于阈值（默认 1KB）时，Value 存储在独立的 Blob File 中，SSTable 中只存储 Value 在 Blob File 中的位置指针。这大幅减少了大 Value 场景下的 Compaction 写放大。
+**Titan 扩展（大 Value 分离）**：TiKV 在 RocksDB 基础上开发了 Titan 扩展，实现了 WiscKey 论文中的 Key-Value 分离思想：当 Value 大于阈值（默认 1KB）时，Value 存储在独立的 Blob File 中，SSTable 中只存储 Value 在 Blob File 中的位置指针。这大幅减少了大 Value 场景下的 Compaction 写放大。
 
 ### 8.2 Kafka Streams：状态存储后端
 
-[[Kafka Streams]] 是 Apache Kafka 提供的轻量级流处理框架，其有状态操作（如聚合、连接）需要将中间状态持久化到本地存储。RocksDB 是 Kafka Streams 的默认状态存储后端。
+Kafka Streams 是 Apache Kafka 提供的轻量级流处理框架，其有状态操作（如聚合、连接）需要将中间状态持久化到本地存储。RocksDB 是 Kafka Streams 的默认状态存储后端。
 
 在 Kafka Streams 的使用场景中，RocksDB 的访问模式非常特殊：
 - **Key 分布**：通常按消息的 key（如用户 ID、设备 ID）分布，热点 key 访问频繁
@@ -346,7 +346,7 @@ Kafka Streams 为 RocksDB 设置了专门的配置：较大的 Block Cache（缓
 
 ### 8.3 Flink：增量 Checkpoint 的实现基础
 
-[[Apache Flink]] 的 **RocksDB State Backend** 使用 RocksDB 存储流处理算子的本地状态。与 Kafka Streams 不同，Flink 还利用 RocksDB 的 SSTable 特性实现了**增量 Checkpoint（Incremental Checkpoint）**。
+Apache Flink 的 **RocksDB State Backend** 使用 RocksDB 存储流处理算子的本地状态。与 Kafka Streams 不同，Flink 还利用 RocksDB 的 SSTable 特性实现了**增量 Checkpoint（Incremental Checkpoint）**。
 
 普通 Checkpoint 需要将全量状态快照上传到远程存储（如 HDFS/S3），对于 TB 级状态的流处理任务，每次 Checkpoint 上传几 GB 数据，耗时数十分钟，严重影响吞吐量。
 
@@ -359,7 +359,7 @@ Kafka Streams 为 RocksDB 设置了专门的配置：较大的 Block Cache（缓
 
 ### 8.4 MyRocks：MySQL 的 LSM-Tree 存储引擎
 
-**[[MyRocks]]** 是 Facebook 开发的 MySQL 存储引擎插件，用 RocksDB 替代 InnoDB 作为底层存储引擎。Facebook 的动机是：MySQL 的 InnoDB 引擎使用 B+ 树存储，写放大高，SSD 磨损快，且存储效率不如 LSM-Tree。
+**MyRocks** 是 Facebook 开发的 MySQL 存储引擎插件，用 RocksDB 替代 InnoDB 作为底层存储引擎。Facebook 的动机是：MySQL 的 InnoDB 引擎使用 B+ 树存储，写放大高，SSD 磨损快，且存储效率不如 LSM-Tree。
 
 实际生产数据（Facebook 的 UDB 数据库）显示，切换 MyRocks 后：
 - **存储空间减少约 50%**：LSM-Tree 的空间效率高于 B+ 树（B+ 树节点存在大量碎片和内部空洞）
@@ -406,7 +406,7 @@ Kafka Streams 为 RocksDB 设置了专门的配置：较大的 Block Cache（缓
 
 传统的 LSM-Tree 存储引擎（LevelDB/RocksDB）设计为嵌入式引擎，数据和计算紧密耦合在同一节点。随着云计算的发展，**存算分离**成为重要趋势：
 
-- **Disaggregated Storage**：将 SSTable 文件存储在对象存储（如 S3）或分布式文件系统（如 [[JuiceFS]]）上，本地只保留 MemTable 和热点 Block Cache。Compaction 可以在独立的计算节点上执行，不占用服务节点资源。
+- **Disaggregated Storage**：将 SSTable 文件存储在对象存储（如 S3）或分布式文件系统（如 JuiceFS）上，本地只保留 MemTable 和热点 Block Cache。Compaction 可以在独立的计算节点上执行，不占用服务节点资源。
 - **Shared Storage RocksDB**：Meta 的 RocksDB 团队正在探索基于 S3 的 SSTable 存储，利用 S3 的持久性替代本地磁盘，节点故障时不需要 Raft 复制（数据在 S3 上已是多副本），只需重建 MemTable（从 WAL 恢复）。
 
 ### 10.2 NVM（非易失性内存）的机遇
@@ -425,7 +425,7 @@ Compaction 过程中的核心操作（key 比较、CRC 计算、Snappy/Zstd 压�
 
 ### 11.1 LevelDB 的历史贡献
 
-LevelDB 以约 2 万行精炼的 C++ 代码，向工程界清晰地展示了 LSM-Tree 的完整实现路径：SkipList-based MemTable、WAL 持久化、SSTable 的 Block 格式与 Bloom Filter、分层 Compaction 策略、以及 Version/VersionEdit/VersionSet 的 MVCC 版本管理。这些设计思想被 RocksDB、[[Cassandra]]、[[HBase]]、[[ClickHouse]] MergeTree 等无数后继系统所借鉴，LevelDB 的影响力远超其代码规模。
+LevelDB 以约 2 万行精炼的 C++ 代码，向工程界清晰地展示了 LSM-Tree 的完整实现路径：SkipList-based MemTable、WAL 持久化、SSTable 的 Block 格式与 Bloom Filter、分层 Compaction 策略、以及 Version/VersionEdit/VersionSet 的 MVCC 版本管理。这些设计思想被 RocksDB、Cassandra、HBase、ClickHouse MergeTree 等无数后继系统所借鉴，LevelDB 的影响力远超其代码规模。
 
 ### 11.2 RocksDB 的工程贡献
 

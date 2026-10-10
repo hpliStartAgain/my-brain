@@ -573,7 +573,7 @@ CNI_NETNS=/var/run/netns/container1 \
 
 **策略层（iptables/eBPF）**：iptables 通过 Netfilter 的五个钩子实现 NAT、端口映射和访问控制，但其 O(n) 的链式遍历在大规模场景下成为瓶颈；eBPF/Cilium 用哈希表实现 O(1) 查找，通过 `redirect()` 绕过 Netfilter 框架，在性能和可观测性两个维度都显著优于传统 iptables 方案。
 
-下一篇 [[10 网络性能诊断——从 ss 到 perf/eBPF 的全套工具链]] 是本专栏的收官之作，将系统梳理网络性能诊断的完整工具链：`ss`/`netstat` 查连接状态，`tcpdump`/`Wireshark` 抓包分析，`perf` 对内核网络函数进行 profiling，以及 BCC/bpftrace 工具集如何用 eBPF 实现实时的、零侵入的网络路径追踪。
+下一篇 10 网络性能诊断——从 ss 到 perf/eBPF 的全套工具链 是本专栏的收官之作，将系统梳理网络性能诊断的完整工具链：`ss`/`netstat` 查连接状态，`tcpdump`/`Wireshark` 抓包分析，`perf` 对内核网络函数进行 profiling，以及 BCC/bpftrace 工具集如何用 eBPF 实现实时的、零侵入的网络路径追踪。
 
 ---
 

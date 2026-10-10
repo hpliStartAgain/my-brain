@@ -9,7 +9,7 @@ aliases: []
 
 ## 摘要
 
-`HDFSBackedStateStore` 将全量状态放在 JVM 堆内存中，这在状态规模较小（< 10GB）时工作良好，但面对"1 亿用户状态"、"7 天内所有事件的去重记录"这类大状态场景，JVM 堆直接 OOM。Spark 3.2 引入了基于 [[RocksDB]] 的 State Store 实现（`RocksDBStateStore`），它将状态数据存储在 **堆外内存（Off-Heap）+ 本地 NVMe 磁盘**上，彻底突破了 JVM 堆大小的限制。其底层是 Facebook 开源的 [[LSM Tree]] 存储引擎 RocksDB，专为高写入吞吐量和低延迟随机读写而设计。本文从 LSM Tree 的核心工作原理讲起，深入剖析 RocksDB State Store 如何集成 Spark 的状态管理接口、其 Changelog 机制如何高效同步状态到 HDFS、与 `HDFSBackedStateStore` 的多维度性能对比，以及生产中关键的配置参数和调优策略。
+`HDFSBackedStateStore` 将全量状态放在 JVM 堆内存中，这在状态规模较小（< 10GB）时工作良好，但面对"1 亿用户状态"、"7 天内所有事件的去重记录"这类大状态场景，JVM 堆直接 OOM。Spark 3.2 引入了基于 RocksDB 的 State Store 实现（`RocksDBStateStore`），它将状态数据存储在 **堆外内存（Off-Heap）+ 本地 NVMe 磁盘**上，彻底突破了 JVM 堆大小的限制。其底层是 Facebook 开源的 LSM Tree 存储引擎 RocksDB，专为高写入吞吐量和低延迟随机读写而设计。本文从 LSM Tree 的核心工作原理讲起，深入剖析 RocksDB State Store 如何集成 Spark 的状态管理接口、其 Changelog 机制如何高效同步状态到 HDFS、与 `HDFSBackedStateStore` 的多维度性能对比，以及生产中关键的配置参数和调优策略。
 
 ---
 
@@ -25,7 +25,7 @@ aliases: []
 - **设备级流聚合**：1000 万台 IoT 设备，每台设备保存 10 个指标的滑动窗口聚合 → 状态可能超过 **20GB**
 - **实时 Session 分析**：同时在线用户 500 万，每个 Session 保存 100 字节状态 → **500MB**（这个还可以）
 
-8GB、20GB 的状态放在 JVM 堆里，即使 Executor 内存配到 32GB，考虑到 [[JVM GC]] 的空间开销（至少 25% 的 GC 保留空间）、Execution Memory 的需求，可用于 State Store 的堆内存实际上相当紧张。而且，大堆内存的 GC 停顿（Full GC 可能暂停几秒到几十秒）会直接影响流处理的延迟稳定性。
+8GB、20GB 的状态放在 JVM 堆里，即使 Executor 内存配到 32GB，考虑到 JVM GC 的空间开销（至少 25% 的 GC 保留空间）、Execution Memory 的需求，可用于 State Store 的堆内存实际上相当紧张。而且，大堆内存的 GC 停顿（Full GC 可能暂停几秒到几十秒）会直接影响流处理的延迟稳定性。
 
 ### 1.2 理想的大状态存储应该具备什么特性
 
@@ -44,9 +44,9 @@ RocksDB 恰好满足了前两点：它是一个 LSM Tree 引擎，所有数据�
 
 ### 2.1 LSM Tree 是什么，为什么出现
 
-**LSM Tree（Log-Structured Merge Tree，日志结构合并树）** 是一种专为**写密集型工作负载**设计的数据结构，最早由 Patrick O'Neil 等人在 1996 年的论文中提出，被 [[LevelDB]]、RocksDB、[[Cassandra]]、[[HBase]] 等广泛采用。
+**LSM Tree（Log-Structured Merge Tree，日志结构合并树）** 是一种专为**写密集型工作负载**设计的数据结构，最早由 Patrick O'Neil 等人在 1996 年的论文中提出，被 LevelDB、RocksDB、Cassandra、HBase 等广泛采用。
 
-传统的 B-Tree（如 [[MySQL]] InnoDB 的 B+ Tree）在随机写入时性能较差，因为每次写入都可能触发多个磁盘页面的随机 I/O（查找目标位置 + 修改数据 + 可能的页面分裂）。在 HDD 时代，随机 I/O 比顺序 I/O 慢 100 倍以上，B-Tree 的写入性能在高并发场景下成为瓶颈。
+传统的 B-Tree（如 MySQL InnoDB 的 B+ Tree）在随机写入时性能较差，因为每次写入都可能触发多个磁盘页面的随机 I/O（查找目标位置 + 修改数据 + 可能的页面分裂）。在 HDD 时代，随机 I/O 比顺序 I/O 慢 100 倍以上，B-Tree 的写入性能在高并发场景下成为瓶颈。
 
 LSM Tree 的核心思想：**将随机写转化为顺序写**。所有写入操作首先写入内存中的有序结构（MemTable），积累到一定量后，批量**顺序**写入磁盘（SST 文件）。通过牺牲一定的读性能（读可能需要查多个层次的文件）和后台 Compaction 开销，换取极高的写入吞吐量。
 

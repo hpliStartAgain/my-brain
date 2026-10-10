@@ -9,7 +9,7 @@ aliases: []
 
 ## 摘要
 
-日志是应用可观测性的第一道防线，却也是 Java 生态中历史包袱最重的领域之一。[[Log4j]] 1.x、[[JUL]]（java.util.logging）、[[JCL]]（Apache Commons Logging）、[[Log4j]] 2.x、[[Logback]]……各有一套 API，在同一个应用的依赖树中可能同时存在多套日志框架，导致日志输出混乱、配置互相干扰。[[SLF4J]] 通过"门面模式 + 桥接器"彻底解决了这个问题，Spring Boot 则在 SLF4J 之上构建了一套零配置可用、生产就绪的日志体系。本文深入剖析 SLF4J 的门面设计与绑定机制、Logback 的 Appender/Layout/Filter 体系、日志桥接的工作原理（`log4j-over-slf4j` 等），以及结构化日志（JSON 格式）、MDC 链路追踪标签、异步日志等生产级配置的实现原理与最佳实践。
+日志是应用可观测性的第一道防线，却也是 Java 生态中历史包袱最重的领域之一。Log4j 1.x、JUL（java.util.logging）、JCL（Apache Commons Logging）、Log4j 2.x、Logback……各有一套 API，在同一个应用的依赖树中可能同时存在多套日志框架，导致日志输出混乱、配置互相干扰。SLF4J 通过"门面模式 + 桥接器"彻底解决了这个问题，Spring Boot 则在 SLF4J 之上构建了一套零配置可用、生产就绪的日志体系。本文深入剖析 SLF4J 的门面设计与绑定机制、Logback 的 Appender/Layout/Filter 体系、日志桥接的工作原理（`log4j-over-slf4j` 等），以及结构化日志（JSON 格式）、MDC 链路追踪标签、异步日志等生产级配置的实现原理与最佳实践。
 
 ---
 
@@ -72,7 +72,7 @@ graph TD
 
 SLF4J 1.8 之前通过在类路径上放置特定类（`org/slf4j/impl/StaticLoggerBinder.class`）来绑定实现——这是一种约定，不是接口。
 
-SLF4J 1.8+ 改为标准的 Java [[ServiceLoader]] 机制：`LoggerFactory.getILoggerFactory()` 通过 `ServiceLoader.load(SLF4JServiceProvider.class)` 发现绑定实现。每个 SLF4J 绑定（如 `logback-classic`）在其 JAR 的 `META-INF/services/org.slf4j.spi.SLF4JServiceProvider` 文件中声明自己的 `SLF4JServiceProvider` 实现类。
+SLF4J 1.8+ 改为标准的 Java ServiceLoader 机制：`LoggerFactory.getILoggerFactory()` 通过 `ServiceLoader.load(SLF4JServiceProvider.class)` 发现绑定实现。每个 SLF4J 绑定（如 `logback-classic`）在其 JAR 的 `META-INF/services/org.slf4j.spi.SLF4JServiceProvider` 文件中声明自己的 `SLF4JServiceProvider` 实现类。
 
 Logback 的 `logback-classic` 中包含：
 ```
@@ -330,7 +330,7 @@ public void deleteUser(Long userId) {
 
 ### 5.1 MDC 是什么，解决什么问题
 
-[[MDC]]（Mapped Diagnostic Context）是 SLF4J/Logback 提供的线程本地日志上下文。在一个高并发服务中，多个请求的日志交织在一起，很难从日志中还原单个请求的完整处理链路。
+MDC（Mapped Diagnostic Context）是 SLF4J/Logback 提供的线程本地日志上下文。在一个高并发服务中，多个请求的日志交织在一起，很难从日志中还原单个请求的完整处理链路。
 
 MDC 通过 `ThreadLocal` 存储一组键值对，日志 Pattern 中通过 `%X{key}` 引用这些值——这样，同一个线程处理的所有日志都会携带相同的上下文信息：
 
@@ -609,7 +609,7 @@ JSON 输出：
 
 ### 7.3 Log4j 2.x 的 Disruptor 异步模式（性能最优）
 
-如果需要追求极致的日志写入性能（百万级 TPS 的场景），可以切换到 Log4j 2.x 的 "All Asynchronous" 模式。Log4j 2.x 使用 LMAX [[Disruptor]] 环形缓冲区（无锁并发数据结构）替代 `AsyncAppender` 的 `BlockingQueue`，吞吐量可比同步日志提升 6-68 倍（官方 Benchmark 数据）。
+如果需要追求极致的日志写入性能（百万级 TPS 的场景），可以切换到 Log4j 2.x 的 "All Asynchronous" 模式。Log4j 2.x 使用 LMAX Disruptor 环形缓冲区（无锁并发数据结构）替代 `AsyncAppender` 的 `BlockingQueue`，吞吐量可比同步日志提升 6-68 倍（官方 Benchmark 数据）。
 
 切换到 Log4j 2.x：
 

@@ -8,7 +8,7 @@ aliases: [ClickHouse 全局架构, ClickHouse 列存原理, ClickHouse MPP, Clic
 # 01 ClickHouse 全局架构——列式存储与 MPP 执行引擎
 
 **摘要：**
-ClickHouse 是 Yandex 为日志分析场景从零自研的列式 OLAP 引擎，2016 年开源后迅速成为实时分析领域的性能标杆。本文从 OLAP 场景与 OLTP 的根本差异切入，沿"为什么通用数据库做不好分析查询 → 列式存储如何从根本上改变 IO 模型 → 向量化执行如何榨干 CPU → MPP 如何把多核与多节点都用起来"这条主线，拆解 ClickHouse 三层协同设计的工程逻辑，并厘清它与 [[Doris]]、[[Trino]]、Hive 在定位上的本质差异，为后续篇章的存储引擎、查询执行、分布式表等深入话题奠定全局视角。
+ClickHouse 是 Yandex 为日志分析场景从零自研的列式 OLAP 引擎，2016 年开源后迅速成为实时分析领域的性能标杆。本文从 OLAP 场景与 OLTP 的根本差异切入，沿"为什么通用数据库做不好分析查询 → 列式存储如何从根本上改变 IO 模型 → 向量化执行如何榨干 CPU → MPP 如何把多核与多节点都用起来"这条主线，拆解 ClickHouse 三层协同设计的工程逻辑，并厘清它与 Doris、Trino、Hive 在定位上的本质差异，为后续篇章的存储引擎、查询执行、分布式表等深入话题奠定全局视角。
 
 ---
 
@@ -261,7 +261,7 @@ ClickHouse 选择了向量化路线——原因很务实：向量化在绝大多
 
 ClickHouse 常被描述为 MPP（Massively Parallel Processing，大规模并行处理）架构，但这个说法需要精确化——ClickHouse 的并行模型与 Trino、Greenplum 那种传统 MPP 有重要区别，理解这个区别对选型和调优都很关键。
 
-**传统 MPP**（以 [[Trino]]/Presto、Greenplum 为代表）的核心特征是**跨节点的分布式执行**——查询计划被拆分成多个 stage，每个 stage 在不同节点上执行，stage 之间通过网络交换（shuffle/exchange）中间结果。譬如表 A 在节点 1-4 上各有 1/4 数据，表 B 在节点 1-4 上各有 1/4 数据，做 `A JOIN B` 时，传统 MPP 会按 JOIN key 对两张表的数据做 shuffle——把 A 和 B 中 JOIN key 相同的行送到同一个节点上做 Hash Join。这种 shuffle 是 MPP 的灵魂——它让大表 JOIN 可以跨节点并行，不受单机内存限制。
+**传统 MPP**（以 Trino/Presto、Greenplum 为代表）的核心特征是**跨节点的分布式执行**——查询计划被拆分成多个 stage，每个 stage 在不同节点上执行，stage 之间通过网络交换（shuffle/exchange）中间结果。譬如表 A 在节点 1-4 上各有 1/4 数据，表 B 在节点 1-4 上各有 1/4 数据，做 `A JOIN B` 时，传统 MPP 会按 JOIN key 对两张表的数据做 shuffle——把 A 和 B 中 JOIN key 相同的行送到同一个节点上做 Hash Join。这种 shuffle 是 MPP 的灵魂——它让大表 JOIN 可以跨节点并行，不受单机内存限制。
 
 **ClickHouse 的并行模型**首先要强调的是**单机内的多线程并行**——同一台服务器上，一个查询会并发启动多个线程（`max_threads` 控制，默认等于 CPU 核心数），每个线程处理一部分 Granule，最后合并结果。这种单机多线程并行是 ClickHouse 性能的基础——在单机场景下，一个查询就能把几十个 CPU 核心全部跑满。
 
@@ -328,7 +328,7 @@ ClickHouse "默认不 shuffle"的选择是一个典型的工程权衡——它�
 
 **代价**：当查询涉及大表 JOIN，且两张表不在同一个 Shard 上时，ClickHouse 的表现不如 Trino。ClickHouse 的 `GLOBAL JOIN` 会把右表拉到 Initiator 单点做 JOIN——如果右表很大，Initiator 的内存和网络都扛不住。Trino 的 shuffle Hash Join 则把 JOIN 分散到所有节点——每个节点只处理一部分数据，内存和网络都分摊了。
 
-**这个权衡背后的认知是**：OLAP 场景里，单表聚合的频率远高于大表 JOIN——为高频场景优化、为低频场景接受次优表现，是正确的取舍。如果业务里大表 JOIN 是主流，那 ClickHouse 可能不是最佳选择——Trino 或 [[Doris]] 更合适。**没有银弹，架构即权衡**——ClickHouse 的权衡是"单表聚合优先"，理解了这个前提，才能理解它后续所有的设计决策。
+**这个权衡背后的认知是**：OLAP 场景里，单表聚合的频率远高于大表 JOIN——为高频场景优化、为低频场景接受次优表现，是正确的取舍。如果业务里大表 JOIN 是主流，那 ClickHouse 可能不是最佳选择——Trino 或 Doris 更合适。**没有银弹，架构即权衡**——ClickHouse 的权衡是"单表聚合优先"，理解了这个前提，才能理解它后续所有的设计决策。
 
 ### 4.4 工程上如何缓解 ClickHouse 的 JOIN 短板
 
@@ -370,9 +370,9 @@ ClickHouse "默认不 shuffle"的选择是一个典型的工程权衡——它�
 
 ### 5.2 与同类系统的定位对比
 
-ClickHouse 不是唯一的 OLAP 引擎——市场上还有 [[Doris]]（含 StarRocks）、[[Trino]]、Hive、Druid 等。它们各有定位，不是简单的"谁更好"的关系。
+ClickHouse 不是唯一的 OLAP 引擎——市场上还有 Doris（含 StarRocks）、Trino、Hive、Druid 等。它们各有定位，不是简单的"谁更好"的关系。
 
-| 维度 | ClickHouse | [[Doris]]/StarRocks | [[Trino]] | Hive | Druid |
+| 维度 | ClickHouse | Doris/StarRocks | Trino | Hive | Druid |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **架构** | 列存 + 单机多线程 + 广播 | 列存 + MPP（FE/BE 分离） | 内存计算 + MPP（shuffle） | 列存 + MapReduce/Spark | 列存 + 时序索引 |
 | **查询延迟** | 亚秒到秒级 | 亚秒到秒级 | 秒到分钟级 | 分钟级 | 亚秒级 |

@@ -327,4 +327,4 @@ return true;
 
 ## 下一篇预告
 
-[[02 字符串搜索：Implement strStr 与 KMP 算法]] 将深入字符串搜索的经典算法——KMP（Knuth-Morris-Pratt）。Implement strStr（LeetCode 28）的暴力解法是 $O(mn)$，而 KMP 通过预处理模式串的"最长相等前后缀"信息，将时间复杂度降到 $O(m+n)$。理解 `next` 数组的构建原理，是搞懂 KMP 的关键，也是面试中区分"背了答案"和"真正理解"的分水岭。
+02 字符串搜索：Implement strStr 与 KMP 算法 将深入字符串搜索的经典算法——KMP（Knuth-Morris-Pratt）。Implement strStr（LeetCode 28）的暴力解法是 $O(mn)$，而 KMP 通过预处理模式串的"最长相等前后缀"信息，将时间复杂度降到 $O(m+n)$。理解 `next` 数组的构建原理，是搞懂 KMP 的关键，也是面试中区分"背了答案"和"真正理解"的分水岭。

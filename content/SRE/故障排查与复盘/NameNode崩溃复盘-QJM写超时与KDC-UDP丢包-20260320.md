@@ -13,7 +13,7 @@ aliases: ["NN1崩溃", "QJM写超时", "KDC UDP丢包"]
 
 > **Active NN 每日执行一次 Kerberos `reloginFromKeytab()`（fresh kinit）。3月20日 02:36:43，NN1 的 AS_REQ UDP 包被 KDC recv buffer 丢弃——NN1 无法完成 TGT 获取，所有 JournalNode 的 SASL 握手全部阻塞，20 秒内无响应触发 QJM 超时，NN1 崩溃。根本背景是 KDC 主机 UDP 接收缓冲区长期仅 208KB（Linux 默认最小值），累计 5072 万次溢出丢包。**
 
-此外，事后分析发现一个**加剧因素**：部署在 exporter-01（192.0.2.109）上的 [[hadoop-exporter]] 存在两处实现缺陷——每次 Prometheus scrape 时对所有 DataNode 无并发限制地同时发起 TGS_REQ，且每次 scrape 都重建 Kerberos 客户端丢弃 ticket 缓存——导致其在崩溃前 **02:35:43 的 10 秒窗口内向 KDC 集中发出 1309 条请求**（正常背景流量的 54 倍），将 UDP recv buffer 打满，为 NN1 的 AS_REQ 被丢弃创造了直接条件。该行为自 2026-01-31 开始出现，是 1 月底以来 KDC 负载暴增约 3 倍的根本原因。
+此外，事后分析发现一个**加剧因素**：部署在 exporter-01（192.0.2.109）上的 hadoop-exporter 存在两处实现缺陷——每次 Prometheus scrape 时对所有 DataNode 无并发限制地同时发起 TGS_REQ，且每次 scrape 都重建 Kerberos 客户端丢弃 ticket 缓存——导致其在崩溃前 **02:35:43 的 10 秒窗口内向 KDC 集中发出 1309 条请求**（正常背景流量的 54 倍），将 UDP recv buffer 打满，为 NN1 的 AS_REQ 被丢弃创造了直接条件。该行为自 2026-01-31 开始出现，是 1 月底以来 KDC 负载暴增约 3 倍的根本原因。
 
 ---
 
@@ -21,7 +21,7 @@ aliases: ["NN1崩溃", "QJM写超时", "KDC UDP丢包"]
 
 ### 1.1 HDFS QJM 写入机制
 
-[[HDFS]] HA 模式下，Active NN 的每一条 edit log 都通过 [[QuorumJournalManager]] 同步写入三个 JournalNode（JN）。写入使用 QJM 的多数派（quorum）语义：至少 2/3 个 JN 返回 ACK 才算成功，否则等待直到 `dfs.qjournal.write-txns.timeout.ms`（默认 20000ms）超时。
+HDFS HA 模式下，Active NN 的每一条 edit log 都通过 QuorumJournalManager 同步写入三个 JournalNode（JN）。写入使用 QJM 的多数派（quorum）语义：至少 2/3 个 JN 返回 ACK 才算成功，否则等待直到 `dfs.qjournal.write-txns.timeout.ms`（默认 20000ms）超时。
 
 ```
 Active NN
@@ -583,4 +583,4 @@ Mar 24 01:42:55 kdc-01.hadoop.example.com krb5kdc[123563](info): AS_REQ (2 etype
 ## 相关文档
 
 - [[HiveServer2 Kerberos 认证故障深度分析报告]]
-- [[HDFS HA 架构与 QJM 原理]]
+- HDFS HA 架构与 QJM 原理

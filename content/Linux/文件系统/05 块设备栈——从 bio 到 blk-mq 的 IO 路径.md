@@ -7,7 +7,7 @@ aliases: ["Linux块设备栈", "bio结构体", "blk-mq多队列", "通用块层�
 
 **摘要：**
 
-当 [[Page Cache]] 发生 miss，需要从磁盘读取数据时，文件系统会调用 `submit_bio()` 将 IO 请求提交到块设备栈。这一层是 Linux 存储系统中最贴近硬件的内核子系统，也是近十年变化最大的部分。传统的单队列块层（single-queue block layer）在面对 NVMe SSD（每秒百万级 IOPS）时成为严重瓶颈——**一把大锁保护整个请求队列**，多核 CPU 之间的锁竞争使得高速 SSD 的 IOPS 只能发挥出一小部分。Linux 3.13 引入的 blk-mq（multi-queue block layer）从根本上重新设计了块设备栈：每个 CPU core 有独立的软件提交队列（software staging queue），硬件有多个硬件调度队列（hardware dispatch queue），彻底消除了锁竞争。本文从 `bio` 数据结构出发，解析一个 IO 请求从文件系统到磁盘控制器 DMA 的完整路径，重点剖析单队列时代的瓶颈、blk-mq 的设计思想与数据结构，以及 `io_context`（进程 IO 上下文）如何支持 IO 调度器对进程级 IO 优先级的管理。
+当 Page Cache 发生 miss，需要从磁盘读取数据时，文件系统会调用 `submit_bio()` 将 IO 请求提交到块设备栈。这一层是 Linux 存储系统中最贴近硬件的内核子系统，也是近十年变化最大的部分。传统的单队列块层（single-queue block layer）在面对 NVMe SSD（每秒百万级 IOPS）时成为严重瓶颈——**一把大锁保护整个请求队列**，多核 CPU 之间的锁竞争使得高速 SSD 的 IOPS 只能发挥出一小部分。Linux 3.13 引入的 blk-mq（multi-queue block layer）从根本上重新设计了块设备栈：每个 CPU core 有独立的软件提交队列（software staging queue），硬件有多个硬件调度队列（hardware dispatch queue），彻底消除了锁竞争。本文从 `bio` 数据结构出发，解析一个 IO 请求从文件系统到磁盘控制器 DMA 的完整路径，重点剖析单队列时代的瓶颈、blk-mq 的设计思想与数据结构，以及 `io_context`（进程 IO 上下文）如何支持 IO 调度器对进程级 IO 优先级的管理。
 
 ---
 

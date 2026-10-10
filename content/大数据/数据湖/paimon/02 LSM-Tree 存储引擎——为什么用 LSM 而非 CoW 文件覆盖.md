@@ -7,7 +7,7 @@ aliases: ["Paimon LSM-Tree", "LSM-Tree存储引擎", "MemTable", "SST文件", "P
 
 **摘要：**
 
-[[Apache Paimon]] 的存储引擎核心是 **[[LSM-Tree]]（Log-Structured Merge-Tree）**。这个数据结构在数据库领域已有 40 年历史，是 [[LevelDB]]、[[RocksDB]]、[[Apache HBase]]、[[Apache Cassandra]] 共同的存储基础。然而，Paimon 是第一个将 LSM-Tree 系统性地应用于数据湖（对象存储 + 大规模分析查询）场景的开源项目。本文深入剖析 Paimon 的 LSM-Tree 实现：MemTable 如何在内存中积累高频写入、SST 文件如何在 S3/HDFS 上分层组织、Compaction 的 Full Compaction 与 Universal Compaction 两种策略如何在写放大与读放大之间取舍，以及这套机制相较于 Hudi CoW/MoR 和 Iceberg 的文件模型在高频流式写入场景下的根本优势。
+Apache Paimon 的存储引擎核心是 **LSM-Tree（Log-Structured Merge-Tree）**。这个数据结构在数据库领域已有 40 年历史，是 LevelDB、RocksDB、Apache HBase、Apache Cassandra 共同的存储基础。然而，Paimon 是第一个将 LSM-Tree 系统性地应用于数据湖（对象存储 + 大规模分析查询）场景的开源项目。本文深入剖析 Paimon 的 LSM-Tree 实现：MemTable 如何在内存中积累高频写入、SST 文件如何在 S3/HDFS 上分层组织、Compaction 的 Full Compaction 与 Universal Compaction 两种策略如何在写放大与读放大之间取舍，以及这套机制相较于 Hudi CoW/MoR 和 Iceberg 的文件模型在高频流式写入场景下的根本优势。
 
 ---
 
@@ -15,7 +15,7 @@ aliases: ["Paimon LSM-Tree", "LSM-Tree存储引擎", "MemTable", "SST文件", "P
 
 ### 1.1 不可变文件（Immutable File）模型
 
-[[Apache Hudi]] 和 [[Apache Iceberg]] 都建立在"不可变文件"模型之上——一个 Parquet 文件一旦写出，其内容永远不变。对该文件中记录的更新或删除，有两种方式处理：
+Apache Hudi 和 Apache Iceberg 都建立在"不可变文件"模型之上——一个 Parquet 文件一旦写出，其内容永远不变。对该文件中记录的更新或删除，有两种方式处理：
 
 **方式一：Copy-on-Write（写时复制）**
 
@@ -78,7 +78,7 @@ LSM-Tree 的解耦：
 
 **MemTable 的数据结构**：
 
-Paimon 的 MemTable 使用 **SortBuffer**（外部排序缓冲区）实现，因为 Flink 环境中内存是严格管理的（[[Flink MemoryManager]]），Paimon 不能无限使用 JVM 堆：
+Paimon 的 MemTable 使用 **SortBuffer**（外部排序缓冲区）实现，因为 Flink 环境中内存是严格管理的（Flink MemoryManager），Paimon 不能无限使用 JVM 堆：
 
 ```java
 // Paimon MemTable 的核心逻辑（简化）
@@ -231,7 +231,7 @@ Full Compaction 的特点：
 
 ### 3.3 Universal Compaction（通用合并）
 
-**Universal Compaction** 是 Paimon 借鉴自 [[RocksDB]] 的 Universal Compaction 策略，适合流式写入场景：
+**Universal Compaction** 是 Paimon 借鉴自 RocksDB 的 Universal Compaction 策略，适合流式写入场景：
 
 ```
 Universal Compaction 核心逻辑：
@@ -291,7 +291,7 @@ WITH (
 
 ### 4.1 S3 不支持随机写的问题
 
-[[LSM-Tree]] 在传统数据库（[[RocksDB]]、[[LevelDB]]）中运行在本地磁盘上，支持随机读写（即使顺序写为主，也有 seek 操作）。但 Paimon 运行在 S3/OSS 等对象存储上，这些系统有根本性的限制：
+LSM-Tree 在传统数据库（RocksDB、LevelDB）中运行在本地磁盘上，支持随机读写（即使顺序写为主，也有 seek 操作）。但 Paimon 运行在 S3/OSS 等对象存储上，这些系统有根本性的限制：
 
 ```
 对象存储的约束：

@@ -41,7 +41,7 @@ Sort Shuffle 的工作模式是：Map Task 将 Shuffle 数据写到 Executor 所
 
 ### 1.3 云原生与容器化环境的挑战
 
-在 [[Kubernetes]] 上运行 Spark（Spark on K8s）已经成为大量互联网公司的标准部署方式。K8s 的 Pod 是临时性的、无状态的——Pod 可以在任意节点调度，随时被驱逐重新调度到另一个节点。
+在 Kubernetes 上运行 Spark（Spark on K8s）已经成为大量互联网公司的标准部署方式。K8s 的 Pod 是临时性的、无状态的——Pod 可以在任意节点调度，随时被驱逐重新调度到另一个节点。
 
 这与传统 Shuffle 的"本地磁盘"假设直接冲突：
 
@@ -264,7 +264,7 @@ RSS：Reduce Task 只需从少数几个 Worker 节点顺序读取（Worker 侧�
 
 **维度三：本地磁盘压力解除**
 
-Executor 节点的本地磁盘不再需要存储 Shuffle 数据，完全释放给 OS [[Page Cache]] 和 Spill 文件使用。磁盘 I/O 竞争消失，Task 的计算性能（非 Shuffle 部分）也得到提升。
+Executor 节点的本地磁盘不再需要存储 Shuffle 数据，完全释放给 OS Page Cache 和 Spill 文件使用。磁盘 I/O 竞争消失，Task 的计算性能（非 Shuffle 部分）也得到提升。
 
 **维度四：避免 Shuffle Fetch 触发 Stage 重算**
 

@@ -24,7 +24,7 @@ Redis 的 String 并不是"字符串"——它是一个**二进制安全的字�
 | 编码 | 触发条件 | 内存布局 | 适用场景 |
 | :--- | :--- | :--- | :--- |
 | **int** | 值是 64 位有符号整数 | 直接在 RedisObject 的 ptr 字段存储整数值 | 计数器、ID |
-| **embstr** | 字符串长度 ≤ 44 字节 | RedisObject 和 [[02 SDS 与 Redis 对象系统\|SDS]] 在一块连续内存中分配 | 短字符串 |
+| **embstr** | 字符串长度 ≤ 44 字节 | RedisObject 和 [[02 SDS 与 Redis 对象系统]] 在一块连续内存中分配 | 短字符串 |
 | **raw** | 字符串长度 > 44 字节 | RedisObject 和 SDS 分别分配内存 | 长字符串 |
 
 这种编码选择对性能有直接影响——int 编码的 INCR 操作是纯内存整数运算，不需要任何字符串解析；embstr 编码的短字符串只需一次内存分配（对 CPU 缓存友好）；raw 编码需要两次内存分配和一次指针跳转。
@@ -331,7 +331,7 @@ ZSet（Sorted Set）是 Redis 最精妙的数据类型——每个元素关联�
 | 编码 | 触发条件 | 数据结构 |
 | :--- | :--- | :--- |
 | **ziplist/listpack** | 元素数 ≤ 128 且所有元素值长度 ≤ 64 字节 | 紧凑连续内存 |
-| **skiplist + dict** | 超过阈值 | [[04 跳跃表 压缩列表与 Listpack\|跳跃表]]（按 score 排序）+ 字典（按 member 查找 score）|
+| **skiplist + dict** | 超过阈值 | [[04 跳跃表 压缩列表与 Listpack]]（按 score 排序）+ 字典（按 member 查找 score）|
 
 skiplist + dict 的双索引设计使得 ZSet 同时支持：
 - **按 score 范围查询**（ZRANGEBYSCORE）：O(log N + M)，走跳跃表

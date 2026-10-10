@@ -74,7 +74,7 @@ Lua 从设计之初就是作为嵌入其他应用的脚本语言（与 C 互操�
 
 **理由二：LuaJIT 的极致性能**
 
-[[LuaJIT]] 是 Lua 5.1 的 JIT（Just-In-Time）编译实现，由 Mike Pall 开发。LuaJIT 的基准测试性能在某些场景下接近 C——远超其他脚本语言的解释器：
+LuaJIT 是 Lua 5.1 的 JIT（Just-In-Time）编译实现，由 Mike Pall 开发。LuaJIT 的基准测试性能在某些场景下接近 C——远超其他脚本语言的解释器：
 
 ```
 典型性能对比（相对 C = 1.0）：
@@ -132,7 +132,7 @@ Tracing JIT 的优势在于：它能跨函数边界追踪热路径，生成的�
 
 **第三级：FFI（Foreign Function Interface）**
 
-LuaJIT 的 [[FFI]] 库允许 Lua 代码**直接调用 C 函数和结构体**，无需编写 C 扩展模块，且 FFI 调用可以被 JIT 编译器内联：
+LuaJIT 的 FFI 库允许 Lua 代码**直接调用 C 函数和结构体**，无需编写 C 扩展模块，且 FFI 调用可以被 JIT 编译器内联：
 
 ```lua
 -- 通过 FFI 直接调用 C 标准库

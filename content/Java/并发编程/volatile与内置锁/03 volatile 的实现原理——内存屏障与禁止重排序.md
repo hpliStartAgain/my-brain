@@ -82,7 +82,7 @@ Field n:I
 
 ### 2.2 JIT 编译器的处理
 
-HotSpot JIT 编译器在遇到 `volatile` 字段的读写时，会根据 [[线程安全问题/02 Java 内存模型（JMM）——happens-before 与可见性保证]] 中定义的 JMM 规范，在生成的本地代码中插入内存屏障。
+HotSpot JIT 编译器在遇到 `volatile` 字段的读写时，会根据 [[02 Java 内存模型（JMM）——happens-before 与可见性保证]] 中定义的 JMM 规范，在生成的本地代码中插入内存屏障。
 
 JSR-133 Cookbook（Doug Lea 编写的 JMM 实现指南）规定了编译器必须遵守的屏障插入规则：
 
@@ -201,7 +201,7 @@ volatile 读的保证是"一定读到最新值"。这个保证通过读之后的
 
 ### 5.1 x86 的 TSO 模型与 volatile 的实际开销
 
-如 [[线程安全问题/02 Java 内存模型（JMM）——happens-before 与可见性保证]] 中分析，x86 使用 TSO（Total Store Order）内存模型，天然禁止了除 Store-Load 以外的所有重排序。
+如 [[02 Java 内存模型（JMM）——happens-before 与可见性保证]] 中分析，x86 使用 TSO（Total Store Order）内存模型，天然禁止了除 Store-Load 以外的所有重排序。
 
 这意味着：
 
@@ -442,7 +442,7 @@ LongAdder（分段设计）：   ~8 ns/op（减少了 5-6 倍的缓存争用）
 
 适用 `volatile` 的场景：**一写多读的状态标志**（最经典）；**DCL 单例模式中禁止初始化重排序**；**独立的简单赋值且不需要原子性保证**。
 
-下一篇 [[volatile与内置锁/04 synchronized 的锁升级——偏向锁、轻量级锁与重量级锁]] 将深入分析 `synchronized` 的另一种同步机制——它通过互斥锁提供了 `volatile` 无法提供的原子性保证，但同时引入了比 `volatile` 更复杂的性能优化（锁升级机制）。
+下一篇 [[04 synchronized 的锁升级——偏向锁、轻量级锁与重量级锁]] 将深入分析 `synchronized` 的另一种同步机制——它通过互斥锁提供了 `volatile` 无法提供的原子性保证，但同时引入了比 `volatile` 更复杂的性能优化（锁升级机制）。
 
 ---
 

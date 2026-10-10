@@ -7,7 +7,7 @@ aliases: ["Hudi增量查询", "Incremental Pull", "Hudi CDC消费", "增量ETL�
 
 **摘要：**
 
-[[Apache Hudi]] 的 **Incremental Query（增量查询）** 是它区别于所有竞争对手的核心能力，也是"Hudi 是增量处理引擎"这一定位的最直接体现。它让下游 Spark 任务可以精确查询"自上次处理以来，哪些记录发生了变化"——而不是每次都扫描整张表。这一能力将全量 ETL 的算力消耗从"扫描全量 10TB 数据"缩减为"只处理过去 1 小时变化的 500MB 数据"，在大规模数据管道中通常带来 10-100 倍的计算量减少。本文深入剖析增量查询的实现机制、Checkpoint 状态管理、与 Spark Structured Streaming 的集成，以及在实际 CDC 增量 ETL 管道中的完整工程实践。
+Apache Hudi 的 **Incremental Query（增量查询）** 是它区别于所有竞争对手的核心能力，也是"Hudi 是增量处理引擎"这一定位的最直接体现。它让下游 Spark 任务可以精确查询"自上次处理以来，哪些记录发生了变化"——而不是每次都扫描整张表。这一能力将全量 ETL 的算力消耗从"扫描全量 10TB 数据"缩减为"只处理过去 1 小时变化的 500MB 数据"，在大规模数据管道中通常带来 10-100 倍的计算量减少。本文深入剖析增量查询的实现机制、Checkpoint 状态管理、与 Spark Structured Streaming 的集成，以及在实际 CDC 增量 ETL 管道中的完整工程实践。
 
 ---
 
@@ -40,7 +40,7 @@ aliases: ["Hudi增量查询", "Incremental Pull", "Hudi CDC消费", "增量ETL�
 
 ### 1.2 为什么 Delta Lake 的 CDF 不是同等能力
 
-[[Delta Lake]] 在 1.x 版本后也引入了 **Change Data Feed（CDF）**，表面上提供类似的增量消费能力。但两者有几个重要差异：
+Delta Lake 在 1.x 版本后也引入了 **Change Data Feed（CDF）**，表面上提供类似的增量消费能力。但两者有几个重要差异：
 
 **差异 1：设计时间点不同**
 
@@ -423,7 +423,7 @@ tableEnv.executeSql(
 );
 ```
 
-这种方式让 Hudi 充当了类似 [[Apache Kafka]] 的角色：作为一个**持久化的、可回溯的变更日志存储**，Flink 可以从任意历史时间点开始消费，且不会因为 Kafka 的 retention 限制而丢失历史数据。
+这种方式让 Hudi 充当了类似 Apache Kafka 的角色：作为一个**持久化的、可回溯的变更日志存储**，Flink 可以从任意历史时间点开始消费，且不会因为 Kafka 的 retention 限制而丢失历史数据。
 
 ---
 

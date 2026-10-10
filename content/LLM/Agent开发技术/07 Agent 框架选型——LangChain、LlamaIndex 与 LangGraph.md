@@ -516,7 +516,7 @@ graph TD
 | 多 Agent 对话迭代协作 | **AutoGen** |
 | 简单 Agent（< 3 工具）| **原生 SDK（无框架）** |
 
-下一篇 [[08 多 Agent 系统与 A2A 协议]] 将深入探讨当单个 Agent 能力不够时，如何设计多 Agent 协作系统，以及 Google 提出的 A2A 协议如何为 Agent 间通信提供标准化方案。
+下一篇 08 多 Agent 系统与 A2A 协议 将深入探讨当单个 Agent 能力不够时，如何设计多 Agent 协作系统，以及 Google 提出的 A2A 协议如何为 Agent 间通信提供标准化方案。
 
 ---
 

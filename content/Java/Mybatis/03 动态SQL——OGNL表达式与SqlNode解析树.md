@@ -88,7 +88,7 @@ XML 中的动态标签（`<if>`、`<foreach>` 等）形成了一棵嵌套结构�
 
 ### 2.1 OGNL 是什么
 
-[[OGNL]]（Object-Graph Navigation Language，对象图导航语言）是一个用于 Java 对象图的表达式语言，最早在 WebWork（Struts 2 的前身）中广泛使用。它的核心能力是：
+OGNL（Object-Graph Navigation Language，对象图导航语言）是一个用于 Java 对象图的表达式语言，最早在 WebWork（Struts 2 的前身）中广泛使用。它的核心能力是：
 
 1. **属性访问**：通过 `user.address.city` 这样的点路径，访问嵌套对象的属性；
 2. **方法调用**：`name.toUpperCase()`、`list.size()`；
@@ -188,7 +188,7 @@ public class DynamicContext {
 
 ### 3.1 组合模式的应用
 
-Mybatis 的动态 SQL 标签在 XML 中形成嵌套结构——`<select>` 包含 `<where>`，`<where>` 包含多个 `<if>`，`<if>` 内可能还有 `<choose>` 等。这种递归嵌套结构天然适合用[[组合模式]]表达。
+Mybatis 的动态 SQL 标签在 XML 中形成嵌套结构——`<select>` 包含 `<where>`，`<where>` 包含多个 `<if>`，`<if>` 内可能还有 `<choose>` 等。这种递归嵌套结构天然适合用组合模式表达。
 
 Mybatis 将 XML 标签树编译为 `SqlNode` 接口的实现体系：
 

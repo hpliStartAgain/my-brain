@@ -230,7 +230,7 @@ Java 工程师不直接调用 CPU 内存屏障指令，而是通过 JMM 定义�
 - **`synchronized` 进入**：相当于 `LoadLoad` + `LoadStore`
 - **`synchronized` 退出**：相当于 `StoreStore` + `StoreLoad`
 
-这些对应关系将在 [[volatile与内置锁/03 volatile 的实现原理——内存屏障与禁止重排序]] 和 [[volatile与内置锁/04 synchronized 的锁升级——偏向锁、轻量级锁与重量级锁]] 中详细展开。
+这些对应关系将在 [[03 volatile 的实现原理——内存屏障与禁止重排序]] 和 [[04 synchronized 的锁升级——偏向锁、轻量级锁与重量级锁]] 中详细展开。
 
 ---
 
@@ -245,7 +245,7 @@ Java 工程师不直接调用 CPU 内存屏障指令，而是通过 JMM 定义�
 | 可见性层 | 异步化 → 写-读顺序被打破 | 内存屏障（排空缓冲区） |
 | Java 抽象层 | 屏障指令依赖 CPU 架构 | JMM：`volatile`、`synchronized`、`happens-before` |
 
-理解了这条链路，[[线程安全问题/02 Java 内存模型（JMM）——happens-before 与可见性保证]] 就不再是一堆抽象规则的死记硬背——JMM 的每一条 happens-before 规则，背后都对应着具体的内存屏障插入策略，而每一种屏障的存在，都是为了解决 Store Buffer 和 Invalidate Queue 引入的特定可见性问题。
+理解了这条链路，[[02 Java 内存模型（JMM）——happens-before 与可见性保证]] 就不再是一堆抽象规则的死记硬背——JMM 的每一条 happens-before 规则，背后都对应着具体的内存屏障插入策略，而每一种屏障的存在，都是为了解决 Store Buffer 和 Invalidate Queue 引入的特定可见性问题。
 
 ---
 

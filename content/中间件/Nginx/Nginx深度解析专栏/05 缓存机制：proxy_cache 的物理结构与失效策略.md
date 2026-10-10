@@ -124,7 +124,7 @@ scheme=https, method=GET, host=example.com, uri=/api/users?page=1
 
 **Step 2：计算 MD5 哈希**
 
-对 Key 字符串计算 [[MD5]] 哈希，得到一个 32 字符的十六进制字符串：
+对 Key 字符串计算 MD5 哈希，得到一个 32 字符的十六进制字符串：
 ```
 MD5("httpsGETexample.com/api/users?page=1") = "ab3cd5ef78901234..."
 ```

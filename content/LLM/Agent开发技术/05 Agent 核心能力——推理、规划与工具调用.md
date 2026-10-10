@@ -133,7 +133,7 @@ Final Answer: [答案]
 
 ### 3.1 Function Calling 如何工作
 
-[[Function Calling]]（工具调用）是现代 LLM API 的标准特性，是 ReAct 中 Action 环节的技术实现。它让 LLM 以结构化的 JSON 格式表达工具调用意图，而非在自由文本中夹杂工具调用（后者需要正则解析，不可靠）。
+Function Calling（工具调用）是现代 LLM API 的标准特性，是 ReAct 中 Action 环节的技术实现。它让 LLM 以结构化的 JSON 格式表达工具调用意图，而非在自由文本中夹杂工具调用（后者需要正则解析，不可靠）。
 
 在 API 层面，工具调用通过以下步骤工作：
 

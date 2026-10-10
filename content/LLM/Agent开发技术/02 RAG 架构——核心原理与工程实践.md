@@ -247,7 +247,7 @@ Embedding 模型将一段文本映射为一个固定维度的浮点数向量（�
 
 ### 6.2 HNSW 索引——向量数据库的主流选择
 
-**HNSW（Hierarchical Navigable Small World）** 是当前最主流的 ANN 索引算法，被 [[Chroma]]、[[Milvus]]、[[Qdrant]]、[[Weaviate]]、[[pgvector]] 等几乎所有向量数据库采用。
+**HNSW（Hierarchical Navigable Small World）** 是当前最主流的 ANN 索引算法，被 Chroma、Milvus、Qdrant、Weaviate、pgvector 等几乎所有向量数据库采用。
 
 HNSW 的核心思想借鉴了**六度分隔理论**（Small World Graph）和**跳表**（Skip List）：
 
@@ -340,7 +340,7 @@ $$\text{RRF}(d) = \sum_{r \in \text{rankers}} \frac{1}{k + r(d)}$$
 
 其中 $r(d)$ 是文档 $d$ 在排序 $r$ 中的名次，$k$ 通常取 60。直觉上，在多个排序中都排名靠前的文档会获得更高的综合分数。
 
-实践中，混合搜索在大多数场景下优于纯向量搜索或纯关键词搜索，是生产级 RAG 系统的首选检索策略。[[Weaviate]]、[[Qdrant]]、[[Elasticsearch]] 等都内置了混合搜索支持。
+实践中，混合搜索在大多数场景下优于纯向量搜索或纯关键词搜索，是生产级 RAG 系统的首选检索策略。Weaviate、Qdrant、Elasticsearch 等都内置了混合搜索支持。
 
 ### 7.4 元数据过滤
 

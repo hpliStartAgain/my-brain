@@ -7,7 +7,7 @@ aliases: ["四大数据湖对比", "Paimon vs Iceberg", "Paimon vs Hudi", "流�
 
 **摘要：**
 
-本篇是 [[Apache Paimon]] 专栏的收尾，也是三个数据湖专栏（[[Apache Hudi]]、[[Apache Iceberg]]、Apache Paimon）的最终汇总。经过对 Paimon 的 LSM-Tree 存储引擎、双表模型、Changelog Producer 和 Lookup Join 的深度解析，本文将从**流存储能力**这个 Paimon 的核心差异化维度出发，对四大方案（包含 [[Delta Lake]]）做全面的架构级对比。重点不在于"谁更好"，而在于**理解每个方案在什么约束条件下是最优解**——特别是在实时数仓、流批一体这个 Paimon 最强的赛道上，四者之间的差距到底有多大，体现在哪些具体的工程细节上。
+本篇是 Apache Paimon 专栏的收尾，也是三个数据湖专栏（Apache Hudi、Apache Iceberg、Apache Paimon）的最终汇总。经过对 Paimon 的 LSM-Tree 存储引擎、双表模型、Changelog Producer 和 Lookup Join 的深度解析，本文将从**流存储能力**这个 Paimon 的核心差异化维度出发，对四大方案（包含 Delta Lake）做全面的架构级对比。重点不在于"谁更好"，而在于**理解每个方案在什么约束条件下是最优解**——特别是在实时数仓、流批一体这个 Paimon 最强的赛道上，四者之间的差距到底有多大，体现在哪些具体的工程细节上。
 
 ---
 

@@ -557,7 +557,7 @@ AQS 是 JDK 并发包的核心基础设施，它的设计展示了"抽象的力�
 
 **两个等待队列**：AQS 同步队列（竞争锁失败的线程）和 Condition 等待队列（调用了 `await()` 的线程）。`signal()` 将节点从后者转移到前者，`await()` 在前者竞争锁成功后才真正返回。
 
-接下来的 [[JUC工具/07 ReentrantLock 深度剖析——公平锁、非公平锁与可中断]] 将基于本文的 AQS 知识，具体分析 `ReentrantLock` 的所有功能，以及它与 `synchronized` 的对比选型。
+接下来的 [[07 ReentrantLock 深度剖析——公平锁、非公平锁与可中断]] 将基于本文的 AQS 知识，具体分析 `ReentrantLock` 的所有功能，以及它与 `synchronized` 的对比选型。
 
 ---
 

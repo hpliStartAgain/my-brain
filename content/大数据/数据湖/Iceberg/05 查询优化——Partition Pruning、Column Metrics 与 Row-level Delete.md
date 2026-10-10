@@ -7,7 +7,7 @@ aliases: ["Iceberg查询优化", "分区剪枝", "Data Skipping", "行级删除"
 
 **摘要：**
 
-[[Apache Iceberg]] 的查询性能优化是一个从粗到细的**多级过滤体系**：从 Catalog 的元数据解析（毫秒级），到 ManifestList 的分区摘要过滤（秒级），到 Manifest 的列级统计过滤（文件级 Data Skipping），再到 Parquet 内部的 Row Group 级过滤——每一层都在尽量减少下一层需要处理的数据量。本文深入解析这套多级过滤体系的完整执行路径，重点剖析列统计信息（lower_bounds/upper_bounds）如何驱动文件级 Data Skipping，以及 Iceberg 1.x 引入的行级删除（Row-level Delete）的两种实现方式（Position Delete 和 Equality Delete）在性能代价和适用场景上的根本差异。
+Apache Iceberg 的查询性能优化是一个从粗到细的**多级过滤体系**：从 Catalog 的元数据解析（毫秒级），到 ManifestList 的分区摘要过滤（秒级），到 Manifest 的列级统计过滤（文件级 Data Skipping），再到 Parquet 内部的 Row Group 级过滤——每一层都在尽量减少下一层需要处理的数据量。本文深入解析这套多级过滤体系的完整执行路径，重点剖析列统计信息（lower_bounds/upper_bounds）如何驱动文件级 Data Skipping，以及 Iceberg 1.x 引入的行级删除（Row-level Delete）的两种实现方式（Position Delete 和 Equality Delete）在性能代价和适用场景上的根本差异。
 
 ---
 
@@ -375,7 +375,7 @@ CALL system.rewrite_manifests('analytics.events');
 
 ### 5.2 Sort Order（排序规范）：文件内数据布局优化
 
-类似 [[Delta Lake]] 的 Z-Order，Iceberg 支持通过 `sort_order` 配置文件内的数据排列顺序，使高频查询的过滤列在 Parquet Row Group 内聚合，提升 Row Group 级别的 Data Skipping 效果：
+类似 Delta Lake 的 Z-Order，Iceberg 支持通过 `sort_order` 配置文件内的数据排列顺序，使高频查询的过滤列在 Parquet Row Group 内聚合，提升 Row Group 级别的 Data Skipping 效果：
 
 ```sql
 -- 配置写入时的全局排序（按 user_id 聚合）

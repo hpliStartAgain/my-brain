@@ -382,7 +382,7 @@ class StateLeakDetector:
 
 ### 4.1 通过 Spark Metrics System 暴露指标
 
-Spark 内置了基于 [[Dropwizard Metrics]] 的指标框架，通过配置可以将流查询指标以 Prometheus 格式暴露：
+Spark 内置了基于 Dropwizard Metrics 的指标框架，通过配置可以将流查询指标以 Prometheus 格式暴露：
 
 ```properties
 # spark-defaults.conf 或启动参数

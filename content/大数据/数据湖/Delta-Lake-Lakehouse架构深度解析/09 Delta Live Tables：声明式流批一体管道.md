@@ -102,7 +102,7 @@ def monthly_revenue():
 
 **DLT 如何实现 MV 的增量刷新**：
 
-DLT 利用 [[Change Data Feed]] 来实现高效的增量刷新：
+DLT 利用 Change Data Feed 来实现高效的增量刷新：
 1. `cleaned_orders` 的 CDF 提供了自上次刷新以来的行级别变更（insert/update/delete）
 2. DLT 对增量变更重新执行聚合逻辑（增量聚合，而不是全量重算）
 3. 将增量聚合结果 MERGE 到 `monthly_revenue` 中
@@ -407,8 +407,8 @@ pipeline_config = {
 
 > [!info] 核心概念
 > DLT 目前（2025 年）是 Databricks 平台的特有功能，不在开源 Delta Lake 中提供。开源替代方案：
-> - **[[Apache Airflow]]** + 手动编写增量逻辑（最常见）
-> - **[[dbt]]（Data Build Tool）**：专注于 SQL 转换的声明式框架，与 Delta Lake 集成
+> - **Apache Airflow** + 手动编写增量逻辑（最常见）
+> - **dbt（Data Build Tool）**：专注于 SQL 转换的声明式框架，与 Delta Lake 集成
 > - **Spark Structured Streaming** + **Delta CDF**：流批一体的开源实现（本专栏第 08 篇）
 > 
 > 本文介绍 DLT 的目的是理解声明式管道的设计思想，其核心概念（物化视图、Expectations、增量刷新）对于使用开源工具实现类似架构有重要的参考价值。

@@ -230,7 +230,7 @@ xfs_db -r /dev/sda1 -c "inode 128" -c "print core.nextents"
 
 ### 4.1 延迟分配（Delayed Allocation）
 
-XFS 的延迟分配（Delayed Allocation，delalloc）与 ext4 的同名特性思路相同：**`write()` 写入 [[Page Cache]] 时不立即分配磁盘块，等到脏页真正要写回磁盘时才分配**。
+XFS 的延迟分配（Delayed Allocation，delalloc）与 ext4 的同名特性思路相同：**`write()` 写入 Page Cache 时不立即分配磁盘块，等到脏页真正要写回磁盘时才分配**。
 
 ```
 传统分配（无延迟）：

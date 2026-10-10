@@ -9,7 +9,7 @@ aliases: [隔离边界光谱, 隔离强度对比, 沙箱技术路线, gVisor vs 
 
 **摘要：**
 
-[[隔离原语/02 Linux 隔离原语——namespace、cgroups、seccomp 与 capabilities 的安全地基|第 02 篇]] 论证了隔离原语是"必要但不充分"的——四重隔离原语共享宿主内核，一个内核漏洞即可全线突破。本文回答随之而来的核心问题：**当四重原语不够时，信任边界应该画在哪里？** 答案不是一个点，而是一条光谱——从共享内核（runc）到系统调用过滤的极致（seccomp 加严 / bubblewrap / Landlock），到用户态内核（gVisor 的 Sentry 拦截），再到硬件虚拟化（Kata Containers 的轻量 VM 与 Firecracker 的 MicroVM）。本文给出四档路线的完整对照：每种方案的信任边界位置、工作机制、兼容性代价与性能特征，并以作者在真实物理机上的同机基准（runc/gVisor/Kata：启动 p50 2.5s/3.0s/4.0s，空闲 PSS 28.8/127.2/392.7 MiB）量化"性能换隔离"的代价；同时梳理 2026 年主流产品的隔离选择（Claude Code 用 bubblewrap、Codex 用 Landlock、Claude Web 与 GKE 用 gVisor、E2B 与 Lambda 用 Firecracker），说明"最强隔离"不是正确答案、"足够隔离"才是。核心认知：**隔离选型的本质是在威胁等级、性能预算、兼容性约束三者之间取平衡点，而判断平衡点的前提是理解每档方案的边界位置与失效模式**。
+[[02 Linux 隔离原语——namespace、cgroups、seccomp 与 capabilities 的安全地基]] 论证了隔离原语是"必要但不充分"的——四重隔离原语共享宿主内核，一个内核漏洞即可全线突破。本文回答随之而来的核心问题：**当四重原语不够时，信任边界应该画在哪里？** 答案不是一个点，而是一条光谱——从共享内核（runc）到系统调用过滤的极致（seccomp 加严 / bubblewrap / Landlock），到用户态内核（gVisor 的 Sentry 拦截），再到硬件虚拟化（Kata Containers 的轻量 VM 与 Firecracker 的 MicroVM）。本文给出四档路线的完整对照：每种方案的信任边界位置、工作机制、兼容性代价与性能特征，并以作者在真实物理机上的同机基准（runc/gVisor/Kata：启动 p50 2.5s/3.0s/4.0s，空闲 PSS 28.8/127.2/392.7 MiB）量化"性能换隔离"的代价；同时梳理 2026 年主流产品的隔离选择（Claude Code 用 bubblewrap、Codex 用 Landlock、Claude Web 与 GKE 用 gVisor、E2B 与 Lambda 用 Firecracker），说明"最强隔离"不是正确答案、"足够隔离"才是。核心认知：**隔离选型的本质是在威胁等级、性能预算、兼容性约束三者之间取平衡点，而判断平衡点的前提是理解每档方案的边界位置与失效模式**。
 
 ---
 
@@ -109,7 +109,7 @@ runc 在所有维度都是最优的——这正是它成为默认的原因：**�
 
 **适用**：可信代码（自有服务、CI 构建）、威胁等级低（内部工具）、需要极致密度与性能的场景。
 
-**反例（不该用 runc 的场景）**：多租户公网代码执行、执行第三方/模型生成的不可信代码且无其他纵深防御、安全合规要求"工作负载不得接触宿主内核"的场景。素材中测试集群的决策是"runc Profile 先行"——不是因为 runc 足够安全，而是因为"先跑通功能、后加隔离"的工程顺序：**功能验证用 runc（最便宜），安全上线换 gVisor/Kata（最可控）**。这也是 OpenSandbox 支持"同一平台切换运行时"的根本价值——[[平台与协议/07 OpenSandbox 架构深度解析——协议优先与六责任面|平台协议层]] 保证了运行时替换不影响上层 API。
+**反例（不该用 runc 的场景）**：多租户公网代码执行、执行第三方/模型生成的不可信代码且无其他纵深防御、安全合规要求"工作负载不得接触宿主内核"的场景。素材中测试集群的决策是"runc Profile 先行"——不是因为 runc 足够安全，而是因为"先跑通功能、后加隔离"的工程顺序：**功能验证用 runc（最便宜），安全上线换 gVisor/Kata（最可控）**。这也是 OpenSandbox 支持"同一平台切换运行时"的根本价值——[[07 OpenSandbox 架构深度解析——协议优先与六责任面]] 保证了运行时替换不影响上层 API。
 
 ### 2.4 runc 在 Agent 沙箱平台中的真实角色
 
@@ -254,7 +254,7 @@ gVisor 的兼容性以系统调用覆盖率为度量：amd64 平台 351 个系�
 
 **netstack 的实质**：gVisor 没有使用宿主机的 Linux 网络栈——Sentry 内部实现了一个完整的 Go 网络栈（TCP/IP、路由、ARP、socket 层）。当容器进程调用 `socket()`/`connect()`/`send()`/`recv()` 时，这些调用由 Sentry 的网络栈处理，而非宿主机内核。性能特征：TCP 吞吐量低于内核栈（缺少高级拥塞控制算法、TFO/TCP Fast Open、零拷贝接收等优化）、连接建立有用户空间处理开销、短连接场景（HTTP/1.0 微服务调用）受影响更大。**对 Agent 沙箱的实际影响**：Agent 的网络使用模式通常是"少量 HTTP 请求到外部 API"——如调用 LLM API、查询数据库、访问 Web 页面。这种"低频、短连接"模式受 netstack 影响较小——10-30% 的网络延迟增加对"等待 LLM 生成响应需要数秒"的场景几乎无感。但如果 Agent 需要做大量网络传输（如下载大模型文件、流式处理大量数据），netstack 可能成为瓶颈。
 
-**netstack 的优化方向与缓解策略**：gVisor 团队持续优化网络栈——添加更多 TCP 选项支持、改进拥塞控制、优化数据包处理路径。但进度受限于"用 Go 重新实现一个完整网络栈"的工程量——Linux 内核网络栈经过数十年优化，Go 网络栈需要追赶这个差距。对 Agent 沙箱部署者，一个实用的缓解策略是：**对网络密集型 Agent 任务，考虑 gVisor 的 host network 模式**（如果安全策略允许）——让网络流量绕过 Sentry 的网络栈直接走宿主机网络栈，牺牲一些网络隔离换取网络性能。但需要评估安全影响——host network 模式下容器与宿主机共享网络 namespace，**减弱了网络隔离强度，且与"独立 network namespace 是 Egress 控制前提"的原则冲突**（[[隔离原语/02 Linux 隔离原语——namespace、cgroups、seccomp 与 capabilities 的安全地基|第 02 篇]]），因此在多租户沙箱平台上通常不可接受——网络性能与网络隔离在这里是不可兼得的二选一。
+**netstack 的优化方向与缓解策略**：gVisor 团队持续优化网络栈——添加更多 TCP 选项支持、改进拥塞控制、优化数据包处理路径。但进度受限于"用 Go 重新实现一个完整网络栈"的工程量——Linux 内核网络栈经过数十年优化，Go 网络栈需要追赶这个差距。对 Agent 沙箱部署者，一个实用的缓解策略是：**对网络密集型 Agent 任务，考虑 gVisor 的 host network 模式**（如果安全策略允许）——让网络流量绕过 Sentry 的网络栈直接走宿主机网络栈，牺牲一些网络隔离换取网络性能。但需要评估安全影响——host network 模式下容器与宿主机共享网络 namespace，**减弱了网络隔离强度，且与"独立 network namespace 是 Egress 控制前提"的原则冲突**（[[02 Linux 隔离原语——namespace、cgroups、seccomp 与 capabilities 的安全地基]]），因此在多租户沙箱平台上通常不可接受——网络性能与网络隔离在这里是不可兼得的二选一。
 
 ### 4.5 性能模型：结构性成本与实现成本
 
@@ -311,7 +311,7 @@ Kata Containers（2017 年由 Clear Containers 与 runV 合并而来，CNCF 项�
 
 **设备与 Guest**：设备通过 virtio 暴露给 Guest（virtio-net/virtio-blk/virtio-serial/vsock 等），Guest 内核是精简的 Kata 内核镜像（只包含容器工作负载需要的驱动与子系统）。vsock 是 Kata 内部通信的关键通道——host 侧的 shim 与 Guest 内的 Kata agent 通过 vsock 通信，不依赖网络栈。热插拔能力（内存/CPU/设备）让 Kata VM 可以按需扩容——但素材实测显示热插拔在 Agent 沙箱场景使用率很低，因为沙箱生命周期短（分钟级），"创建即全量"更简单。
 
-**五 hypervisor 策略**：Kata 支持多种底层 hypervisor（QEMU、Cloud Hypervisor、Firecracker、Dragonball、StratoVirt）——这是 Kata 与"单 hypervisor 方案"的最大差异：**Kata 是"VM 容器"的标准层，hypervisor 是可插拔的**。素材调研记录了关键事实：**GPU、TDX、SEV-SNP 等高级特性目前仅 QEMU hypervisor 支持**——如果 Agent 沙箱需要 GPU 直通或机密计算，Kata 的选型实际上被锁定在 QEMU 上。Dragonball（蚂蚁开源的 Rust VMM）与 containerd-shim 同进程运行，主打并发启动密度——这是 CubeSandbox 的底层（[[隔离原语/05 VMM 解剖——Firecracker、Cloud Hypervisor 与 Kata 的虚拟机监视器家族|第 05 篇]] 展开）。
+**五 hypervisor 策略**：Kata 支持多种底层 hypervisor（QEMU、Cloud Hypervisor、Firecracker、Dragonball、StratoVirt）——这是 Kata 与"单 hypervisor 方案"的最大差异：**Kata 是"VM 容器"的标准层，hypervisor 是可插拔的**。素材调研记录了关键事实：**GPU、TDX、SEV-SNP 等高级特性目前仅 QEMU hypervisor 支持**——如果 Agent 沙箱需要 GPU 直通或机密计算，Kata 的选型实际上被锁定在 QEMU 上。Dragonball（蚂蚁开源的 Rust VMM）与 containerd-shim 同进程运行，主打并发启动密度——这是 CubeSandbox 的底层（[[05 VMM 解剖——Firecracker、Cloud Hypervisor 与 Kata 的虚拟机监视器家族]] 展开）。
 
 **Kata 4.0 单二进制架构**：Kata 4.0 起把 runtime 合并为单二进制，简化部署与升级。素材 PoC 使用 Kata 3.31.0（`kata-qemu-runtime-rs` handler），部署方式为 Helm chart 或 containerd 插件注册——**注意：Kata 的安装不只是装一个二进制，还需要在 containerd 的 config.toml 注册 runtime handler、创建 RuntimeClass、配置节点标签与污点**（让 Kata Pod 只调度到有 Kata 的节点），四层一致性的完整实践。
 
@@ -321,7 +321,7 @@ Kata Containers（2017 年由 Clear Containers 与 runV 合并而来，CNCF 项�
 
 Firecracker（AWS 2018 年开源，NSDI '20 论文）是另一条硬件虚拟化路线：**极简 VMM + KVM，专为"容器化 VM"优化**。它不追求通用虚拟化（不是 QEMU 的替代品），而是只做一件事：**快速、廉价地创建大量安全隔离的微型 VM**。
 
-**设计要点**（详见 [[隔离原语/05 VMM 解剖——Firecracker、Cloud Hypervisor 与 Kata 的虚拟机监视器家族|第 05 篇]]）：仅 6 个仿真设备（virtio-net/block/vsock/balloon/serial/键盘）、无 BIOS、无 PCI 直通、jailer 安全进程隔离 VMM、rate limiter 内置流量控制。**性能数据**：启动到应用代码 <125ms、单 microVM 内存开销 <5MiB、单机每秒可创建约 150 个。
+**设计要点**（详见 [[05 VMM 解剖——Firecracker、Cloud Hypervisor 与 Kata 的虚拟机监视器家族]]）：仅 6 个仿真设备（virtio-net/block/vsock/balloon/serial/键盘）、无 BIOS、无 PCI 直通、jailer 安全进程隔离 VMM、rate limiter 内置流量控制。**性能数据**：启动到应用代码 <125ms、单 microVM 内存开销 <5MiB、单机每秒可创建约 150 个。
 
 **jailer 进程隔离**：Firecracker 的 VMM 进程本身被 jailer 包裹——jailer 把 VMM 放入独立的 namespace/cgroup/seccomp 环境，以非 root 用户运行，即使 VMM 被攻破（理论上攻击者只能利用 VMM 漏洞），也要先突破 jailer 的约束。这是"VMM 自身也要沙箱化"的纵深防御设计——**管理隔离边界的人，自己也住在边界之内**。
 
@@ -344,7 +344,7 @@ Firecracker（AWS 2018 年开源，NSDI '20 论文）是另一条硬件虚拟化
 | **GPU/机密计算** | QEMU 支持 TDX/SEV-SNP/GPU | 无 PCI 直通，不支持 |
 | **典型部署** | 企业强隔离容器 | 托管平台的高密度执行环境 |
 
-**选型启示**：Kata 适合"K8s 原生、需要 Pod 语义、可能扩展 GPU/机密计算"的企业场景；Firecracker 适合"平台自建数据面、追求密度与冷启动"的托管场景。素材中 CubeSandbox 走的是"KVM MicroVM + 自研产品"路线（[[平台与协议/06 Agent 沙箱平台分层——六层模型与三条产品路线|第 06 篇]] 展开），本质上是第三种形态：介于两者之间的企业自研 MicroVM 平台。
+**选型启示**：Kata 适合"K8s 原生、需要 Pod 语义、可能扩展 GPU/机密计算"的企业场景；Firecracker 适合"平台自建数据面、追求密度与冷启动"的托管场景。素材中 CubeSandbox 走的是"KVM MicroVM + 自研产品"路线（[[06 Agent 沙箱平台分层——六层模型与三条产品路线]] 展开），本质上是第三种形态：介于两者之间的企业自研 MicroVM 平台。
 
 ---
 
@@ -369,13 +369,13 @@ Firecracker（AWS 2018 年开源，NSDI '20 论文）是另一条硬件虚拟化
 
 ### 6.3 数据解读：性能换隔离的量化代价
 
-**启动时间**：runc 2.5s → gVisor 3.0s（+20%）→ Kata 4.0s（+60%）。注意这包含 K8s 链路（镜像拉取、CR reconcile 等）的固定成本——纯运行时启动差异小于绝对数字暗示的差距。**但 WarmPool 场景下三者热池命中都收敛到 ~1s API/2.2s 首命令**——预热池抹平了大部分启动差异（[[平台与协议/09 OpenSandbox 编排面——BatchSandbox、WarmPool 与快照|第 09 篇]]）。
+**启动时间**：runc 2.5s → gVisor 3.0s（+20%）→ Kata 4.0s（+60%）。注意这包含 K8s 链路（镜像拉取、CR reconcile 等）的固定成本——纯运行时启动差异小于绝对数字暗示的差距。**但 WarmPool 场景下三者热池命中都收敛到 ~1s API/2.2s 首命令**——预热池抹平了大部分启动差异（[[09 OpenSandbox 编排面——BatchSandbox、WarmPool 与快照]]）。
 
 **内存开销**：这是最显著的差距——runc 28.8MiB → gVisor 127.2MiB（+342%）→ Kata 392.7MiB（+1264%）。**对容量规划的意义**：同样 256GiB 节点，runc 可以跑约 8000 个空闲沙箱，gVisor 约 2000 个，Kata 只有约 650 个。Kata 的密度劣势是它难以大规模用于"海量短生命周期 Agent 会话"的根本原因。
 
 **负载特征**：CPU 密集三者无差异（验证了"纯计算不受隔离影响"）；内存触页 gVisor/Kata 显著慢于 runc（4-5 倍，用户态内核与 VM 的页错误路径更长）；小文件创建 Kata 慢 4 倍（virtio-blk + Guest 文件系统栈的累积开销）；进程并发 gVisor/Kata 慢约 5 倍（进程创建路径经过 Sentry/VM）。
 
-**结论**：gVisor 的代价集中在内存与 I/O 路径，Kata 的代价是全方位的但隔离最强。**"贵"与"安全"是同一枚硬币的两面**——选择高档位时，容量模型必须重算，这正是 [[工程实践/12 沙箱性能工程——Runtime 基准与 WarmPool 容量管理|第 12 篇]] 的主题。
+**结论**：gVisor 的代价集中在内存与 I/O 路径，Kata 的代价是全方位的但隔离最强。**"贵"与"安全"是同一枚硬币的两面**——选择高档位时，容量模型必须重算，这正是 [[12 沙箱性能工程——Runtime 基准与 WarmPool 容量管理]] 的主题。
 
 ### 6.4 冷启动 vs 热池：隔离档位差异在预热场景下被抹平
 
@@ -392,7 +392,7 @@ Firecracker（AWS 2018 年开源，NSDI '20 论文）是另一条硬件虚拟化
 
 三个关键发现：其一，**热池命中时三者 API 延迟完全相同（1.012s）**——预热池把"启动差异"转移到了"创建阶段"，命中阶段只剩 execd 就绪与路由开销；其二，**并发 50 全部命中时三者 p99 几乎一致（~5.6s）**——池化容量充足时隔离档位不构成性能差异；其三，**耗尽时差距重新出现**（runc 17.5s vs Kata 27.5s）——池子打空后回到冷启动量级，Kata 的启动代价以"耗尽尾延迟"的形式回归。
 
-**工程含义**：高档位（Kata）的启动劣势可以通过预热池管理消化，但代价从"每次创建的延迟"变成了"常驻内存开销（397MiB/槽）与池容量管理"——容量模型从"创建成本"转向"持有成本"。这是 [[平台与协议/09 OpenSandbox 编排面——BatchSandbox、WarmPool 与快照|第 09 篇]] 的核心论题。
+**工程含义**：高档位（Kata）的启动劣势可以通过预热池管理消化，但代价从"每次创建的延迟"变成了"常驻内存开销（397MiB/槽）与池容量管理"——容量模型从"创建成本"转向"持有成本"。这是 [[09 OpenSandbox 编排面——BatchSandbox、WarmPool 与快照]] 的核心论题。
 
 ### 6.5 基准数据的边界：什么能比、什么不能比
 
@@ -452,13 +452,13 @@ Firecracker（AWS 2018 年开源，NSDI '20 论文）是另一条硬件虚拟化
 
 素材 Phase4/Phase5 记录了作者从 PoC 到生产的档位决策全过程，这是四档光谱在真实项目中的完整应用案例：
 
-**第一阶段（PoC，单机）**：全部三种运行时都装上（runc 默认 + gVisor + Kata），在同一 Kubernetes 集群、同一 OpenSandbox 平台上跑三类 Agent。目的不是选型，而是**收集数据**——启动时间、空闲 PSS、负载表现（[[工程实践/12 沙箱性能工程——Runtime 基准与 WarmPool 容量管理|第 12 篇]] 的基准表就是在这个阶段产出的）。
+**第一阶段（PoC，单机）**：全部三种运行时都装上（runc 默认 + gVisor + Kata），在同一 Kubernetes 集群、同一 OpenSandbox 平台上跑三类 Agent。目的不是选型，而是**收集数据**——启动时间、空闲 PSS、负载表现（[[12 沙箱性能工程——Runtime 基准与 WarmPool 容量管理]] 的基准表就是在这个阶段产出的）。
 
 **第二阶段（测试集群）**：决策"runc Profile 先行"——测试集群只装 runc，Server/Controller 双副本，先验证平台功能（生命周期、三类 Agent、MCP 子沙箱）与高可用骨架。**理由**：功能验证阶段引入隔离运行时是自找麻烦——Kata/gVisor 的安装与运维复杂度会污染"平台本身是否有 bug"的判断。
 
 **第三阶段（生产规划）**：决策"三 Profile 独立"——生产环境拆成 runc/gVisor/Kata 三个 Server Profile（独立域名、独立 values、独立节点选择器），而不是一个 Server 内动态切换。**理由**：OpenSandbox 0.2.x 的 Runtime 是 Server 实例级配置，不能逐沙箱选择（素材 Phase5-01 的十个盲区之一）——既然平台不支持细粒度切换，就用"三套独立部署"表达档位。
 
-**第四阶段（灰度顺序）**：runc Profile 承载日常流量 → gVisor Profile 在"中风险代码解释器"场景灰度（先过内核版本门禁、platform 验证）→ Kata Profile 仅在高安全场景（多租户敏感数据）开放（且必须先过嵌套虚拟化门禁，[[隔离原语/04 KVM 与硬件虚拟化——MicroVM 隔离的硬件基石|第 04 篇]]）。
+**第四阶段（灰度顺序）**：runc Profile 承载日常流量 → gVisor Profile 在"中风险代码解释器"场景灰度（先过内核版本门禁、platform 验证）→ Kata Profile 仅在高安全场景（多租户敏感数据）开放（且必须先过嵌套虚拟化门禁，[[04 KVM 与硬件虚拟化——MicroVM 隔离的硬件基石]]）。
 
 这个决策过程最值得借鉴的一点：**档位决策不是一次投票，而是一条时间线**——先跑通、再测数、再规划、再灰度。每个阶段都有明确的通过标准，任何阶段的数据都会推翻上一阶段的假设。
 
@@ -478,10 +478,10 @@ Firecracker（AWS 2018 年开源，NSDI '20 论文）是另一条硬件虚拟化
 
 ### 8.2 下一篇导读
 
-本文把四档光谱讲清楚了，但第四档（硬件虚拟化）还有一层没展开：**MicroVM 到底怎么在硬件层面强制隔离？** 下一篇 [[隔离原语/04 KVM 与硬件虚拟化——MicroVM 隔离的硬件基石|04 KVM 与硬件虚拟化]] 将深入 CPU 虚拟化状态机（VMX root/non-root）、EPT 内存隔离、KVM API 三级 fd 体系，以及素材中真实验证过的嵌套虚拟化（L0/L1/L2）与它的生产门禁——理解 KVM，才能真正理解 Firecracker/Kata/CubeSandbox 为什么"硬件级隔离"可信。
+本文把四档光谱讲清楚了，但第四档（硬件虚拟化）还有一层没展开：**MicroVM 到底怎么在硬件层面强制隔离？** 下一篇 [[04 KVM 与硬件虚拟化——MicroVM 隔离的硬件基石]] 将深入 CPU 虚拟化状态机（VMX root/non-root）、EPT 内存隔离、KVM API 三级 fd 体系，以及素材中真实验证过的嵌套虚拟化（L0/L1/L2）与它的生产门禁——理解 KVM，才能真正理解 Firecracker/Kata/CubeSandbox 为什么"硬件级隔离"可信。
 
 > [!info] 专栏导航
-> 本文是 [[../00 专栏导览|Agent 沙箱技术专栏]] 的第 03 篇。上一篇 [[隔离原语/02 Linux 隔离原语——namespace、cgroups、seccomp 与 capabilities 的安全地基|02 Linux 隔离原语]] 讲透了四重原语；本文把它们放进四档光谱；接下来 04-05 篇深入硬件虚拟化层，06 篇开始进入平台层。
+> 本文是 [[00 专栏导览]] 的第 03 篇。上一篇 [[02 Linux 隔离原语——namespace、cgroups、seccomp 与 capabilities 的安全地基]] 讲透了四重原语；本文把它们放进四档光谱；接下来 04-05 篇深入硬件虚拟化层，06 篇开始进入平台层。
 
 ---
 

@@ -63,7 +63,7 @@ CREATE TABLE users (
 
 ### 1.2 HBase 数据模型的官方定义拆解
 
-[[Apache HBase]] 官方文档对数据模型的定义是：
+Apache HBase 官方文档对数据模型的定义是：
 
 > "HBase data model is a multi-dimensional sorted map. The map is indexed by a row key, column key, and a timestamp."
 
@@ -91,7 +91,7 @@ RowKey 是 HBase 数据模型中最重要的概念，没有之一。它不仅仅
 
 RowKey 在 HBase 内部存储为 `byte[]`（字节数组），最大长度为 64KB，但生产实践中强烈建议不超过 100 字节，最佳实践是 10~16 字节。这个限制不是任意的，背后有严格的工程推理：
 
-RowKey 的每一个字节，在 HBase 的存储格式 [[HFile]] 中，都会在以下几个地方被**重复存储**：
+RowKey 的每一个字节，在 HBase 的存储格式 HFile 中，都会在以下几个地方被**重复存储**：
 
 1. **MemStore 中**：每个 KeyValue 对象都携带完整的 RowKey
 2. **HFile 的数据 Block 中**：每个 Cell 都携带完整的 RowKey
@@ -130,7 +130,7 @@ HBase 按照 RowKey 的**字节序**（Byte-order，类似字典序但基于字�
 
 **细节三：字节序是全局有序，Region 是局部有序**
 
-HBase 的表在逻辑上是全局按 RowKey 有序的，但在物理上，这张大表被切分成若干个 **Region**（行键范围片段），每个 Region 由一个 [[RegionServer]] 负责服务。Region 内部的数据是有序的，不同 Region 之间通过行键范围界定，合在一起构成全局有序。
+HBase 的表在逻辑上是全局按 RowKey 有序的，但在物理上，这张大表被切分成若干个 **Region**（行键范围片段），每个 Region 由一个 RegionServer 负责服务。Region 内部的数据是有序的，不同 Region 之间通过行键范围界定，合在一起构成全局有序。
 
 这意味着：如果你需要对 RowKey 在 `[start, end]` 范围内的数据进行 Scan，HBase 只需要定位到 start 所在的 Region，然后顺序读取，直到遇到 end——这是一次接近顺序 I/O 的操作，非常高效。
 
@@ -141,8 +141,8 @@ HBase 的表在逻辑上是全局按 RowKey 有序的，但在物理上，这张
 **为什么列族必须预先定义？**
 
 这个问题的答案隐藏在 HBase 的存储架构中。在 HBase 中，一个表的每个 Region，在每个列族上都对应一个独立的 **Store**（存储单元）。每个 Store 包含：
-- 一个 **[[MemStore]]**：内存中的写缓冲，接收写入请求
-- 若干个 **[[HFile]]**：磁盘上的有序不可变文件，MemStore Flush 后生成
+- 一个 **MemStore**：内存中的写缓冲，接收写入请求
+- 若干个 **HFile**：磁盘上的有序不可变文件，MemStore Flush 后生成
 
 列族直接决定了内存的分配方式（每个 Store 一个 MemStore）和磁盘的文件组织方式（每个 Store 的 HFile 独立存放）。如果允许在运行时随意新增列族，就需要动态创建新的 MemStore 和磁盘目录，这会引入极高的运维复杂度和潜在的内存压力。
 
@@ -158,7 +158,7 @@ HBase 的表在逻辑上是全局按 RowKey 有序的，但在物理上，这张
 - 每个列族每个 Region 有 1 个 MemStore，默认 128MB
 - 总 MemStore 内存 = 3（列族）× 200（Region）× 128MB = **76.8GB**
 
-这 76.8GB 还只是 MemStore，不包括 [[BlockCache]]（通常也需要数十 GB），以及 JVM 堆本身的开销。如果是 5 个列族，MemStore 就需要 128GB，远超一台普通服务器的内存容量。
+这 76.8GB 还只是 MemStore，不包括 BlockCache（通常也需要数十 GB），以及 JVM 堆本身的开销。如果是 5 个列族，MemStore 就需要 128GB，远超一台普通服务器的内存容量。
 
 ### 2.3 第三维：列限定符（Column Qualifier）——稀疏性的载体
 
@@ -213,13 +213,13 @@ HBase 的表在逻辑上是全局按 RowKey 有序的，但在物理上，这张
 
 **为什么需要多版本？**
 
-这是一个需要追溯到 HBase 底层存储引擎的问题。HBase 使用 [[LSM-Tree]]（Log-Structured Merge Tree）作为存储引擎，LSM-Tree 的核心特性之一是**不支持原地修改（No In-Place Update）**。
+这是一个需要追溯到 HBase 底层存储引擎的问题。HBase 使用 LSM-Tree（Log-Structured Merge Tree）作为存储引擎，LSM-Tree 的核心特性之一是**不支持原地修改（No In-Place Update）**。
 
 在传统的 B+Tree 存储引擎（如 InnoDB）中，更新一条记录就是找到磁盘上该记录的位置，然后覆盖写入新值。这种随机写操作对磁盘 I/O 非常不友好（机械硬盘需要寻道，SSD 有写入放大问题）。
 
 LSM-Tree 的解决思路是：**所有写操作（包括更新和删除）都是追加写（Append-Only），绝不覆盖旧数据**。这使得写操作转化为纯顺序 I/O，吞吐量极高。但随之而来的问题是：同一个 Cell 可能存在多个版本的数据，最新版本和历史版本共存于存储文件中。
 
-多版本机制正是为了支持这种追加写模式而设计的——**每次"更新"实际上是写入一个时间戳更大的新版本，而不是修改旧版本**。读取时，HBase 返回时间戳最大（最新）的版本；历史版本在 [[Compaction]] 阶段被清理。
+多版本机制正是为了支持这种追加写模式而设计的——**每次"更新"实际上是写入一个时间戳更大的新版本，而不是修改旧版本**。读取时，HBase 返回时间戳最大（最新）的版本；历史版本在 Compaction 阶段被清理。
 
 > [!note] 设计哲学
 > HBase 的多版本机制不是一个"附加功能"，而是 LSM-Tree 写入模型的**必然产物**。理解这一点，才能理解为什么"删除"在 HBase 中不是立即删除数据，而是写入一个特殊的"墓碑标记"（Tombstone Marker）——因为 LSM-Tree 不支持原地修改，删除也必须通过追加写来实现。
@@ -333,7 +333,7 @@ TTL 的工作原理是：在读取时，HBase 会检查 Cell 的时间戳，如�
 
 ### 4.1 Namespace 是什么，为什么需要它
 
-[[Namespace]]（命名空间）是 HBase 0.98 版本引入的表组织机制，类似于关系型数据库中的"数据库"（Database）或 Schema。它在逻辑上将若干张表组织在一起，提供多租户隔离的管理边界。
+Namespace（命名空间）是 HBase 0.98 版本引入的表组织机制，类似于关系型数据库中的"数据库"（Database）或 Schema。它在逻辑上将若干张表组织在一起，提供多租户隔离的管理边界。
 
 在引入 Namespace 之前，HBase 的所有表都在同一个全局命名空间下，导致：
 - 不同业务团队的表混杂在一起，管理混乱
@@ -589,7 +589,7 @@ HBase 的 `Scan` 和 `Get` 操作支持设置 **Filter**（过滤器），过滤
 | `FilterList` | 多个 Filter 组合（AND/OR） | 复合条件查询 |
 
 > [!warning] 生产避坑
-> Filter 虽然减少了网络传输，但**不能替代 RowKey 设计**。`ValueFilter` 和 `SingleColumnValueFilter` 需要扫描所有 Cell 的值进行比较，本质上仍是全表扫描，只是减少了返回数据量。如果业务频繁需要按某个非 RowKey 字段查询，正确的做法是设计合适的 RowKey 或引入外部的二级索引（如 [[Apache Phoenix]] 或 [[Elasticsearch]]），而不是依赖 Filter 扫表。
+> Filter 虽然减少了网络传输，但**不能替代 RowKey 设计**。`ValueFilter` 和 `SingleColumnValueFilter` 需要扫描所有 Cell 的值进行比较，本质上仍是全表扫描，只是减少了返回数据量。如果业务频繁需要按某个非 RowKey 字段查询，正确的做法是设计合适的 RowKey 或引入外部的二级索引（如 Apache Phoenix 或 Elasticsearch），而不是依赖 Filter 扫表。
 
 ---
 
@@ -660,7 +660,7 @@ scan.setMaxResultSize(20);
 - **无法支持"按发送者查询所有消息"**：发送者 ID 不在 RowKey 中，只能通过 `SingleColumnValueFilter` 全表扫描，效率低
 - **消息已读状态更新会创建新版本**：由于 LSM-Tree 的追加写特性，每次更新 `m:read_status` 都会创建新版本。在 `VERSIONS=1` 的配置下，旧版本会在 Compaction 时清理，不会有问题；但如果误配 `VERSIONS=N`，大量状态更新会导致版本堆积。
 
-如果需要支持"按发送者查询"，正确的做法是建立一张独立的索引表，RowKey 为 `senderId + invertedTimestamp`，Value 指向主表的 RowKey——这正是 HBase 二级索引的手工实现模式（[[Apache Phoenix]] 的二级索引功能将这个过程自动化了）。
+如果需要支持"按发送者查询"，正确的做法是建立一张独立的索引表，RowKey 为 `senderId + invertedTimestamp`，Value 指向主表的 RowKey——这正是 HBase 二级索引的手工实现模式（Apache Phoenix 的二级索引功能将这个过程自动化了）。
 
 ---
 

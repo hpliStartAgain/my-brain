@@ -435,7 +435,7 @@ Client 的 `DFSInputStream` 接收 Packet，验证 CRC 校验和，将数据复�
 - 如果 seek 频繁且跨 Block，NameNode 的 `getBlockLocations` RPC 调用也会增多
 - HDD 的随机读本身延迟就很高（5~10ms 寻道时间）
 
-这正是第一篇文章中分析的 HDFS 设计取舍：为了高吞吐顺序读，牺牲了随机读性能。如果业务需要高性能随机读，应该使用 [[HBase]]（构建在 HDFS 之上，但通过 [[HFile]] 索引和 BlockCache 实现了高效随机读）或 [[Apache Parquet]] 格式（列式存储，支持谓词下推减少不必要的数据读取）。
+这正是第一篇文章中分析的 HDFS 设计取舍：为了高吞吐顺序读，牺牲了随机读性能。如果业务需要高性能随机读，应该使用 HBase（构建在 HDFS 之上，但通过 HFile 索引和 BlockCache 实现了高效随机读）或 Apache Parquet 格式（列式存储，支持谓词下推减少不必要的数据读取）。
 
 ### 5.3 并发写多个文件：HDFS 的高效场景
 

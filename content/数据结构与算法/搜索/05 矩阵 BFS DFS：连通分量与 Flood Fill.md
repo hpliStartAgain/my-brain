@@ -401,4 +401,4 @@ while (!queue.isEmpty()) {
 
 ---
 
-*关联文章：[[DFS 与回溯核心框架：状态树的系统性遍历]] | [[组合型回溯：Combination Sum 系列]]*
+*关联文章：DFS 与回溯核心框架：状态树的系统性遍历 | 组合型回溯：Combination Sum 系列*

@@ -7,7 +7,7 @@ aliases: ["Iceberg vs Delta Lake", "Iceberg vs Hudi", "数据湖三剑客", "开
 
 **摘要：**
 
-本篇是 [[Apache Iceberg]] 专栏的收尾，也是对前五篇所有技术细节的综合汇总。经过对 Iceberg 三层元数据架构、Hidden Partitioning、乐观并发控制和行级删除的深度解析，我们可以从 Iceberg 的视角，精确地描述三大数据湖方案（[[Apache Hudi]]、[[Delta Lake]]、Apache Iceberg）在**格式开放性、多引擎生态、元数据架构、分区能力和云原生集成**五个维度上的本质差异。本文不以 Iceberg 为"最优解"，而以"适配特定场景的最优解"为选型原则——理解每个方案在什么场景下是最佳选择，比得出"谁更好"的结论更有工程价值。
+本篇是 Apache Iceberg 专栏的收尾，也是对前五篇所有技术细节的综合汇总。经过对 Iceberg 三层元数据架构、Hidden Partitioning、乐观并发控制和行级删除的深度解析，我们可以从 Iceberg 的视角，精确地描述三大数据湖方案（Apache Hudi、Delta Lake、Apache Iceberg）在**格式开放性、多引擎生态、元数据架构、分区能力和云原生集成**五个维度上的本质差异。本文不以 Iceberg 为"最优解"，而以"适配特定场景的最优解"为选型原则——理解每个方案在什么场景下是最佳选择，比得出"谁更好"的结论更有工程价值。
 
 ---
 
@@ -237,7 +237,7 @@ Iceberg 在云原生数据湖场景下已经形成了难以撼动的生态优势
 
 ### 4.2 REST Catalog：Iceberg 生态的标准化接口
 
-[[REST Catalog]] 是 Iceberg 社区在 2022 年提出的 Catalog 标准接口规范，定义了一套 HTTP REST API 用于管理 Iceberg 表的元数据：
+REST Catalog 是 Iceberg 社区在 2022 年提出的 Catalog 标准接口规范，定义了一套 HTTP REST API 用于管理 Iceberg 表的元数据：
 
 ```
 REST Catalog 核心 API：
@@ -352,7 +352,7 @@ Iceberg v3（规范草案中）正在引入以下新能力：
 
 ### 6.3 与 Paimon 的互补关系
 
-[[Apache Paimon]]（下一个专栏的主角）代表了分区模型的第三代演进——基于 LSM-Tree 的行级流存储。它不与 Iceberg 竞争，而是与 Iceberg **互补**：
+Apache Paimon（下一个专栏的主角）代表了分区模型的第三代演进——基于 LSM-Tree 的行级流存储。它不与 Iceberg 竞争，而是与 Iceberg **互补**：
 
 ```
 Iceberg 的定位：
@@ -385,7 +385,7 @@ Paimon 的定位：
 
 **Iceberg 的核心价值主张**：不是"最快的写入"，不是"最深的 Spark 集成"，而是**"在最大规模、最多引擎的场景下，提供最一致、最可靠的表格式标准"**。
 
-下一个专栏将进入 [[Apache Paimon]]，探索为 [[Apache Flink]] 流计算原生设计的第三代数据湖存储——它用 LSM-Tree 代替 Copy-on-Write 文件替换，将流式写入延迟从分钟级压缩到秒级，是实时数仓架构的重要基础。
+下一个专栏将进入 Apache Paimon，探索为 Apache Flink 流计算原生设计的第三代数据湖存储——它用 LSM-Tree 代替 Copy-on-Write 文件替换，将流式写入延迟从分钟级压缩到秒级，是实时数仓架构的重要基础。
 
 
 > [!note] 思考题

@@ -193,7 +193,7 @@ sequenceDiagram
 
 `BypassMergeSortShuffleWriter` 的限制是 R ≤ 200。当 R 更大时，如果数据依然不需要 Map 端聚合，也不需要 key 有序输出，能否有一个比 `SortShuffleWriter` 更高效的实现？
 
-`UnsafeShuffleWriter`（在早期也叫做 Tungsten-Sort Writer）就是为这个场景设计的。它的核心优化思路来自 [[Tungsten]] 项目的两个关键洞察：
+`UnsafeShuffleWriter`（在早期也叫做 Tungsten-Sort Writer）就是为这个场景设计的。它的核心优化思路来自 Tungsten 项目的两个关键洞察：
 
 **洞察一：JVM 对象模型对排序来说太昂贵**
 
@@ -230,7 +230,7 @@ sequenceDiagram
 
 为什么需要这个条件？在 `UnsafeShuffleWriter` 的合并阶段，需要将多个 Spill 文件的内容合并成最终的 `.data` 文件。合并时，Spill 文件中的序列化记录需要被读取并追加到最终文件。如果序列化器不支持重定位（例如序列化内容中包含了绝对内存地址），就无法安全地做这种直接字节拷贝。
 
-Java 原生序列化不支持重定位（因为 Java 对象流可能包含类型信息和引用关系），但 [[Kryo]] 序列化天然支持重定位（序列化结果是纯数据字节流，不含内存地址）。这也是为什么生产环境几乎所有 Spark 集群都配置了 Kryo 序列化器——它不仅更快、更紧凑，还解锁了 `UnsafeShuffleWriter` 的使用。
+Java 原生序列化不支持重定位（因为 Java 对象流可能包含类型信息和引用关系），但 Kryo 序列化天然支持重定位（序列化结果是纯数据字节流，不含内存地址）。这也是为什么生产环境几乎所有 Spark 集群都配置了 Kryo 序列化器——它不仅更快、更紧凑，还解锁了 `UnsafeShuffleWriter` 的使用。
 
 ### 3.4 UnsafeShuffleWriter 的完整执行流程
 
@@ -271,7 +271,7 @@ graph TD
 
 **排序速度**：比较排序的最优时间复杂度是 O(n log n)，每次比较需要访问 key 对象（可能有缓存 miss）；`UnsafeShuffleWriter` 的基数排序是 O(n)，且全部在紧凑的 `LongArray` 上操作，缓存命中率极高。
 
-**GC 压力**：`SortShuffleWriter` 的内存操作全在 JVM 堆上，大量对象的创建和销毁会给 [[JVM GC]] 带来显著压力，可能导致 GC 停顿影响 Task 执行；`UnsafeShuffleWriter` 的主要内存操作在堆外，几乎不触发 GC。
+**GC 压力**：`SortShuffleWriter` 的内存操作全在 JVM 堆上，大量对象的创建和销毁会给 JVM GC 带来显著压力，可能导致 GC 停顿影响 Task 执行；`UnsafeShuffleWriter` 的主要内存操作在堆外，几乎不触发 GC。
 
 ---
 

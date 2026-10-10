@@ -9,7 +9,7 @@ aliases: []
 
 ## 摘要
 
-倒排索引（Inverted Index）是全文搜索引擎的核心数据结构，也是 Elasticsearch 高效全文检索能力的基础。它的核心思想与正排索引（数据库中常见的"文档→字段→值"映射）相反：倒排索引构建的是"词（Term）→文档列表"的映射，使得给定一个查询词，能够以 O(1) 的复杂度找到所有包含该词的文档。但倒排索引的实现远比这个描述复杂——当词汇量达到数亿级别时，如何在有限内存中存储 Term Dictionary（词典）？如何在 Posting List（倒排列表）上高效执行交集、并集操作？[[Lucene]] 的答案是 **FST（Finite State Transducer，有限状态转换器）** 词典 + **Frame Of Reference（FOR）** 压缩 Posting List + **Roaring Bitmap** 跳跃结构——三者组合，实现了在内存极度受限的条件下，亚毫秒级的全文检索响应。
+倒排索引（Inverted Index）是全文搜索引擎的核心数据结构，也是 Elasticsearch 高效全文检索能力的基础。它的核心思想与正排索引（数据库中常见的"文档→字段→值"映射）相反：倒排索引构建的是"词（Term）→文档列表"的映射，使得给定一个查询词，能够以 O(1) 的复杂度找到所有包含该词的文档。但倒排索引的实现远比这个描述复杂——当词汇量达到数亿级别时，如何在有限内存中存储 Term Dictionary（词典）？如何在 Posting List（倒排列表）上高效执行交集、并集操作？Lucene 的答案是 **FST（Finite State Transducer，有限状态转换器）** 词典 + **Frame Of Reference（FOR）** 压缩 Posting List + **Roaring Bitmap** 跳跃结构——三者组合，实现了在内存极度受限的条件下，亚毫秒级的全文检索响应。
 
 ---
 
@@ -264,7 +264,7 @@ ES 中所有 `integer`、`long`、`float`、`double`、`geo_point` 类型字段�
 
 **BKD Tree**：数值和地理字段的专用索引结构，解决了倒排索引在范围查询上的效率瓶颈。
 
-下一篇深入文档的完整写入链路与 Lucene Segment 的合并机制：[[03 文档写入与段合并——Segment、Refresh 与 Merge]]。
+下一篇深入文档的完整写入链路与 Lucene Segment 的合并机制：03 文档写入与段合并——Segment、Refresh 与 Merge。
 
 ---
 

@@ -17,7 +17,7 @@ Driver 和 Executor Pod 从创建到销毁的完整生命周期管理，是排�
 
 ### 1.1 Driver Pod 的状态机
 
-[[Kubernetes]] 中 Pod 的状态（`phase`）有五种：
+Kubernetes 中 Pod 的状态（`phase`）有五种：
 
 | Phase | 含义 |
 |------|------|

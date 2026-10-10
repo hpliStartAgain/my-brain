@@ -234,7 +234,7 @@ HDFS 的 3 副本提供了对节点故障的保护，但它无法防止以下情
 - **表结构误删除**：`drop 'tableName'` 执行后，数据从所有 HDFS 副本中删除
 - **跨时间点的数据访问**：需要查看 3 天前的数据状态（时间点恢复）
 
-[[Snapshot]]（快照）提供了数据在**特定时间点的完整视图**，支持：
+Snapshot（快照）提供了数据在**特定时间点的完整视图**，支持：
 - 将表恢复到快照时间点的状态（Restore）
 - 从快照克隆出一个新表（Clone）
 - 将快照导出到另一个 HDFS 集群（Export，用于异地备份和集群迁移）
@@ -339,7 +339,7 @@ hbase org.apache.hadoop.hbase.snapshot.ExportSnapshot \
 
 Snapshot 提供的是"时间点"级别的备份，两次快照之间发生的数据变更无法通过快照恢复（只能接受快照时间点和故障时间点之间的 RPO 数据损失）。
 
-[[HBase Replication]]（复制）提供了**接近实时的跨集群数据同步**——Primary 集群（源）的写入操作，异步地同步到 Standby 集群（目标），使两个集群的数据保持高度一致。
+HBase Replication（复制）提供了**接近实时的跨集群数据同步**——Primary 集群（源）的写入操作，异步地同步到 Standby 集群（目标），使两个集群的数据保持高度一致。
 
 Replication 的典型应用场景：
 - **异地灾备**：Primary 集群不可用时，快速切换到 Standby 集群
@@ -348,7 +348,7 @@ Replication 的典型应用场景：
 
 ### 5.2 Replication 的实现机制：基于 WAL 的异步复制
 
-HBase Replication 的实现基于 WAL——这是最自然的选择：WAL 已经包含了所有写入操作的完整记录，将 WAL 从 Primary 传输到 Standby 并在那里重放，就完成了数据同步。这与 [[MySQL]] 的 Binlog 复制机制在本质上是相同的。
+HBase Replication 的实现基于 WAL——这是最自然的选择：WAL 已经包含了所有写入操作的完整记录，将 WAL 从 Primary 传输到 Standby 并在那里重放，就完成了数据同步。这与 MySQL 的 Binlog 复制机制在本质上是相同的。
 
 **Replication 的组件：**
 

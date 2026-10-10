@@ -637,7 +637,7 @@ clickhouse-client --query "SELECT count() FROM system.tables;"
 
 ## 第 6 章 ClickHouse vs Doris vs StarRocks——选型决策框架
 
-在 OLAP 系统选型中，ClickHouse、[[Doris]]、StarRocks 三者功能重叠度高，如何选择是工程团队常见的困惑。第 01 篇讲过 ClickHouse 与 Doris/Trino 的初步对比，这里从运维和选型角度系统展开。
+在 OLAP 系统选型中，ClickHouse、Doris、StarRocks 三者功能重叠度高，如何选择是工程团队常见的困惑。第 01 篇讲过 ClickHouse 与 Doris/Trino 的初步对比，这里从运维和选型角度系统展开。
 
 ### 6.1 核心差异分析
 
@@ -668,7 +668,7 @@ clickhouse-client --query "SELECT count() FROM system.tables;"
 ### 6.2 选型建议
 
 **选 ClickHouse 的场景**：
-- **日志分析、监控指标存储**：时序单表查询为主，高吞吐写入，不需要频繁更新删除（如 [[Elasticsearch]] 的替代方案）
+- **日志分析、监控指标存储**：时序单表查询为主，高吞吐写入，不需要频繁更新删除（如 Elasticsearch 的替代方案）
 - **事件追踪、点击流分析**：用户行为数据，超大数据量单表聚合（按 user_id/date 分组统计）
 - **已有 ClickHouse 积累**：团队有 ClickHouse 运维经验，不需要迁移
 

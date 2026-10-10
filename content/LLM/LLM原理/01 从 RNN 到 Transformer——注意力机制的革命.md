@@ -264,7 +264,7 @@ Attention 在这里的角色是 RNN 的"增强配件"，而非替代品。一个
 
 他们提出的 Transformer 架构完全抛弃了循环结构，仅靠注意力机制和前馈网络构建了一个序列到序列的模型。这不仅解决了 RNN 的串行计算瓶颈，还在机器翻译任务上取得了当时的最优性能——而且训练速度大幅提升。
 
-这篇论文的意义远超机器翻译。Transformer 成为了后续所有大语言模型的基础架构：[[GPT 架构]]（Decoder-Only）、BERT（Encoder-Only）、T5（Encoder-Decoder）都是 Transformer 的变体。
+这篇论文的意义远超机器翻译。Transformer 成为了后续所有大语言模型的基础架构：GPT 架构（Decoder-Only）、BERT（Encoder-Only）、T5（Encoder-Decoder）都是 Transformer 的变体。
 
 ### 5.2 Self-Attention：序列内部的注意力
 
@@ -342,7 +342,7 @@ $$PE_{(pos, 2i+1)} = \cos\left(\frac{pos}{10000^{2i/d}}\right)$$
 位置编码被直接加到输入的 token embedding 上：$\text{input} = \text{token\_embedding} + \text{positional\_encoding}$。
 
 > [!note] 设计哲学
-> 正弦-余弦位置编码是 Transformer 的原始方案，但它有一个局限：它是绝对位置编码，不能很好地泛化到训练时未见过的更长序列。后续的 [[GPT 架构]] 使用了**可学习的位置编码**（Learnable Positional Embedding），而更先进的方案如 **RoPE**（Rotary Position Embedding）和 **ALiBi**（Attention with Linear Biases）将位置信息注入到注意力分数中而非 embedding 中，显著提升了长序列的泛化能力。我们将在后续文章中详细讨论。
+> 正弦-余弦位置编码是 Transformer 的原始方案，但它有一个局限：它是绝对位置编码，不能很好地泛化到训练时未见过的更长序列。后续的 GPT 架构 使用了**可学习的位置编码**（Learnable Positional Embedding），而更先进的方案如 **RoPE**（Rotary Position Embedding）和 **ALiBi**（Attention with Linear Biases）将位置信息注入到注意力分数中而非 embedding 中，显著提升了长序列的泛化能力。我们将在后续文章中详细讨论。
 
 ### 5.5 Transformer 的完整架构
 
@@ -356,7 +356,7 @@ $$PE_{(pos, 2i+1)} = \cos\left(\frac{pos}{10000^{2i/d}}\right)$$
 
 $$\text{output} = \text{LayerNorm}(x + \text{SubLayer}(x))$$
 
-残差连接的作用与 [[LSTM]] 的细胞状态类似——提供一条"高速公路"让信息和梯度直接传递，避免深层网络的退化问题。
+残差连接的作用与 LSTM 的细胞状态类似——提供一条"高速公路"让信息和梯度直接传递，避免深层网络的退化问题。
 
 **解码器层**包含三个子层：
 1. **Masked Multi-Head Self-Attention**——带掩码，防止位置 $i$ 关注到位置 $i+1$ 及之后的 token（保证自回归生成的因果性）

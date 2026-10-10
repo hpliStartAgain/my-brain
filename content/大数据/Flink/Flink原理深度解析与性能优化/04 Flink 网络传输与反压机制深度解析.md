@@ -72,7 +72,7 @@ graph LR
 3. 对端 TaskManager 收到 Netty 消息，写入 InputChannel 的 Buffer 队列
 4. Task B 从 Buffer 队列读取数据，反序列化为 Java 对象
 
-**TaskManager 间的连接复用**：两个 TaskManager 之间只建立**一条 TCP 连接**（通过 [[Netty]] 的多路复用），即使两个 TM 之间有 100 对 Subtask 需要互相传数据，也共享这一条 TCP 连接。数据通过虚拟的 Channel ID 区分属于哪对 Subtask 的通信。这样做的原因是：TCP 连接建立（三次握手）和维护（心跳）有开销，连接数过多会消耗大量系统资源（文件描述符等）。
+**TaskManager 间的连接复用**：两个 TaskManager 之间只建立**一条 TCP 连接**（通过 Netty 的多路复用），即使两个 TM 之间有 100 对 Subtask 需要互相传数据，也共享这一条 TCP 连接。数据通过虚拟的 Channel ID 区分属于哪对 Subtask 的通信。这样做的原因是：TCP 连接建立（三次握手）和维护（心跳）有开销，连接数过多会消耗大量系统资源（文件描述符等）。
 
 ---
 

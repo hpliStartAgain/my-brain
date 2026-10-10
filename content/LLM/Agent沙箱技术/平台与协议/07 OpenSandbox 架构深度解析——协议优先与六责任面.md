@@ -9,7 +9,7 @@ aliases: [OpenSandbox架构, OpenSandbox六责任面, Sandbox Protocol, 协议�
 
 **摘要：**
 
-[[平台与协议/06 Agent 沙箱平台分层——六层模型与三条产品路线|第 06 篇]] 把 OpenSandbox 定位为"企业产品派"的代表——覆盖六层模型中的第 1/2/3/6 层。本文深入它的架构内核：**协议优先（Protocol-First）设计哲学**与**六责任面（Six Surfaces）架构**。文章首先解释"为什么契约先于实现"——specs/ 目录下的 OpenAPI 契约是公共契约的事实源，SDK、CLI、Server 都依赖契约而非彼此；然后逐面拆解六责任面：Client 面（五语言 SDK/osb CLI/MCP Server）、Protocol 面（Lifecycle/Diagnostics/Execd/Egress 四契约）、生命周期控制面（FastAPI Server：鉴权、配置校验、状态持久化、委托运行时）、Runtime 后端（Docker 与 Kubernetes 双引擎，batchsandbox/agent-sandbox 双 workload provider）、数据面（execd + 用户负载 + volumes + egress sidecar）、网络与安全面（endpoint 解析、ingress gateway 路由、egress 策略）；随后深入控制面实现细节——创建请求的同步轮询语义（202/504 的真实含义）、状态所有权边界（CR 就绪前归 API Server、就绪后归 Controller）；最后给出基于素材实测的评估（65 个 API 操作实测、44 个 CLI 命令实测、7 个产品缺陷、16 个能力缺口）与适用场景判断。核心认知：**OpenSandbox 的架构价值不在"某个功能多强"，而在"契约分层让运行时替换、客户端扩展、平台演进成为可能"——协议优先是它对 Agent 沙箱行业的最大贡献**。
+[[06 Agent 沙箱平台分层——六层模型与三条产品路线]] 把 OpenSandbox 定位为"企业产品派"的代表——覆盖六层模型中的第 1/2/3/6 层。本文深入它的架构内核：**协议优先（Protocol-First）设计哲学**与**六责任面（Six Surfaces）架构**。文章首先解释"为什么契约先于实现"——specs/ 目录下的 OpenAPI 契约是公共契约的事实源，SDK、CLI、Server 都依赖契约而非彼此；然后逐面拆解六责任面：Client 面（五语言 SDK/osb CLI/MCP Server）、Protocol 面（Lifecycle/Diagnostics/Execd/Egress 四契约）、生命周期控制面（FastAPI Server：鉴权、配置校验、状态持久化、委托运行时）、Runtime 后端（Docker 与 Kubernetes 双引擎，batchsandbox/agent-sandbox 双 workload provider）、数据面（execd + 用户负载 + volumes + egress sidecar）、网络与安全面（endpoint 解析、ingress gateway 路由、egress 策略）；随后深入控制面实现细节——创建请求的同步轮询语义（202/504 的真实含义）、状态所有权边界（CR 就绪前归 API Server、就绪后归 Controller）；最后给出基于素材实测的评估（65 个 API 操作实测、44 个 CLI 命令实测、7 个产品缺陷、16 个能力缺口）与适用场景判断。核心认知：**OpenSandbox 的架构价值不在"某个功能多强"，而在"契约分层让运行时替换、客户端扩展、平台演进成为可能"——协议优先是它对 Agent 沙箱行业的最大贡献**。
 
 ---
 
@@ -76,7 +76,7 @@ graph TD
 
 **代价二：实现滞后风险**。契约定义了能力，实现可能没跟上——素材实测发现 Diagnostics API 未实现（GAP-001）、CLI 缺 Snapshot/Pool 命令组、OSEP-0006 停留在 implementable。**契约面 ≠ 实现面**——评估时必须以实测（调用 API/跑命令）为准，不能以文档为准。
 
-**代价三：过度抽象风险**。契约抽象了运行时差异，但"抽象泄漏"不可避免——Docker runtime 与 K8s runtime 的行为差异（如 pause/resume 语义、网络模型）会在边界处透出。素材 PoC 的"暂停/恢复与快照：同一个状态名下面是不同机器"（[[平台与协议/09 OpenSandbox 编排面——BatchSandbox、WarmPool 与快照|第 09 篇]]）正是抽象泄漏的实例。
+**代价三：过度抽象风险**。契约抽象了运行时差异，但"抽象泄漏"不可避免——Docker runtime 与 K8s runtime 的行为差异（如 pause/resume 语义、网络模型）会在边界处透出。素材 PoC 的"暂停/恢复与快照：同一个状态名下面是不同机器"（[[09 OpenSandbox 编排面——BatchSandbox、WarmPool 与快照]]）正是抽象泄漏的实例。
 
 **反例（协议优先不适用的情况）**：单一固定运行时、无多客户端需求、纯内部工具的沙箱——协议层是负担而非资产。**协议优先的价值随"端数 × 运行时数"增长**——端越多、运行时越多样，契约的杠杆越大。
 
@@ -89,7 +89,7 @@ graph TD
 | **执行层** | envd | 无 | execd |
 | **协议开放度** | 不可自建 | 标准开放 | 开放 + 可扩展 |
 
-**OpenSandbox 的独特位置**：它是三条路线中唯一"**协议开源 + 控制面可自托管 + 执行层内置**"的组合——SIG 有标准但缺控制面/执行层，E2B 有完整产品但闭源托管。这个位置解释了它为什么成为企业自建的主候选（[[平台与协议/06 Agent 沙箱平台分层——六层模型与三条产品路线|第 06 篇]] 的选型复盘）。
+**OpenSandbox 的独特位置**：它是三条路线中唯一"**协议开源 + 控制面可自托管 + 执行层内置**"的组合——SIG 有标准但缺控制面/执行层，E2B 有完整产品但闭源托管。这个位置解释了它为什么成为企业自建的主候选（[[06 Agent 沙箱平台分层——六层模型与三条产品路线]] 的选型复盘）。
 
 ---
 
@@ -108,7 +108,7 @@ graph TD
 | **5. Sandbox Data Plane** | 用户负载容器 + execd + volumes + egress sidecar | 依赖运行时创建 |
 | **6. Network & Security Plane** | endpoint 解析、ingress 路由、egress 策略、资源限制 | 依赖数据面 |
 
-**拆分意图**（官方文档原意）：SDK 和工具依赖公共契约；Server 拥有生命周期编排；Runtime provider 拥有平台特定的资源创建；execd/egress 拥有沙箱网络与文件系统命名空间内的操作。**任何一层的实现变更都不会波及其他层**——这是六责任面与六层模型（[[平台与协议/06 Agent 沙箱平台分层——六层模型与三条产品路线|第 06 篇]]）的关系：六层模型是"需求维度"的划分，六责任面是"实现模块"的划分。
+**拆分意图**（官方文档原意）：SDK 和工具依赖公共契约；Server 拥有生命周期编排；Runtime provider 拥有平台特定的资源创建；execd/egress 拥有沙箱网络与文件系统命名空间内的操作。**任何一层的实现变更都不会波及其他层**——这是六责任面与六层模型（[[06 Agent 沙箱平台分层——六层模型与三条产品路线]]）的关系：六层模型是"需求维度"的划分，六责任面是"实现模块"的划分。
 
 ### 2.2 Client 面：三种客户端形态
 
@@ -116,7 +116,7 @@ graph TD
 
 **osb CLI**：运维与调试的主工具。素材 Phase3-06 对 CLI 做了 44 个命令的完整实测：覆盖 Sandbox 生命周期（create/list/get/pause/resume/delete/update）、execd 能力（exec/upload/download/fs）、Endpoint、Snapshot、Pool 等命令组。**实测发现：Snapshot/Pool 命令组缺失**——CLI 的覆盖落后于 API（GAP 类问题），这意味着 CLI 不能作为全部能力的操作入口，部分能力只能走 API。
 
-**MCP Server**：opensandbox-mcp 把 Sandbox API 封装为 MCP 工具——Agent 通过 MCP 协议直接创建/操作子沙箱（[[工程实践/11 三类 Agent 沙箱落地——OpenCode、Hermes 与 LangChain 镜像化实战|第 11 篇]] 的"父 Agent → MCP → 子沙箱"链路）。**注意 MCP Server 的定位**：它是"Sandbox SDK/API 的工具适配层"，不是"用户与所有 Agent 对话的统一协议"（素材源码走读的边界结论）。
+**MCP Server**：opensandbox-mcp 把 Sandbox API 封装为 MCP 工具——Agent 通过 MCP 协议直接创建/操作子沙箱（[[11 三类 Agent 沙箱落地——OpenCode、Hermes 与 LangChain 镜像化实战]] 的"父 Agent → MCP → 子沙箱"链路）。**注意 MCP Server 的定位**：它是"Sandbox SDK/API 的工具适配层"，不是"用户与所有 Agent 对话的统一协议"（素材源码走读的边界结论）。
 
 ### 2.3 六责任面与六层模型的映射
 
@@ -150,7 +150,7 @@ specs/ 下的四个 OpenAPI 契约（素材实测操作数）：
 
 Server 是控制面的实现——FastAPI 应用，职责四件：
 
-1. **鉴权**：API Key 认证（素材 PoC 使用共享平台级 Key，生产化需短期凭据，[[生产化/14 沙箱安全体系——三层防护、短期凭据与多租户|第 14 篇]]）；
+1. **鉴权**：API Key 认证（素材 PoC 使用共享平台级 Key，生产化需短期凭据，[[14 沙箱安全体系——三层防护、短期凭据与多租户]]）；
 2. **配置校验**：请求的模板/镜像/资源/运行时声明校验；
 3. **状态持久化**：Server 管理的记录（沙箱元数据、快照记录——**pod-local SQLite，双副本 404 问题**）；
 4. **委托运行时**：把生命周期工作委托给配置的 runtime service（Docker/K8s）。
@@ -166,7 +166,7 @@ Server 是控制面的实现——FastAPI 应用，职责四件：
 | 模板合并 | 合并用户请求与模板默认值 | 合并冲突 → 4xx 校验错误 |
 | imagePullSecret | 按请求传递拉镜像凭据 | 拉取失败 → Pod ImagePullBackOff |
 | GPU 翻译 | 资源请求 → 扩展资源（nvidia.com/gpu） | 节点无 GPU 扩展资源 → 调度失败 |
-| RuntimeClass | 声明安全运行时 | 四层不一致 → 静默降级（[[隔离原语/02 Linux 隔离原语|第 02 篇]]） |
+| RuntimeClass | 声明安全运行时 | 四层不一致 → 静默降级（第 02 篇） |
 | volumes/egress | 注入卷声明与 sidecar | sidecar 异常 → 沙箱网络策略失效 |
 | endpoint 解析 | 直接读 workload 数据或网关配置 | DEF-003 路由 Header 无效 |
 | pause/resume | 委托给 provider | 202 ≠ 完成，需轮询终态 |
@@ -181,7 +181,7 @@ Server 是控制面的实现——FastAPI 应用，职责四件：
 
 | provider | 说明 |
 | :--- | :--- |
-| **batchsandbox**（默认） | OpenSandbox 自研 Controller 与 BatchSandbox/Pool/SandboxSnapshot CRD——高吞吐、池化（[[平台与协议/09 OpenSandbox 编排面——BatchSandbox、WarmPool 与快照|第 09 篇]]） |
+| **batchsandbox**（默认） | OpenSandbox 自研 Controller 与 BatchSandbox/Pool/SandboxSnapshot CRD——高吞吐、池化（[[09 OpenSandbox 编排面——BatchSandbox、WarmPool 与快照]]） |
 | **agent-sandbox** | 兼容 kubernetes-sigs/agent-sandbox 的 Sandbox CRD——生态标准对接 |
 
 **双 provider 的战略意义**：OpenSandbox 不做"独占标准"，而是**同时拥抱自研高性能 CRD 与社区标准 CRD**——素材 PoC 默认走 batchsandbox，但保留 agent-sandbox provider 作为标准兼容路径。这是"协议优先"哲学的延伸：**契约层以上不绑定任何编排实现**。
@@ -206,7 +206,7 @@ Server 是控制面的实现——FastAPI 应用，职责四件：
 | **资源限制** | Pod limits + RuntimeClass | 配额实测 |
 | **安全运行时** | RuntimeClass 接入 gVisor/Kata | 三运行时切换实验 |
 
-**网络面的设计要点**：流量进沙箱走"统一入口抽象"——Agent 在沙箱内启动服务后，通过统一的 ingress 层触达（InfoQ 的"统一入口访问抽象"）；流量出沙箱走 egress 管控——**进与出是两条独立路径**，分别由 gateway 与 egress sidecar 负责（[[平台与协议/08 OpenSandbox 数据面——execd 与 egress 的盒内世界|第 08 篇]]）。
+**网络面的设计要点**：流量进沙箱走"统一入口抽象"——Agent 在沙箱内启动服务后，通过统一的 ingress 层触达（InfoQ 的"统一入口访问抽象"）；流量出沙箱走 egress 管控——**进与出是两条独立路径**，分别由 gateway 与 egress sidecar 负责（[[08 OpenSandbox 数据面——execd 与 egress 的盒内世界]]）。
 
 ---
 
@@ -271,7 +271,7 @@ async def create_sandbox(req: CreateRequest, ...):
 | CLI 显示 pause ok | 请求被接受，非完成 | **必须轮询到 Paused 状态**（DEF-001） |
 | 运行中 CR phase=Succeed | 稳态命名，非 Job 成功 | 不能据此判断"任务完成" |
 
-**"202 语义"与"状态所有权"是本专栏 [[生产化/15 生产化深水区——十个盲区与行业共识|第 15 篇]]"十个盲区"之首的直接素材**——控制面契约的语义歧义是生产事故的温床。
+**"202 语义"与"状态所有权"是本专栏 [[15 生产化深水区——十个盲区与行业共识]]"十个盲区"之首的直接素材**——控制面契约的语义歧义是生产事故的温床。
 
 ---
 
@@ -368,7 +368,7 @@ assert sb.list().count == 0   # API/CR/Pod 全清
 
 ### 4.6 SDK 与 MCP 的边界
 
-素材源码走读强调的边界结论：**"MCP Server 是 Sandbox SDK/API 的工具适配层，不是用户与所有 Agent 对话的统一协议"**——MCP 只负责"把沙箱能力变成 Agent 可调用的工具"，Agent 之间的对话、会话、编排是 Agent 平台（第 5 层）的事。这个边界与 [[平台与协议/06 Agent 沙箱平台分层——六层模型与三条产品路线|第 06 篇]] 的"执行层不提供业务语义"是同一原则的两处表达。
+素材源码走读强调的边界结论：**"MCP Server 是 Sandbox SDK/API 的工具适配层，不是用户与所有 Agent 对话的统一协议"**——MCP 只负责"把沙箱能力变成 Agent 可调用的工具"，Agent 之间的对话、会话、编排是 Agent 平台（第 5 层）的事。这个边界与 [[06 Agent 沙箱平台分层——六层模型与三条产品路线]] 的"执行层不提供业务语义"是同一原则的两处表达。
 
 ---
 
@@ -379,7 +379,7 @@ assert sb.list().count == 0   # API/CR/Pod 全清
 1. **协议优先与运行时可替换**——适合"先验证产品，再验证运行时"的实验顺序（runc→gVisor→Kata 切换实测通过）；
 2. **完整平台面**——65 个 API 操作覆盖生命周期/执行/网络，五语言 SDK + CLI + MCP 齐备；
 3. **K8s 原生**——BatchSandbox CRD + Controller + WarmPool，与 K8s 运维体系无缝；
-4. **真实证据链**——素材完成了"父 Agent + 真实模型 + 外部交互入口 + MCP/API 子沙箱 + 命令执行 + 资源回收"的完整链路验证（[[工程实践/10 Agent 沙箱部署实战——从单机 PoC 到测试集群|第 10/11 篇]]）；
+4. **真实证据链**——素材完成了"父 Agent + 真实模型 + 外部交互入口 + MCP/API 子沙箱 + 命令执行 + 资源回收"的完整链路验证（[[10 Agent 沙箱部署实战——从单机 PoC 到测试集群]]）；
 5. **生态开放**——CNCF Landscape 收录、双 provider（batchsandbox + sigs）、社区贡献通道存在（素材记录 19 个候选 Issue/PR，5 个已合并 main）。
 
 ### 5.2 不足（素材生产化差距台账摘要）
@@ -392,15 +392,15 @@ assert sb.list().count == 0   # API/CR/Pod 全清
 
 **三个最影响生产化的结构性问题**：
 
-**问题一：Runtime 是 Server 实例级配置**（GAP-010）——0.2.x 不能逐沙箱选择运行时，生产方案只能"三 Profile 三域名"（[[隔离原语/03 隔离边界的光谱——从共享内核到 MicroVM 的四档技术路线|第 03 篇]] 的档位决策实录）。
+**问题一：Runtime 是 Server 实例级配置**（GAP-010）——0.2.x 不能逐沙箱选择运行时，生产方案只能"三 Profile 三域名"（[[03 隔离边界的光谱——从共享内核到 MicroVM 的四档技术路线]] 的档位决策实录）。
 
 **问题二：Snapshot 元数据的单点性**（GAP-003）——pod-local SQLite 让双副本 Server 的快照查询 404，"共享状态≠副本数"盲区的直接实例。
 
-**问题三：平台总 Key 的放大面**（Phase5-09）——共享平台级 Key 经 MCP 打穿后，父 Agent 能枚举全部沙箱（[[生产化/14 沙箱安全体系——三层防护、短期凭据与多租户|第 14 篇]] 的凭据治理）。
+**问题三：平台总 Key 的放大面**（Phase5-09）——共享平台级 Key 经 MCP 打穿后，父 Agent 能枚举全部沙箱（[[14 沙箱安全体系——三层防护、短期凭据与多租户]] 的凭据治理）。
 
 ### 5.3 差距台账的使用方法：从评估到立项
 
-34 项差距（7 DEF + 16 GAP + 11 POC）不是"劝退清单"，而是"立项清单"——素材的生产化路线（[[生产化/15 生产化深水区——十个盲区与行业共识|第 15 篇]] 的 T0-T7/P0-P6）展示了台账的标准用法：
+34 项差距（7 DEF + 16 GAP + 11 POC）不是"劝退清单"，而是"立项清单"——素材的生产化路线（[[15 生产化深水区——十个盲区与行业共识]] 的 T0-T7/P0-P6）展示了台账的标准用法：
 
 | 差距类型 | 处理策略 | 示例 |
 | :--- | :--- | :--- |
@@ -429,7 +429,7 @@ assert sb.list().count == 0   # API/CR/Pod 全清
 
 1. **OpenSandbox 是唯一"协议+控制面+执行层"三件套齐全的开源方案**——这正是它成为企业主候选的结构性原因；
 2. **OpenKruise Agents 在第 5 层有独特位置**（checkpoint 特长）——它的"checkpoint 工作负载管理"能力与 OpenSandbox 的"执行沙箱"能力互补，素材调研将其列为"第 5 层适配的参考方向"之一；
-3. **没有任何开源方案覆盖第 5 层**——再次验证"第 5 层自研"是所有路线的共同结论（[[平台与协议/06 Agent 沙箱平台分层——六层模型与三条产品路线|第 06 篇]]）。
+3. **没有任何开源方案覆盖第 5 层**——再次验证"第 5 层自研"是所有路线的共同结论（[[06 Agent 沙箱平台分层——六层模型与三条产品路线]]）。
 
 ### 5.5 适用场景判断
 
@@ -494,10 +494,10 @@ assert sb.list().count == 0   # API/CR/Pod 全清
 
 ### 6.5 下一篇导读
 
-本文覆盖了控制面与协议面，但数据面还有一层"盒内世界"没有展开：**execd 如何注入沙箱？命令/文件/PTY 如何实现？egress sidecar 如何管控出站？Endpoint 如何让沙箱内服务被访问？** 下一篇 [[平台与协议/08 OpenSandbox 数据面——execd 与 egress 的盒内世界|08 OpenSandbox 数据面]] 深入"沙箱里面"的机制与安全边界。
+本文覆盖了控制面与协议面，但数据面还有一层"盒内世界"没有展开：**execd 如何注入沙箱？命令/文件/PTY 如何实现？egress sidecar 如何管控出站？Endpoint 如何让沙箱内服务被访问？** 下一篇 [[08 OpenSandbox 数据面——execd 与 egress 的盒内世界]] 深入"沙箱里面"的机制与安全边界。
 
 > [!info] 专栏导航
-> 本文是 [[../00 专栏导览|Agent 沙箱技术专栏]] 的第 07 篇，OpenSandbox 三部曲之一。06 篇给出平台全景；本文解剖架构与控制面；08 篇数据面；09 篇编排面。三部曲完成后，10-12 篇进入部署与实战。
+> 本文是 [[00 专栏导览]] 的第 07 篇，OpenSandbox 三部曲之一。06 篇给出平台全景；本文解剖架构与控制面；08 篇数据面；09 篇编排面。三部曲完成后，10-12 篇进入部署与实战。
 
 ---
 

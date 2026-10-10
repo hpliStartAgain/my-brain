@@ -591,7 +591,7 @@ public Mono<String> fetchWithCF() {
 
 **组合能力**：`thenCompose`（flatMap 避免嵌套）、`allOf`（等所有完成）、`anyOf`（等任意完成）覆盖了绝大多数异步编排场景。
 
-下一篇 [[JUC工具/14 并发工具类——CountDownLatch、CyclicBarrier、Semaphore 与 Exchanger]] 将回到 AQS 的具体应用，深入剖析 JUC 的四大并发协调工具，理解它们的使用场景差异与内部实现。
+下一篇 [[14 并发工具类——CountDownLatch、CyclicBarrier、Semaphore 与 Exchanger]] 将回到 AQS 的具体应用，深入剖析 JUC 的四大并发协调工具，理解它们的使用场景差异与内部实现。
 
 ---
 

@@ -27,7 +27,7 @@ ES 的全文检索基于倒排索引——给定一个词，快速找到包含�
 
 ### 1.2 Doc Values：预先构建的列式存储
 
-**Doc Values** 是 Lucene 在写入阶段**预先构建**的正排列式存储。对于每个开启了 Doc Values 的字段，Lucene 会在 Segment 文件中维护一个专属的列存文件（`.dvd` 和 `.dvm`），其存储格式类似于 [[Parquet]] 的列存——所有文档的同一字段值连续存储，按 DocID 排列。
+**Doc Values** 是 Lucene 在写入阶段**预先构建**的正排列式存储。对于每个开启了 Doc Values 的字段，Lucene 会在 Segment 文件中维护一个专属的列存文件（`.dvd` 和 `.dvm`），其存储格式类似于 Parquet 的列存——所有文档的同一字段值连续存储，按 DocID 排列。
 
 **数据类型与 Doc Values 的编码：**
 
@@ -39,7 +39,7 @@ ES 的全文检索基于倒排索引——给定一个词，快速找到包含�
 | `date` | DELTA 编码（毫秒时间戳） | 时间戳差值极小，压缩效率高 |
 | `text` | **默认不开启** | 分词后的全文字段，Doc Values 无意义 |
 
-当一个聚合操作到来时，ES 不需要解析任何文档的 JSON `_source`，直接读取 Doc Values 列存文件，批量获取所有文档的字段值，然后做统计计算。由于是顺序 IO，且列存格式的数据紧密排列，[[Page Cache]] 的利用率极高。
+当一个聚合操作到来时，ES 不需要解析任何文档的 JSON `_source`，直接读取 Doc Values 列存文件，批量获取所有文档的字段值，然后做统计计算。由于是顺序 IO，且列存格式的数据紧密排列，Page Cache 的利用率极高。
 
 > [!warning] 生产避坑
 > **Doc Values 默认对大多数字段开启，但 `text` 类型除外**。如果你在 `text` 字段上做聚合而没有设置 `keyword` 子字段，ES 会抛出错误："Fielddata is disabled on [field]..."。正确做法是在 Mapping 中为需要聚合的文本字段添加 `keyword` 子字段：
@@ -74,7 +74,7 @@ Doc Values 需要额外的磁盘空间（通常是原始字段大小的 1~3 倍�
 
 **Bucket 聚合**类似于 SQL 的 `GROUP BY`——将文档按某种条件分组，每组是一个"桶"（Bucket），然后对每个桶做进一步的统计。
 
-核心区别在于：SQL 的 GROUP BY 需要读取所有数据，ES 的 Bucket 聚合直接基于 Doc Values 的列式数据迭代，并借助 [[Page Cache]] 实现高效的批量读取。
+核心区别在于：SQL 的 GROUP BY 需要读取所有数据，ES 的 Bucket 聚合直接基于 Doc Values 的列式数据迭代，并借助 Page Cache 实现高效的批量读取。
 
 ### 2.2 Terms 聚合：分布式环境下的精度陷阱
 
@@ -173,7 +173,7 @@ ES 在 Terms 聚合结果中提供了两个元数据字段来帮助你评估误�
 将索引设置为单个 Primary Shard，聚合在单个 Shard 上完成，结果 100% 精确。但单 Shard 限制了并行度，不适合大规模场景。
 
 > [!note] 设计哲学
-> ES 在这里做了一个工程上的妥协：牺牲精确性换取分布式可扩展性。这与 Presto/[[Trino]] 的 `APPROX_DISTINCT()` 函数、[[Kafka]] Streams 的窗口聚合中的近似统计是同一种设计哲学——在大数据量、分布式系统中，精确的 `GROUP BY` 代价极高，近似结果往往足够用。ES 的智慧在于将误差量化（`doc_count_error_upper_bound`），让使用者可以基于业务容忍度做决策。
+> ES 在这里做了一个工程上的妥协：牺牲精确性换取分布式可扩展性。这与 Presto/Trino 的 `APPROX_DISTINCT()` 函数、Kafka Streams 的窗口聚合中的近似统计是同一种设计哲学——在大数据量、分布式系统中，精确的 `GROUP BY` 代价极高，近似结果往往足够用。ES 的智慧在于将误差量化（`doc_count_error_upper_bound`），让使用者可以基于业务容忍度做决策。
 
 ### 2.5 Range 聚合与 Date Histogram 聚合
 

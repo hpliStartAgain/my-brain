@@ -95,7 +95,7 @@ echo mq-deadline > /sys/block/sda/queue/scheduler
 
 ### 3.1 CFQ 的设计目标
 
-**CFQ（Completely Fair Queuing，完全公平队列）** 是 Linux 2.6.18~5.0 时代的默认 IO 调度器，设计目标与 CPU 调度器的 [[CFS 完全公平调度器]] 类似：**保证每个进程获得公平的磁盘 IO 带宽**。
+**CFQ（Completely Fair Queuing，完全公平队列）** 是 Linux 2.6.18~5.0 时代的默认 IO 调度器，设计目标与 CPU 调度器的 CFS 完全公平调度器 类似：**保证每个进程获得公平的磁盘 IO 带宽**。
 
 CFQ 的核心思想：
 

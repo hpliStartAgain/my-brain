@@ -29,7 +29,7 @@ sparkConf:
 
 这段 YAML 一旦提交到 Git 仓库（哪怕是 private repo），就永远留在 Git 历史中。任何能访问 Git 仓库的人都能看到这些密码。更糟糕的是，许多公司的 Git 仓库因安全配置不当而泄露。
 
-**正确做法**：将敏感信息存储在 [[Kubernetes Secrets]] 中，Pod 通过环境变量或文件挂载获取，YAML 中只引用 Secret 的名称（不包含实际内容）。
+**正确做法**：将敏感信息存储在 Kubernetes Secrets 中，Pod 通过环境变量或文件挂载获取，YAML 中只引用 Secret 的名称（不包含实际内容）。
 
 ### 1.2 K8s Secrets 的使用方式
 
@@ -105,7 +105,7 @@ aws eks create-pod-identity-association \
 
 ### 1.4 Kerberos on K8s：最复杂的认证场景
 
-连接企业内部 [[Hadoop HDFS]] 或 HiveServer2 时，通常需要 [[Kerberos]] 认证。Kerberos 认证的核心是 **keytab 文件**（包含服务账号的加密密钥）。
+连接企业内部 Hadoop HDFS 或 HiveServer2 时，通常需要 Kerberos 认证。Kerberos 认证的核心是 **keytab 文件**（包含服务账号的加密密钥）。
 
 **Kerberos on K8s 的挑战**：
 

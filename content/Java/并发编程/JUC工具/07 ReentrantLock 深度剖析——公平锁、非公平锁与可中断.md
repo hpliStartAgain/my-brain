@@ -9,7 +9,7 @@ aliases: []
 
 **摘要：**
 
-`ReentrantLock` 是 JUC 并发包中使用最广泛的显式锁实现。它与 `synchronized` 在语义上等价——都提供可重入的互斥锁——但 `ReentrantLock` 提供了 `synchronized` 所没有的能力：**可中断的等待**（`lockInterruptibly`）、**有超时的尝试**（`tryLock`）、**公平性选择**（`FairSync` vs `NonfairSync`）以及**多个等待条件**（`newCondition()`）。本文在 [[JUC工具/06 AQS 框架——AbstractQueuedSynchronizer 的设计与实现]] 的基础上，深入剖析 `ReentrantLock` 的四种获取锁方式的实现差异、公平锁的 `hasQueuedPredecessors` 检查如何防止插队、非公平锁的插队策略为什么能提升吞吐量、以及 `tryLock(timeout)` 如何在 AQS 中实现超时等待。文章最后给出 `ReentrantLock` 与 `synchronized` 选型的工程决策树。
+`ReentrantLock` 是 JUC 并发包中使用最广泛的显式锁实现。它与 `synchronized` 在语义上等价——都提供可重入的互斥锁——但 `ReentrantLock` 提供了 `synchronized` 所没有的能力：**可中断的等待**（`lockInterruptibly`）、**有超时的尝试**（`tryLock`）、**公平性选择**（`FairSync` vs `NonfairSync`）以及**多个等待条件**（`newCondition()`）。本文在 [[06 AQS 框架——AbstractQueuedSynchronizer 的设计与实现]] 的基础上，深入剖析 `ReentrantLock` 的四种获取锁方式的实现差异、公平锁的 `hasQueuedPredecessors` 检查如何防止插队、非公平锁的插队策略为什么能提升吞吐量、以及 `tryLock(timeout)` 如何在 AQS 中实现超时等待。文章最后给出 `ReentrantLock` 与 `synchronized` 选型的工程决策树。
 
 ---
 
@@ -546,7 +546,7 @@ try {
 
 **使用原则**：优先 `synchronized`，需要更强功能时选 `ReentrantLock`，且 `unlock()` 必须在 `finally` 中。
 
-下一篇 [[JUC工具/08 读写锁与 StampedLock——从 ReentrantReadWriteLock 到乐观读]] 将展示 `ReentrantLock` 的进阶形态：当临界区的读操作远多于写操作时，如何通过读写锁进一步提升并发度。
+下一篇 [[08 读写锁与 StampedLock——从 ReentrantReadWriteLock 到乐观读]] 将展示 `ReentrantLock` 的进阶形态：当临界区的读操作远多于写操作时，如何通过读写锁进一步提升并发度。
 
 ---
 

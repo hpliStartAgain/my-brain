@@ -9,7 +9,7 @@ aliases: [HDFS调优, 小文件问题, HDFS存算分离]
 
 ## 摘要
 
-本文是 HDFS 深度解析专栏的收官之作，从工程实践角度系统整理两个核心议题。第一，**小文件问题**——这是 HDFS 生产集群中最普遍、最棘手的性能瓶颈：为什么小文件会让 NameNode 内存枯竭、RPC 性能下降，现有的治理手段（合并、归档、SequenceFile、ORC/Parquet 压缩）各自适用什么场景，以及如何从数据生产源头治理而不是事后修补。第二，**HDFS 的演进方向**——存算分离架构的崛起正在挑战 HDFS 的传统优势，[[Apache Ozone]]、[[Amazon S3]]、[[Alluxio]] 等新兴方案对 HDFS 意味着什么？HDFS 在云原生时代还有哪些不可替代的价值？
+本文是 HDFS 深度解析专栏的收官之作，从工程实践角度系统整理两个核心议题。第一，**小文件问题**——这是 HDFS 生产集群中最普遍、最棘手的性能瓶颈：为什么小文件会让 NameNode 内存枯竭、RPC 性能下降，现有的治理手段（合并、归档、SequenceFile、ORC/Parquet 压缩）各自适用什么场景，以及如何从数据生产源头治理而不是事后修补。第二，**HDFS 的演进方向**——存算分离架构的崛起正在挑战 HDFS 的传统优势，Apache Ozone、Amazon S3、Alluxio 等新兴方案对 HDFS 意味着什么？HDFS 在云原生时代还有哪些不可替代的价值？
 
 ---
 
@@ -187,7 +187,7 @@ SequenceFile 的局限：主要面向 MapReduce 场景，在 Spark 中使用 Seq
 
 ### 3.5 手段五：列式存储格式（Parquet/ORC）——结构化数据的首选
 
-对于结构化数据（有 Schema 的表数据），使用 **[[Apache Parquet]]** 或 **[[Apache ORC]]** 格式存储，是同时解决小文件问题和读取性能问题的最优解。
+对于结构化数据（有 Schema 的表数据），使用 **Apache Parquet** 或 **Apache ORC** 格式存储，是同时解决小文件问题和读取性能问题的最优解。
 
 **为什么列式存储能减少小文件数量？**
 
@@ -304,8 +304,8 @@ HDFS 的传统部署模式是**存算一体（Collocated Storage and Compute）*
 - **计算层**：使用弹性的 EC2/ECS 实例运行 Spark/Flink，按需启停，只在需要计算时付费
 
 在私有云/混合云上，代表性方案包括：
-- **[[Apache Ozone]]**：Hadoop 原生的对象存储，设计目标是替代 HDFS 用于小文件密集场景，突破 NameNode 元数据瓶颈
-- **[[Alluxio]]**（原 Tachyon）：分布式内存文件系统，在计算层和存储层之间充当高速缓存，用内存/SSD 缓存热数据，弥补存算分离的网络延迟劣势
+- **Apache Ozone**：Hadoop 原生的对象存储，设计目标是替代 HDFS 用于小文件密集场景，突破 NameNode 元数据瓶颈
+- **Alluxio**（原 Tachyon）：分布式内存文件系统，在计算层和存储层之间充当高速缓存，用内存/SSD 缓存热数据，弥补存算分离的网络延迟劣势
 
 ### 5.3 存算分离的核心挑战：数据本地性的丧失
 
@@ -319,7 +319,7 @@ HDFS 的传统部署模式是**存算一体（Collocated Storage and Compute）*
 在现代 25GbE/100GbE 高速网络环境下，网络带宽已经足够支撑大多数数据处理场景（100GbE ≈ 12.5 GB/s，已超过单块 SSD 的读取带宽）。但对于 HDD 磁盘密集型的存算一体集群（12 块 HDD × 200 MB/s = 2.4 GB/s 本地带宽），25GbE 网络的 3.125 GB/s 反而可能比本地读取更快。
 
 > [!info] 核心概念：Alluxio 如何弥合存算分离的性能鸿沟
-> [[Alluxio]] 在计算层和存储层之间充当"智能缓存层"：
+> Alluxio 在计算层和存储层之间充当"智能缓存层"：
 > - 计算节点读取数据时，Alluxio 将数据从底层存储（HDFS、S3、OSS）缓存到本地内存/SSD
 > - 后续对同一数据的读取直接命中 Alluxio 缓存，不需要再次从远端存储层拉取
 > - Alluxio 感知数据本地性，将缓存调度到即将处理该数据的计算节点上（类似 HDFS 的数据本地性）
@@ -340,7 +340,7 @@ HDFS 的传统部署模式是**存算一体（Collocated Storage and Compute）*
 
 ### 5.5 Apache Ozone：下一代 Hadoop 原生存储
 
-**[[Apache Ozone]]** 是 Hadoop 3.x 引入的下一代分布式对象存储，设计目标是在 Hadoop 生态内提供一个**既具备对象存储扩展性、又保留 HDFS 强一致性语义**的存储方案。
+**Apache Ozone** 是 Hadoop 3.x 引入的下一代分布式对象存储，设计目标是在 Hadoop 生态内提供一个**既具备对象存储扩展性、又保留 HDFS 强一致性语义**的存储方案。
 
 与 HDFS 的核心区别：
 
@@ -352,7 +352,7 @@ HDFS 的传统部署模式是**存算一体（Collocated Storage and Compute）*
 | 数据块管理 | NameNode 集中管理 | SCM（Storage Container Manager）分布式管理 |
 | 文件数量上限 | 受 NameNode 内存限制（约数十亿）| 理论无上限 |
 
-Ozone 的元数据架构突破了 HDFS 的内存天花板：Ozone Manager（OM）将元数据存储在 [[RocksDB]]（而不是 JVM Heap）中，RocksDB 的存储容量由磁盘决定（而非内存），因此 Ozone 可以管理数百亿甚至更多的文件，远超 HDFS 的上限。
+Ozone 的元数据架构突破了 HDFS 的内存天花板：Ozone Manager（OM）将元数据存储在 RocksDB（而不是 JVM Heap）中，RocksDB 的存储容量由磁盘决定（而非内存），因此 Ozone 可以管理数百亿甚至更多的文件，远超 HDFS 的上限。
 
 > [!note] 设计哲学：Ozone 不是 HDFS 的替代，而是互补
 > Ozone 目前在社区活跃度和生产成熟度上还不及 HDFS。对于现有的 HDFS 存储，逐步迁移到 Ozone 需要时间和验证。在可预见的未来（5~10 年），HDFS 仍然是大多数 Hadoop 生态大数据平台的主存储层，Ozone 更可能作为补充（用于小文件密集场景或对象存储接口需求）而不是完全替代 HDFS。
@@ -444,7 +444,7 @@ hdfs haadmin -getServiceState nn2
 - **HDFS**：继续承担 Hadoop 生态（Hive、HBase、Spark on HDFS）的核心存储，尤其是对强一致性、原子 rename、低延迟元数据操作有需求的场景
 - **Apache Ozone**：逐步承接小文件密集场景和对象存储接口需求，作为 HDFS 的下一代继承者在 Hadoop 生态内演进
 - **云对象存储（S3/OSS/COS）**：承担云原生数据湖的底层存储，弹性好、成本低，配合 Delta Lake/Iceberg 实现数据湖语义
-- **[[Alluxio]]**：作为缓存层，在存算分离架构中弥合性能鸿沟，使计算层感知不到底层是 HDFS 还是 S3
+- **Alluxio**：作为缓存层，在存算分离架构中弥合性能鸿沟，使计算层感知不到底层是 HDFS 还是 S3
 
 HDFS 不会消亡，但它的角色会逐渐从"大数据存储的唯一选择"演变为"Hadoop 生态中不可替代的特定场景最优解"。理解 HDFS 的底层原理，不只是为了更好地使用 HDFS，更是为了理解**分布式存储系统的通用工程原则**——这些原则在 Ozone、S3、Ceph 等任何分布式存储系统中都以不同形式存在。
 

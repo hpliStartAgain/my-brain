@@ -15,9 +15,9 @@ aliases: ["Flink简介", "Flink是什么"]
 
 ### 1.1 批处理范式及其隐藏假设
 
-大数据处理的起点是 [[MapReduce]]。MapReduce 的设计哲学极其简单且优雅：将问题分解为 Map（映射）和 Reduce（归约）两个阶段，通过对**静态数据集**的分布式处理来完成大规模计算任务。
+大数据处理的起点是 MapReduce。MapReduce 的设计哲学极其简单且优雅：将问题分解为 Map（映射）和 Reduce（归约）两个阶段，通过对**静态数据集**的分布式处理来完成大规模计算任务。
 
-注意这里的关键词：**静态数据集**。MapReduce（以及之后的 [[Apache Spark]] 批处理）隐含了一个根本性假设——**数据是有界的（Bounded）**，即在开始计算之前，所有需要处理的数据已经完整地存在于存储系统中（HDFS 或 S3）。
+注意这里的关键词：**静态数据集**。MapReduce（以及之后的 Apache Spark 批处理）隐含了一个根本性假设——**数据是有界的（Bounded）**，即在开始计算之前，所有需要处理的数据已经完整地存在于存储系统中（HDFS 或 S3）。
 
 这个假设在 2004 年 Google 发表 MapReduce 论文时是合理的：那个时代的数据处理场景主要是日志分析、离线报表、搜索索引构建，这些任务确实可以等到数据积累完成后再批量处理。
 
@@ -69,7 +69,7 @@ Lambda 架构确实解决了问题——在批处理层出结果之前，用速�
 
 ### 2.1 第一代：Storm——低延迟的先驱，有状态的痛苦
 
-[[Apache Storm]] 是第一代真正意义上的开源流处理框架，由 Twitter 于 2011 年开源。Storm 的核心贡献是证明了大规模低延迟流处理的可行性，它的 Topology（拓扑）模型——Spout（数据源）+ Bolt（处理节点）构成的 DAG——是后来所有流处理框架的概念先驱。
+Apache Storm 是第一代真正意义上的开源流处理框架，由 Twitter 于 2011 年开源。Storm 的核心贡献是证明了大规模低延迟流处理的可行性，它的 Topology（拓扑）模型——Spout（数据源）+ Bolt（处理节点）构成的 DAG——是后来所有流处理框架的概念先驱。
 
 Storm 能做什么：单条消息延迟达到毫秒级；集群吞吐量每秒可处理数百万条消息；拓扑结构灵活，可以构建复杂的处理链路。
 
@@ -85,7 +85,7 @@ Storm 的根本局限是什么：
 
 ### 2.2 第二代：Spark Streaming——微批次的折衷
 
-[[Apache Spark]] 团队在 Spark 之上构建了 Spark Streaming（2013 年）。Spark Streaming 的核心思路非常直接：**把流切成一个个小的批次（Micro-Batch），每个批次用 Spark 的批处理引擎处理**。
+Apache Spark 团队在 Spark 之上构建了 Spark Streaming（2013 年）。Spark Streaming 的核心思路非常直接：**把流切成一个个小的批次（Micro-Batch），每个批次用 Spark 的批处理引擎处理**。
 
 这个设计立刻继承了 Spark 的所有优点：成熟的容错机制、丰富的算子、与 Spark SQL 和 MLlib 的生态集成……同时将延迟从小时级（批处理）降低到了秒级（每个 Micro-Batch 通常 0.5 ~ 2 秒）。
 
@@ -181,7 +181,7 @@ Flink 将**状态（State）**作为流处理的第一等公民内置到框架�
 
 ### 3.3 Flink vs Kafka Streams：架构哲学的根本差异
 
-[[Kafka Streams]] 是一个经常被拿来与 Flink 比较但实际上定位完全不同的框架：
+Kafka Streams 是一个经常被拿来与 Flink 比较但实际上定位完全不同的框架：
 
 - **Kafka Streams** 是一个**库（Library）**，嵌入在你的 Java/Scala 应用中运行，不需要独立的集群，天然与 Kafka 深度集成，但只能消费 Kafka 数据源，且不适合大规模计算
 - **Flink** 是一个**分布式计算引擎**，需要独立的集群（JobManager + TaskManager），支持任意数据源（Kafka、MySQL、HDFS、HTTP 等），适合大规模复杂计算

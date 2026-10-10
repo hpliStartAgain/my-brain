@@ -9,7 +9,7 @@ aliases: []
 
 **摘要：**
 
-前几篇文章剖析了 API Server 的"入口侧"——请求如何经过认证、授权、准入控制最终写入 [[etcd]]。本文转向"出口侧"——数据写入 etcd 后，如何被其他组件感知和消费。K8s 的所有控制器（Deployment Controller、ReplicaSet Controller、kubelet 等）都不轮询 API Server——它们通过 **List-Watch 协议**获取资源的初始状态和后续变更。在客户端侧，`client-go` 库提供了 **Informer 框架**——一套精心设计的本地缓存和事件分发机制，使得控制器可以高效地基于内存缓存做决策，而不是每次协调都查询 API Server。Informer 是 K8s 控制器编程的基石——理解 Reflector、DeltaFIFO、Indexer、WorkQueue 这些组件如何协作，是编写 Operator 和理解 K8s 内部行为的必备知识。本文从 API Server 端的 Watch 实现出发，完整追踪数据从 etcd 变更到控制器执行协调的全链路。
+前几篇文章剖析了 API Server 的"入口侧"——请求如何经过认证、授权、准入控制最终写入 etcd。本文转向"出口侧"——数据写入 etcd 后，如何被其他组件感知和消费。K8s 的所有控制器（Deployment Controller、ReplicaSet Controller、kubelet 等）都不轮询 API Server——它们通过 **List-Watch 协议**获取资源的初始状态和后续变更。在客户端侧，`client-go` 库提供了 **Informer 框架**——一套精心设计的本地缓存和事件分发机制，使得控制器可以高效地基于内存缓存做决策，而不是每次协调都查询 API Server。Informer 是 K8s 控制器编程的基石——理解 Reflector、DeltaFIFO、Indexer、WorkQueue 这些组件如何协作，是编写 Operator 和理解 K8s 内部行为的必备知识。本文从 API Server 端的 Watch 实现出发，完整追踪数据从 etcd 变更到控制器执行协调的全链路。
 
 ---
 

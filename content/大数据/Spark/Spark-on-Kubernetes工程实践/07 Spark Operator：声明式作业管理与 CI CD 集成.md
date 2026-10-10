@@ -161,7 +161,7 @@ SparkApplication 状态机：
 
 ### 3.1 Reconcile Loop：K8s 控制器的核心模式
 
-[[Kubernetes Controller]] 的核心编程模型是 **Reconcile Loop（调谐循环）**：
+Kubernetes Controller 的核心编程模型是 **Reconcile Loop（调谐循环）**：
 
 ```
 期望状态（Desired State）：SparkApplication CRD 中声明的配置

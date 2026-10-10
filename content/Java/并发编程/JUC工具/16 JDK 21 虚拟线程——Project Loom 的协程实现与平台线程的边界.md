@@ -123,7 +123,7 @@ OS 线程（平台线程）：
 
 ### 3.3 调度器：ForkJoinPool 的角色
 
-虚拟线程由 JVM 内置的调度器管理，底层使用的正是 [[线程池/12 线程池（下）——ForkJoinPool 与工作窃取算法]] 中介绍的 `ForkJoinPool`：
+虚拟线程由 JVM 内置的调度器管理，底层使用的正是 [[12 线程池（下）——ForkJoinPool 与工作窃取算法]] 中介绍的 `ForkJoinPool`：
 
 ```
 虚拟线程调度架构：
@@ -171,7 +171,7 @@ synchronized (lock) {
 
 为什么 `synchronized` 会导致 Pinning？
 
-`synchronized` 的底层是 [[volatile与内置锁/04 synchronized 的锁升级——偏向锁、轻量级锁与重量级锁]] 中介绍的 JVM 内置 Monitor。Monitor 的等待集（WaitSet）直接关联到 OS 线程（通过 `pthread_mutex_t`）。当虚拟线程在 `synchronized` 内阻塞时，JVM 无法将这个虚拟线程从其 Carrier Thread 上"卸下"，因为 OS 的 mutex 等待是与 OS 线程绑定的，迁移到另一个平台线程后无法继续持有 mutex。
+`synchronized` 的底层是 [[04 synchronized 的锁升级——偏向锁、轻量级锁与重量级锁]] 中介绍的 JVM 内置 Monitor。Monitor 的等待集（WaitSet）直接关联到 OS 线程（通过 `pthread_mutex_t`）。当虚拟线程在 `synchronized` 内阻塞时，JVM 无法将这个虚拟线程从其 Carrier Thread 上"卸下"，因为 OS 的 mutex 等待是与 OS 线程绑定的，迁移到另一个平台线程后无法继续持有 mutex。
 
 **情况 2：调用了本地方法（JNI）内的阻塞操作**
 
@@ -384,7 +384,7 @@ try (var scope = new StructuredTaskScope.ShutdownOnFailure()) {
 
 **生态适配**：Spring Boot 3.2+、Tomcat 10.1+、Quarkus、Micronaut 都已支持虚拟线程。数据库驱动、HTTP 客户端等 IO 组件无需修改，与虚拟线程天然兼容。
 
-下一篇 [[JUC工具/17 实战——高并发场景下的锁优化与无锁编程]] 将把本专栏学到的所有并发知识融合为实战技巧，通过真实的性能问题案例，展示如何系统地分析并发瓶颈、选择正确的优化手段。
+下一篇 [[17 实战——高并发场景下的锁优化与无锁编程]] 将把本专栏学到的所有并发知识融合为实战技巧，通过真实的性能问题案例，展示如何系统地分析并发瓶颈、选择正确的优化手段。
 
 ---
 

@@ -9,7 +9,7 @@ aliases: []
 
 **摘要：**
 
-在 [[02 Kubernetes 整体架构]] 中我们确立了 API Server 的核心定位：它是 K8s 集群中**所有组件通信的唯一枢纽**，也是 [[etcd]] 的**唯一客户端**。但"唯一枢纽"这四个字背后隐藏着巨大的工程复杂度——API Server 需要同时扮演 REST API 网关、认证授权门卫、数据校验引擎、Watch 事件分发器、API 版本转换器等多重角色，还要在高并发下保持低延迟和高可用。本文作为 API Server 专栏的开篇，先从"API Server 到底做了什么"出发，梳理它在 K8s 架构中承担的全部职责，然后深入其内部的**请求处理管线（Handler Chain）**——一个 HTTP 请求从进入 API Server 到写入 etcd 并通知 Watcher，经历了哪些处理阶段、每个阶段解决什么问题。最后介绍 **API Aggregation Layer**——K8s 如何在不修改核心 API Server 的情况下扩展 API 端点。
+在 [[02 Kubernetes 整体架构]] 中我们确立了 API Server 的核心定位：它是 K8s 集群中**所有组件通信的唯一枢纽**，也是 etcd 的**唯一客户端**。但"唯一枢纽"这四个字背后隐藏着巨大的工程复杂度——API Server 需要同时扮演 REST API 网关、认证授权门卫、数据校验引擎、Watch 事件分发器、API 版本转换器等多重角色，还要在高并发下保持低延迟和高可用。本文作为 API Server 专栏的开篇，先从"API Server 到底做了什么"出发，梳理它在 K8s 架构中承担的全部职责，然后深入其内部的**请求处理管线（Handler Chain）**——一个 HTTP 请求从进入 API Server 到写入 etcd 并通知 Watcher，经历了哪些处理阶段、每个阶段解决什么问题。最后介绍 **API Aggregation Layer**——K8s 如何在不修改核心 API Server 的情况下扩展 API 端点。
 
 ---
 
@@ -65,7 +65,7 @@ K8s 支持多种授权模式，最常用的是 **RBAC（Role-Based Access Contro
 
 ### 1.5 角色五：数据校验与持久化
 
-通过准入控制后，API Server 对请求中的对象进行**Schema 校验**——验证对象的结构是否符合 API 定义（字段名是否正确、类型是否匹配、必填字段是否存在）。校验通过后，API Server 将对象序列化（默认 protobuf 格式）并写入 [[etcd]]。
+通过准入控制后，API Server 对请求中的对象进行**Schema 校验**——验证对象的结构是否符合 API 定义（字段名是否正确、类型是否匹配、必填字段是否存在）。校验通过后，API Server 将对象序列化（默认 protobuf 格式）并写入 etcd。
 
 API Server 是 etcd 的**唯一客户端**——其他任何组件（kubectl、kubelet、Controller Manager）都不直接访问 etcd。这种设计将 etcd 的读写逻辑封装在 API Server 内部，对外暴露结构化的 REST API，实现了存储层与业务逻辑的解耦。
 

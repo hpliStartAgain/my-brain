@@ -9,7 +9,7 @@ aliases: []
 
 ## 摘要
 
-Watch 和 Lease 是 etcd 区别于普通键值存储的两大核心特性，也是 [[Kubernetes]] 控制平面架构的基础设施。Watch 提供了基于 Revision 的**持久化事件流**——客户端可以从任意历史 Revision 开始订阅，不遗漏任何变更；Lease 提供了**TTL 自动过期**机制——绑定了 Lease 的 key 在租约到期后自动删除，是服务发现（Provider 心跳）和分布式锁（持有者宕机自动释放）的基础。本文深入剖析 Watch 的流式推送实现（EventHistory + WatchStore 的分层设计）、Lease 的 TTL 续约机制，以及两者在实际工程场景中的使用模式与边界。
+Watch 和 Lease 是 etcd 区别于普通键值存储的两大核心特性，也是 Kubernetes 控制平面架构的基础设施。Watch 提供了基于 Revision 的**持久化事件流**——客户端可以从任意历史 Revision 开始订阅，不遗漏任何变更；Lease 提供了**TTL 自动过期**机制——绑定了 Lease 的 key 在租约到期后自动删除，是服务发现（Provider 心跳）和分布式锁（持有者宕机自动释放）的基础。本文深入剖析 Watch 的流式推送实现（EventHistory + WatchStore 的分层设计）、Lease 的 TTL 续约机制，以及两者在实际工程场景中的使用模式与边界。
 
 ---
 
@@ -17,7 +17,7 @@ Watch 和 Lease 是 etcd 区别于普通键值存储的两大核心特性，也�
 
 ### 1.1 Watch 的设计目标
 
-etcd 的 Watch 与 [[Zookeeper]] 的 Watcher 有本质区别，理解这个区别是理解 etcd Watch 设计动机的关键：
+etcd 的 Watch 与 Zookeeper 的 Watcher 有本质区别，理解这个区别是理解 etcd Watch 设计动机的关键：
 
 **ZooKeeper Watcher 的问题：**
 - **一次性**：Watcher 触发一次后自动失效，客户端必须重新注册 Watcher；

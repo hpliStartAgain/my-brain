@@ -258,7 +258,7 @@ Spark 开源版的算子层**大部分仍是逐行处理**，向量化主要体�
 
 ### 4.3 Apache Arrow 与跨语言列式数据交换
 
-**[[Apache Arrow]]** 是 Apache 基金会提供的跨语言列式内存格式标准，定义了一种与语言无关的、SIMD 友好的列式内存布局。
+**Apache Arrow** 是 Apache 基金会提供的跨语言列式内存格式标准，定义了一种与语言无关的、SIMD 友好的列式内存布局。
 
 Spark SQL 在以下场景使用 Arrow：
 
@@ -357,7 +357,7 @@ spark.sql.columnVector.offheap.enabled=true
 
 ### 6.1 Tungsten 项目的背景
 
-**[[Tungsten]]** 是 Spark 1.4 引入的内存管理与 CPU 效率优化项目，是 Whole-Stage CodeGen 和向量化执行的底层支撑：
+**Tungsten** 是 Spark 1.4 引入的内存管理与 CPU 效率优化项目，是 Whole-Stage CodeGen 和向量化执行的底层支撑：
 
 1. **堆外内存管理**：通过 `MemoryManager` 和 `TaskMemoryManager` 管理堆外内存，直接操作内存地址，避免 JVM GC 对大内存操作的影响
 2. **二进制行格式（UnsafeRow）**：设计了一种紧凑的行式二进制格式，列值以紧密排列的方式存储（固定长度类型直接存值，变长类型存偏移量），支持在不反序列化的情况下直接比较和 Hash

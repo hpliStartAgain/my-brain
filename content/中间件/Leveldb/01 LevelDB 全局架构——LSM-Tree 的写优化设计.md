@@ -27,7 +27,7 @@ LevelDB 是由 Google 的 Jeff Dean 和 Sanjay Ghemawat 于 2011 年开源的嵌
 
 ### 1.2 B+ 树的写入困境
 
-传统关系型数据库和早期键值存储（如 [[Berkeley DB]]）普遍使用 [[B+ 树]]作为核心数据结构。B+ 树在读取场景下表现优异——其 O(log N) 的查找复杂度配合磁盘页对齐的节点设计，使得范围查询和点查询都非常高效。
+传统关系型数据库和早期键值存储（如 Berkeley DB）普遍使用 B+ 树作为核心数据结构。B+ 树在读取场景下表现优异——其 O(log N) 的查找复杂度配合磁盘页对齐的节点设计，使得范围查询和点查询都非常高效。
 
 然而 B+ 树的写入模式存在天然缺陷：
 
@@ -43,7 +43,7 @@ LevelDB 是由 Google 的 Jeff Dean 和 Sanjay Ghemawat 于 2011 年开源的嵌
 
 ### 1.3 LSM-Tree 的核心思想
 
-[[LSM-Tree]] 的思想最早由 Patrick O'Neil 等人在 1996 年的论文《The Log-Structured Merge-Tree》中提出，其核心思想极其朴素：
+LSM-Tree 的思想最早由 Patrick O'Neil 等人在 1996 年的论文《The Log-Structured Merge-Tree》中提出，其核心思想极其朴素：
 
 > **永远不修改磁盘上已有的数据，只追加写入新数据，周期性地将多个有序文件合并成更大的有序文件。**
 
@@ -233,11 +233,11 @@ LevelDB 采用分层（Leveled）存储策略，每层的总容量有上限：
 
 ### 4.1 为什么需要 WAL
 
-MemTable 存在于内存中，进程崩溃后内存数据全部丢失。若没有 WAL，所有已 `Put()` 但尚未刷盘的数据将永久丢失，存储引擎无法提供持久性（Durability）保证，即 [[ACID]] 中的 D。
+MemTable 存在于内存中，进程崩溃后内存数据全部丢失。若没有 WAL，所有已 `Put()` 但尚未刷盘的数据将永久丢失，存储引擎无法提供持久性（Durability）保证，即 ACID 中的 D。
 
 WAL（Write-Ahead Log，预写日志）的核心思想是：**在修改内存状态之前，先将操作记录持久化到磁盘**。这样，即使进程崩溃，重启后也可以通过重放 WAL 来恢复 MemTable 的内容，保证已确认的写入不会丢失。
 
-"Write-Ahead" 的含义正是"先写日志，再修改数据结构"——保证日志总是比实际数据更早持久化。这一原则在所有需要崩溃恢复的系统中普遍适用，从数据库 [[MySQL InnoDB]] 的 redo log，到消息队列 [[Kafka]] 的 log segment，再到分布式共识算法 [[Raft]] 的日志复制，都遵循同样的思想。
+"Write-Ahead" 的含义正是"先写日志，再修改数据结构"——保证日志总是比实际数据更早持久化。这一原则在所有需要崩溃恢复的系统中普遍适用，从数据库 MySQL InnoDB 的 redo log，到消息队列 Kafka 的 log segment，再到分布式共识算法 Raft 的日志复制，都遵循同样的思想。
 
 ### 4.2 WAL 的文件结构
 
@@ -350,7 +350,7 @@ LevelDB 的写入并非逐条处理，而是通过 `WriteBatch` 实现批量原�
 
 ### 5.3 SequenceNumber——MVCC 的版本标记
 
-LevelDB 中每一条写入记录都携带一个单调递增的 `SequenceNumber`，这是 LevelDB 实现 [[MVCC]]（多版本并发控制）的基础。
+LevelDB 中每一条写入记录都携带一个单调递增的 `SequenceNumber`，这是 LevelDB 实现 MVCC（多版本并发控制）的基础。
 
 `InternalKey = UserKey + SequenceNumber + ValueType`
 
@@ -377,7 +377,7 @@ SequenceNumber 的作用：
 
 LevelDB 在以下场景中表现出色：
 
-**写密集型工作负载**：时序数据库（如 [[InfluxDB]] 早期版本）、日志存储、用户行为埋点、消息队列的 offset 存储等场景，数据以时间顺序持续写入，LSM-Tree 的顺序写特性带来极高吞吐量。
+**写密集型工作负载**：时序数据库（如 InfluxDB 早期版本）、日志存储、用户行为埋点、消息队列的 offset 存储等场景，数据以时间顺序持续写入，LSM-Tree 的顺序写特性带来极高吞吐量。
 
 **SSD 存储**：SSD 对写放大敏感，LSM-Tree 通过 Compaction 将随机小写合并为大块顺序写，减少 SSD 的随机写次数，延长 SSD 寿命。
 
@@ -389,11 +389,11 @@ LevelDB 在以下场景中表现出色：
 
 **不适合写后立即读**：写入后立即读取同一个 key，如果该 key 尚在 MemTable 中还好（内存读取），但若触发了 Compaction，后台 IO 可能影响读取延迟，产生不可预测的 P99 毛刺。
 
-**不适合大 Value 存储**：LSM-Tree 的 Compaction 会反复读取和重写数据，若 Value 很大（如图片、视频），Compaction 的写放大代价极高。针对这个问题，[[WiscKey]] 论文提出了 Key-Value 分离存储的方案（大 Value 存储在单独的 Value Log 中，SSTable 中只存 Key 和 Value 的位置指针），[[Badger]]（Go 语言实现）采用了这一思路。
+**不适合大 Value 存储**：LSM-Tree 的 Compaction 会反复读取和重写数据，若 Value 很大（如图片、视频），Compaction 的写放大代价极高。针对这个问题，WiscKey 论文提出了 Key-Value 分离存储的方案（大 Value 存储在单独的 Value Log 中，SSTable 中只存 Key 和 Value 的位置指针），Badger（Go 语言实现）采用了这一思路。
 
 **不适合大规模并发点查询**：Bloom Filter 虽然能过滤大多数不存在 key 的查询，但对于大量并发的随机点查询（如根据主键查询用户信息），读放大依然比 B+ 树高。
 
-**单机嵌入式限制**：LevelDB 没有网络层、没有复制、没有事务（除了单批次的原子写），不支持 SQL。这些高级特性需要在 LevelDB 之上构建，如 [[RocksDB]] 在 LevelDB 基础上增加了 Column Family、事务等特性。
+**单机嵌入式限制**：LevelDB 没有网络层、没有复制、没有事务（除了单批次的原子写），不支持 SQL。这些高级特性需要在 LevelDB 之上构建，如 RocksDB 在 LevelDB 基础上增加了 Column Family、事务等特性。
 
 ### 6.3 LevelDB 在工程实践中的影响力
 
@@ -401,11 +401,11 @@ LevelDB 的设计影响了一代存储引擎：
 
 | 系统 | 关系 | 核心改进点 |
 |------|------|-----------|
-| **[[RocksDB]]** | 基于 LevelDB 的工程增强 | Column Family、多线程 Compaction、Rate Limiter、Universal Compaction 等 |
-| **[[TiKV]]** | 使用 RocksDB 作为存储引擎 | 在 RocksDB 之上构建 Multi-Raft、MVCC 事务 |
-| **[[Cassandra]]** | 独立实现的 LSM-Tree | 基于 LSM-Tree 思想，与 LevelDB 架构类似 |
-| **[[HBase]]** | LSM-Tree 变种 | 类似的 MemStore + HFile（SSTable）架构 |
-| **[[ClickHouse]] MergeTree** | LSM-Tree 思想的变种 | 列存 + 合并树，用于 OLAP 分析场景 |
+| **RocksDB** | 基于 LevelDB 的工程增强 | Column Family、多线程 Compaction、Rate Limiter、Universal Compaction 等 |
+| **TiKV** | 使用 RocksDB 作为存储引擎 | 在 RocksDB 之上构建 Multi-Raft、MVCC 事务 |
+| **Cassandra** | 独立实现的 LSM-Tree | 基于 LSM-Tree 思想，与 LevelDB 架构类似 |
+| **HBase** | LSM-Tree 变种 | 类似的 MemStore + HFile（SSTable）架构 |
+| **ClickHouse MergeTree** | LSM-Tree 思想的变种 | 列存 + 合并树，用于 OLAP 分析场景 |
 
 这些系统无一不继承了 LevelDB 的核心洞察：**将随机写转化为顺序写，是处理高吞吐写入场景的正确方向**。
 

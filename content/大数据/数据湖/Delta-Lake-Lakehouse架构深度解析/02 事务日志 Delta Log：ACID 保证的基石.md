@@ -324,7 +324,7 @@ Spark 可以并行读取这 5 个 Checkpoint 分片，元数据加载速度线�
 读取者通过枚举 `_delta_log/` 目录中存在的 JSON 文件，只能看到已完成提交的版本，看不到进行中的提交。Spark 写入过程中崩溃 → JSON 文件不存在 → 该版本从未被读取者看到 → 原子性保证。
 
 > [!info] 核心概念
-> 这里有一个微妙的问题：S3 的 PUT 操作是原子的（要么完整写入，要么不写），但 S3 的 LIST 操作存在**最终一致性**问题（旧版 S3，新版 S3 Strong Consistency 已解决）。Delta Lake 依赖 S3 Strong Consistency（AWS S3 在 2020 年 12 月宣布支持），或者用 [[DynamoDB]] 作为外部 Lock Provider 实现强一致性（`delta.dynamoDbLogStore`）。
+> 这里有一个微妙的问题：S3 的 PUT 操作是原子的（要么完整写入，要么不写），但 S3 的 LIST 操作存在**最终一致性**问题（旧版 S3，新版 S3 Strong Consistency 已解决）。Delta Lake 依赖 S3 Strong Consistency（AWS S3 在 2020 年 12 月宣布支持），或者用 DynamoDB 作为外部 Lock Provider 实现强一致性（`delta.dynamoDbLogStore`）。
 
 ### 5.2 持久性（Durability）
 

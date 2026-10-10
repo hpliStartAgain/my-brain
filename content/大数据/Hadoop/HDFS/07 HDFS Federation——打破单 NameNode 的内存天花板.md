@@ -529,7 +529,7 @@ Federation 是 HDFS 在面对超大规模集群时的水平扩展方案，其核
 
 但 Federation 的局限性也同样清晰：跨 Namespace 操作代价高、Namespace 切分固化难以调整、多 NameNode 管理复杂度增加。这些局限性决定了 Federation 是一个"在不得不用时才用"的方案，而不是"一开始就部署"的常规选择。
 
-下一篇文章，我们将目光转向 DataNode 的存储引擎——DataNode 如何通过 Fsdataset 管理本地磁盘上的 Block 数据，磁盘故障如何被检测和隔离，以及 DataNode 如何高效利用内核 [[Page Cache]] 优化 I/O 性能。
+下一篇文章，我们将目光转向 DataNode 的存储引擎——DataNode 如何通过 Fsdataset 管理本地磁盘上的 Block 数据，磁盘故障如何被检测和隔离，以及 DataNode 如何高效利用内核 Page Cache 优化 I/O 性能。
 
 ---
 

@@ -7,7 +7,7 @@ aliases: ["Iceberg隐藏分区", "Hidden Partition", "分区列陷阱", "Partiti
 
 **摘要：**
 
-**Hidden Partitioning（隐藏分区）** 是 [[Apache Iceberg]] 在用户体验和架构设计上最重要的创新之一。传统的 [[Apache Hive]] 分区模型有一个广为人知却鲜少被彻底解决的"分区列陷阱"——如果查询条件没有使用分区列，就会触发全表扫描；如果分区列是从其他列派生的（如 `date` 从 `event_ts` 派生），用户还需要在写入时手动维护冗余的分区列，一旦忘记写或者写错，数据就进了错误的分区。Iceberg 的 Hidden Partitioning 把分区规则（包括变换函数）存储在表元数据中，而不是编码在文件路径里——对用户完全透明。这带来了两个革命性的工程能力：**查询无需知道分区方案**（Iceberg 自动做分区推导和剪枝）、**分区方案可以原地演进**（Partition Evolution，无需重写历史数据）。本文深入剖析 Hidden Partitioning 的物理实现、五种分区变换函数的工作原理、Partition Evolution 的机制，以及它与 Delta Lake / Hudi 分区方案的根本差异。
+**Hidden Partitioning（隐藏分区）** 是 Apache Iceberg 在用户体验和架构设计上最重要的创新之一。传统的 Apache Hive 分区模型有一个广为人知却鲜少被彻底解决的"分区列陷阱"——如果查询条件没有使用分区列，就会触发全表扫描；如果分区列是从其他列派生的（如 `date` 从 `event_ts` 派生），用户还需要在写入时手动维护冗余的分区列，一旦忘记写或者写错，数据就进了错误的分区。Iceberg 的 Hidden Partitioning 把分区规则（包括变换函数）存储在表元数据中，而不是编码在文件路径里——对用户完全透明。这带来了两个革命性的工程能力：**查询无需知道分区方案**（Iceberg 自动做分区推导和剪枝）、**分区方案可以原地演进**（Partition Evolution，无需重写历史数据）。本文深入剖析 Hidden Partitioning 的物理实现、五种分区变换函数的工作原理、Partition Evolution 的机制，以及它与 Delta Lake / Hudi 分区方案的根本差异。
 
 ---
 
@@ -15,7 +15,7 @@ aliases: ["Iceberg隐藏分区", "Hidden Partition", "分区列陷阱", "Partiti
 
 ### 1.1 Hive 分区的工作方式
 
-[[Apache Hive]] 的分区本质上是一个**目录命名约定**：把数据文件存在 `hdfs:///data/events/date=2024-01-01/` 目录下，就意味着这批数据属于 `date=2024-01-01` 分区。
+Apache Hive 的分区本质上是一个**目录命名约定**：把数据文件存在 `hdfs:///data/events/date=2024-01-01/` 目录下，就意味着这批数据属于 `date=2024-01-01` 分区。
 
 这个设计的优点是直观：人类可以直接在文件系统上看到分区结构，HDFS/S3 浏览器也能直接理解分区层次。
 
@@ -84,7 +84,7 @@ WHERE DATE(event_ts) = '2024-01-01';  ← 函数阻止了分区剪裁
 
 ### 1.2 Delta Lake 和 Hudi 的分区也有同样问题
 
-这个问题不是 Hive 独有的——[[Delta Lake]] 和 [[Apache Hudi]] 沿用了同样的"目录层次结构"分区模型：
+这个问题不是 Hive 独有的——Delta Lake 和 Apache Hudi 沿用了同样的"目录层次结构"分区模型：
 
 ```python
 # Delta Lake 分区

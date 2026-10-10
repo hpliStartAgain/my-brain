@@ -331,7 +331,7 @@ sequenceDiagram
     end
 ```
 
-**缓存策略的重要性**：Index Block 通常只有几 KB（每个 Data Block 一条记录，约 20~30 字节/条，一个 4MB SSTable 有约 1000 个 Data Block，Index Block 约 20~30KB），完全可以常驻 [[Block Cache]]。如果 Index Block 常驻缓存，读取一个已知存在的 key 只需**一次磁盘 IO**（加载 Data Block）。
+**缓存策略的重要性**：Index Block 通常只有几 KB（每个 Data Block 一条记录，约 20~30 字节/条，一个 4MB SSTable 有约 1000 个 Data Block，Index Block 约 20~30KB），完全可以常驻 Block Cache。如果 Index Block 常驻缓存，读取一个已知存在的 key 只需**一次磁盘 IO**（加载 Data Block）。
 
 ---
 
@@ -403,13 +403,13 @@ Block Cache 的命中率对读取性能影响巨大：
 - **命中**：直接从内存读取，延迟约 100ns~1μs
 - **未命中**：需要磁盘 IO，延迟约 1~10ms（HDD）或 100μs~1ms（SSD）
 
-**Block Cache 大小规划**：一般建议将 Block Cache 设置为热点数据集大小的 10%~20%。对于 [[LRU（最近最少使用）]] 缓存，若热点数据分布符合 80/20 法则（80% 的访问集中在 20% 的数据），则 20% 大小的 Block Cache 可以获得约 80% 的命中率。
+**Block Cache 大小规划**：一般建议将 Block Cache 设置为热点数据集大小的 10%~20%。对于 LRU（最近最少使用） 缓存，若热点数据分布符合 80/20 法则（80% 的访问集中在 20% 的数据），则 20% 大小的 Block Cache 可以获得约 80% 的命中率。
 
 ### 8.2 mmap 与直接 IO
 
 LevelDB 支持两种文件读取方式，由 `Options.use_mmap_reads`（64位系统默认 true）控制：
 
-**mmap 方式**：将 SSTable 文件直接映射到进程的虚拟地址空间。优点是读取时不需要额外的内存拷贝（直接从 [[Page Cache]] 读取），OS 负责管理缓存；缺点是如果打开的文件过多，会耗尽虚拟地址空间（在 32 位系统上尤为严重）。
+**mmap 方式**：将 SSTable 文件直接映射到进程的虚拟地址空间。优点是读取时不需要额外的内存拷贝（直接从 Page Cache 读取），OS 负责管理缓存；缺点是如果打开的文件过多，会耗尽虚拟地址空间（在 32 位系统上尤为严重）。
 
 **pread 方式**：通过 `pread(fd, buf, size, offset)` 系统调用读取文件。优点是精确控制读取范围，不消耗虚拟地址空间；缺点是需要一次用户态到内核态的拷贝。
 
@@ -443,7 +443,7 @@ LevelDB 的 SSTable 格式在设计上考虑了向后兼容性：
 
 ### 9.2 RocksDB 对 SSTable 格式的扩展
 
-[[RocksDB]] 在 LevelDB 的 SSTable 格式基础上做了若干扩展（兼容旧格式的同时引入新特性）：
+RocksDB 在 LevelDB 的 SSTable 格式基础上做了若干扩展（兼容旧格式的同时引入新特性）：
 
 - **BlockBasedTable v2**：新增 Full Filter（整个文件一个 Bloom Filter）和 Partitioned Index（将大 Index Block 分片，减少内存占用）
 - **压缩字典（Dictionary Compression）**：对于大量相似 Block，使用共享的 Zstd 压缩字典，显著提升压缩率

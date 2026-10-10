@@ -9,7 +9,7 @@ aliases: [HBase架构, HBase组件职责]
 
 **摘要：**
 
-HBase 的整体架构是一个经过精心设计的职责分离体系：[[ZooKeeper]] 承担协调职责，[[HMaster]] 承担管控职责，[[RegionServer]] 承担数据服务职责，三者共同构成了一个能够在廉价商用服务器集群上支撑 PB 级数据随机读写的分布式系统。本文深入剖析三大核心组件各自的工作机理，重点揭示两个常被忽视的关键设计：**HMaster 不在数据读写的关键路径上**（这是 HBase 能在 Master 故障期间维持读写服务的根本原因）；以及 **`hbase:meta` 表的三级寻址机制**（这是客户端能高效定位任意 Region 的基础设施）。通过理解这三个组件的协作边界，读者将能够在生产环境中准确判断故障影响范围、合理配置资源、以及快速定位性能瓶颈。
+HBase 的整体架构是一个经过精心设计的职责分离体系：ZooKeeper 承担协调职责，HMaster 承担管控职责，RegionServer 承担数据服务职责，三者共同构成了一个能够在廉价商用服务器集群上支撑 PB 级数据随机读写的分布式系统。本文深入剖析三大核心组件各自的工作机理，重点揭示两个常被忽视的关键设计：**HMaster 不在数据读写的关键路径上**（这是 HBase 能在 Master 故障期间维持读写服务的根本原因）；以及 **`hbase:meta` 表的三级寻址机制**（这是客户端能高效定位任意 Region 的基础设施）。通过理解这三个组件的协作边界，读者将能够在生产环境中准确判断故障影响范围、合理配置资源、以及快速定位性能瓶颈。
 
 ---
 
@@ -24,11 +24,11 @@ HBase 的整体架构是一个经过精心设计的职责分离体系：[[ZooKee
 - **数据路径（Data Path）**：处理每一次读写请求，需要极低延迟、极高吞吐，是系统的性能核心。这条路径上的任何组件故障都会直接影响服务可用性。
 - **控制路径（Control Path）**：处理元数据管理、故障恢复、负载均衡等管控操作，频率低但对正确性要求高。这条路径上的短暂故障通常不影响正在进行的数据操作。
 
-HBase 将这两条路径严格分离：[[RegionServer]] 负责数据路径（所有读写请求都由 RegionServer 直接处理），[[HMaster]] 负责控制路径（元数据管理、Region 分配、负载均衡）。[[ZooKeeper]] 作为独立的协调层，为两者提供分布式协调服务。
+HBase 将这两条路径严格分离：RegionServer 负责数据路径（所有读写请求都由 RegionServer 直接处理），HMaster 负责控制路径（元数据管理、Region 分配、负载均衡）。ZooKeeper 作为独立的协调层，为两者提供分布式协调服务。
 
 这种架构的关键优势是：**HMaster 的短暂不可用不会影响正在进行的读写操作**。一个运行中的 HBase 集群，即使 HMaster 发生故障，RegionServer 仍然可以继续服务已经分配给它们的 Region，客户端的读写请求不会受到影响——直到需要进行 Region 分配或 DDL 操作（如创建/删除表）时，才会因为 HMaster 不可用而阻塞。
 
-这一设计与 [[HDFS]] 的 NameNode 形成鲜明对比：HDFS 的 NameNode 在数据读写的关键路径上（客户端需要从 NameNode 获取 Block 位置信息），NameNode 故障会直接导致读写不可用（在 HA 模式切换完成之前）。HBase 通过将元数据路由信息缓存在客户端，以及使用 `hbase:meta` 表而非 Master 来存储 Region 位置信息，实现了比 HDFS 更强的 Master 容错能力。
+这一设计与 HDFS 的 NameNode 形成鲜明对比：HDFS 的 NameNode 在数据读写的关键路径上（客户端需要从 NameNode 获取 Block 位置信息），NameNode 故障会直接导致读写不可用（在 HA 模式切换完成之前）。HBase 通过将元数据路由信息缓存在客户端，以及使用 `hbase:meta` 表而非 Master 来存储 Region 位置信息，实现了比 HDFS 更强的 Master 容错能力。
 
 ### 1.2 架构全景图
 
@@ -100,7 +100,7 @@ graph TD
 
 ### 2.1 ZooKeeper 在 HBase 中的核心职责
 
-[[ZooKeeper]] 在 HBase 架构中扮演的角色，可以用一句话概括：**分布式系统的"公证处"**——提供强一致性的分布式协调服务，解决分布式系统中的选主（Leader Election）、服务发现（Service Discovery）和配置管理（Configuration Management）问题。
+ZooKeeper 在 HBase 架构中扮演的角色，可以用一句话概括：**分布式系统的"公证处"**——提供强一致性的分布式协调服务，解决分布式系统中的选主（Leader Election）、服务发现（Service Discovery）和配置管理（Configuration Management）问题。
 
 HBase 对 ZooKeeper 的依赖体现在以下几个具体职能上：
 
@@ -167,7 +167,7 @@ ZooKeeper 还存储了 HBase 的一些全局配置和集群状态信息：
 
 ### 3.1 HMaster 的核心职责
 
-[[HMaster]]（简称 Master）是 HBase 集群的管控中心，负责所有的**非数据路径操作**。它的核心职责包括：
+HMaster（简称 Master）是 HBase 集群的管控中心，负责所有的**非数据路径操作**。它的核心职责包括：
 
 **职责一：DDL 操作（表的生命周期管理）**
 
@@ -230,7 +230,7 @@ HMaster 完全不参与以上任何步骤。
 同时，这也意味着：**HMaster 故障对在线读写的影响是零**（在 Region 分配不需要变动的情况下）。生产中，HMaster 进程重启或主备切换，用户几乎感知不到（除非在切换期间恰好有 RegionServer 下线，需要 HMaster 来协调故障恢复）。
 
 > [!note] 设计哲学
-> HBase 的这个设计选择（将 HMaster 完全排除在数据路径之外）是对 [[Google BigTable]] 中 Master 设计的忠实复现。BigTable 论文明确指出："Clients communicate directly with tablet servers for reads and writes... In practice, this means clients are not required to access the master." 这是大规模分布式存储系统中"控制平面与数据平面分离"原则的经典实践。
+> HBase 的这个设计选择（将 HMaster 完全排除在数据路径之外）是对 Google BigTable 中 Master 设计的忠实复现。BigTable 论文明确指出："Clients communicate directly with tablet servers for reads and writes... In practice, this means clients are not required to access the master." 这是大规模分布式存储系统中"控制平面与数据平面分离"原则的经典实践。
 
 ### 3.3 HMaster 的内部组件
 
@@ -252,7 +252,7 @@ HMaster 的内部结构包含以下几个主要模块：
 
 ### 4.1 RegionServer 的整体架构
 
-[[RegionServer]] 是 HBase 中最核心、最复杂的组件。所有的数据读写操作最终都由 RegionServer 执行，它的性能直接决定了 HBase 集群的整体吞吐量和延迟。
+RegionServer 是 HBase 中最核心、最复杂的组件。所有的数据读写操作最终都由 RegionServer 执行，它的性能直接决定了 HBase 集群的整体吞吐量和延迟。
 
 一个 RegionServer 进程内部包含以下主要组件：
 

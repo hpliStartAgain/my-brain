@@ -7,7 +7,7 @@ aliases: []
 
 ## 摘要
 
-本文记录了一套真实运转的 AI 驱动工程师系统。系统以 [[Obsidian]] 为载体、[[Dataview]] 为查询引擎、[[Kanban]] 插件为看板视图，在此基础上通过 [[Claude Code]] 的 Skill 机制注入三个可复用的 AI Agent 行为：每日日报生成（`daily-report`）、每周任务初始化（`weekly-init`）、半年度 OKR 生成（`write-OKR`）。
+本文记录了一套真实运转的 AI 驱动工程师系统。系统以 Obsidian 为载体、Dataview 为查询引擎、Kanban 插件为看板视图，在此基础上通过 Claude Code 的 Skill 机制注入三个可复用的 AI Agent 行为：每日日报生成（`daily-report`）、每周任务初始化（`weekly-init`）、半年度 OKR 生成（`write-OKR`）。
 
 文章不是方法论推销，而是系统设计的完整解剖：为什么这样分层、每一层解决什么问题、AI 在哪个环节创造了价值、在哪个环节反而有害。目标读者是有一定 Obsidian 使用经验、希望通过 AI 工具降低「启动阻力」而非「外包决策」的工程师。
 
@@ -51,7 +51,7 @@ Jira 为软件工程团队协作设计，Linear 为产品团队设计，Notion �
 
 ### 1.2 Obsidian + Dataview 的工程师任务管理哲学
 
-[[Obsidian]] 的核心设计哲学是「本地优先、纯文本、所有权在你自己」。这三点对工程师的吸引力不是审美偏好，而是工程原则：
+Obsidian 的核心设计哲学是「本地优先、纯文本、所有权在你自己」。这三点对工程师的吸引力不是审美偏好，而是工程原则：
 
 - **本地优先**：工作上下文不依赖第三方服务的可用性，不担心数据出境或安全审计
 - **纯文本**：Markdown 文件是 Git 可追踪的，可以用任何文本编辑器打开，不被厂商锁定
@@ -59,9 +59,9 @@ Jira 为软件工程团队协作设计，Linear 为产品团队设计，Notion �
 
 但 Obsidian 本身只是一个 Markdown 编辑器加图谱可视化工具，要把它变成任务管理系统，需要两个关键插件：
 
-**[[Kanban]] 插件**提供看板视图。它的底层实现仍然是 Markdown 文件，Kanban board 只是对特定格式 Markdown 的渲染。这意味着看板状态可以用文本工具批量修改，AI 也可以直接读写它。
+**Kanban 插件**提供看板视图。它的底层实现仍然是 Markdown 文件，Kanban board 只是对特定格式 Markdown 的渲染。这意味着看板状态可以用文本工具批量修改，AI 也可以直接读写它。
 
-**[[Dataview]] 插件**提供结构化查询。它把 Markdown 文件的 YAML frontmatter 当作数据库字段，提供类 SQL 的 DQL（Dataview Query Language）查询语法。只要 frontmatter 规范，任意维度的筛选、排序、聚合都可以在笔记内动态展示。
+**Dataview 插件**提供结构化查询。它把 Markdown 文件的 YAML frontmatter 当作数据库字段，提供类 SQL 的 DQL（Dataview Query Language）查询语法。只要 frontmatter 规范，任意维度的筛选、排序、聚合都可以在笔记内动态展示。
 
 两者结合，就得到了一个「以 Markdown 文件为数据库、以 Dataview 查询为视图、以 Kanban 为工作流可视化」的任务管理系统——它既是工程师熟悉的纯文本环境，又具备传统数据库系统的查询能力。
 
@@ -298,7 +298,7 @@ SORT priority ASC, deadline ASC
 
 #### 3.1.1 是什么
 
-[[Claude Code]] 是 Anthropic 官方发布的命令行 AI Agent 工具（CLI），与通过网页聊天使用 Claude 有本质区别。它不是一个聊天机器人，而是一个具备以下能力的本地 Agent：
+Claude Code 是 Anthropic 官方发布的命令行 AI Agent 工具（CLI），与通过网页聊天使用 Claude 有本质区别。它不是一个聊天机器人，而是一个具备以下能力的本地 Agent：
 
 - **文件系统访问**：可以读写本地文件，包括 Markdown、代码、配置文件
 - **Shell 执行**：可以运行命令行命令（在用户授权范围内）
@@ -344,7 +344,7 @@ CC 有明确的权限模型。默认情况下：
 
 #### 3.2.1 是什么
 
-Skill 是 [[Claude Code]] 的可复用行为单元。本质上，一个 Skill 是一个 Markdown 文件，放置在 `.claude/skills/<skill-name>/SKILL.md` 路径下，包含：
+Skill 是 Claude Code 的可复用行为单元。本质上，一个 Skill 是一个 Markdown 文件，放置在 `.claude/skills/<skill-name>/SKILL.md` 路径下，包含：
 
 - **YAML frontmatter**：Skill 的元数据（id、name、description）
 - **执行指令**：结构化的步骤说明，告诉 AI 在被调用时应该做什么、读什么文件、输出什么格式
@@ -771,7 +771,7 @@ my-brain/CLAUDE.md          ← 项目级：描述 Quartz 框架和整体知识�
 
 #### 5.1.1 是什么
 
-[[Claude Code]] 支持通过 `--print` 参数以非交互模式运行，结合操作系统的 cron 机制，可以实现定时自动触发 Skill。
+Claude Code 支持通过 `--print` 参数以非交互模式运行，结合操作系统的 cron 机制，可以实现定时自动触发 Skill。
 
 基本命令格式：
 
@@ -835,7 +835,7 @@ AI 生成的内容和 Dataview 查询的联动有两种模式：
 AI 修改看板文件需要遵循 Kanban 插件的文件格式约定，否则插件解析会出错：
 
 1. 列名必须是 `## 待办`、`## 进行中`、`## 已完成`（精确匹配，包括空格）
-2. 每个条目格式：`- [ ] [[任务文件名]]`（注意：Wiki 链接只写文件名，不含路径和扩展名）
+2. 每个条目格式：`- [ ] 任务文件名`（注意：Wiki 链接只写文件名，不含路径和扩展名）
 3. 不修改 `%% kanban:settings %%` 以下的内容
 4. 不修改文件的 frontmatter（`kanban-plugin: board` 这一行）
 

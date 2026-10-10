@@ -9,7 +9,7 @@ aliases: []
 
 ## 摘要
 
-Spark on Kubernetes 的资源优化是降低计算成本、提高集群利用率的核心课题。本文围绕三个互相关联的主题展开：**Spot 实例**（云厂商以 10-30% 折扣提供的可被随时回收的实例，适合 Spark 作业但需要设计容忍驱逐的机制）、**Gang Scheduling**（"全或无"的调度语义——作业的所有 Executor Pod 必须同时就绪才开始，否则等待；K8s 默认调度器不支持，需要 [[Volcano]] 或 [[Apache Yunikorn]] 扩展）、**容量规划**（如何根据工作负载特征确定节点规格、集群大小和资源配额分配）。三者共同构成 Spark on K8s 的资源效率优化体系：Gang Scheduling 避免死锁和资源碎片，Spot 实例降低计算成本，容量规划确保资源供给与需求的匹配。
+Spark on Kubernetes 的资源优化是降低计算成本、提高集群利用率的核心课题。本文围绕三个互相关联的主题展开：**Spot 实例**（云厂商以 10-30% 折扣提供的可被随时回收的实例，适合 Spark 作业但需要设计容忍驱逐的机制）、**Gang Scheduling**（"全或无"的调度语义——作业的所有 Executor Pod 必须同时就绪才开始，否则等待；K8s 默认调度器不支持，需要 Volcano 或 Apache Yunikorn 扩展）、**容量规划**（如何根据工作负载特征确定节点规格、集群大小和资源配额分配）。三者共同构成 Spark on K8s 的资源效率优化体系：Gang Scheduling 避免死锁和资源碎片，Spot 实例降低计算成本，容量规划确保资源供给与需求的匹配。
 
 ---
 
@@ -151,7 +151,7 @@ Gang Scheduling 的调度结果（同样场景）：
 
 ### 2.3 Volcano：Kubernetes 上的 Gang Scheduling 实现
 
-**[[Volcano]]** 是华为开源的 K8s 批处理计算框架，提供 Gang Scheduling 等高级调度能力，已进入 CNCF 沙箱项目。
+**Volcano** 是华为开源的 K8s 批处理计算框架，提供 Gang Scheduling 等高级调度能力，已进入 CNCF 沙箱项目。
 
 **Volcano 的核心概念**：
 
@@ -189,7 +189,7 @@ spec:
 
 ### 2.4 Apache Yunikorn：另一个 Gang Scheduling 方案
 
-**[[Apache Yunikorn]]**（原 Alibaba Scheduler，2019 年贡献给 Apache）也提供 Gang Scheduling，且与 Spark 的集成更轻量（不需要替换整个调度器，通过 Scheduler Plugin 扩展）：
+**Apache Yunikorn**（原 Alibaba Scheduler，2019 年贡献给 Apache）也提供 Gang Scheduling，且与 Spark 的集成更轻量（不需要替换整个调度器，通过 Scheduler Plugin 扩展）：
 
 ```
 spark.kubernetes.scheduler.name=yunikorn

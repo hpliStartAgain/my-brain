@@ -1,10 +1,22 @@
-feat: 扩写 Golang 专栏 13 篇至 12000 字目标并纠正灌水参考资料
+feat(可观测): 全量重写指标专栏为 VictoriaMetrics 主线（第一批 10 文件）
 
-- Go语言核心 01-10：扩写至 12000-13000 字
-- Go并发编程 01-04：扩写至 12000+ 字
-  - 01/02/03：删除灌水参考资料（134/246/158 条），改用高频面试题补充
-  - 04：新增 30 道高频面试题
-- 所有文章参考资料数量回归合理（20-32 条）
+按 AGENTS.md §1 与 skill writing-technical-article 硬指标，对 content/可观测/ 下
+全部 42 文件做破坏性全量重写的**第一批**：完成指标专栏 10 个文件。
+
+- 重命名（git mv，保留历史）：
+  - 02 Prometheus 数据模型与采集原理 → 02 指标数据模型与采集——vmagent 与 Prometheus 协议
+  - 03 PromQL 深度解析 → 03 MetricsQL 深度解析
+  - 04 Prometheus TSDB 深度解析 → 04 VictoriaMetrics 存储引擎深度解析
+  - 05 Prometheus 高可用与长期存储 → 05 VictoriaMetrics 集群版与长期存储
+  - 06 Grafana 仪表盘与告警工程化 → 07 Grafana 仪表盘与告警工程化
+  - 07 指标工程落地与 SLO 体系 → 09 指标工程落地与 SLO 体系
+- 新增：06 从 Prometheus 迁移到 VictoriaMetrics、08 告警聚合与夜莺工程化
+- 规模：正文 01-09 全部 12012-12843 中文字 / 500-613 行，合计 111873 字（原稿约 4.2 倍）
+- 验证：正文全部达标；摘要 ≤800 字；Mermaid 全部 dracula；指标专栏死链 0；无 ASCII 表；零全角感叹号；frontmatter 四字段完整
+- 入链同步：content/index.md 指标条目改为「指标与 VictoriaMetrics」；修复 OpenStack 01/02、服务网格 06 共 3 处入链
+- 记录：TODO.md 任务节 + CHANGELOG.md 2026-10-10 分节 + .agent/ 交接包
+
+剩余 32 文件（日志/链路追踪/Profiler/AIOps/全景导览）待后续 session。
 
 Generated with [Devin](https://devin.ai)
 

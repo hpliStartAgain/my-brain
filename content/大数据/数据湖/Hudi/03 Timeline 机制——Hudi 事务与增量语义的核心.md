@@ -7,7 +7,7 @@ aliases: ["Hudi Timeline", "Hudi事务机制", "Hudi增量语义", "Timeline状�
 
 **摘要：**
 
-**Timeline** 是 Apache Hudi 区别于所有其他数据湖方案的核心架构创新。它不仅仅是一个事务日志（[[Delta Lake]] 的 `_delta_log` 也是事务日志），更是一个**全局有序的操作历史记录**，赋予了 Hudi 独特的**增量消费语义**——下游系统可以精确查询"在时间 T1 到 T2 之间，哪些记录发生了变化"。本文深入解析 Timeline 的文件结构、五种 Action 类型、三阶段提交协议的状态转移、并发写入的冲突处理，以及 Timeline 如何从底层支撑 Snapshot Query 和 Incremental Query 两种读取模式。理解 Timeline 是理解 Hudi 一切行为的关键——它既是事务保证的基础，也是增量语义的承载者。
+**Timeline** 是 Apache Hudi 区别于所有其他数据湖方案的核心架构创新。它不仅仅是一个事务日志（Delta Lake 的 `_delta_log` 也是事务日志），更是一个**全局有序的操作历史记录**，赋予了 Hudi 独特的**增量消费语义**——下游系统可以精确查询"在时间 T1 到 T2 之间，哪些记录发生了变化"。本文深入解析 Timeline 的文件结构、五种 Action 类型、三阶段提交协议的状态转移、并发写入的冲突处理，以及 Timeline 如何从底层支撑 Snapshot Query 和 Incremental Query 两种读取模式。理解 Timeline 是理解 Hudi 一切行为的关键——它既是事务保证的基础，也是增量语义的承载者。
 
 ---
 
@@ -15,7 +15,7 @@ aliases: ["Hudi Timeline", "Hudi事务机制", "Hudi增量语义", "Timeline状�
 
 ### 1.1 Delta Log vs Timeline：同为日志，设计目标不同
 
-[[Delta Lake]] 也有类似的事务日志机制——`_delta_log/` 目录下的 JSON 文件记录每次操作。那么 Hudi 的 Timeline 有什么本质不同？
+Delta Lake 也有类似的事务日志机制——`_delta_log/` 目录下的 JSON 文件记录每次操作。那么 Hudi 的 Timeline 有什么本质不同？
 
 答案在于两者的**设计目标优先级**不同：
 

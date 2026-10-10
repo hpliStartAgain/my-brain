@@ -19,17 +19,17 @@ etcd 与 ZooKeeper 是分布式系统领域最具代表性的两款协调服务�
 
 要理解 ZooKeeper，必须把时钟拨回到 2007 年。
 
-那是 [[Hadoop]] 生态的草创期。[[Kafka]] 还没诞生，[[Dubbo]] 刚在阿里内部孵化，分布式系统的工程师们面临一个反复出现的困境：每个系统都需要实现自己的"协调"逻辑——分布式锁、Leader 选举、配置管理、服务注册。而这些逻辑天然涉及一致性问题，在多节点环境下极难正确实现。Yahoo! 的工程师们观察到这一共性需求后，设计了 ZooKeeper——一个专门提供协调原语的分布式服务。
+那是 Hadoop 生态的草创期。Kafka 还没诞生，Dubbo 刚在阿里内部孵化，分布式系统的工程师们面临一个反复出现的困境：每个系统都需要实现自己的"协调"逻辑——分布式锁、Leader 选举、配置管理、服务注册。而这些逻辑天然涉及一致性问题，在多节点环境下极难正确实现。Yahoo! 的工程师们观察到这一共性需求后，设计了 ZooKeeper——一个专门提供协调原语的分布式服务。
 
 ZooKeeper 的设计哲学是**"提供原语，而非解决方案"**。它不直接提供分布式锁的 API，而是暴露 ZNode 树、Watcher、临时节点等原语，让调用方自行组合出所需的协调语义。这种设计产生了一个重要的副作用：API 的表达能力极强，但理解和正确使用的门槛很高。用临时有序节点实现公平锁是 ZooKeeper 的经典用法，但这种用法并不直观——你需要理解节点的创建顺序和 Watcher 链，才能写出不产生"惊群效应"的正确实现。
 
 在共识协议上，ZooKeeper 采用了 **ZAB**（ZooKeeper Atomic Broadcast）。ZAB 是 Paxos 的工程化变体，针对**主备复制**模型优化：Leader 接收所有写请求，以原子广播的方式同步到 Follower，Follower 可以服务读请求（但这带来了读取旧数据的风险）。ZAB 的强项在于高吞吐的顺序写，弱项在于 Leader 单点瓶颈和复杂的崩溃恢复逻辑。
 
-在 2010 年代初，ZooKeeper 是分布式协调的事实标准。HDFS NameNode 的高可用、[[Kafka]] 的 Controller 选举、[[Dubbo]] 的服务注册发现，都构建在 ZooKeeper 之上。然而，ZooKeeper 的设计是为了那个时代的需求量身打造的——它没有预见到 API 网关、容器编排、云原生微服务的兴起。
+在 2010 年代初，ZooKeeper 是分布式协调的事实标准。HDFS NameNode 的高可用、Kafka 的 Controller 选举、Dubbo 的服务注册发现，都构建在 ZooKeeper 之上。然而，ZooKeeper 的设计是为了那个时代的需求量身打造的——它没有预见到 API 网关、容器编排、云原生微服务的兴起。
 
 ### 1.2 etcd：云原生时代的配置中心
 
-etcd 诞生于 2013 年，是 [[CoreOS]] 工程师为 [[Kubernetes]] 的前身——Fleet 集群管理工具——设计的配置存储。它的起点不是"如何提供协调原语"，而是"如何可靠地存储和同步集群配置"。
+etcd 诞生于 2013 年，是 CoreOS 工程师为 Kubernetes 的前身——Fleet 集群管理工具——设计的配置存储。它的起点不是"如何提供协调原语"，而是"如何可靠地存储和同步集群配置"。
 
 这一出发点的差异，塑造了 etcd 截然不同的设计取向：
 
@@ -37,7 +37,7 @@ etcd 诞生于 2013 年，是 [[CoreOS]] 工程师为 [[Kubernetes]] 的前身�
 - **HTTP/gRPC API 而非自定义协议**：etcd v3 基于 gRPC，任何语言都能轻松调用，不需要专用的 ZooKeeper 客户端库（ZooKeeper 的客户端库在历史上以复杂和易出 bug 著称）。
 - **Raft 共识而非 ZAB**：etcd 选择了 Diego Ongaro 在 2014 年发表的 Raft 算法。Raft 的设计目标就是**可理解性**（understandability）——相比 Paxos 和 ZAB，Raft 将共识问题分解为 Leader 选举、日志复制、安全性三个相对独立的子问题，更容易理解和正确实现。
 
-当 Kubernetes 在 2014 年选择 etcd 作为唯一的状态存储时，etcd 的命运被彻底改变。[[Kubernetes]] 集群中的所有资源对象——Pod、Service、ConfigMap、Secret——都持久化在 etcd 中。这意味着 etcd 的可靠性直接决定了整个 Kubernetes 集群的可用性，etcd 因此经历了极其严苛的生产检验。
+当 Kubernetes 在 2014 年选择 etcd 作为唯一的状态存储时，etcd 的命运被彻底改变。Kubernetes 集群中的所有资源对象——Pod、Service、ConfigMap、Secret——都持久化在 etcd 中。这意味着 etcd 的可靠性直接决定了整个 Kubernetes 集群的可用性，etcd 因此经历了极其严苛的生产检验。
 
 > [!note] 设计哲学对比
 > ZooKeeper 的哲学是**"提供低级原语，构建高级语义"**——像一个积木套装，功能强大但需要装配。
@@ -383,7 +383,7 @@ etcd 原生暴露 **Prometheus 格式的 metrics**（`/metrics` 端口），集�
 
 ### 7.1 Kafka 的去 ZooKeeper 历程
 
-[[Kafka]] 是 ZooKeeper 最知名的重度用户之一。Kafka 依赖 ZooKeeper 实现 Controller 选举、Topic 元数据存储、Consumer Offset 存储（早期版本）。随着 Kafka 集群规模增大，ZooKeeper 的瓶颈逐渐显现：
+Kafka 是 ZooKeeper 最知名的重度用户之一。Kafka 依赖 ZooKeeper 实现 Controller 选举、Topic 元数据存储、Consumer Offset 存储（早期版本）。随着 Kafka 集群规模增大，ZooKeeper 的瓶颈逐渐显现：
 
 - **元数据操作的性能瓶颈**：Kafka Controller 在 ZooKeeper 上频繁读写 Topic/Partition 元数据，ZooKeeper 的写吞吐（~50k ops/s）限制了 Kafka 能支撑的分区数上限
 - **运维复杂度**：维护两套集群（Kafka + ZooKeeper），出问题时排查链路更长
@@ -393,7 +393,7 @@ Kafka 2.8+ 引入 **KRaft 模式**，用内置的 Raft 共识协议（运行在 
 
 ### 7.2 Dubbo 的注册中心演进
 
-早期 [[Dubbo]] 几乎绑定 ZooKeeper 作为注册中心，但这带来了一些问题：
+早期 Dubbo 几乎绑定 ZooKeeper 作为注册中心，但这带来了一些问题：
 
 - ZooKeeper 的 CP 特性意味着网络分区时，注册中心不可用，所有服务发现失败（服务调用可能失败，即使服务本身是健康的）
 - 大型微服务体系中，ZooKeeper 的节点数量（一个接口对应多个 ZNode）随接口数呈线性增长，容易撑爆 ZooKeeper 的内存限制

@@ -97,7 +97,7 @@ graph TD
 3. **块设备队列**：请求在块设备队列中排队，等待驱动程序下发到硬件
 4. **硬件队列**：存储设备自身的内部队列（如 SSD 的 NCQ、NVMe 的 SQ/CQ）
 
-这意味着：你在应用层观测到的"I/O 延迟"是所有这些层的叠加效果。用 `strace` 看到 `read()` 返回 1μs，不代表磁盘延迟是 1μs——大概率是 [[Page Cache]] 命中了。用 `iostat` 看到磁盘的 `await` 是 5ms，不代表应用感知到 5ms——如果 Page Cache 命中率 99%，应用的平均读延迟可能只有 50μs。
+这意味着：你在应用层观测到的"I/O 延迟"是所有这些层的叠加效果。用 `strace` 看到 `read()` 返回 1μs，不代表磁盘延迟是 1μs——大概率是 Page Cache 命中了。用 `iostat` 看到磁盘的 `await` 是 5ms，不代表应用感知到 5ms——如果 Page Cache 命中率 99%，应用的平均读延迟可能只有 50μs。
 
 > [!warning] 分析陷阱：不要用单一工具判断 I/O 性能
 > 存储性能分析最常见的错误是只看一个工具就下结论。只看 `iostat` 会忽略缓存命中率；只看应用延迟会忽略底层排队。正确的分析路径是：先看应用层延迟（`strace`/应用日志）→ 再看系统调用层（`perf trace`）→ 再看 Page Cache 命中率（`cachestat`/`sar`）→ 最后看块设备层（`iostat`/`biolatency`）。每一层都可能引入延迟，必须逐层排除。
@@ -931,7 +931,7 @@ ext4 和 XFS 是 Linux 上最主流的两个文件系统，选择依据：
 
 存储 I/O 不是孤立的，它与内存、CPU、网络子系统紧密关联：
 
-- **存储 ↔ 内存**：[[Page Cache]] 是内存和存储的交汇点。内存不足时，Page Cache 被挤压，I/O 性能恶化。参见 [[06 内存：从 NUMA 与页表到 JVM 堆模型]]
+- **存储 ↔ 内存**：Page Cache 是内存和存储的交汇点。内存不足时，Page Cache 被挤压，I/O 性能恶化。参见 [[06 内存：从 NUMA 与页表到 JVM 堆模型]]
 - **存储 ↔ CPU**：高 IOPS 场景下，I/O 中断处理消耗大量 CPU。`io_uring` 和中断聚合是减少 CPU 开销的关键
 - **存储 ↔ 网络**：分布式存储（NFS/Ceph）的 I/O 延迟受网络延迟影响。NVMe-oF（NVMe over Fabrics）把 NVMe 协议扩展到网络，但网络延迟成为新的瓶颈
 
@@ -948,10 +948,10 @@ ext4 和 XFS 是 Linux 上最主流的两个文件系统，选择依据：
 - NVMe Specification, NVM Express Inc., https://nvmexpress.org/
 - Matthew Wilcox, *Page Cache Replacements*, Linux Plumbers Conference, 2018
 - [[06 内存：从 NUMA 与页表到 JVM 堆模型]]
-- [[Page Cache]]
-- [[VFS]]
-- [[io_uring]]
-- [[NVMe]]
+- Page Cache
+- VFS
+- io_uring
+- NVMe
 
 ---
 

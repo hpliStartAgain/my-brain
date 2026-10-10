@@ -9,7 +9,7 @@ aliases: [VMM解剖, Firecracker架构, CloudHypervisor, rust-vmm, CubeHyperviso
 
 **摘要：**
 
-[[隔离原语/04 KVM 与硬件虚拟化——MicroVM 隔离的硬件基石|第 04 篇]] 讲透了硬件底座（VMX/EPT/KVM 三级 fd），但"谁在用户态把 KVM 变成一台可用的虚拟机"还没有回答——这个角色是 **VMM（Virtual Machine Monitor，虚拟机监视器）**。本文解剖 VMM 家族：从 Firecracker 的"极致减法"（仅 6 个仿真设备、无 BIOS/PCI/USB、jailer 进程降权、token bucket 限流，支撑 AWS Lambda/Fargate 每月数万亿请求），到 rust-vmm 的"组件化乐高"（不是产品而是组件库），到 Cloud Hypervisor 的"中间路线"（PCI/GPU 直通、热插拔、live migration），再到 Kata 的"五 hypervisor 可插拔策略"（QEMU 默认且独占 GPU/TDX/SEV-SNP 能力、Dragonball 与 containerd-shim 同进程主打并发密度），最后拆解 CubeSandbox——从 VMM 到完整 Sandbox 产品的形态（CubeAPI/CubeMaster/Cubelet/CubeShim/CubeHypervisor 六组件）。核心认知：**VMM 构成"极简↔全功能"光谱，选型不是比功能多少，而是比"设备模型与威胁模型的匹配度"——每个你模拟的设备都是一个攻击面，每个你不模拟的设备都是一个不可用能力**；同时，VMM 只是沙箱的"第 4 层"组件，CubeSandbox 的教训表明：**没有控制面与协议层的 VMM，只是半成品**。
+[[04 KVM 与硬件虚拟化——MicroVM 隔离的硬件基石]] 讲透了硬件底座（VMX/EPT/KVM 三级 fd），但"谁在用户态把 KVM 变成一台可用的虚拟机"还没有回答——这个角色是 **VMM（Virtual Machine Monitor，虚拟机监视器）**。本文解剖 VMM 家族：从 Firecracker 的"极致减法"（仅 6 个仿真设备、无 BIOS/PCI/USB、jailer 进程降权、token bucket 限流，支撑 AWS Lambda/Fargate 每月数万亿请求），到 rust-vmm 的"组件化乐高"（不是产品而是组件库），到 Cloud Hypervisor 的"中间路线"（PCI/GPU 直通、热插拔、live migration），再到 Kata 的"五 hypervisor 可插拔策略"（QEMU 默认且独占 GPU/TDX/SEV-SNP 能力、Dragonball 与 containerd-shim 同进程主打并发密度），最后拆解 CubeSandbox——从 VMM 到完整 Sandbox 产品的形态（CubeAPI/CubeMaster/Cubelet/CubeShim/CubeHypervisor 六组件）。核心认知：**VMM 构成"极简↔全功能"光谱，选型不是比功能多少，而是比"设备模型与威胁模型的匹配度"——每个你模拟的设备都是一个攻击面，每个你不模拟的设备都是一个不可用能力**；同时，VMM 只是沙箱的"第 4 层"组件，CubeSandbox 的教训表明：**没有控制面与协议层的 VMM，只是半成品**。
 
 ---
 
@@ -146,7 +146,7 @@ Firecracker 的性能规格由集成测试强制保证——每次 PR 和主分�
 
 **这些数字的含义**：
 
-- **~125ms 启动**：从 API 调用到 Guest Linux 的 `/sbin/init` 开始执行——用户空间代码可以在 125ms 内开始运行。这比传统 VM（数秒）快一个数量级。对 Agent 沙箱：125ms 的冷启动配合预热池（[[平台与协议/09 OpenSandbox 编排面——BatchSandbox、WarmPool 与快照|第 09 篇]]），可以做到"用户无感"的沙箱交付；
+- **~125ms 启动**：从 API 调用到 Guest Linux 的 `/sbin/init` 开始执行——用户空间代码可以在 125ms 内开始运行。这比传统 VM（数秒）快一个数量级。对 Agent 沙箱：125ms 的冷启动配合预热池（[[09 OpenSandbox 编排面——BatchSandbox、WarmPool 与快照]]），可以做到"用户无感"的沙箱交付；
 - **<5MB 内存开销**：Firecracker VMM 自身的内存开销（不包括 Guest OS）。在 64GB 内存的主机上，理论上可以运行 12000+ 个 Firecracker VMM 进程——实际受限于 Guest OS 的内存需求；
 - **150 microVMs/秒**：创建速率——每秒可以启动 150 个新 MicroVM。**这个"每秒创建速率"是比"单次启动时间"更重要的容量指标**：它决定了平台在流量突增时的扩容速度上限。
 
@@ -160,7 +160,7 @@ Firecracker 的性能规格由集成测试强制保证——每次 PR 和主分�
 
 **vCPU 线程**（一个或多个）：通过 KVM 创建，运行 `KVM_RUN` 主循环——每个 Guest CPU 核对应一个 vCPU 线程。它们是 Guest 代码实际运行的"载体"。
 
-这种线程模型的分离确保了"控制平面"（API 线程）和"数据平面"（VMM + vCPU 线程）的解耦——API 线程的处理延迟不影响 Guest 的运行时性能。**对沙箱平台的意义**：控制面与数据面分离是沙箱架构的通用原则（[[平台与协议/07 OpenSandbox 架构深度解析——协议优先与六责任面|OpenSandbox 六责任面]] 的同一哲学），Firecracker 在线程级别就实现了它。
+这种线程模型的分离确保了"控制平面"（API 线程）和"数据平面"（VMM + vCPU 线程）的解耦——API 线程的处理延迟不影响 Guest 的运行时性能。**对沙箱平台的意义**：控制面与数据面分离是沙箱架构的通用原则（[[07 OpenSandbox 架构深度解析——协议优先与六责任面]] 的同一哲学），Firecracker 在线程级别就实现了它。
 
 ### 2.5 jailer：VMM 自身的沙箱
 
@@ -174,7 +174,7 @@ Firecracker 进程本身需要一定的特权来操作 KVM——但如果 Firecr
 6. **启动 Firecracker**：在上述所有安全措施就位后，execve Firecracker 二进制。
 
 > [!note] 设计哲学：管理隔离边界的人，自己也住在边界之内
-> jailer 的设计哲学值得每个沙箱平台借鉴：**VMM 是"制造隔离边界"的组件，但它自己也要被隔离**。这个"元隔离"思想在 Agent 沙箱平台中处处可见：OpenSandbox 的 execd 与 egress 是沙箱内的守护进程（[[平台与协议/08 OpenSandbox 数据面——execd 与 egress 的盒内世界|第 08 篇]]）、Server 控制面跑在独立 Pod 中、平台自身的凭据最小化。**隔离不是"给别人的"，而是"给自己的"**——任何管理边界的组件，如果自己不受边界约束，它就是边界的薄弱点。
+> jailer 的设计哲学值得每个沙箱平台借鉴：**VMM 是"制造隔离边界"的组件，但它自己也要被隔离**。这个"元隔离"思想在 Agent 沙箱平台中处处可见：OpenSandbox 的 execd 与 egress 是沙箱内的守护进程（[[08 OpenSandbox 数据面——execd 与 egress 的盒内世界]]）、Server 控制面跑在独立 Pod 中、平台自身的凭据最小化。**隔离不是"给别人的"，而是"给自己的"**——任何管理边界的组件，如果自己不受边界约束，它就是边界的薄弱点。
 
 ### 2.6 rate limiter：设备层的资源控制
 
@@ -202,7 +202,7 @@ Firecracker 的设计不是理论推演——它在 AWS Lambda 的生产环境�
 
 **反例一：需要 GPU 的工作负载**。Firecracker 无 PCI 直通，Guest 无法访问 GPU——Agent 沙箱需要本地推理/训练时，Firecracker 路线直接出局（E2B 的 GPU 能力也正因此长期缺席，直到接入其他后端）。
 
-**反例二：需要 live migration 的场景**。Firecracker 不支持在线迁移——节点维护意味着沙箱销毁重建。对"会话必须连续"的 Agent 场景，需要评估"重建会话"的成本是否可接受（状态外置后重建通常可接受，[[生产化/13 Agent 状态与存储——六类状态的正确拆分|第 13 篇]] 的状态拆分正是为此设计）。
+**反例二：需要 live migration 的场景**。Firecracker 不支持在线迁移——节点维护意味着沙箱销毁重建。对"会话必须连续"的 Agent 场景，需要评估"重建会话"的成本是否可接受（状态外置后重建通常可接受，[[13 Agent 状态与存储——六类状态的正确拆分]] 的状态拆分正是为此设计）。
 
 **反例三：Windows Guest 或复杂设备拓扑**。无 BIOS/ACPI 栈决定了它只能跑精简 Linux——需要 Windows/复杂固件的场景请用 QEMU 路线。
 
@@ -320,7 +320,7 @@ containerd → shim 进程（内含 VMM 逻辑）
 
 ### 5.4 如何观察"沙箱真的跑在 VM 里"：VMM 层的证据链
 
-[[隔离原语/02 Linux 隔离原语——namespace、cgroups、seccomp 与 capabilities 的安全地基|第 02 篇]] 讲过隔离证据链的通用方法，VMM 层有自己专属的证据——宿主机上可以直接看到"虚拟机的存在痕迹"：
+[[02 Linux 隔离原语——namespace、cgroups、seccomp 与 capabilities 的安全地基]] 讲过隔离证据链的通用方法，VMM 层有自己专属的证据——宿主机上可以直接看到"虚拟机的存在痕迹"：
 
 ```bash
 # 证据 1：hypervisor 进程（QEMU/Cloud Hypervisor/Firecracker）
@@ -378,11 +378,11 @@ graph TD
     class SHIM,HYPER,KVM rt
 ```
 
-**对照六层模型**（[[平台与协议/06 Agent 沙箱平台分层——六层模型与三条产品路线|第 06 篇]]）：CubeSandbox 覆盖第 4 层（隔离运行时，CubeHypervisor）与第 6 层（API/协议，CubeAPI），第 1-2 层（控制面/编排）部分覆盖（CubeMaster 但 K8s 集成标注 preview），第 3 层（执行层）与第 5 层（Agent 适配）缺失或薄弱。
+**对照六层模型**（[[06 Agent 沙箱平台分层——六层模型与三条产品路线]]）：CubeSandbox 覆盖第 4 层（隔离运行时，CubeHypervisor）与第 6 层（API/协议，CubeAPI），第 1-2 层（控制面/编排）部分覆盖（CubeMaster 但 K8s 集成标注 preview），第 3 层（执行层）与第 5 层（Agent 适配）缺失或薄弱。
 
 ### 6.3 限制与教训：素材中的两个关键发现
 
-**限制一：K8s 部署仍标注 preview**。CubeSandbox 的 Kubernetes 集成尚不稳定——企业要在 K8s 上大规模使用需要等待成熟。这个状态与 OpenSandbox 的"K8s 原生"形成鲜明对比（[[平台与协议/07 OpenSandbox 架构深度解析——协议优先与六责任面|第 07 篇]]）。
+**限制一：K8s 部署仍标注 preview**。CubeSandbox 的 Kubernetes 集成尚不稳定——企业要在 K8s 上大规模使用需要等待成熟。这个状态与 OpenSandbox 的"K8s 原生"形成鲜明对比（[[07 OpenSandbox 架构深度解析——协议优先与六责任面]]）。
 
 **限制二：PVM（Protected VM）需要更换 host kernel 并重启**。启用 PVM（受保护虚拟机，类似机密计算）需要宿主机更换内核并重启——**运维上这是"停机变更"，不是"在线开关"**。这个细节暴露了产品成熟度的边界：安全特性的启用路径还很原始。
 
@@ -492,10 +492,10 @@ graph TD
 
 ### 8.3 下一篇导读
 
-隔离技术主线（01-05）到此收官：威胁模型 → 隔离原语 → 四档光谱 → 硬件底座 → VMM 家族，**"隔离运行时"层已经完整**。从下一篇开始进入平台层：[[平台与协议/06 Agent 沙箱平台分层——六层模型与三条产品路线|06 Agent 沙箱平台分层]] 将把视角从"边界画在哪"切换到"平台怎么建"——六层模型的职责边界、E2B/SIG/OpenSandbox 三条产品路线的完整对比，以及"为什么选型是分层覆盖矩阵问题"。
+隔离技术主线（01-05）到此收官：威胁模型 → 隔离原语 → 四档光谱 → 硬件底座 → VMM 家族，**"隔离运行时"层已经完整**。从下一篇开始进入平台层：[[06 Agent 沙箱平台分层——六层模型与三条产品路线]] 将把视角从"边界画在哪"切换到"平台怎么建"——六层模型的职责边界、E2B/SIG/OpenSandbox 三条产品路线的完整对比，以及"为什么选型是分层覆盖矩阵问题"。
 
 > [!info] 专栏导航
-> 本文是 [[../00 专栏导览|Agent 沙箱技术专栏]] 的第 05 篇，隔离技术主线收官。前 4 篇：威胁模型（01）、隔离原语（02）、四档光谱（03）、KVM 硬件底座（04）；本文完成 VMM 家族解剖。第 06-09 篇进入平台与协议层。
+> 本文是 [[00 专栏导览]] 的第 05 篇，隔离技术主线收官。前 4 篇：威胁模型（01）、隔离原语（02）、四档光谱（03）、KVM 硬件底座（04）；本文完成 VMM 家族解剖。第 06-09 篇进入平台与协议层。
 
 ---
 

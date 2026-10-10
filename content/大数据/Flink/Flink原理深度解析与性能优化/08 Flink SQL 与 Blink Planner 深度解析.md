@@ -19,7 +19,7 @@ Flink SQL 的查询优化器经历了一次重要的架构替换：
 
 **原生 Flink Planner（旧版）**：
 - Flink 1.9 之前的默认 Planner
-- 基于 [[Apache Calcite]] 的 HepPlanner（启发式优化器，纯 RBO）
+- 基于 Apache Calcite 的 HepPlanner（启发式优化器，纯 RBO）
 - 不支持 CBO，优化规则有限
 - 流和批的优化逻辑分离，难以维护
 
@@ -64,7 +64,7 @@ graph TD
 
 ### 2.2 第一阶段：Calcite SQL Parser → SqlNode AST
 
-Flink SQL 使用 [[Apache Calcite]] 的 SQL 解析器将 SQL 文本解析为 **SqlNode 抽象语法树（AST）**。这一阶段是纯语法层面的解析，不涉及语义——只要语法正确（关键字、括号、运算符匹配），就能生成 SqlNode 树。
+Flink SQL 使用 Apache Calcite 的 SQL 解析器将 SQL 文本解析为 **SqlNode 抽象语法树（AST）**。这一阶段是纯语法层面的解析，不涉及语义——只要语法正确（关键字、括号、运算符匹配），就能生成 SqlNode 树。
 
 ```
 SQL 文本：

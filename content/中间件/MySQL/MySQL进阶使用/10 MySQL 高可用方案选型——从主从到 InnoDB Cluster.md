@@ -44,10 +44,10 @@ MySQL 高可用通常由三个层次组合实现：
 
 ### 2.1 异步复制（Asynchronous Replication）
 
-MySQL 的默认复制模式是**异步复制**：主库提交事务后立即返回给客户端，不等待从库确认收到 [[Binlog]]。
+MySQL 的默认复制模式是**异步复制**：主库提交事务后立即返回给客户端，不等待从库确认收到 Binlog。
 
 工作流程：
-1. 主库执行事务，写入 [[Redo Log]] 和 Binlog
+1. 主库执行事务，写入 Redo Log 和 Binlog
 2. 主库返回"提交成功"给客户端
 3. 从库的 IO Thread 连接主库，拉取 Binlog，写入本地的 Relay Log
 4. 从库的 SQL Thread 读取 Relay Log，回放事务

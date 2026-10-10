@@ -391,4 +391,4 @@ public int candy(int[] ratings) {
 
 ## 下一篇预告
 
-[[09 动态规划与位运算：Climbing Stairs、Plus One、Single Number I/II]] 将进入动态规划和位运算的交叉地带。爬楼梯是 DP 入门经典，但你真的理解"状态"的含义吗？Plus One 是大数加法的模拟，细节是关键；Single Number 系列把位运算的特性用到了极致。
+09 动态规划与位运算：Climbing Stairs、Plus One、Single Number I/II 将进入动态规划和位运算的交叉地带。爬楼梯是 DP 入门经典，但你真的理解"状态"的含义吗？Plus One 是大数加法的模拟，细节是关键；Single Number 系列把位运算的特性用到了极致。

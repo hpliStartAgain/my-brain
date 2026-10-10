@@ -9,7 +9,7 @@ aliases: [SRE-Copilot, ChatOps, LLM运维助手]
 
 ## 摘要
 
-本文是专栏第九篇，聚焦大数据集群 AiOps 的人机交互层：以 [[eino]] Multi-Agent 框架为核心，构建一个真正能帮助 SRE 解决问题的 LLM 驱动 ChatOps 系统（SRE-Copilot）。文章从 ChatOps 的本质和价值切入，深度解析 LLM-as-Tool-Router 架构中的核心设计决策，讲解如何将 [[Foxeye]] / [[Loki]] / [[VictoriaMetrics]] / [[SCMDB]] 等大数据集群运维工具封装为 LLM 可调用的 Tool，分析内网私有化 LLM 部署的技术选型与数据隐私约束，并展示 SRE-Copilot 在实际故障排查中的交互示例。本文的核心主张：ChatOps 的价值不是"让工程师用聊天界面替代命令行"，而是让 LLM 承担"数据拉取 + 交叉分析 + 自然语言总结"这三件最耗时的事，把工程师的精力解放出来专注于决策和判断。
+本文是专栏第九篇，聚焦大数据集群 AiOps 的人机交互层：以 eino Multi-Agent 框架为核心，构建一个真正能帮助 SRE 解决问题的 LLM 驱动 ChatOps 系统（SRE-Copilot）。文章从 ChatOps 的本质和价值切入，深度解析 LLM-as-Tool-Router 架构中的核心设计决策，讲解如何将 Foxeye / Loki / VictoriaMetrics / SCMDB 等大数据集群运维工具封装为 LLM 可调用的 Tool，分析内网私有化 LLM 部署的技术选型与数据隐私约束，并展示 SRE-Copilot 在实际故障排查中的交互示例。本文的核心主张：ChatOps 的价值不是"让工程师用聊天界面替代命令行"，而是让 LLM 承担"数据拉取 + 交叉分析 + 自然语言总结"这三件最耗时的事，把工程师的精力解放出来专注于决策和判断。
 
 ---
 
@@ -81,7 +81,7 @@ sequenceDiagram
 
 ### 2.2 eino Multi-Agent 框架选型理由
 
-[[eino]] 是 CloudWeGo（字节跳动开源）团队开发的 Go 语言 AI 应用框架，类似于 Python 生态中的 LangChain，但更适合需要高并发、低延迟的运维场景。
+eino 是 CloudWeGo（字节跳动开源）团队开发的 Go 语言 AI 应用框架，类似于 Python 生态中的 LangChain，但更适合需要高并发、低延迟的运维场景。
 
 选择 eino 而不是 LangChain 的核心原因：
 

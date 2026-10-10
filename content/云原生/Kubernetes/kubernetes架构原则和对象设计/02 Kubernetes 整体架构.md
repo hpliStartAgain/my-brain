@@ -139,7 +139,7 @@ API Server 本身是**无状态的**——它不在内存或本地磁盘中保�
 
 #### 为什么是 etcd
 
-etcd 是一个分布式键值存储系统，基于 [[Raft]] 共识算法保证数据的强一致性。K8s 选择 etcd 作为状态存储，原因包括：
+etcd 是一个分布式键值存储系统，基于 Raft 共识算法保证数据的强一致性。K8s 选择 etcd 作为状态存储，原因包括：
 
 **强一致性**：etcd 使用 Raft 算法——写入操作必须被多数节点确认后才算成功。在 3 节点的 etcd 集群中，一次写入需要至少 2 个节点确认。这保证了在网络分区或节点故障时，数据不会丢失或不一致。
 
@@ -227,7 +227,7 @@ Controller Manager 是一个进程，内部运行了**数十个控制器**。每
 
 #### Leader Election
 
-在高可用部署中，多个 Controller Manager 实例同时运行，但**只有一个实例是 Leader**——只有 Leader 实际执行控制器逻辑，其他实例处于待命状态。当 Leader 故障时，其他实例通过 [[etcd]] 的 Lease 机制自动选举新的 Leader（通常在几秒内完成）。
+在高可用部署中，多个 Controller Manager 实例同时运行，但**只有一个实例是 Leader**——只有 Leader 实际执行控制器逻辑，其他实例处于待命状态。当 Leader 故障时，其他实例通过 etcd 的 Lease 机制自动选举新的 Leader（通常在几秒内完成）。
 
 Scheduler 也使用同样的 Leader Election 机制——多个实例中只有一个实际执行调度逻辑。
 
@@ -318,7 +318,7 @@ iptables 模式下，kube-proxy 为每个 Service 生成一组 iptables 规则�
 -A KUBE-SEP-POD3 -p tcp -j DNAT --to-destination 10.244.3.2:80
 ```
 
-这与 [[05 容器网络原理]] 中介绍的 Docker 端口映射原理本质相同——都是通过 [[iptables]] DNAT 实现流量转发。区别在于 Docker 的 DNAT 将宿主机端口映射到单个容器，而 K8s 的 Service 是将 ClusterIP 负载均衡到多个 Pod。
+这与 [[05 容器网络原理]] 中介绍的 Docker 端口映射原理本质相同——都是通过 iptables DNAT 实现流量转发。区别在于 Docker 的 DNAT 将宿主机端口映射到单个容器，而 K8s 的 Service 是将 ClusterIP 负载均衡到多个 Pod。
 
 ### 3.3 容器运行时
 
@@ -327,7 +327,7 @@ iptables 模式下，kube-proxy 为每个 Service 生成一组 iptables 规则�
 - **containerd**：CNCF 毕业项目，从 Docker 中独立出来的核心运行时，是大多数 K8s 发行版的默认选择
 - **CRI-O**：Red Hat 主导开发，专门为 K8s 设计的轻量级运行时
 
-两者都通过 CRI 接口与 kubelet 交互，底层都使用 runc（或其他 [[OCI]] 兼容的运行时如 kata-runtime、runsc）来创建容器。
+两者都通过 CRI 接口与 kubelet 交互，底层都使用 runc（或其他 OCI 兼容的运行时如 kata-runtime、runsc）来创建容器。
 
 ---
 

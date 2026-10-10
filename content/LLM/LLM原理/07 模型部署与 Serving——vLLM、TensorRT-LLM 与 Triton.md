@@ -56,7 +56,7 @@ LLM Serving 需要同时平衡三个相互矛盾的目标：
 
 ### 2.1 vLLM——开源生态的事实标准
 
-vLLM 由 UC Berkeley 的 Sky Computing Lab 开发，凭借 [[PagedAttention]] 技术和易用性迅速成为开源 LLM Serving 的首选。
+vLLM 由 UC Berkeley 的 Sky Computing Lab 开发，凭借 PagedAttention 技术和易用性迅速成为开源 LLM Serving 的首选。
 
 **核心技术栈**：
 - **PagedAttention**：虚拟内存分页式 KV Cache 管理，消除显存碎片
@@ -184,7 +184,7 @@ graph TD
 
 LLM 服务的负载通常有明显的波动——工作日白天高峰、夜间低谷。弹性伸缩可以在高峰期自动增加 GPU 实例，低谷期释放资源降低成本。
 
-在 [[Kubernetes]] 环境下，可以使用 **KEDA**（Kubernetes Event-Driven Autoscaling）根据请求队列长度或 GPU 利用率自动扩缩推理 Pod。
+在 Kubernetes 环境下，可以使用 **KEDA**（Kubernetes Event-Driven Autoscaling）根据请求队列长度或 GPU 利用率自动扩缩推理 Pod。
 
 关键挑战是**冷启动**：一个新的推理实例需要加载模型到 GPU 显存，这通常需要 30 秒到数分钟。对于 70B 模型（140 GB），加载时间可能超过 2 分钟。缓解方案包括：
 - 预热池（保持少量空闲实例随时可用）
@@ -343,7 +343,7 @@ docker run --gpus all \
 
 **方案三：Kubernetes + GPU Operator**
 
-在 [[Kubernetes]] 集群中使用 NVIDIA GPU Operator 调度 GPU 资源，部署多实例 vLLM/TensorRT-LLM 服务。这是生产级本地部署的标准方案，支持弹性伸缩、滚动更新、健康检查等企业级特性。
+在 Kubernetes 集群中使用 NVIDIA GPU Operator 调度 GPU 资源，部署多实例 vLLM/TensorRT-LLM 服务。这是生产级本地部署的标准方案，支持弹性伸缩、滚动更新、健康检查等企业级特性。
 
 ### 7.3 Apple Silicon 部署
 

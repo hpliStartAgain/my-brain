@@ -8,15 +8,15 @@
 
 ### 什么是 Hadoop Distributed File System (HDFS)？
 
-[[HDFS]]（Hadoop Distributed File System）是一个分布式文件系统，专为存储非结构化数据而构建。它被设计为可靠地存储海量文件，并以高带宽将这些文件流式传输到用户应用程序。
+HDFS（Hadoop Distributed File System）是一个分布式文件系统，专为存储非结构化数据而构建。它被设计为可靠地存储海量文件，并以高带宽将这些文件流式传输到用户应用程序。
 
-HDFS 是 [[GFS]]（Google File System）的一种变体和简化版本。HDFS 的许多架构决策都受到 GFS 设计的启发。HDFS 构建在这样一个核心理念之上：**最高效的数据处理模式是一次写入、多次读取**（write-once, read-many-times）的模式。
+HDFS 是 GFS（Google File System）的一种变体和简化版本。HDFS 的许多架构决策都受到 GFS 设计的启发。HDFS 构建在这样一个核心理念之上：**最高效的数据处理模式是一次写入、多次读取**（write-once, read-many-times）的模式。
 
 ![HDFS 简介](images/chapter-006/page245.png)
 
 ### 背景
 
-[[Apache Hadoop]] 是一个提供分布式文件存储系统和分布式计算的软件框架，使用 [[MapReduce]] 编程模型分析和转换超大数据集。HDFS 是 Hadoop 中的默认文件存储系统。它被设计为分布式、可扩展、容错的文件系统，主要满足 MapReduce 范式的需求。
+Apache Hadoop 是一个提供分布式文件存储系统和分布式计算的软件框架，使用 MapReduce 编程模型分析和转换超大数据集。HDFS 是 Hadoop 中的默认文件存储系统。它被设计为分布式、可扩展、容错的文件系统，主要满足 MapReduce 范式的需求。
 
 HDFS 和 GFS 都是为了存储超大文件并扩展到 PB 级存储而构建的。两者都是为处理海量数据集上的批处理而构建的，专为数据密集型应用设计，而非面向最终用户。与 GFS 一样，HDFS 也不符合 POSIX 标准，本身不是可挂载的文件系统。通常通过 HDFS 客户端或使用 Hadoop 库中的 API 调用来访问。
 
@@ -406,11 +406,11 @@ HDFS 用于构建在 Hadoop 框架之上的多个 Apache 项目中，包括 Pig�
 
 | 模式 | 用途 |
 |------|------|
-| [[预写日志]] | 为了容错和处理 NameNode 崩溃，所有元数据更改写入磁盘上的 EditLog |
-| [[心跳]] | NameNode 通过心跳消息与每个 DataNode 通信以发送指令和收集状态 |
-| [[脑裂|Split-Brain]] | ZooKeeper 用于确保只有一个 NameNode 处于 Active 状态；Fencing 用于阻止先前 Active 的 NameNode 访问集群资源 |
-| [[校验和]] | 每个 DataNode 使用校验和检测存储数据的损坏 |
-| [[仲裁]] | QJM 使用仲裁机制确保 EditLog 在日志节点之间的高可用性 |
+| 预写日志 | 为了容错和处理 NameNode 崩溃，所有元数据更改写入磁盘上的 EditLog |
+| 心跳 | NameNode 通过心跳消息与每个 DataNode 通信以发送指令和收集状态 |
+| Split-Brain | ZooKeeper 用于确保只有一个 NameNode 处于 Active 状态；Fencing 用于阻止先前 Active 的 NameNode 访问集群资源 |
+| 校验和 | 每个 DataNode 使用校验和检测存储数据的损坏 |
+| 仲裁 | QJM 使用仲裁机制确保 EditLog 在日志节点之间的高可用性 |
 
 ### 进一步阅读
 

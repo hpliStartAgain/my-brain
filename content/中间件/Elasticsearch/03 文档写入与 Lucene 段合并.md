@@ -33,7 +33,7 @@ Lucene 的答案是：**段（Segment）一旦写入磁盘，就永远不再修�
 
 **第一：文件可以被操作系统 Page Cache 安全地缓存。**
 
-[[Page Cache]] 是 Linux 内核中文件系统层面的缓存机制——文件内容被读取后，会驻留在物理内存中，后续读取直接命中内存，速度提升数个数量级。但这依赖一个前提：文件内容不会在进程读取期间被其他进程修改。Segment 的不可变性完美满足了这个条件。一个活跃被查询的 Segment，其文件会被 Page Cache 持久锁住，查询速度接近内存访问。
+Page Cache 是 Linux 内核中文件系统层面的缓存机制——文件内容被读取后，会驻留在物理内存中，后续读取直接命中内存，速度提升数个数量级。但这依赖一个前提：文件内容不会在进程读取期间被其他进程修改。Segment 的不可变性完美满足了这个条件。一个活跃被查询的 Segment，其文件会被 Page Cache 持久锁住，查询速度接近内存访问。
 
 **第二：文件可以被安全地并发读取，无需任何锁。**
 
@@ -58,7 +58,7 @@ Lucene 的答案是：**用一个独立的删除标记文件（.liv 文件，即
 这就解释了为什么 ES 的更新操作（`_update`）的代价与写入操作基本相同——本质上它就是一次删除 + 一次写入。
 
 > [!note] 设计哲学
-> Lucene 用"删除标记 + 段合并时物理清除"的方式，将"如何修改不可变数据"这个难题，转化成了一个更易解决的"如何周期性地整理垃圾"的问题。这种设计思路在 LSM-Tree（[[LevelDB]]、RocksDB）中同样可以看到其影子。
+> Lucene 用"删除标记 + 段合并时物理清除"的方式，将"如何修改不可变数据"这个难题，转化成了一个更易解决的"如何周期性地整理垃圾"的问题。这种设计思路在 LSM-Tree（LevelDB、RocksDB）中同样可以看到其影子。
 
 ---
 
@@ -108,7 +108,7 @@ Buffer 的大小由 `indices.memory.index_buffer_size` 控制（默认是 JVM He
 
 **写入 Translog（事务日志）**
 
-Translog 是 ES 自己实现的 [[WAL]]（Write-Ahead Log）机制。每一条写入操作（Index/Delete/Update），都会被以追加写（append-only）的方式写入 Translog 文件。
+Translog 是 ES 自己实现的 WAL（Write-Ahead Log）机制。每一条写入操作（Index/Delete/Update），都会被以追加写（append-only）的方式写入 Translog 文件。
 
 > [!info] 核心概念：WAL（Write-Ahead Log）
 > WAL 是数据库领域的经典模式——**在修改实际数据之前，先把"我打算做什么"记录到一个顺序日志文件中**。这个日志文件的写入是顺序 IO（非常快），即使系统崩溃，也可以在重启时通过重放日志（Replay）来恢复内存中丢失的数据。
@@ -366,7 +366,7 @@ ES 的写入不仅仅发生在 Primary Shard，还需要同步到所有 Replica 
 
 ### 6.2 in-sync 副本集与写入一致性
 
-ES 维护了一个 **in-sync copies（同步副本集）** 的概念，类似于 [[Kafka]] 的 ISR。只有与 Primary 保持同步（数据不落后超过一定程度）的 Replica，才在 in-sync 集合中。
+ES 维护了一个 **in-sync copies（同步副本集）** 的概念，类似于 Kafka 的 ISR。只有与 Primary 保持同步（数据不落后超过一定程度）的 Replica，才在 in-sync 集合中。
 
 写入请求需要 in-sync 集合中**所有成员**都确认，才算成功（`wait_for_active_shards=all` 语义）。默认情况下，`wait_for_active_shards=1`，只需 Primary 写入成功即可返回，牺牲了部分一致性以换取更低的写入延迟。
 
@@ -411,7 +411,7 @@ PUT /problematic-index/_settings
 **根因分析**：Refresh 操作会将内存中的 IndexWriter Buffer 序列化为 Segment，序列化过程会产生大量临时对象（Term Dictionary 构建、FST 编码等），在 Young Gen 快速晋升到 Old Gen，加速了 Old Gen 的填充。
 
 **解决方案**：
-1. 适当增大 Heap（但不超过 32GB，避免超过 JVM [[JVM]] 的指针压缩阈值）；
+1. 适当增大 Heap（但不超过 32GB，避免超过 JVM JVM 的指针压缩阈值）；
 2. 将 `refresh_interval` 从 1s 调整为 5s，减少 Refresh 频率；
 3. 增加节点分担写入压力（水平扩展）；
 4. 检查是否存在大文档写入（`_source` 巨大的文档在 Refresh 时序列化开销极高）。
@@ -422,7 +422,7 @@ PUT /problematic-index/_settings
 
 ### 8.1 Lucene Segment 与 LSM-Tree 的异同
 
-Lucene 的 Segment 机制与 [[LevelDB]]/RocksDB 的 [[LSM-Tree]] 在设计思想上有深刻的相似之处，但也有关键区别：
+Lucene 的 Segment 机制与 LevelDB/RocksDB 的 LSM-Tree 在设计思想上有深刻的相似之处，但也有关键区别：
 
 | 维度 | Lucene Segment | LSM-Tree（LevelDB） |
 |:---|:---|:---|
@@ -450,7 +450,7 @@ Lucene 的 Segment 机制与 [[LevelDB]]/RocksDB 的 [[LSM-Tree]] 在设计思�
 - **Flush** 将 Page Cache 中的 Segment fsync 到磁盘，然后截断 Translog；
 - **TieredMergePolicy** 在后台按层合并 Segment，物理清除已删除文档，控制 Segment 总数。
 
-理解这条链路，是解释 ES 所有写入相关问题（GC 压力、磁盘占用、查询抖动）的底层框架。下一篇文章将深入 ES 的查询执行机制，分析 [[BM25]] 评分模型与向量检索（HNSW）的实现原理。
+理解这条链路，是解释 ES 所有写入相关问题（GC 压力、磁盘占用、查询抖动）的底层框架。下一篇文章将深入 ES 的查询执行机制，分析 BM25 评分模型与向量检索（HNSW）的实现原理。
 
 ---
 

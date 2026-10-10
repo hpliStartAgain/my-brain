@@ -259,7 +259,7 @@ spec:
         targetPort: 80
 ```
 
-**Endpoint Controller**（内置控制器之一）Watch Service 和 Pod 两种资源。当它发现一个 Service 的 Selector 匹配到了哪些 Pod 时，它创建/更新对应的 **Endpoints 对象**（或 EndpointSlice 对象），列出所有匹配 Pod 的 IP 地址和端口。[[kube-proxy]] 再根据 Endpoints 生成 iptables/IPVS 规则，实现流量转发。
+**Endpoint Controller**（内置控制器之一）Watch Service 和 Pod 两种资源。当它发现一个 Service 的 Selector 匹配到了哪些 Pod 时，它创建/更新对应的 **Endpoints 对象**（或 EndpointSlice 对象），列出所有匹配 Pod 的 IP 地址和端口。kube-proxy 再根据 Endpoints 生成 iptables/IPVS 规则，实现流量转发。
 
 ```
 Service (selector: app=nginx)

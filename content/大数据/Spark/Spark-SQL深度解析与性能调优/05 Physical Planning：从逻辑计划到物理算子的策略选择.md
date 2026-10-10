@@ -176,7 +176,7 @@ SELECT /*+ BROADCAST(b) */ * FROM a JOIN b ON a.id = b.id
 
 **为什么是默认策略**：SortMergeJoin 是 Spark SQL 对大表 × 大表场景的首选策略，原因是：
 1. **内存安全**：不需要将整个分区的数据放入 HashMap，只需要维护两个排好序的迭代器，内存开销极低
-2. **可 Spill**：如果内存不足，SortMergeJoin 的排序阶段可以 Spill 到磁盘（利用 [[ExternalSorter]]），不会 OOM
+2. **可 Spill**：如果内存不足，SortMergeJoin 的排序阶段可以 Spill 到磁盘（利用 ExternalSorter），不会 OOM
 3. **输出有序**：结果天然按 Join Key 有序，后续如果有 ORDER BY Join Key 的操作，可以省略排序
 
 **代价**：比 BroadcastHashJoin 多 2 次 Shuffle（两侧都需 Shuffle）+ 2 次排序。在大数据量场景下，这是无法避免的代价。

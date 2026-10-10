@@ -713,7 +713,7 @@ public class SecondaryDataSourceConfig {
 > }
 > ```
 >
-> 跨数据源的分布式事务需要引入 [[Seata]] 或 [[XA 事务]] 等分布式事务解决方案，`@Transactional` 无法保证跨库的原子性。
+> 跨数据源的分布式事务需要引入 Seata 或 XA 事务 等分布式事务解决方案，`@Transactional` 无法保证跨库的原子性。
 
 ### 6.3 SqlSessionTemplate 的 executorType 配置
 

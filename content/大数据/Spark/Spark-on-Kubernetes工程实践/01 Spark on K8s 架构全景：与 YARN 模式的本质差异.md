@@ -9,7 +9,7 @@ aliases: []
 
 ## 摘要
 
-Spark on Kubernetes 是 Spark 2.3（2018 年）正式引入的原生 K8s 调度后端，允许 Spark 将 Driver 和每个 Executor 作为独立的 [[Kubernetes]] Pod 运行，由 K8s 调度器统一管理资源。相比主导大数据集群十余年的 [[Hadoop YARN]] 模式，Spark on K8s 并非简单的"部署环境替换"，而是在资源调度模型、容器化运行环境、存储访问方式、故障恢复机制等多个维度都有根本性的架构差异。理解这些差异，是正确配置和调优 Spark on K8s 的前提。本文系统对比两种模式的架构，深度分析 Spark on K8s 的 Driver Pod 创建流程、Executor Pod 动态申请机制、K8s Scheduler 与 YARN ResourceManager 的调度语义差异，以及 K8s 原生的标签选择、亲和性调度如何影响 Spark 任务的资源分配。
+Spark on Kubernetes 是 Spark 2.3（2018 年）正式引入的原生 K8s 调度后端，允许 Spark 将 Driver 和每个 Executor 作为独立的 Kubernetes Pod 运行，由 K8s 调度器统一管理资源。相比主导大数据集群十余年的 Hadoop YARN 模式，Spark on K8s 并非简单的"部署环境替换"，而是在资源调度模型、容器化运行环境、存储访问方式、故障恢复机制等多个维度都有根本性的架构差异。理解这些差异，是正确配置和调优 Spark on K8s 的前提。本文系统对比两种模式的架构，深度分析 Spark on K8s 的 Driver Pod 创建流程、Executor Pod 动态申请机制、K8s Scheduler 与 YARN ResourceManager 的调度语义差异，以及 K8s 原生的标签选择、亲和性调度如何影响 Spark 任务的资源分配。
 
 ---
 
@@ -17,7 +17,7 @@ Spark on Kubernetes 是 Spark 2.3（2018 年）正式引入的原生 K8s 调度�
 
 ### 1.1 YARN 的资源抽象模型
 
-[[Hadoop YARN]] 将集群资源抽象为**容器（Container）**：每个 Container 是一组 CPU 和内存的配额（如 `4 vCores, 8GB`），由 ResourceManager 统一管理和分配。
+Hadoop YARN 将集群资源抽象为**容器（Container）**：每个 Container 是一组 CPU 和内存的配额（如 `4 vCores, 8GB`），由 ResourceManager 统一管理和分配。
 
 **YARN 模式下 Spark 的运行流程**：
 
@@ -44,7 +44,7 @@ Spark on Kubernetes 是 Spark 2.3（2018 年）正式引入的原生 K8s 调度�
 
 ### 2.1 K8s 资源抽象：Pod 取代 Container
 
-在 Kubernetes 中，最小的部署单位是 **[[Kubernetes Pod|Pod]]**（而不是容器）。一个 Pod 包含一个或多个容器，共享网络命名空间（同一 Pod 内的容器用 `localhost` 互通）和存储卷。
+在 Kubernetes 中，最小的部署单位是 **Pod**（而不是容器）。一个 Pod 包含一个或多个容器，共享网络命名空间（同一 Pod 内的容器用 `localhost` 互通）和存储卷。
 
 Spark on K8s 的映射关系：
 
@@ -149,7 +149,7 @@ K8s 的默认调度器（`kube-scheduler`）是**通用调度器**，不了解 S
 
 **K8s Scheduler 对 Spark 的影响**：
 
-- **无 Gang Scheduling 原生支持**：默认 K8s Scheduler 不保证所有 Executor Pod 同时调度（可能部分 Pod 调度成功，部分因资源不足 Pending）→ 资源碎片，作业等待时间长；需要 [[Volcano]] 或 [[Apache Yunikorn]] 等扩展调度器提供 Gang Scheduling（第 08 篇详述）
+- **无 Gang Scheduling 原生支持**：默认 K8s Scheduler 不保证所有 Executor Pod 同时调度（可能部分 Pod 调度成功，部分因资源不足 Pending）→ 资源碎片，作业等待时间长；需要 Volcano 或 Apache Yunikorn 等扩展调度器提供 Gang Scheduling（第 08 篇详述）
 - **无数据本地性调度**：K8s Scheduler 不知道 HDFS 数据块位置，Executor 被调度到的节点可能没有本地数据；在对象存储（S3/OSS）场景下这不是问题（数据在远端，本地性无意义），但在 HDFS 场景下会引入额外的网络 I/O
 - **资源 requests vs limits 的语义**：K8s 调度基于 `resources.requests`（保证值）而非 `resources.limits`（上限）；Spark Executor 通常将 `requests = limits`（QoS Class: Guaranteed），避免被 K8s 的 OOM Killer 以低优先级杀掉
 

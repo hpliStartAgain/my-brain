@@ -1,0 +1,68 @@
+{
+  "schema_version": "1.0",
+  "task_id": "observability-rewrite",
+  "created_at": "2026-10-10T15:49:52+08:00",
+  "source_agent": "devin",
+  "target_agent_recommendation": "任意具备文件读写能力的 agent（下一 session 继续串行直写）",
+  "repo": "my-brain",
+  "cwd": "/home/hpli/personal-projects/my-brain",
+  "branch": "v5-migration",
+  "git_state": "clean_index_dirty_worktree_16_paths_uncommitted",
+  "status": "ready_for_next",
+  "current_phase": "第一批完成：指标专栏 10 文件全量重写并验证通过；剩余 32 文件（日志/链路追踪/Profiler/AIOps/全景导览）未开始",
+  "completed_steps": [
+    "登记 TODO.md 任务节，锁定目标结构与重命名清单",
+    "指标专栏 10 文件全量重写为 VictoriaMetrics 主线（00 导览 + 01-09 正文）",
+    "git mv 重命名 5 篇（02/03/04/05/06→07 与 07→09），新增 2 篇（06 迁移、08 夜莺）",
+    "content/index.md 指标条目改为「指标与 VictoriaMetrics」",
+    "修复重命名导致的 3 处外部入链（OpenStack 01/02、服务网格 06）",
+    "指标专栏统一验证通过：正文 01-09 均 ≥12000 中文字/≥500 行，死链 0，无 ASCII 表，零全角感叹号",
+    "CHANGELOG.md 追加 2026-10-10「进行中：可观测全栈专栏全量重写」分节"
+  ],
+  "failed_steps": [],
+  "verification": [
+    "指标专栏正文 01-09：12012-12843 中文字 / 500-613 行，全部达标",
+    "指标专栏摘要：292-358 字（红线 ≤800）",
+    "指标专栏 Mermaid：10 张，全部 dracula 主题",
+    "指标专栏死链：0（原稿含 Grafana/PromQL/Prometheus 等裸产品名死链）",
+    "指标专栏 frontmatter：四字段完整；无 ASCII 表格；零全角感叹号",
+    "全库扫描：可观测目录仍有 341 处死链，全部位于未重写的 32 个文件中（历史债务）"
+  ],
+  "blockers": [],
+  "updated_files": [
+    "TODO.md",
+    "CHANGELOG.md",
+    "content/index.md",
+    "content/云原生/OpenStack/01 OpenStack 全景——从 NASA 与 Rackspace 的联姻到开源云操作系统.md",
+    "content/云原生/OpenStack/02 控制面三件套——MariaDB、RabbitMQ 与 Keystone.md",
+    "content/云原生/服务网格/06 可观测性——分布式追踪、指标与访问日志.md",
+    "content/可观测/指标/00 专栏导览.md",
+    "content/可观测/指标/01 为什么需要指标.md",
+    "content/可观测/指标/02 指标数据模型与采集——vmagent 与 Prometheus 协议.md (git mv from 02 Prometheus 数据模型与采集原理.md)",
+    "content/可观测/指标/03 MetricsQL 深度解析.md (git mv from 03 PromQL 深度解析.md)",
+    "content/可观测/指标/04 VictoriaMetrics 存储引擎深度解析.md (git mv from 04 Prometheus TSDB 深度解析.md)",
+    "content/可观测/指标/05 VictoriaMetrics 集群版与长期存储.md (git mv from 05 Prometheus 高可用与长期存储.md)",
+    "content/可观测/指标/06 从 Prometheus 迁移到 VictoriaMetrics.md (new)",
+    "content/可观测/指标/07 Grafana 仪表盘与告警工程化.md (git mv from 06 Grafana 仪表盘与告警工程化.md)",
+    "content/可观测/指标/08 告警聚合与夜莺工程化.md (new)",
+    "content/可观测/指标/09 指标工程落地与 SLO 体系.md (git mv from 07 指标工程落地与 SLO 体系.md)"
+  ],
+  "artifact_paths": [
+    ".agent/handoff/20261010-154952-observability-rewrite/TASK.md",
+    ".agent/handoff/20261010-154952-observability-rewrite/STATUS.json",
+    ".agent/handoff/20261010-154952-observability-rewrite/DECISIONS.md",
+    ".agent/handoff/20261010-154952-observability-rewrite/EVIDENCE.md",
+    ".agent/handoff/20261010-154952-observability-rewrite/NEXT_STEPS.md",
+    ".agent/handoff/20261010-154952-observability-rewrite/ARTIFACTS/指标专栏-验证报告.md",
+    "TODO.md (任务节含重命名清单与续接说明)",
+    "CHANGELOG.md (2026-10-10 分节)"
+  ],
+  "next_steps": [
+    "接手先读 TASK.md / STATUS.json，再读 TODO.md 顶部任务节（含完整重命名计划）",
+    "重跑篇幅统计与死链扫描，确认指标专栏 10 文件仍达标、0 死链",
+    "开始第二批：日志专栏（Loki 主线，00 导览 + 01-08），按 TODO.md 第 2 节的重命名清单执行",
+    "每篇完成后跑篇幅统计；重命名后用 git mv 并同步修正入链",
+    "第三批起依次做链路追踪、Profiler、AIOps，最后写 00 全景导览",
+    "全部完成后：全库死链清理 + CHANGELOG 分节 + TODO 状态置 done + index.md 同步"
+  ]
+}

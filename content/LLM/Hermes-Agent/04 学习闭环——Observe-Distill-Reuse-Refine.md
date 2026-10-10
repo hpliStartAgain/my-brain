@@ -474,7 +474,7 @@ SKILL.md 的生成质量取决于 LLM 的能力——弱模型可能生成"遗�
 
 ### 8.2 下一篇导读
 
-下一篇 [[05 技能系统——SKILL.md 与 agentskills.io 标准]] 将深入技能系统的"文档层面"——SKILL.md 的标准格式（front-matter + When to Use + Procedure + Pitfalls + Verification）、agentskills.io 开放标准（让 Hermes 技能可被 Claude Code/Cursor/OpenHands 等其他 Agent 使用）、Skills Hub（88k+ 技能的集中市场）、技能的平台特定性（macOS/Linux/Windows）、技能的媒体投递（`[[as_document]]` 指令）等。
+下一篇 [[05 技能系统——SKILL.md 与 agentskills.io 标准]] 将深入技能系统的"文档层面"——SKILL.md 的标准格式（front-matter + When to Use + Procedure + Pitfalls + Verification）、agentskills.io 开放标准（让 Hermes 技能可被 Claude Code/Cursor/OpenHands 等其他 Agent 使用）、Skills Hub（88k+ 技能的集中市场）、技能的平台特定性（macOS/Linux/Windows）、技能的媒体投递（`as_document` 指令）等。
 
 > [!info] 专栏导航
 > 本文是 [[00 专栏导览|Hermes Agent 专栏]] 的第 4 篇，"核心架构"部分的第 2 篇。

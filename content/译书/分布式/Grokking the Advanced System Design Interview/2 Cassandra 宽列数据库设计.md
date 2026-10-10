@@ -8,13 +8,13 @@
 
 ### 背景
 
-[[Cassandra]] 是 Apache 开源项目，最初由 Facebook 于 2007 年为其收件箱搜索功能开发。Cassandra 架构旨在提供可扩展性、可用性和可靠性以存储大量数据。Cassandra 结合了 Amazon [[Dynamo]] 的分布式特性和 Google [[BigTable]] 的列式数据模型。凭借去中心化架构，集群中不存在单点故障，性能随节点增加线性扩展。
+Cassandra 是 Apache 开源项目，最初由 Facebook 于 2007 年为其收件箱搜索功能开发。Cassandra 架构旨在提供可扩展性、可用性和可靠性以存储大量数据。Cassandra 结合了 Amazon Dynamo 的分布式特性和 Google BigTable 的列式数据模型。凭借去中心化架构，集群中不存在单点故障，性能随节点增加线性扩展。
 
 ![Cassandra 架构来源](images/chapter-002/page053.png)
 
 ### 什么是 Cassandra？
 
-Cassandra 是分布式、去中心化、可扩展且高可用的 NoSQL 数据库。用 [[CAP 定理]] 术语表述，Cassandra 通常归类为 AP 系统（可用性和分区容忍性）。Cassandra 可通过复制因子和一致性级别进行调整以满足强一致性需求，但会带来性能代价。
+Cassandra 是分布式、去中心化、可扩展且高可用的 NoSQL 数据库。用 CAP 定理 术语表述，Cassandra 通常归类为 AP 系统（可用性和分区容忍性）。Cassandra 可通过复制因子和一致性级别进行调整以满足强一致性需求，但会带来性能代价。
 
 Cassandra 使用对等架构，每个节点连接到所有其他节点。每个 Cassandra 节点执行所有数据库操作，无需领导者节点即可服务客户端请求。
 
@@ -49,7 +49,7 @@ Cassandra 使用对等架构，每个节点连接到所有其他节点。每个 
 
 ### 数据分区
 
-Cassandra 使用[[一致性哈希]]进行数据分区。默认使用 **Murmur3** 哈希函数，对给定分区键始终产生相同的哈希值。
+Cassandra 使用一致性哈希进行数据分区。默认使用 **Murmur3** 哈希函数，对给定分区键始终产生相同的哈希值。
 
 ![Data partitioning ring](images/chapter-002/page060.png)
 ![Coordinator Node](images/chapter-002/page061.png)
@@ -153,7 +153,7 @@ Snitch 是跟踪网络拓扑的组件，决定环内节点的接近度并识别�
 
 ## Gossiper
 
-Cassandra 使用 [[Gossip 协议]] 让每个节点跟踪集群中其他节点的状态信息。每个节点每秒与 1-3 个随机节点交换状态信息。
+Cassandra 使用 Gossip 协议 让每个节点跟踪集群中其他节点的状态信息。每个节点每秒与 1-3 个随机节点交换状态信息。
 
 **世代号**：每个节点存储一个世代号，每次重启时递增。世代号包含在 Gossip 消息中，用于区分重启前后的状态。
 
@@ -184,7 +184,7 @@ Cassandra 同时使用内存和磁盘存储数据，以提供高性能和持久�
 
 ### 提交日志
 
-写入请求到达节点时，数据立即写入提交日志。提交日志是[[预写日志]]（WAL），存储在磁盘上，作为崩溃恢复机制。写入在写入提交日志之前不被视为成功。
+写入请求到达节点时，数据立即写入提交日志。提交日志是预写日志（WAL），存储在磁盘上，作为崩溃恢复机制。写入在写入提交日志之前不被视为成功。
 
 ### MemTable
 
@@ -210,7 +210,7 @@ Cassandra 同时使用内存和磁盘存储数据，以提供高性能和持久�
 
 ![Read path](images/chapter-002/page081.png)
 
-Cassandra 使用[[布隆过滤器]]（Bloom Filter）快速判断 SSTable 是否包含所请求的分区数据。布隆过滤器是一种概率性数据结构，可以精确回答"不存在"，但不能精确回答"存在"。
+Cassandra 使用布隆过滤器（Bloom Filter）快速判断 SSTable 是否包含所请求的分区数据。布隆过滤器是一种概率性数据结构，可以精确回答"不存在"，但不能精确回答"存在"。
 
 ---
 

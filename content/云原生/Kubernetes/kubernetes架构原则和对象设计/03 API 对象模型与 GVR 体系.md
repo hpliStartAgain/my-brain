@@ -107,7 +107,7 @@ ObjectMeta 是所有 K8s 对象**共享的元数据结构**。它包含的字段
 
 | 字段 | 说明 |
 | :--- | :--- |
-| **`resourceVersion`** | 对象在 [[etcd]] 中的版本号（对应 etcd 的 revision）。每次对象被修改，resourceVersion 都会递增 |
+| **`resourceVersion`** | 对象在 etcd 中的版本号（对应 etcd 的 revision）。每次对象被修改，resourceVersion 都会递增 |
 | **`generation`** | spec 部分被修改的次数。只有 spec 变更会递增 generation，status 变更不会 |
 
 **`resourceVersion`** 是 K8s 乐观并发控制的核心。更新一个对象时，客户端必须在请求中携带当前的 resourceVersion。API Server 在写入 etcd 时检查——如果 etcd 中的实际 resourceVersion 与请求中的不一致（说明有其他人在你读取之后修改了该对象），更新会被拒绝（409 Conflict）。客户端需要重新读取最新版本，合并自己的变更，再次尝试更新。
@@ -290,7 +290,7 @@ kubectl get hpa.v1.autoscaling         # 旧版 API
 kubectl get hpa.v2.autoscaling         # 新版 API（更多字段）
 ```
 
-但在 [[etcd]] 中，对象只存储一份——使用**存储版本（Storage Version）** 序列化。当通过非存储版本的 API 读写对象时，API Server 在读取时自动将存储版本转换为请求的版本（反之亦然）。这个转换通过 API Server 内部的 **conversion webhook** 或内置转换函数完成。
+但在 etcd 中，对象只存储一份——使用**存储版本（Storage Version）** 序列化。当通过非存储版本的 API 读写对象时，API Server 在读取时自动将存储版本转换为请求的版本（反之亦然）。这个转换通过 API Server 内部的 **conversion webhook** 或内置转换函数完成。
 
 ### 4.3 弃用策略
 

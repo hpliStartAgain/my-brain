@@ -369,7 +369,7 @@ docs = compression_retriever.get_relevant_documents(
 
 ### 6.1 LangChain 集成
 
-**[[LangChain]]** 是最广泛使用的 LLM 应用开发框架，Milvus 有官方的 `langchain-milvus` 集成包。
+**LangChain** 是最广泛使用的 LLM 应用开发框架，Milvus 有官方的 `langchain-milvus` 集成包。
 
 ```python
 # LangChain + Milvus 完整 RAG 示例
@@ -434,7 +434,7 @@ print("来源文档：", [doc.metadata["doc_title"] for doc in result["source_do
 
 ### 6.2 LlamaIndex 集成
 
-**[[LlamaIndex]]**（原 GPT Index）是专注于 RAG 场景的框架，提供了比 LangChain 更丰富的数据连接器和索引管理工具。
+**LlamaIndex**（原 GPT Index）是专注于 RAG 场景的框架，提供了比 LangChain 更丰富的数据连接器和索引管理工具。
 
 ```python
 # LlamaIndex + Milvus 集成示例
@@ -500,7 +500,7 @@ RAG 系统的质量评估分为两个维度：
 
 ### 7.2 RAGAS——自动化 RAG 评估框架
 
-**[[RAGAS]]**（RAG Assessment）是专门为 RAG 系统设计的自动评估框架，用 LLM 对检索质量和生成质量进行自动打分，不需要人工标注。
+**RAGAS**（RAG Assessment）是专门为 RAG 系统设计的自动评估框架，用 LLM 对检索质量和生成质量进行自动打分，不需要人工标注。
 
 ```python
 # RAGAS 评估示例

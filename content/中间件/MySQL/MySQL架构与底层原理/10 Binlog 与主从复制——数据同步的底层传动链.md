@@ -7,7 +7,7 @@ aliases: [Binlog, 主从复制, GTID, 并行复制]
 
 # 10 Binlog 与主从复制——数据同步的底层传动链
 
-**摘要：** [[Binlog]]（Binary Log，二进制日志）是 MySQL 数据同步的底层基础设施。它不只是主从复制的数据管道，也是数据恢复（Point-in-Time Recovery）、增量备份、异构数据同步（如 [[Canal]] 订阅）的共同依赖。本文从 Binlog 的三种格式（STATEMENT、ROW、MIXED）的设计取舍出发，深入分析主从复制的三线程模型（IO Thread、SQL Thread、Dump Thread）和 Relay Log 的作用，解析 **GTID（Global Transaction Identifier）** 如何从根本上解决了基于位点复制的"位点漂移"难题，以及 MySQL 5.7+ 的**并行复制**是如何将从库的单线程回放突破为多线程、大幅缩短主从延迟的。
+**摘要：** Binlog（Binary Log，二进制日志）是 MySQL 数据同步的底层基础设施。它不只是主从复制的数据管道，也是数据恢复（Point-in-Time Recovery）、增量备份、异构数据同步（如 Canal 订阅）的共同依赖。本文从 Binlog 的三种格式（STATEMENT、ROW、MIXED）的设计取舍出发，深入分析主从复制的三线程模型（IO Thread、SQL Thread、Dump Thread）和 Relay Log 的作用，解析 **GTID（Global Transaction Identifier）** 如何从根本上解决了基于位点复制的"位点漂移"难题，以及 MySQL 5.7+ 的**并行复制**是如何将从库的单线程回放突破为多线程、大幅缩短主从延迟的。
 
 ---
 
@@ -19,7 +19,7 @@ Binlog 是 MySQL **Server 层**（而非存储引擎层）的日志，记录了�
 
 这里有一个关键的层次区分：
 
-- **Redo Log** 是 [[InnoDB]] 存储引擎的私有日志，记录的是"物理变更"（某个数据页的某个偏移量上的字节从 X 变为 Y），用于 InnoDB 的崩溃恢复
+- **Redo Log** 是 InnoDB 存储引擎的私有日志，记录的是"物理变更"（某个数据页的某个偏移量上的字节从 X 变为 Y），用于 InnoDB 的崩溃恢复
 - **Binlog** 是 MySQL Server 层的公共日志，记录的是"逻辑变更"（执行了什么 SQL，或者哪一行数据从什么值变成了什么值），用于主从复制和数据恢复
 
 由于 Binlog 在 Server 层，它对所有存储引擎（InnoDB、MyISAM 等）都有效；而 Redo Log 只属于 InnoDB。
@@ -30,7 +30,7 @@ Binlog 是 MySQL **Server 层**（而非存储引擎层）的日志，记录了�
 
 **用途二：时间点恢复（Point-in-Time Recovery，PITR）**。结合定期的全量备份，Binlog 可以将数据库恢复到任意时间点。流程：还原最近一次全量备份 → 回放从备份时间点到目标时间点的所有 Binlog → 数据恢复到目标时间点的状态。这是"误删数据后恢复"的标准手段。
 
-**用途三：异构数据同步**。[[Canal]]、[[Debezium]] 等工具通过伪装成 MySQL 从库来接收 Binlog，然后将 MySQL 的数据变更实时同步到 Elasticsearch、ClickHouse、Redis、消息队列等异构系统。Binlog 成为 MySQL 到整个数据生态的"数据总线"。
+**用途三：异构数据同步**。Canal、Debezium 等工具通过伪装成 MySQL 从库来接收 Binlog，然后将 MySQL 的数据变更实时同步到 Elasticsearch、ClickHouse、Redis、消息队列等异构系统。Binlog 成为 MySQL 到整个数据生态的"数据总线"。
 
 > [!note] 设计哲学
 > Binlog 是 MySQL 架构中"关注点分离"设计的典范。InnoDB 负责本地的崩溃恢复（Redo Log），MySQL Server 层负责跨实例的数据同步（Binlog）。两者职责明确，互不干扰。如果 MySQL 只有 Redo Log 而没有 Binlog，数据库之间就无法通过逻辑层面的变更进行同步，整个分布式架构就无从谈起。

@@ -156,7 +156,7 @@ status 列（原始值）：paid, paid, pending, paid, cancelled, paid, paid, ..
 
 ORC 的 RLE v2 支持四种子编码模式，根据数据特征自动选择：
 - **SHORT_REPEAT**：序列中有短重复（如 `[5, 5, 5, 5, 5]`），存储 (5, repeat_count=5)
-- **DIRECT**：无明显规律，使用 [[Bit Packing]] 减少存储宽度（如 0-100 范围的值只需 7 位存储，而不是默认的 8 位 int）
+- **DIRECT**：无明显规律，使用 Bit Packing 减少存储宽度（如 0-100 范围的值只需 7 位存储，而不是默认的 8 位 int）
 - **PATCHED_BASE**：大多数值在小范围内，少数异常值用 patch 单独记录
 - **DELTA**：相邻值的差值固定或递增（如时间戳序列），只存储初始值和 delta
 
@@ -310,7 +310,7 @@ ORC 的 Row Group min/max 统计适用于**有序或近似有序的列**（如�
 
 但对于**无序高基数列**（如 `uuid`、`email`、`phone`），min/max 无法有效过滤：如果 Row Group 1 的 uuid 列 min = 'a...' max = 'z...'，几乎任何查询值都落在这个范围内，min/max 过滤失效。
 
-**[[Bloom Filter]]（布隆过滤器）** 解决这个问题：对每个 Row Group 的目标列，构建一个 Bloom Filter（一种空间高效的概率性数据结构），用于判断某个值**是否可能存在于该 Row Group 中**。
+**Bloom Filter（布隆过滤器）** 解决这个问题：对每个 Row Group 的目标列，构建一个 Bloom Filter（一种空间高效的概率性数据结构），用于判断某个值**是否可能存在于该 Row Group 中**。
 
 > [!info] 核心概念：Bloom Filter 原理
 > Bloom Filter 是一个 m 位的位数组，初始全为 0。插入一个值 v 时，用 k 个不同的哈希函数分别计算 v 的哈希值，将对应的 k 个位置设为 1。查询 v 是否存在时，用同样的 k 个哈希函数计算，如果所有对应位都为 1，则"可能存在"；如果有任何一位为 0，则"一定不存在"。

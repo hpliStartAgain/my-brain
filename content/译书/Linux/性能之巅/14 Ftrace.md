@@ -73,7 +73,7 @@ Tracing "vfs_read"... Ctrl-C to end.
 [...]
 ```
 
-输出显示 `vfs_read()` 调用了 `rw_verify_area()`，后者又调用了 `security_file_permission()`，依此类推。第二列显示了每个函数的持续时间（“us” 是微秒），以便你可以进行性能分析，识别导致父函数变慢的子函数。这种特定的 Ftrace 能力被称为**函数图追踪** (function graph tracing)，在第 14.8 节 [[#14.8 Ftrace function_graph|Ftrace function_graph]] 中涵盖。
+输出显示 `vfs_read()` 调用了 `rw_verify_area()`，后者又调用了 `security_file_permission()`，依此类推。第二列显示了每个函数的持续时间（“us” 是微秒），以便你可以进行性能分析，识别导致父函数变慢的子函数。这种特定的 Ftrace 能力被称为**函数图追踪** (function graph tracing)，在第 14.8 节 Ftrace function_graph 中涵盖。
 
 表 14.1 和 14.2 列出了近期 Linux 版本（5.2）中的 Ftrace 剖析器和追踪器，以及 Linux 事件追踪器：追踪点（tracepoints）、kprobes 和 uprobes。这些事件追踪器与 Ftrace 类似，共享相似的配置和输出接口，因此也包含在本章中。表 14.2 中显示的等宽字体追踪器名称是 Ftrace 追踪器，也是用于配置它们的命令行关键字。
 
@@ -114,7 +114,7 @@ hwlat blk mmiotrace function_graph wakeup_dl wakeup_rt wakeup function nop
 
 这是使用挂载在 `/sys` 下的 `tracefs` 接口，下一节将对其进行介绍。后续小节将涵盖剖析器、追踪器以及使用它们的工具。
 
-如果你希望直接跳转到基于 Ftrace 的工具，请查看第 14.13 节 [[#14.13 perf-tools|perf-tools]]，其中包括前面展示的 `funcgraph(8)`。
+如果你希望直接跳转到基于 Ftrace 的工具，请查看第 14.13 节 perf-tools，其中包括前面展示的 `funcgraph(8)`。
 
 未来版本的内核可能会向 Ftrace 添加更多剖析器和追踪器：请检查 Linux 源代码中 `Documentation/trace/ftrace.rst` 下的 Ftrace 文档 [Rostedt 08]。
 
@@ -492,7 +492,7 @@ enable  filter  format  hist  id  trigger
 # echo 'traceoff if bytes > 65536' > events/block/block_rq_issue/trigger
 ```
 
-可以使用直方图触发器（见第 14.10 节 [[#14.10 Ftrace Hist Triggers|Ftrace Hist Triggers]]）执行更复杂的动作。
+可以使用直方图触发器（见第 14.10 节 Ftrace Hist Triggers）执行更复杂的动作。
 
 ## 14.6 kprobes
 
@@ -1478,7 +1478,7 @@ Tracing block I/O. Output every 1 seconds. Ctrl-C to end.
 
 输出显示 I/O 延迟通常很低，在 0 到 1 毫秒之间。
 
-我实现此工具的方式有助于解释对扩展 BPF 的需求。`iolatency(8)` 追踪块 I/O 发起和完成的追踪点，在用户空间读取所有事件，解析它们，并使用 `awk(1)` 将它们后处理成这些直方图。由于在大多数服务器上磁盘 I/O 的频率相对较低，因此这种方法是可行的，且不会产生繁重的开销。但对于更频繁的事件（如网络 I/O 或调度），其开销将是令人望而却步的。扩展 BPF 通过允许在内核空间计算直方图摘要并仅将摘要传递给用户空间解决了这个问题，从而极大地降低了开销。Ftrace 现在通过直方图触发器和合成事件（在第 14.10 节 [[#14.10 Ftrace Hist Triggers|Ftrace Hist Triggers]] 中描述）支持一些类似的能力（我需要更新 `iolatency(8)` 以利用它们）。
+我实现此工具的方式有助于解释对扩展 BPF 的需求。`iolatency(8)` 追踪块 I/O 发起和完成的追踪点，在用户空间读取所有事件，解析它们，并使用 `awk(1)` 将它们后处理成这些直方图。由于在大多数服务器上磁盘 I/O 的频率相对较低，因此这种方法是可行的，且不会产生繁重的开销。但对于更频繁的事件（如网络 I/O 或调度），其开销将是令人望而却步的。扩展 BPF 通过允许在内核空间计算直方图摘要并仅将摘要传递给用户空间解决了这个问题，从而极大地降低了开销。Ftrace 现在通过直方图触发器和合成事件（在第 14.10 节 Ftrace Hist Triggers 中描述）支持一些类似的能力（我需要更新 `iolatency(8)` 以利用它们）。
 
 我确实开发了一种针对自定义直方图的 pre-BPF 解决方案，并将其作为 `perf-stat-hist(8)` 多用途工具发布。
 

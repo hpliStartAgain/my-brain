@@ -7,7 +7,7 @@ aliases: ["Hudi Index", "Hudi Upsert原理", "HoodieKey路由", "Bloom Filter索
 
 **摘要：**
 
-[[Apache Hudi]] 能高效支持记录级 Upsert 的根本原因，在于它维护了一个**记录 → 文件位置的映射索引**。没有这个索引，每次更新一条记录就必须扫描整张表来寻找它的位置——这与 [[Delta Lake]] 的 `MERGE INTO` 在无分区剪裁时的行为相同，代价极高。本文深入剖析 Hudi 的 Upsert 写入全路径：从 `HoodieKey`（主键 + 分区路径的二元组）的设计，到 Bloom Filter Index（默认索引）的工作原理与误判代价，再到 Bucket Index（Hudi 1.x 的重大改进）如何通过哈希分桶彻底消除索引查找开销。理解这套索引机制，是正确选择 Hudi 索引类型、调优 Upsert 吞吐量的基础。
+Apache Hudi 能高效支持记录级 Upsert 的根本原因，在于它维护了一个**记录 → 文件位置的映射索引**。没有这个索引，每次更新一条记录就必须扫描整张表来寻找它的位置——这与 Delta Lake 的 `MERGE INTO` 在无分区剪裁时的行为相同，代价极高。本文深入剖析 Hudi 的 Upsert 写入全路径：从 `HoodieKey`（主键 + 分区路径的二元组）的设计，到 Bloom Filter Index（默认索引）的工作原理与误判代价，再到 Bucket Index（Hudi 1.x 的重大改进）如何通过哈希分桶彻底消除索引查找开销。理解这套索引机制，是正确选择 Hudi 索引类型、调优 Upsert 吞吐量的基础。
 
 ---
 
@@ -283,7 +283,7 @@ Bucket 数太多：
 
 ### 4.1 HBase Index（全局索引）
 
-HBase Index 将 `recordKey → (partitionPath, fileId, offset)` 的映射存储在外部 [[HBase]] 集群中：
+HBase Index 将 `recordKey → (partitionPath, fileId, offset)` 的映射存储在外部 HBase 集群中：
 
 ```
 优点：

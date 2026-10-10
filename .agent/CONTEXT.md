@@ -1,83 +1,99 @@
-# CONTEXT — Netty 专栏全量重写
+# CONTEXT — 可观测全栈专栏全量重写
 
 ## 任务背景（3 句话）
 
-老板要求按 skill `writing-technical-article`（凤凰架构 DNA）与 AGENTS.md 交付标准，全量重写 `content/Java/Netty/` 下 11 篇（00 导览 + 01-10 正文）。技术资产（代码/mermaid/表格/链接/思考题）也重构，叙述与技术资产都按凤凰架构风格重新组织。串行执行，一篇一篇写，严禁子代理（用户明确担心并行内存泄漏）。
+老板要求按 skill `writing-technical-article`（凤凰架构 DNA）与 `AGENTS.md` §1 交付标准，对 `content/可观测/` 下**全部 42 个文件**做破坏性全量重写。现稿普遍单薄（除 AIOps 12 篇外，四个子专栏正文仅 2608-4460 字，缺口 63%-78%）且参差不齐（骨架不一致、思考题错位、300+ 处裸产品名死链）。结构调整为 **Loki（日志）/ VictoriaMetrics（指标）/ 夜莺 Nightingale（告警聚合）** 三条主线，允许重排并重命名篇目。
 
 ## 执行约束
 
-- 11 篇，串行一篇一篇写，主代理直写，严禁子代理（Devin 子代理有内存泄漏 bug）
-- skill `writing-technical-article`（凤凰架构六层 DNA）+ AGENTS.md 交付标准
-- 篇幅硬指标：12000-16000 中文字 / 500+ 行
-- Mermaid 统一 dracula 主题；Callout 用 Obsidian 语法；双向链接先核实
+- 全部 42 文件（含 AIOps 12 篇与 00 全景导览），**串行一篇一篇写，主代理直写，严禁子代理**
+- skill `writing-technical-article`（凤凰架构六层 DNA）+ `AGENTS.md` 交付标准
+- 篇幅硬指标：12000-16000 中文字 / 500+ 行（00 导览不设下限）
+- Mermaid 统一 dracula 主题；Callout 用 Obsidian 语法；双向链接先核实（目标文件必须真实存在）
 - 不虚构年份/版本/性能数字；不创建 Git commit 除非老板显式要求
-- 本专栏骨架惯例：`**摘要：**` 段 + `## 第 N 章` 编号 + 文末参考资料 + 思考题 callout
+- 骨架惯例：`**摘要：**` 段 + `## 第 N 章` 编号 + 文末参考资料 + 思考题 callout
 - frontmatter：title/date/tags/aliases，tags 用 inline 数组，不得破坏结构
 - 论述五问：是什么→为什么出现→不这样会怎样→如何落地→边界与反例
+- 反灌水红线：摘要 ≤800 字、结语 ≤10%、思考题每条 ≤3 句、参考资料不堆砌、同义改写凑字数禁止
+- **经验校准**：实测约 19-20 中文字/行（代码块与表格不计入 CJK）；首稿直接写到 12000+ 字可避免多轮补写
 
 ## 完成状态
 
-00-10 全部 11 篇已全部圆满完成（11/11 篇），统一验证通过，CHANGELOG 已追加。
+**第一批：指标专栏 10 文件全部完成**，统一验证通过。
 
-| 篇 | 行 | 中文字 | 核心内容 |
+| 篇 | 行 | 中文字 | 备注 |
 |---|---|---|---|
-| 00 专栏导览 | 108 | 1730 | 四层架构全景 Dracula 图、篇幅指标表、三条阅读路径、关联专栏互链 |
-| 01 Java NIO基础 | 525 | 12065 | BIO→NIO 演进、Channel/Buffer/Selector、粘包拆包、epoll 空轮询 Bug |
-| 02 Netty全局架构 | 530 | 12000 | Reactor 模式、Boss/Worker、ServerBootstrap、ChannelPipeline |
-| 03 EventLoop与线程模型 | 518 | 12019 | Thread Confinement、MPSC 任务队列、ioRatio、Future/Promise |
-| 04 ByteBuf | 599 | 12008 | 双指针、引用计数、池化内存、CompositeByteBuf 零拷贝 |
-| 05 ChannelPipeline与Handler | 512 | 12005 | 双向链表、入站出站传播、executionMask、@Sharable、动态 Pipeline |
-| 06 编解码器 | 1009 | 12026 | TCP 粘包拆包、ByteToMessageDecoder、LengthFieldBasedFrameDecoder、自定义协议、ReplayingDecoder |
-| 07 Netty内存管理 | 704 | 12018 | jemalloc 算法、PoolChunk 伙伴系统二叉树、PoolSubpage 64位位图、PoolArena 多竞技场隔离与六大使用率队列、PoolThreadCache 无锁本地缓存 |
-| 08 Netty高性能之道 | 786 | 14557 | FastThreadLocal 数组直寻与内存泄漏防御、HashedWheelTimer 时间轮算法与异步取消转储、MpscQueue 128字节缓存行填充防伪共享与 lazySet、Recycler 本地栈与跨线程无锁回收 |
-| 09 基于Netty的RPC框架设计 | 755 | 12805 | LPC到RPC抽象泄漏、八大物理谬误、Titan-RPC 二进制16字节协议帧设计、Protobuf/Hessian2/Kryo 序列化四维坐标横评与 SPI、客户端全双工复用与 CompletableFuture 映射表、指数退避重连与心跳治理、加权轮询与一致性哈希 |
-| 10 开源项目应用 | 678 | 12629 | Dubbo SPI Transporter 架构与五大 Dispatcher 线程派发策略、RocketMQ RemotingCommand 四段式协议与 FileRegion 操作系统原生零拷贝、Elasticsearch Netty4Transport 五大优先级专属物理连接通道与断路器内存防爆、横向设计推演与生产调优参数矩阵 |
+| 00 专栏导览 | 101 | 1465 | 重写；声明 VM 主线 + 四条贯穿判断 + 知识图谱 |
+| 01 为什么需要指标 | 554 | 12117 | 保留篇名，加深 |
+| 02 指标数据模型与采集——vmagent 与 Prometheus 协议 | 564 | 12045 | 改自「02 Prometheus 数据模型与采集原理」 |
+| 03 MetricsQL 深度解析 | 515 | 12603 | 改自「03 PromQL 深度解析」 |
+| 04 VictoriaMetrics 存储引擎深度解析 | 500 | 12843 | 改自「04 Prometheus TSDB 深度解析」 |
+| 05 VictoriaMetrics 集群版与长期存储 | 500 | 12522 | 改自「05 Prometheus 高可用与长期存储」 |
+| 06 从 Prometheus 迁移到 VictoriaMetrics | 518 | 12012 | **新增** |
+| 07 Grafana 仪表盘与告警工程化 | 577 | 12077 | 改自「06 Grafana 仪表盘与告警工程化」 |
+| 08 告警聚合与夜莺工程化 | 540 | 12117 | **新增**，夜莺专篇 |
+| 09 指标工程落地与 SLO 体系 | 613 | 12072 | 改自「07 指标工程落地与 SLO 体系」 |
 
-## 任务状态
+**第二批：日志专栏 9 文件全部完成**，统一验证通过。
 
-- [x] 11 篇全量重构完成（10 篇正文全部达标 500+ 行 / 12000-14557 字，篇均 12666 字）
-- [x] 00 专栏导览更新完成（架构全景图、篇幅表、阅读路径、互链有效）
-- [x] 统一验证完成（frontmatter 完整、Mermaid dracula、wiki 链接死链 0、code fence 平衡）
-- [x] CHANGELOG.md 追加完成
-- [x] TODO.md 状态更新为 done
+| 篇 | 行 | 中文字 | 备注 |
+|---|---|---|---|
+| 00 专栏导览 | 104 | 1550 | 重写；声明 Loki 主线 + 四条贯穿判断 + 知识图谱 |
+| 01 日志的本质与演进 | 634 | 12062 | 保留篇名，加深 |
+| 02 日志采集架构——Grafana Alloy、Promtail 与 Vector | 615 | 12062 | 改自「02 日志采集架构对比」 |
+| 03 Loki 架构与设计哲学——只索引标签 | 533 | 12040 | **新增**（从原 04 拆出） |
+| 04 Loki 存储引擎——Chunk、索引、压缩与保留 | 503 | 12262 | **新增** |
+| 05 LogQL 深度解析 | 705 | 12199 | **新增** |
+| 06 Loki 运维与性能调优 | 555 | 12017 | **新增** |
+| 07 Elasticsearch 对照——Loki 的边界与选型 | 694 | 12000 | 改自「03 Elasticsearch 日志存储与检索原理」 |
+| 08 日志与链路追踪的联动 | 740 | 12026 | 改自「05 日志与链路追踪的联动」 |
 
-## 关键文件路径
+**第三批：链路追踪专栏 9 文件全部完成**，统一验证通过（保持 SkyWalking 主线；06/07 对调）。
 
-- 专栏目录：`/Users/lihaopeng/Documents/my-brain/content/Java/Netty/`
-- skill 主文件：`/Users/lihaopeng/Documents/my-brain/.devin/skills/writing-technical-article/SKILL.md`
-- 风格规则：`/Users/lihaopeng/Documents/my-brain/.devin/skills/writing-technical-article/references/style-rules.md`
-- 交付标准：`/Users/lihaopeng/Documents/my-brain/.devin/skills/writing-technical-article/references/delivery-standard.md`
-- 检查清单：`/Users/lihaopeng/Documents/my-brain/.devin/skills/writing-technical-article/references/checklist.md`
-- 仓库规范：`/Users/lihaopeng/Documents/my-brain/AGENTS.md`
-- 任务登记：`/Users/lihaopeng/Documents/my-brain/TODO.md`
-- 变更记录：`/Users/lihaopeng/Documents/my-brain/CHANGELOG.md`
-- 范文标杆：`content/分布式架构/数据密集型系统架构实战/11 数据拆分之困.md`
+| 篇 | 行 | 中文字 | 备注 |
+|---|---|---|---|
+| 00 专栏导览 | 106 | 1748 | 重写；声明 SkyWalking 主线 + 四条贯穿判断 + 知识图谱 |
+| 01 为什么需要链路追踪 | 526 | 12133 | 保留篇名，加深（Dapper/演进/三支柱分工） |
+| 02 链路追踪核心概念 | 740 | 12061 | 保留篇名，加深（Trace/Span/SpanContext/Baggage/采样） |
+| 03 OpenTelemetry 统一标准 | 750 | 12094 | 保留篇名，加深（API/SDK/Collector + OTLP） |
+| 04 SkyWalking 整体架构深度解析 | 705 | 12110 | 保留篇名，加深（Agent/OAP/UI/存储） |
+| 05 SkyWalking Java Agent 字节码增强原理 | 823 | 12068 | 保留篇名，加深（Instrumentation/Byte Buddy/插件） |
+| 06 SkyWalking OAP 流处理与存储模型 | 847 | 12036 | **原 07**，对调（git mv） |
+| 07 SkyWalking 采样策略与性能影响 | 679 | 12093 | **原 06**，对调（git mv） |
+| 08 链路追踪工程实践落地经验 | 789 | 12114 | 保留篇名，加深（断裂/基数/联动/清单/SOP） |
 
-## 已尝试过的死路
+**第四批：Profiler 专栏 5 文件全部完成**，统一验证通过（保持篇名；以"采样 + 火焰图"为主线）。
 
-- 无（全程串行主代理直写顺利）
+| 篇 | 行 | 中文字 | 备注 |
+|---|---|---|---|
+| 00 专栏导览 | 92 | 1434 | 重写；声明"采样 + 火焰图"主线 + 四条贯穿判断 + 知识图谱 |
+| 01 持续性能剖析 | 638 | 12084 | 保留篇名，加深（采样/类型/传统 vs 持续/平台） |
+| 02 火焰图阅读与性能问题识别 | 691 | 12047 | 保留篇名，加深（结构/读法/五种模式/误区） |
+| 03 eBPF Profiling 内核级性能观测 | 743 | 12158 | 保留篇名，加深（原理/符号解析/工具/边界） |
+| 04 SkyWalking 集成 Profiler | 708 | 12102 | 保留篇名，加深（按需触发/Trace 关联/调优/组合） |
 
-## 关键决策记录
+**第五批：AIOps 与可观测性实战专栏 13 文件 + 全景导览 全部完成**，全任务收官。
 
-- 重写策略：清空旧内容全量重写，frontmatter 保留并更新（date 统一为 2026-09-07，tags 按 AGENTS.md 映射规范，aliases 补充常用别名）
-- 篇幅达标方法：初稿通常 4000-8000 字，需多轮补充技术深度内容（设计背景、机制解释、边界分析、实践案例）至 12000+ 字，不通过参考资料灌水
-- 串行执行：用户明确要求"串行一篇一篇写，不要并行有内存泄漏"，所有文章必须按顺序逐篇处理
-- 技术资产重构：允许重构代码块、Mermaid 图、Markdown 表格、双向链接、思考题
+| 篇 | 行 | 中文字 | 备注 |
+|---|---|---|---|
+| 00 专栏导览 | 111 | 2156 | 重写；标准骨架 + 与四个子专栏的分工声明 |
+| 01 可观测性的本质：从监控到认知跃迁 | 763 | 12027 | 拉齐骨架 + 扩展 |
+| 02 可观测性三大支柱深度解析 | 548 | 12006 | 拉齐骨架 + 扩展 |
+| 03 OpenTelemetry：可观测性标准化的终局 | 562 | 12019 | 拉齐骨架 + 扩展 |
+| 04 分布式追踪的深层原理 | 605 | 12001 | 拉齐骨架 + 扩展 |
+| 05 基础设施可观测性：eBPF 的崛起 | 731 | 12027 | 拉齐骨架 + 扩展 |
+| 06 根因分析的系统方法论：五步法 | 652 | 12002 | 拉齐骨架 + 扩展 |
+| 07 异常检测工程实践 | 600 | 12081 | 拉齐骨架 + 扩展 |
+| 08 AIOps 核心原理：SLO 驱动 | 690 | 12129 | 拉齐骨架 + 扩展 |
+| 09 LLM 与 Agentic AI | 698 | 12132 | 拉齐骨架 + 扩展 |
+| 10 自驱架构：预测性伸缩 | 592 | 12002 | 拉齐骨架 + 扩展 |
+| 11 可观测性平台工程 | 591 | 12021 | 拉齐骨架 + 扩展 |
+| 12 遗留系统可观测性改造 | 550 | 12077 | 拉齐骨架 + 扩展 |
 
-## 篇幅统计方法
+**`00 可观测性全景导览.md`**：全量重写（5127 字），同步 5 个子专栏结构。
 
-```bash
-f="<文件路径>"; lines=$(wc -l < "$f"); chars=$(python3 -c "
-import re
-with open('$f') as fh:
-    text = fh.read()
-cjk = len(re.findall(r'[\u4e00-\u9fff\u3000-\u303f\uff00-\uffef]', text))
-print(cjk)
-"); echo "lines=$lines, cjk_chars=$chars"
-```
+**全目录（47 文件）**：合计 **510327 中文字**（重写前 209672 字）；42 篇正文全部 ≥12000 中文字 / ≥500 行；`content/可观测/` 死链 0。
 
-## 当前最该读的 3 个文件
+## 交接包
 
-1. `/Users/lihaopeng/Documents/my-brain/.agent/STATE.json` — 拿到 next_action
-2. `/Users/lihaopeng/Documents/my-brain/content/Java/Netty/08 Netty高性能之道——FastThreadLocal、HashedWheelTimer与无锁队列.md` — 下一篇要重写的文件
-3. `/Users/lihaopeng/Documents/my-brain/content/Java/Netty/07 Netty内存管理——jemalloc算法在Java中的实现.md` — 已完成的上一篇，参考其结构和风格
+详见 `.agent/handoff/20261010-163754-observability-rewrite/`（TASK / STATUS / DECISIONS / EVIDENCE / NEXT_STEPS + ARTIFACTS）。**本任务已收官**——`content/可观测/` 全部 47 文件重写完毕并验证通过，全部改动保持未 commit（老板未要求提交）。

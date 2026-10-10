@@ -9,7 +9,7 @@ aliases: []
 
 ## 摘要
 
-etcd 是 CoreOS 于 2013 年开源的分布式键值存储，以 Go 语言编写，基于 Raft 共识协议保证强一致性。它是 [[Kubernetes]] 的"大脑"——集群中所有资源对象（Pod、Service、ConfigMap、Secret、RBAC 规则等）的状态全部持久化于 etcd。理解 etcd 的架构，是理解 Kubernetes 高可用、故障恢复和性能瓶颈的基础。本文以一次写请求的完整链路为主线，串联 etcd 的各个层次：gRPC API 层、Raft 共识层、WAL 持久化层、BoltDB 存储层和 MVCC 多版本语义，建立整体认知框架。
+etcd 是 CoreOS 于 2013 年开源的分布式键值存储，以 Go 语言编写，基于 Raft 共识协议保证强一致性。它是 Kubernetes 的"大脑"——集群中所有资源对象（Pod、Service、ConfigMap、Secret、RBAC 规则等）的状态全部持久化于 etcd。理解 etcd 的架构，是理解 Kubernetes 高可用、故障恢复和性能瓶颈的基础。本文以一次写请求的完整链路为主线，串联 etcd 的各个层次：gRPC API 层、Raft 共识层、WAL 持久化层、BoltDB 存储层和 MVCC 多版本语义，建立整体认知框架。
 
 ---
 
@@ -24,7 +24,7 @@ Kubernetes 在 2014 年设计时，需要一个集中存储集群状态的组件
 4. **轻量级**：不需要关系型数据库的复杂查询能力，键值存储足够；
 5. **Go 语言**：与 Kubernetes 的技术栈一致，维护成本低。
 
-etcd 恰好满足上述所有要求。[[Zookeeper]] 是当时唯一可比的竞争对手，但 ZooKeeper 的 Java 实现（JVM GC 问题）、复杂的 ZAB 协议和较差的跨语言客户端，让 Kubernetes 团队最终选择了 etcd。
+etcd 恰好满足上述所有要求。Zookeeper 是当时唯一可比的竞争对手，但 ZooKeeper 的 Java 实现（JVM GC 问题）、复杂的 ZAB 协议和较差的跨语言客户端，让 Kubernetes 团队最终选择了 etcd。
 
 ### 1.2 etcd 存储了哪些 Kubernetes 数据
 

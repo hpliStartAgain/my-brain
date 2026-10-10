@@ -76,7 +76,7 @@ sequenceDiagram
 
 WAL 正是为了解决这个问题而设计的：**在数据写入易失性内存之前，先将操作记录写入持久化存储（HDFS 上的 WAL 文件）**。这样，即使 RegionServer 崩溃，也能通过重放（Replay）WAL 文件来恢复 MemStore 中丢失的数据，重建崩溃前的状态。
 
-WAL 的这个设计模式在数据库领域有悠久历史：[[MySQL]] 的 Binlog 和 Redo Log、[[PostgreSQL]] 的 WAL、[[ZooKeeper]] 的事务日志，都是同一原则的不同实现。HBase 的创新在于将 WAL 与 HDFS 的分布式存储结合，使 WAL 本身也具备了容错能力（HDFS 3 副本）。
+WAL 的这个设计模式在数据库领域有悠久历史：MySQL 的 Binlog 和 Redo Log、PostgreSQL 的 WAL、ZooKeeper 的事务日志，都是同一原则的不同实现。HBase 的创新在于将 WAL 与 HDFS 的分布式存储结合，使 WAL 本身也具备了容错能力（HDFS 3 副本）。
 
 ### 2.2 WAL 的物理结构
 

@@ -60,7 +60,7 @@ Monica Beckwith 在《JVM Performance Engineering》第 8 章把 Java 应用的�
 
 **启动期**的耗时来源：
 - JVM 引导：解析参数、加载 JVM 本地库、初始化数据结构（~几百ms）
-- 类加载：加载 main 类及依赖类，从 jar 读取字节码（受 [[Page Cache]] 影响）
+- 类加载：加载 main 类及依赖类，从 jar 读取字节码（受 Page Cache 影响）
 - 字节码验证：检查字节码格式合法性（可被 `-Xverify:none` 关闭，但不推荐生产用）
 - 静态初始化：执行 `<clinit>` 方法
 

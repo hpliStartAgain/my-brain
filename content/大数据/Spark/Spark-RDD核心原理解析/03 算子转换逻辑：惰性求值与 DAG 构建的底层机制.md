@@ -176,11 +176,11 @@ grouped.saveAsTextFile("hdfs://output/")
 调度器可以在执行前分析整个 DAG，做出只有全局视野才能做的优化决策：
 - 发现两个相邻的 `filter` 可以合并为一个
 - 发现某个 RDD 被多次使用（多个 Action 或多路 DAG 引用），主动建议 `cache()`
-- 在 SQL/DataFrame 层（通过 [[Catalyst 优化器]]），实现谓词下推、列裁剪等
+- 在 SQL/DataFrame 层（通过 Catalyst 优化器），实现谓词下推、列裁剪等
 
 **收益三：容错模型的基础**
 
-因为 Transformation 只记录"如何从父 RDD 算出子 RDD"，而不物化中间数据，整个 Lineage 图就是完整的重算路径。当某个 Executor 故障时，调度器只需从血缘图中找到最近的起点，重新提交相关 Task，不需要任何全局快照（这与 [[Hadoop MapReduce]] 的容错机制形成对比：MapReduce 每个 Step 的输出都写入 HDFS，容错靠重跑 Step，而非血缘重算）。
+因为 Transformation 只记录"如何从父 RDD 算出子 RDD"，而不物化中间数据，整个 Lineage 图就是完整的重算路径。当某个 Executor 故障时，调度器只需从血缘图中找到最近的起点，重新提交相关 Task，不需要任何全局快照（这与 Hadoop MapReduce 的容错机制形成对比：MapReduce 每个 Step 的输出都写入 HDFS，容错靠重跑 Step，而非血缘重算）。
 
 ### 3.3 惰性求值的代价：调试难度上升
 
@@ -296,7 +296,7 @@ sequenceDiagram
 
 ### 5.1 MapReduce 的痛点：强制物化的中间结果
 
-理解 Spark 流水线的价值，最好的对比对象是 [[Hadoop MapReduce]]。
+理解 Spark 流水线的价值，最好的对比对象是 Hadoop MapReduce。
 
 MapReduce 的编程模型天然强制了"Map 全部完成 → Shuffle → Reduce 全部完成"的同步屏障。即使你的逻辑只是 `filter + map`（两个窄依赖操作），用 MapReduce 实现时：
 1. Map 阶段执行 `filter`，结果写入 HDFS（临时目录）

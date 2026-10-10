@@ -7,7 +7,7 @@ aliases: ["Iceberg元数据", "Snapshot快照", "Manifest File", "Manifest List"
 
 **摘要：**
 
-[[Apache Iceberg]] 最核心的工程创新，不是它的事务机制，也不是它的 Hidden Partitioning，而是这一切的物理基础——**三层元数据架构（Snapshot → Manifest List → Manifest File）**。这套分层设计解决了 [[Hive Metastore]] 在大规模场景下的根本性扩展性问题：不再需要查询数百万行的分区表，而是通过元数据文件的层层剪枝，在毫秒级内定位到需要扫描的少量数据文件。本文深入解析三层架构的每一层文件结构、读取路径、列统计如何驱动 Data Skipping，以及这个设计如何天然支持快照隔离和 Time Travel，并与 Delta Lake 的事务日志机制做精准对比。
+Apache Iceberg 最核心的工程创新，不是它的事务机制，也不是它的 Hidden Partitioning，而是这一切的物理基础——**三层元数据架构（Snapshot → Manifest List → Manifest File）**。这套分层设计解决了 Hive Metastore 在大规模场景下的根本性扩展性问题：不再需要查询数百万行的分区表，而是通过元数据文件的层层剪枝，在毫秒级内定位到需要扫描的少量数据文件。本文深入解析三层架构的每一层文件结构、读取路径、列统计如何驱动 Data Skipping，以及这个设计如何天然支持快照隔离和 Time Travel，并与 Delta Lake 的事务日志机制做精准对比。
 
 ---
 

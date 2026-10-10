@@ -7,7 +7,7 @@ aliases: [Redo Log, WAL协议, 崩溃恢复]
 
 # 03 InnoDB 日志系统——WAL 协议与崩溃恢复的工程实现
 
-**摘要：** 数据库最不可妥协的承诺是：**一旦事务提交成功，数据就不会丢失——即使下一秒服务器断电**。这个承诺在工程上是如何兑现的？答案是 WAL（Write-Ahead Logging）协议和围绕它构建的日志系统。本文从"为什么先写日志再写数据"的数学直觉出发，深入剖析 [[Redo Log]] 的物理结构（环形缓冲区、LSN 全局递增语义）、写入流程（Redo Log Buffer → OS Cache → 磁盘的三级流水线）、`innodb_flush_log_at_trx_commit` 三种模式的持久性-性能权衡，以及 Redo Log 与 [[Binlog]] 之间通过两阶段提交（2PC）保证一致性的协调机制。最后完整还原崩溃恢复的过程：MySQL 重启后，InnoDB 如何通过 Redo Log 前滚和 Undo Log 回滚，将数据库恢复到崩溃前的一致状态。
+**摘要：** 数据库最不可妥协的承诺是：**一旦事务提交成功，数据就不会丢失——即使下一秒服务器断电**。这个承诺在工程上是如何兑现的？答案是 WAL（Write-Ahead Logging）协议和围绕它构建的日志系统。本文从"为什么先写日志再写数据"的数学直觉出发，深入剖析 Redo Log 的物理结构（环形缓冲区、LSN 全局递增语义）、写入流程（Redo Log Buffer → OS Cache → 磁盘的三级流水线）、`innodb_flush_log_at_trx_commit` 三种模式的持久性-性能权衡，以及 Redo Log 与 Binlog 之间通过两阶段提交（2PC）保证一致性的协调机制。最后完整还原崩溃恢复的过程：MySQL 重启后，InnoDB 如何通过 Redo Log 前滚和 Undo Log 回滚，将数据库恢复到崩溃前的一致状态。
 
 ---
 
@@ -171,7 +171,7 @@ Redo Log Buffer 存在的意义是**批量化写入**：事务执行过程中可
 
 **第二级：OS Page Cache（操作系统内核缓存）**
 
-调用 `write()` 系统调用将数据从用户空间写入内核的文件系统缓存（[[Page Cache]]）。到这一步，数据已经离开了 MySQL 进程的控制——即使 MySQL 进程崩溃，数据仍然在内核缓存中，操作系统最终会将其写入磁盘。但如果**操作系统本身崩溃或服务器断电**，Page Cache 中的数据会丢失。
+调用 `write()` 系统调用将数据从用户空间写入内核的文件系统缓存（Page Cache）。到这一步，数据已经离开了 MySQL 进程的控制——即使 MySQL 进程崩溃，数据仍然在内核缓存中，操作系统最终会将其写入磁盘。但如果**操作系统本身崩溃或服务器断电**，Page Cache 中的数据会丢失。
 
 **第三级：磁盘持久化（fsync）**
 
@@ -200,7 +200,7 @@ Redo Log Buffer 存在的意义是**批量化写入**：事务执行过程中可
 **模式 0（"极致性能"）**：适用于可以容忍少量数据丢失的场景，如日志系统、监控数据、会话缓存等。
 
 > [!info] 核心概念
-> `innodb_flush_log_at_trx_commit` 与 `sync_binlog` 共同决定了 MySQL 的数据安全级别。生产环境的"黄金配置"是：`innodb_flush_log_at_trx_commit = 1` + `sync_binlog = 1`，简称**"双 1 配置"**。这保证了 Redo Log 和 [[Binlog]] 在每次事务提交时都 fsync 到磁盘，是主从复制和崩溃恢复的正确性基础。
+> `innodb_flush_log_at_trx_commit` 与 `sync_binlog` 共同决定了 MySQL 的数据安全级别。生产环境的"黄金配置"是：`innodb_flush_log_at_trx_commit = 1` + `sync_binlog = 1`，简称**"双 1 配置"**。这保证了 Redo Log 和 Binlog 在每次事务提交时都 fsync 到磁盘，是主从复制和崩溃恢复的正确性基础。
 
 ### 3.3 组提交（Group Commit）优化
 
@@ -283,7 +283,7 @@ InnoDB 中存在两种日志系统，它们由不同的层级管理，服务于�
 
 **崩溃点 1：Prepare 之前**
 
-Redo Log 中没有 PREPARE 标记，事务被视为未提交。恢复时通过 [[Undo Log]] 回滚该事务的所有修改。**结果：事务丢失，数据一致。**
+Redo Log 中没有 PREPARE 标记，事务被视为未提交。恢复时通过 Undo Log 回滚该事务的所有修改。**结果：事务丢失，数据一致。**
 
 **崩溃点 2：Prepare 之后，Write Binlog 之前**
 
@@ -310,7 +310,7 @@ Redo Log 中有 PREPARE 标记，Binlog 中有对应的完整的 `xid` 记录。
 
 **阶段一：Redo Log 前滚（Redo / Roll-Forward）**
 
-InnoDB 从 Checkpoint LSN 开始，**按顺序重放 Redo Log 中记录的所有修改**，将 [[Buffer Pool]] 中的数据页恢复到崩溃前的最新状态。
+InnoDB 从 Checkpoint LSN 开始，**按顺序重放 Redo Log 中记录的所有修改**，将 Buffer Pool 中的数据页恢复到崩溃前的最新状态。
 
 具体过程：
 1. 读取 Redo Log 文件中记录的 Checkpoint LSN
@@ -326,7 +326,7 @@ InnoDB 从 Checkpoint LSN 开始，**按顺序重放 Redo Log 中记录的所有
 
 前滚阶段恢复了所有修改，包括那些**崩溃时尚未提交的事务的修改**。这些未提交的修改需要被撤销，否则会违反原子性（事务要么全做要么全不做）。
 
-InnoDB 通过 [[Undo Log]] 来完成回滚：
+InnoDB 通过 Undo Log 来完成回滚：
 1. 查找所有处于"活跃"状态（既不是 COMMIT 也不是 PREPARE+Binlog 完整的事务）的事务
 2. 对每个需要回滚的事务，读取其 Undo Log，**逆向执行**每一步修改（如果原操作是 INSERT，回滚操作就是 DELETE；如果原操作是 UPDATE，回滚操作就是用 Undo Log 中的旧值还原）
 3. 回滚完成后，释放这些事务持有的所有锁
@@ -458,7 +458,7 @@ ALTER INSTANCE ENABLE INNODB REDO_LOG;
 7. **崩溃恢复 = 前滚（Redo）+ 回滚（Undo）**：前滚恢复所有修改到崩溃前状态，回滚撤销未提交事务的修改
 8. **MySQL 8.0 的改进**：无锁写入、动态容量、临时禁用等，持续提升日志系统的性能和灵活性
 
-Redo Log 与上一篇讲的 [[Buffer Pool]] 形成了 InnoDB 的"性能-安全"双引擎：Buffer Pool 让读写操作在内存中完成（性能），Redo Log 保证内存中的修改不会因崩溃而丢失（安全）。下一篇文章我们将深入 [[Undo Log]] 与 [[MVCC]]——它们是 InnoDB 实现事务隔离性和并发控制的核心机制。
+Redo Log 与上一篇讲的 Buffer Pool 形成了 InnoDB 的"性能-安全"双引擎：Buffer Pool 让读写操作在内存中完成（性能），Redo Log 保证内存中的修改不会因崩溃而丢失（安全）。下一篇文章我们将深入 Undo Log 与 MVCC——它们是 InnoDB 实现事务隔离性和并发控制的核心机制。
 
 ---
 

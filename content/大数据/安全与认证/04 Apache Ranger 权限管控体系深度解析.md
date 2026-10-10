@@ -137,7 +137,7 @@ graph TD
 - 将同步结果写入 Ranger 数据库，Admin UI 中可见的用户/组来自这里
 - 支持增量同步（只同步上次同步后的变更），减少 LDAP 查询压力
 
-**TagSync** 是 Ranger 与 [[Apache Atlas]] 集成的关键组件：
+**TagSync** 是 Ranger 与 Apache Atlas 集成的关键组件：
 - 定期从 Atlas 拉取资源的分类（Classification）标签，如 `PII`、`SENSITIVE`、`PHI`
 - 将标签同步到 Ranger，供 Tag-Based Policy 使用
 - 当 Atlas 中某张 Hive 表被标记为 `PII` 时，Ranger 中针对 `PII` 标签的脱敏策略会自动生效

@@ -53,7 +53,7 @@ R50 ← R49 ← R48 ← ... ← R1 ← R0 ← 原始图数据（HDFS）
 
 ### 2.1 可靠 Checkpoint 的完整生命周期
 
-**可靠 Checkpoint**（Reliable Checkpoint）将 RDD 数据写入可靠的外部存储（通常是 [[HDFS]]），是 Checkpoint 的标准形式。其生命周期分为三个阶段：
+**可靠 Checkpoint**（Reliable Checkpoint）将 RDD 数据写入可靠的外部存储（通常是 HDFS），是 Checkpoint 的标准形式。其生命周期分为三个阶段：
 
 **阶段一：标记（Mark）**
 
@@ -260,7 +260,7 @@ for (iteration <- 1 to 100) {
 
 ### 5.1 机器学习：迭代训练的必备
 
-[[Apache Spark MLlib]] 的内置算法（如 `ALS`、`KMeans`、`GradientBoostingTrees`）已经内置了自动 Checkpoint 逻辑，通过 `checkpointInterval` 参数控制：
+Apache Spark MLlib 的内置算法（如 `ALS`、`KMeans`、`GradientBoostingTrees`）已经内置了自动 Checkpoint 逻辑，通过 `checkpointInterval` 参数控制：
 
 ```scala
 import org.apache.spark.ml.recommendation.ALS

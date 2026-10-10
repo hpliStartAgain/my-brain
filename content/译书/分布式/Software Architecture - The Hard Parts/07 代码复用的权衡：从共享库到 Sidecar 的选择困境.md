@@ -150,7 +150,7 @@ graph LR
     class E infra
 ```
 
-Sidecar 是[[服务网格（Service Mesh）]]架构的核心组件，Istio 和 Linkerd 都采用了这种模式（以 [[Envoy Proxy]] 作为 Sidecar 实现）。
+Sidecar 是服务网格（Service Mesh）架构的核心组件，Istio 和 Linkerd 都采用了这种模式（以 Envoy Proxy 作为 Sidecar 实现）。
 
 **优点**：
 - **语言无关**：Sidecar 是独立进程，主服务可以用任何语言实现
@@ -229,9 +229,9 @@ Sidecar 是[[服务网格（Service Mesh）]]架构的核心组件，Istio 和 L
 
 ## 延伸阅读
 
-- [[Service Mesh Patterns]]：深度了解 Sidecar 模式和服务网格的实现细节
-- [[Istio in Action]]：Envoy Sidecar 和 Istio 控制平面的实战指南
-- [[Building Microservices]] 第 4 章：Sam Newman 关于微服务间代码共享的讨论
+- Service Mesh Patterns：深度了解 Sidecar 模式和服务网格的实现细节
+- Istio in Action：Envoy Sidecar 和 Istio 控制平面的实战指南
+- Building Microservices 第 4 章：Sam Newman 关于微服务间代码共享的讨论
 
 ---
 
@@ -299,7 +299,7 @@ Istio 通过 iptables 规则将 Pod 内所有的入站和出站流量重定向�
 
 ### 5.4 eBPF 对 Sidecar 的挑战
 
-近年来，出现了基于 [[eBPF]] 技术的替代方案（如 Cilium、Hubble），它们通过在 Linux 内核级别拦截网络流量来实现服务网格的能力，而不需要在每个 Pod 中注入 Sidecar。
+近年来，出现了基于 eBPF 技术的替代方案（如 Cilium、Hubble），它们通过在 Linux 内核级别拦截网络流量来实现服务网格的能力，而不需要在每个 Pod 中注入 Sidecar。
 
 **与 Sidecar 的对比**：
 

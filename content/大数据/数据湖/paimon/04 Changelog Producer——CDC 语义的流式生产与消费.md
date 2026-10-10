@@ -7,7 +7,7 @@ aliases: ["Paimon Changelog", "CDC语义", "Changelog Producer", "Full Compactio
 
 **摘要：**
 
-[[Apache Paimon]] 最核心的流处理能力之一，是让数据湖的存储层直接充当**可靠的 Changelog 来源**——下游 [[Apache Flink]] 任务可以像消费 [[Apache Kafka]] 一样消费 Paimon 表的变更事件（`+I`、`-U`、`+U`、`-D`），而不是像传统方案那样只能做全量快照查询。这个能力被称为 **Changelog Producer**。本文深入剖析 Changelog Producer 的两种核心实现模式：**Full Compaction Producer**（通过全量合并产生精确的 before/after 变更对）和 **Lookup Changelog Producer**（通过查找旧值产生实时 Changelog），解析两者在延迟、准确性、资源消耗和适用场景上的根本差异，以及 Paimon Changelog 如何与 Flink 的流式执行模型无缝结合，构建真正的流批一体实时数仓链路。
+Apache Paimon 最核心的流处理能力之一，是让数据湖的存储层直接充当**可靠的 Changelog 来源**——下游 Apache Flink 任务可以像消费 Apache Kafka 一样消费 Paimon 表的变更事件（`+I`、`-U`、`+U`、`-D`），而不是像传统方案那样只能做全量快照查询。这个能力被称为 **Changelog Producer**。本文深入剖析 Changelog Producer 的两种核心实现模式：**Full Compaction Producer**（通过全量合并产生精确的 before/after 变更对）和 **Lookup Changelog Producer**（通过查找旧值产生实时 Changelog），解析两者在延迟、准确性、资源消耗和适用场景上的根本差异，以及 Paimon Changelog 如何与 Flink 的流式执行模型无缝结合，构建真正的流批一体实时数仓链路。
 
 ---
 
@@ -15,7 +15,7 @@ aliases: ["Paimon Changelog", "CDC语义", "Changelog Producer", "Full Compactio
 
 ### 1.1 传统数据湖的"只读快照"困境
 
-在 Paimon 出现之前，基于 [[Apache Hudi]] 或 [[Apache Iceberg]] 构建的数据湖，其下游消费模式通常是：
+在 Paimon 出现之前，基于 Apache Hudi 或 Apache Iceberg 构建的数据湖，其下游消费模式通常是：
 
 ```
 消费模式 1：全量快照读取（Snapshot Query）
@@ -37,7 +37,7 @@ aliases: ["Paimon Changelog", "CDC语义", "Changelog Producer", "Full Compactio
 
 ### 1.2 Kafka 的 CDC 流与数据湖的矛盾
 
-另一种常见方案是：让 [[Apache Kafka]] 充当 Changelog 来源，Paimon/Hudi/Iceberg 只做"最终状态存储"：
+另一种常见方案是：让 Apache Kafka 充当 Changelog 来源，Paimon/Hudi/Iceberg 只做"最终状态存储"：
 
 ```
 架构：
@@ -370,7 +370,7 @@ Paimon 的 Changelog Producer 是它在流批一体架构中的核心差异化�
 - **Full Compaction Producer**：以分钟级延迟换取 Changelog 精确性和写入零额外开销，适合对延迟不那么敏感但需要准确变更语义的 CDC 链路
 - **Lookup Changelog Producer**：以写入时的 Lookup 开销换取秒级 Changelog 延迟，适合实时性要求高的场景，搭配 Lookup Cache 可以大幅降低 SST 读取频率
 
-两者都让 Paimon 成为一个"既能存储、又能流式消费"的数据湖存储——这是 [[Apache Hudi]] 的 Incremental Query 和 [[Apache Iceberg]] 的 Incremental Read 都无法完全覆盖的能力。
+两者都让 Paimon 成为一个"既能存储、又能流式消费"的数据湖存储——这是 Apache Hudi 的 Incremental Query 和 Apache Iceberg 的 Incremental Read 都无法完全覆盖的能力。
 
 下一篇 [[05 Lookup Join 与维表——Paimon 在流计算中的实时维表查询]] 将聚焦 Paimon 作为 Flink Lookup Join 的维表来源，解析 Paimon 如何通过 LSM-Tree 的局部查找能力和 Lookup Cache 机制，实现比 HBase/Redis 更低运维复杂度的实时维表查询。
 

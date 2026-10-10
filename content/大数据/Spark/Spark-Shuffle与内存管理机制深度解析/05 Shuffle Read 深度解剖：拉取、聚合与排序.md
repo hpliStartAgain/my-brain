@@ -9,7 +9,7 @@ aliases: []
 
 ## 摘要
 
-Shuffle Read 是 Spark Shuffle 的"下半场"——当上游 Stage 的所有 Map Task 完成写出后，下游 Stage 的 Reduce Task 开始工作：向 `MapOutputTracker` 查询数据位置，通过 [[Netty]] 网络框架从各节点拉取数据块，然后在内存中进行聚合或排序，最终生成 Reduce 操作的输入。这个过程看似简单，但涉及复杂的并发控制、网络重试、内存协调和多种聚合模式。本文从 `BlockStoreShuffleReader` 出发，逐层剖析 Shuffle Read 的位置感知协议、网络拉取机制、`ExternalAppendOnlyMap` 聚合引擎和排序路径，揭示 Reduce 端的完整数据流动轨迹。
+Shuffle Read 是 Spark Shuffle 的"下半场"——当上游 Stage 的所有 Map Task 完成写出后，下游 Stage 的 Reduce Task 开始工作：向 `MapOutputTracker` 查询数据位置，通过 Netty 网络框架从各节点拉取数据块，然后在内存中进行聚合或排序，最终生成 Reduce 操作的输入。这个过程看似简单，但涉及复杂的并发控制、网络重试、内存协调和多种聚合模式。本文从 `BlockStoreShuffleReader` 出发，逐层剖析 Shuffle Read 的位置感知协议、网络拉取机制、`ExternalAppendOnlyMap` 聚合引擎和排序路径，揭示 Reduce 端的完整数据流动轨迹。
 
 ---
 
@@ -93,7 +93,7 @@ Shuffle Read 的网络拉取面临三个相互矛盾的需求：
 
 **`spark.reducer.maxBlocksInFlightPerAddress`（默认 Int.MaxValue）**：对同一节点的最大并发请求块数。当某个节点有大量小块时，这个参数防止因为向同一节点发出大量小请求而造成该节点的 I/O 压力。
 
-这三个参数共同构成了 Fetch 的"流量控制阀"，实现了一个类似 [[TCP]] 拥塞控制的机制：确保在途请求量不超过系统容量，避免内存溢出。
+这三个参数共同构成了 Fetch 的"流量控制阀"，实现了一个类似 TCP 拥塞控制的机制：确保在途请求量不超过系统容量，避免内存溢出。
 
 ### 2.3 拉取流程的状态机
 

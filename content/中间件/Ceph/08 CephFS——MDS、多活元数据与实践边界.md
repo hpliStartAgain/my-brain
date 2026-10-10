@@ -527,7 +527,7 @@ graph LR
 
 ### 7.1 三方案速览
 
-| 维度 | CephFS | HDFS | [[中间件/JuiceFS/01 JuiceFS 全局架构——元数据引擎与对象存储的分离设计\|JuiceFS]] |
+| 维度 | CephFS | HDFS | [[01 JuiceFS 全局架构——元数据引擎与对象存储的分离设计]] |
 | :--- | :--- | :--- | :--- |
 | **元数据存储** | MDS（内存+RADOS） | NameNode（全量内存） | Redis/TiKV/MySQL（专用 KV） |
 | **数据存储** | RADOS（OSD 集群） | DataNode（本地文件系统） | 对象存储（S3/MinIO/CephRGW） |
