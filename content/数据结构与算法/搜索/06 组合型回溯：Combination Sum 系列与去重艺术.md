@@ -1,452 +1,831 @@
 ---
 title: "组合型回溯：Combination Sum 系列与去重艺术"
-date: 2026-04-28
-tags: [Combination Sum, LeetCode, 剪枝, 去重, 回溯, 算法, 组合, 面试]
-aliases: [Combination Sum, 组合回溯, 去重剪枝, LeetCode 39, LeetCode 40]
+date: 2026-10-11
+tags: [回溯, LeetCode, 39, 40, 77, CombinationSum, 去重, 组合, 算法, 面试]
+aliases: [组合总和, Combination Sum, 组合型回溯, LeetCode 39]
 ---
 
 # 组合型回溯：Combination Sum 系列与去重艺术
 
-## 摘要
+**摘要：**
 
-Combination Sum（组合总和）系列是回溯算法中"组合"类问题的标准教学案例。I 和 II 两道题看似只有"是否有重复元素"这一个区别，但去重逻辑的实现却是面试中最高频的出错点。本文从"排列和组合的本质区别"出发，推导出 `start` 指针的存在理由，再深入讲解 Combination Sum II 中 `i > start` 而非 `i > 0` 的去重条件，以及为什么排序是去重剪枝的前提。全程通过搜索树的可视化，直观展示不同实现选择对搜索空间的影响。
-
----
-
-## 第 1 章 排列与组合：两类问题的本质区别
-
-### 1.1 为什么需要区分排列和组合
-
-**排列（Permutation）**：元素的**顺序**很重要，`[1,2]` 和 `[2,1]` 是不同的排列。
-
-**组合（Combination）**：元素的**选择**很重要，顺序不重要，`[1,2]` 和 `[2,1]` 是同一个组合。
-
-对于组合问题，如果不加限制，回溯会枚举出 `[1,2]` 和 `[2,1]` 两个，但只有一个是正确答案——这就是"重复"问题的来源。
-
-**本质差异**：组合问题的搜索树，每个节点只能向"后面"的元素做选择，不能往前选——这就是 `start` 参数的作用。
-
-### 1.2 通用组合框架 vs 通用排列框架
-
-**排列框架**（无 `start`，`used` 数组防止重选）：
-
-```java
-void backtrack(int[] nums, boolean[] used, List<Integer> path, ...) {
-    if (path.size() == nums.length) {
-        result.add(new ArrayList<>(path));
-        return;
-    }
-    for (int i = 0; i < nums.length; i++) {  // 从 0 开始
-        if (used[i]) continue;
-        used[i] = true;
-        path.add(nums[i]);
-        backtrack(nums, used, path, ...);
-        path.remove(path.size() - 1);
-        used[i] = false;
-    }
-}
-```
-
-**组合框架**（有 `start`，保证不重复选择）：
-
-```java
-void backtrack(int[] candidates, int start, int target, int sum, List<Integer> path, ...) {
-    if (sum == target) {
-        result.add(new ArrayList<>(path));
-        return;
-    }
-    for (int i = start; i < candidates.length; i++) {  // 从 start 开始，不往回选
-        if (candidates[i] > target - sum) break;  // 剪枝（排序后有效）
-        path.add(candidates[i]);
-        backtrack(candidates, i, target, sum + candidates[i], path, ...);  // i（可重复）或 i+1（不可重复）
-        path.remove(path.size() - 1);
-    }
-}
-```
-
-`start` 参数保证了每次递归只从当前元素及之后的元素中选择，天然避免了顺序不同但元素相同的组合被重复计数。
+组合型回溯是面试最高频的回溯题型之一。它围绕 LeetCode 39（组合总和）、40（组合总和 II）、77（组合）、216（组合总和 III）展开，核心有两个：**"排列与组合的区别"（如何用 `start` 参数避免重复）** 与 **"去重的两种策略"（如何在不漏解的前提下跳过重复解）**。很多人写组合题时"要么漏解、要么重复"，根源都是没把这两个问题想清楚。本文用 Go 语言实现，并逐层追问：为什么组合需要 `start` 而排列不需要、`start` 该传 `i` 还是 `i+1`、以及"同层去重"与"同枝去重"的区别。掌握这两个核心，你就掌握了组合型回溯的通用框架。
 
 ---
 
-## 第 2 章 LeetCode 39：Combination Sum（可重复选）
+## 第 1 章 排列 vs 组合：`start` 参数的由来
+
+### 1.1 两者的区别
+
+- **排列（Permutation）**：元素的**顺序**重要。`[1,2]` 与 `[2,1]` 是不同的排列；
+- **组合（Combination）**：元素的**顺序**不重要。`[1,2]` 与 `[2,1]` 是同一个组合。
+
+**这个区别，直接决定了"如何避免重复"。**
+
+### 1.2 排列：用 `used` 避免重复选同一元素
+
+**排列题里，每一层都可以从"所有未使用的元素"里选**——所以用 `used` 数组标记"哪些已用"：
+
+```go
+for i := 0; i < len(nums); i++ {
+    if used[i] {
+        continue // 已用，跳过
+    }
+    used[i] = true
+    path = append(path, nums[i])
+    dfs()
+    path = path[:len(path)-1]
+    used[i] = false
+}
+```
+
+### 1.3 组合：用 `start` 避免"顺序不同但元素相同"的重复
+
+**组合题里，为了避免"`[1,2]` 与 `[2,1]` 被当成两个解"，我们规定"只能按递增顺序选"**——于是用一个 `start` 参数，表示"下一个元素只能从 `start` 之后选"：
+
+```go
+for i := start; i < len(nums); i++ {
+    path = append(path, nums[i])
+    dfs(i+1) // 下一层从 i+1 开始，保证递增
+    path = path[:len(path)-1]
+}
+```
+
+**`start` 参数是组合题的标志**——**它把"组合"这一"无序选择"问题，转化为"有序选择"（只按递增顺序），从而避免重复。** **这是组合型回溯的第一条核心。**
+
+> [!info] `start` 的本质：给"无序"加一个"人为的顺序"
+> 组合的本质是"无序"，但搜索树必须"有序"（否则无法枚举）。**`start` 参数就是"人为强加的顺序"**——规定"只能从前往后选"，于是每个组合只被枚举一次。**理解了这一点，你就明白为什么组合题需要 `start`、而排列题不需要。**
+
+---
+
+## 第 2 章 LeetCode 39：组合总和（元素可重复使用）
 
 ### 2.1 题目
 
-**LeetCode 39 - Combination Sum**（中等）：
+**LeetCode 39 - Combination Sum**（中等）
 
-给你一个**无重复元素**的整数数组 `candidates` 和一个目标整数 `target`，找出 `candidates` 中可以使数字和为 `target` 的所有不同组合。`candidates` 中的数字可以**无限制重复**被选取。
+给你一个**无重复元素**的整数数组 `candidates` 和一个目标数 `target`，找出 `candidates` 中所有可以使数字和为 `target` 的组合。**`candidates` 中的数字可以无限制重复被选取。**
 
-```
-输入：candidates = [2,3,6,7], target = 7
-输出：[[2,2,3],[7]]
-
-输入：candidates = [2,3,5], target = 8
-输出：[[2,2,2,2],[2,3,3],[3,5]]
+```text
+输入: candidates=[2,3,6,7], target=7
+输出: [[2,2,3],[7]]
 ```
 
-### 2.2 搜索树分析
+### 2.2 关键：`start` 传 `i` 而非 `i+1`
 
-以 `candidates = [2, 3, 6, 7]`, `target = 7` 为例，搜索树（局部）：
+**因为元素可以重复使用，所以下一层仍从 `i` 开始（而非 `i+1`）**——**这样同一个元素可以被选多次。**
 
-```
-                   []
-        /         /        \         \
-      [2]        [3]       [6]       [7]
-    / | \ \      /  \
-  [2,2][2,3][2,6][2,7] [3,3][3,6]
-  /|\ ...
-[2,2,2][2,2,3]...
- /\
-[2,2,2,2→8>7剪枝]
-[2,2,3→7=7 收集!]
-```
+```go
+func combinationSum(candidates []int, target int) [][]int {
+    var res [][]int
+    var path []int
 
-**关键设计**：`backtrack` 递归时传 `i`（而非 `i+1`），允许当前元素被再次选择（对应"无限制重复"）。
-
-### 2.3 完整实现
-
-```java
-public List<List<Integer>> combinationSum(int[] candidates, int target) {
-    List<List<Integer>> result = new ArrayList<>();
-    Arrays.sort(candidates);  // 排序，启用剪枝
-    backtrack(candidates, 0, target, 0, new LinkedList<>(), result);
-    return result;
-}
-
-private void backtrack(int[] candidates, int start, int target, int sum,
-                        LinkedList<Integer> path, List<List<Integer>> result) {
-    if (sum == target) {
-        result.add(new ArrayList<>(path));  // 深拷贝！
-        return;
+    var dfs func(start, remain int)
+    dfs = func(start, remain int) {
+        if remain == 0 {
+            tmp := make([]int, len(path))
+            copy(tmp, path)
+            res = append(res, tmp)
+            return
+        }
+        for i := start; i < len(candidates); i++ {
+            if candidates[i] > remain {
+                continue // 剪枝：超过剩余目标，跳过（排序后可 break）
+            }
+            path = append(path, candidates[i])
+            dfs(i, remain-candidates[i]) // 传 i，允许重复使用
+            path = path[:len(path)-1]
+        }
     }
-    for (int i = start; i < candidates.length; i++) {
-        // 剪枝：candidates 已排序，当前元素超目标，后续更大，直接 break
-        if (sum + candidates[i] > target) break;
-
-        path.addLast(candidates[i]);
-        // 传 i 而非 i+1：允许重复选当前元素
-        backtrack(candidates, i, target, sum + candidates[i], path, result);
-        path.removeLast();  // 回溯
-    }
+    dfs(0, target)
+    return res
 }
 ```
 
-### 2.4 逐步追踪
+**注意 `dfs(i, ...)` 而非 `dfs(i+1, ...)`**——**这是"元素可重复"的关键。** 若传 `i+1`，就变成了"每个元素只能用一次"（即 LC 40 的规则）。
 
-`candidates = [2,3,6,7]`, `target = 7`：
-
-```
-backtrack(start=0, sum=0, path=[])
-  i=0: path=[2], backtrack(start=0, sum=2, ...)
-    i=0: path=[2,2], backtrack(start=0, sum=4, ...)
-      i=0: path=[2,2,2], backtrack(start=0, sum=6, ...)
-        i=0: path=[2,2,2,2], sum=8>7, break
-        i=1: path=[2,2,2,3], sum=9>7, break
-      i=1: path=[2,2,3], sum=7==target → 收集 [2,2,3]！
-      i=2: 6>7-4=3, break
-    i=1: path=[2,3], backtrack(start=1, sum=5, ...)
-      i=1: path=[2,3,3], sum=8>7, break
-      i=2: 6>7-5=2, break
-    i=2: 6>7-2=5, break
-  i=1: path=[3], backtrack(start=1, sum=3, ...)
-    i=1: path=[3,3], sum=6
-      i=1: path=[3,3,3], sum=9>7, break
-      i=2: 6>7-6=1, break
-    i=2: path=[3,6], sum=9>7, break
-  i=2: 6>7-0=7? No, sum=6
-    ...（最终没有凑出7）
-  i=3: path=[7], sum=7==target → 收集 [7]！
-
-最终结果：[[2,2,3],[7]]
-```
+**"传 `i` 还是 `i+1`"是组合题的核心分叉**——它区分了"元素可重复"与"元素不可重复"两类题。
 
 ---
 
-## 第 3 章 LeetCode 40：Combination Sum II（有重复元素，每个只用一次）
+## 第 3 章 LeetCode 40：组合总和 II（元素不可重复 + 去重）
 
 ### 3.1 题目
 
-**LeetCode 40 - Combination Sum II**（中等）：
+**LeetCode 40 - Combination Sum II**（中等）
 
-给定候选数组 `candidates` 和目标数 `target`，找出 `candidates` 中所有可以使数字和为 `target` 的组合。`candidates` 中的每个数字在每个组合中**只能使用一次**，且数组中**可能有重复元素**，结果中不能有重复组合。
+给你一个**可能含重复元素**的数组 `candidates` 和目标数 `target`，找出所有和为 `target` 的组合。**每个数字在每个组合中只能使用一次。**
 
-```
-输入：candidates = [10,1,2,7,6,1,5], target = 8
-输出：[[1,1,6],[1,2,5],[1,7],[2,6]]
-
-输入：candidates = [2,5,2,1,2], target = 5
-输出：[[1,2,2],[5]]
+```text
+输入: candidates=[10,1,2,7,6,1,5], target=8
+输出: [[1,1,6],[1,2,5],[1,7],[2,6]]
 ```
 
-### 3.2 与 Combination Sum I 的两个区别
+### 3.2 两处变化
 
-| 维度 | Combination Sum I | Combination Sum II |
-|------|------------------|--------------------|
-| 候选数组是否有重复 | 无重复 | 有重复 |
-| 每个元素可否多次使用 | 可以 | 只能用一次 |
-| 递归时 start 传值 | 传 `i`（允许重选当前） | 传 `i+1`（每个只用一次） |
-| 去重逻辑 | 不需要（无重复元素） | 需要（相同元素只选一次） |
+**变化一，`start` 传 `i+1`**——因为每个元素只能用一次。
 
-### 3.3 去重的核心难点：为什么是 `i > start` 而非 `i > 0`
+**变化二，必须去重**——因为 `candidates` 可能含重复元素（如两个 `1`），**若不去重，会产生重复的组合。**
 
-先排序，使相同元素相邻：`candidates = [1, 1, 2, 5, 6, 7, 10]`，`target = 8`
+### 3.3 去重的核心："同层去重"
 
-搜索树（关注重复的 `1`）：
+**先排序**（让相同元素相邻），再在循环里跳过"同一层里重复的元素"：
 
-```
-                        []
-             /          |           \    ...
-           [1]         [1]          [2]  ...
-       （第1个1）   （第2个1）
-```
+```go
+func combinationSum2(candidates []int, target int) [][]int {
+    sort.Ints(candidates) // 先排序
+    var res [][]int
+    var path []int
 
-两个 `1` 选一个作为路径第一步，产生了重复。去重逻辑的目标：**在同一层（同一个 `start`）中，相同的值只允许第一次出现时进入搜索，后续相同值跳过**。
-
-```java
-for (int i = start; i < candidates.length; i++) {
-    // 去重：在同一层递归中，跳过相同的值（除了第一个）
-    if (i > start && candidates[i] == candidates[i - 1]) continue;
-    // ...
-}
-```
-
-**为什么是 `i > start` 而非 `i > 0`？**
-
-考虑路径 `[1, ...]`，当我们在第一个 `1` 之后递归，进入 `backtrack(start=1, ...)`，此时 `start=1`，可以选第二个 `1`（`candidates[1] = 1`）：
-
-```
-i=1（第二个1），i > start(=1) 是 false，不跳过 → 允许选第二个1，得到 [1,1,...]
-```
-
-这是正确的——`[1, 1, ...]` 是合法组合（两个不同的 `1`），不是重复。
-
-而如果用 `i > 0`：
-
-```
-i=1（第二个1），i > 0 是 true，且 candidates[1] == candidates[0]，跳过 → [1,1,...] 被丢弃！
-```
-
-这就**漏掉**了包含两个 `1` 的合法组合。
-
-**关键直觉**：`i > start` 的含义是"在当前这一层（从 `start` 开始），跳过重复值"，而不是"全局跳过重复值"。不同层（不同的 `start`）对重复元素的处理是独立的。
-
-### 3.4 完整实现
-
-```java
-public List<List<Integer>> combinationSum2(int[] candidates, int target) {
-    List<List<Integer>> result = new ArrayList<>();
-    Arrays.sort(candidates);  // 排序是去重的前提
-    backtrack(candidates, 0, target, 0, new LinkedList<>(), result);
-    return result;
-}
-
-private void backtrack(int[] candidates, int start, int target, int sum,
-                        LinkedList<Integer> path, List<List<Integer>> result) {
-    if (sum == target) {
-        result.add(new ArrayList<>(path));
-        return;
-    }
-    for (int i = start; i < candidates.length; i++) {
-        if (sum + candidates[i] > target) break;  // 剪枝（排序保证有效）
-
-        // 去重：同层内跳过重复值
-        if (i > start && candidates[i] == candidates[i - 1]) continue;
-
-        path.addLast(candidates[i]);
-        backtrack(candidates, i + 1, target, sum + candidates[i], path, result);  // i+1，每个只用一次
-        path.removeLast();
-    }
-}
-```
-
-### 3.5 搜索树对比：去重前 vs 去重后
-
-`candidates = [1, 1, 2, 5, 6, 7, 10]`, `target = 8`
-
-**去重前（错误，会有重复结果）**：
-
-```
-layer0:
-  选第1个1 → [1, ...]
-  选第2个1 → [1, ...]  ← 重复！两条路径产生的结果集合相同
-  选2 → [2, ...]
-  ...
-```
-
-**去重后（`i > start && candidates[i] == candidates[i-1]`）**：
-
-```
-layer0 (start=0):
-  i=0: 选第1个1（candidates[0]=1）→ [1, ...]
-  i=1: i>start(0), candidates[1]==candidates[0]，skip 第2个1 → 跳过
-  i=2: 选2 → [2, ...]
-  ...
-
-layer1 (start=1, 已选了第1个1):
-  i=1: 选第2个1（candidates[1]=1）→ [1,1, ...]  ← 正确！这是第二层选第2个1
-  i=2: 选2 → [1,2, ...]
-  ...
-```
-
-结果：`[[1,1,6],[1,2,5],[1,7],[2,6]]`，无重复。
-
----
-
-## 第 4 章 Combination Sum III（进阶变体）
-
-### 4.1 题目
-
-**LeetCode 216 - Combination Sum III**（中等）：
-
-找出所有相加之和为 `n` 的 `k` 个数的组合，且满足：只使用数字 `1-9`，每个数字最多使用一次，返回所有可能的有效组合的列表。
-
-```
-输入：k=3, n=7
-输出：[[1,2,4]]
-
-输入：k=3, n=9
-输出：[[1,2,6],[1,3,5],[2,3,4]]
-```
-
-### 4.2 实现
-
-```java
-public List<List<Integer>> combinationSum3(int k, int n) {
-    List<List<Integer>> result = new ArrayList<>();
-    backtrack(1, k, n, 0, new LinkedList<>(), result);
-    return result;
-}
-
-private void backtrack(int start, int k, int target, int sum,
-                        LinkedList<Integer> path, List<List<Integer>> result) {
-    // 剪枝：已选 k 个或和已达目标，检查是否同时满足
-    if (path.size() == k) {
-        if (sum == target) result.add(new ArrayList<>(path));
-        return;
-    }
-    // 剪枝：剩余需要的数字数量不够填满
-    int remaining = k - path.size();
-    for (int i = start; i <= 9; i++) {
-        if (sum + i > target) break;  // 超目标
-        if (9 - i + 1 < remaining) break;  // 剩余数字不够选（比如 start=8，还需选2个，但只剩8,9两个）
-        path.addLast(i);
-        backtrack(i + 1, k, target, sum + i, path, result);
-        path.removeLast();
-    }
-}
-```
-
-**额外剪枝**：`9 - i + 1 < remaining`——从 `i` 到 `9` 的数字数量（`9 - i + 1`）小于还需选的数量（`remaining`），当前分支不可能凑够 `k` 个数，提前剪枝。
-
----
-
-## 第 5 章 面试常见追问与思维扩展
-
-### 5.1 如何判断一道题是 Combination Sum 的变体
-
-Combination Sum 的变体题通常有以下特征：
-
-1. **选出若干数，使和等于目标值** → 组合求和
-2. **每个数可重复使用 vs 只能使用一次** → 递归传 `i` vs 传 `i+1`
-3. **输入有无重复元素** → 是否需要 `i > start` 去重
-4. **选几个数有限制（如 k 个）** → 增加 `path.size() == k` 的终止条件
-
-### 5.2 Subset（子集）问题的关系
-
-子集是组合的超集——对于 `[1,2,3]`，子集包括所有长度（0、1、2、3）的组合。
-
-```java
-void backtrack(int[] nums, int start, List<Integer> path, ...) {
-    result.add(new ArrayList<>(path));  // 每个节点都是答案（不只是叶节点）
-    for (int i = start; i < nums.length; i++) {
-        path.add(nums[i]);
-        backtrack(nums, i + 1, path, ...);
-        path.remove(path.size() - 1);
-    }
-}
-```
-
-Subsets II（有重复元素）同样需要排序 + `i > start` 去重，与 Combination Sum II 的去重逻辑完全相同。
-
-### 5.3 复杂度分析：组合与子集
-
-| 问题 | 答案数量 | 时间复杂度 |
-|------|---------|-----------|
-| Combination Sum I（无限重复） | 最坏 $O(n^{T/M})$（$T$=target，$M$=最小元素） | 难以精确，见分析 |
-| Combination Sum II | $O(2^n)$ 子集数 | $O(k \cdot 2^n)$ |
-| Subsets（无重复） | $2^n$ | $O(n \cdot 2^n)$ |
-
-对于 Combination Sum I，准确的复杂度分析需要用搜索树的高度 $T/M$（最多选 $T/M$ 个最小元素）和每层的分支数（最多 $n$ 个）来估算：约 $O(n^{T/M})$。
-
----
-
-## 第 6 章 完整代码汇总与面试注意事项
-
-### 6.1 Combination Sum I（可重复）
-
-```java
-class Solution {
-    public List<List<Integer>> combinationSum(int[] candidates, int target) {
-        List<List<Integer>> res = new ArrayList<>();
-        Arrays.sort(candidates);
-        backtrack(candidates, 0, target, 0, new LinkedList<>(), res);
-        return res;
-    }
-
-    private void backtrack(int[] c, int start, int target, int sum,
-                            LinkedList<Integer> path, List<List<Integer>> res) {
-        if (sum == target) { res.add(new ArrayList<>(path)); return; }
-        for (int i = start; i < c.length; i++) {
-            if (sum + c[i] > target) break;
-            path.addLast(c[i]);
-            backtrack(c, i, target, sum + c[i], path, res);  // i，可重复
-            path.removeLast();
+    var dfs func(start, remain int)
+    dfs = func(start, remain int) {
+        if remain == 0 {
+            tmp := make([]int, len(path))
+            copy(tmp, path)
+            res = append(res, tmp)
+            return
+        }
+        for i := start; i < len(candidates); i++ {
+            // 同层去重：跳过同一层里重复的元素
+            if i > start && candidates[i] == candidates[i-1] {
+                continue
+            }
+            if candidates[i] > remain {
+                break // 剪枝：排序后，后面的更大
+            }
+            path = append(path, candidates[i])
+            dfs(i+1, remain-candidates[i]) // 传 i+1，每个元素只用一次
+            path = path[:len(path)-1]
         }
     }
+    dfs(0, target)
+    return res
 }
 ```
 
-### 6.2 Combination Sum II（每个只用一次，有重复）
+**关键在 `if i > start && candidates[i] == candidates[i-1] { continue }`**：
 
-```java
-class Solution {
-    public List<List<Integer>> combinationSum2(int[] candidates, int target) {
-        List<List<Integer>> res = new ArrayList<>();
-        Arrays.sort(candidates);
-        backtrack(candidates, 0, target, 0, new LinkedList<>(), res);
-        return res;
-    }
+- **`i > start`**：保证"同一层的第一个元素不被跳过"（否则会漏解）；
+- **`candidates[i] == candidates[i-1]`**：跳过"与同层前一个元素相同"的。
 
-    private void backtrack(int[] c, int start, int target, int sum,
-                            LinkedList<Integer> path, List<List<Integer>> res) {
-        if (sum == target) { res.add(new ArrayList<>(path)); return; }
-        for (int i = start; i < c.length; i++) {
-            if (sum + c[i] > target) break;
-            if (i > start && c[i] == c[i - 1]) continue;  // 去重：同层跳过重复
-            path.addLast(c[i]);
-            backtrack(c, i + 1, target, sum + c[i], path, res);  // i+1，每个只用一次
-            path.removeLast();
+**这是"同层去重"**——**它保证"同一层里，相同的值只被选一次"。**
+
+### 3.4 "同层去重" vs "同枝去重"
+
+**去重有两种**：
+
+- **同层去重**（`i > start && nums[i] == nums[i-1]`）：跳过"同一层里重复的值"——**用于"组合"（避免重复组合）**；
+- **同枝去重**（`used[i-1] == false && nums[i] == nums[i-1]`）：跳过"同一枝里已用过的值"——**用于"排列"（避免重复排列）**。
+
+**两者的区别在于"跳过的范围"**：**同层是"横向"（同一层的兄弟节点），同枝是"纵向"（同一路径上的祖先）。** **组合题用同层去重，排列题用同枝去重。**
+
+**这是去重最容易混淆的地方**——**记住"组合用同层、排列用同枝"，就不会搞错。**
+
+> [!warning] 生产避坑：去重必须"先排序"
+> 两种去重都依赖"相同元素相邻"，**所以必须先排序。** 若不排序，`candidates[i] == candidates[i-1]` 就无法可靠地识别"重复值"。**"排序 + 去重"是固定搭配。**
+
+---
+
+## 第 4 章 LeetCode 77 与 216：定长组合
+
+### 4.1 组合（LeetCode 77）
+
+**题目**：给定 `n` 和 `k`，返回 `1..n` 中所有 `k` 个数的组合。
+
+**它就是"定长组合"**——在 LC 39 的框架上，把"结束条件"从"和为目标"改成"选够了 `k` 个"：
+
+```go
+func combine(n, k int) [][]int {
+    var res [][]int
+    var path []int
+    var dfs func(start int)
+    dfs = func(start int) {
+        if len(path) == k {
+            tmp := make([]int, k)
+            copy(tmp, path)
+            res = append(res, tmp)
+            return
+        }
+        for i := start; i <= n; i++ {
+            path = append(path, i)
+            dfs(i + 1)
+            path = path[:len(path)-1]
         }
     }
+    dfs(1)
+    return res
 }
 ```
 
-> [!warning] 生产避坑：排序 + i > start 缺一不可
-> 如果忘记 `Arrays.sort(candidates)`，`candidates[i] == candidates[i-1]` 这个判断无法正确工作——相同元素可能不相邻，去重会漏掉或过度剪枝。排序是去重逻辑的**前提条件**，不是可选的优化。
+**注意剪枝**：若"剩余可选元素不足以填满 `k` 个"，可以提前 `break`（`i <= n - (k - len(path)) + 1`）。
+
+### 4.2 组合总和 III（LeetCode 216）
+
+**题目**：找出所有相加之和为 `n` 的 `k` 个数的组合，且只能用 `1..9`。
+
+**它是 LC 77 与 LC 39 的合体**——"定长 `k`" + "和为 `n`"：
+
+```go
+func combinationSum3(k, n int) [][]int {
+    var res [][]int
+    var path []int
+    var dfs func(start, remain int)
+    dfs = func(start, remain int) {
+        if len(path) == k {
+            if remain == 0 {
+                tmp := make([]int, k)
+                copy(tmp, path)
+                res = append(res, tmp)
+            }
+            return
+        }
+        for i := start; i <= 9; i++ {
+            if i > remain {
+                break // 剪枝
+            }
+            path = append(path, i)
+            dfs(i+1, remain-i)
+            path = path[:len(path)-1]
+        }
+    }
+    dfs(1, n)
+    return res
+}
+```
+
+**77 与 216 的对比说明**：**组合题的"结束条件"是可替换的**——"选够 `k` 个""和为目标""和为目标且选够 `k` 个"，都只是"结束条件"的不同。
 
 ---
 
-## 本章小结
+## 第 5 章 组合题的统一框架
 
-Combination Sum 系列的三个关键设计决策：
+### 5.1 框架
 
-1. **`start` 参数**：决定"组合"语义，防止 `[1,2]` 和 `[2,1]` 被重复计数
-2. **`i` vs `i+1`**：决定元素是否可重复使用
-3. **`i > start` 去重**：在有重复元素的候选数组中，跳过同层内已经探索过的相同值
+**所有组合题，都能套进这个框架**：
 
-这三个决策完全独立，可以任意组合，覆盖了所有"组合求和"类变体。面试中只要看清楚这三个维度，代码几乎可以直接写出来。
+```go
+var dfs func(start int, ...)
+dfs = func(start int, ...) {
+    if 满足结束条件 {
+        记录结果
+        return
+    }
+    for i := start; i < len(nums); i++ {
+        if 去重条件 { continue }   // 同层去重（若有重复元素）
+        if 剪枝条件 { break }      // 排序后的剪枝
+        path = append(path, nums[i])
+        dfs(下一个 start, 更新的状态)
+        path = path[:len(path)-1]
+    }
+}
+```
 
-下一篇进入字符串型回溯，包括 Palindrome Partitioning（回文分割）、Generate Parentheses（括号生成）和 Restore IP Addresses（恢复 IP 地址）。
+**三处可替换**：**结束条件、去重条件、`start` 的传递方式（`i` 或 `i+1`）**。
+
+### 5.2 四道题对照
+
+| 题目 | 结束条件 | `start` 传 | 去重 |
+|------|---------|-----------|------|
+| LC 39 组合总和 | 和为目标 | `i`（可重复） | 无（无重复元素） |
+| LC 40 组合总和 II | 和为目标 | `i+1` | 同层去重 |
+| LC 77 组合 | 选够 k 个 | `i+1` | 无 |
+| LC 216 组合总和 III | 和为目标且选够 k 个 | `i+1` | 无（元素不重复） |
+
+**这张表说明：组合题的差异，全在"结束条件、`start`、去重"这三处。** **把这三处想清楚，组合题就都成了"填空"。**
+
+> [!info] 组合题的三处"旋钮"
+> 组合型回溯的所有变化，都可以归结为三个"旋钮"：**结束条件、`start` 传递、去重规则。** **把这三处想清楚，你就不会在"这道题该传 `i` 还是 `i+1`""要不要去重"上纠结。** 这与栈与队列专栏"单调栈的三处旋钮"是同一思路——**把变化点提炼成参数，题目就成了填空。**
 
 ---
 
-*关联文章：DFS 与回溯核心框架：状态树的系统性遍历 | 字符串型回溯：分割、括号与 IP 地址*
+## 第 6 章 常见误区与自测方法
+
+### 6.1 四个高频误区
+
+**误区一，组合题忘了 `start` 参数。** 会枚举出"顺序不同但元素相同"的重复解。
+
+**误区二，LC 39 传 `i+1` 而非 `i`。** 元素无法重复使用。
+
+**误区三，去重时漏了 `i > start`。** 会跳过"同层第一个元素"，漏解。
+
+**误区四，去重前没排序。** 相同元素不相邻，去重失效。
+
+### 6.2 一套自测用例
+
+| 用例 | 检验什么 |
+|------|---------|
+| `candidates=[2], target=1` | 无解 |
+| `candidates=[1], target=1` | 单元素 |
+| 含重复元素（LC 40） | 去重 |
+| 元素可重复（LC 39） | `start` 传 `i` |
+| `k=n`（LC 77） | 边界 |
+
+**其中"含重复元素"最值得测**——它专治去重逻辑。
+
+---
+
+## 第 7 章 子集型回溯与更多变体
+
+### 7.1 子集（LeetCode 78）
+
+**题目**：给定一个**无重复元素**的数组，返回所有可能的子集。
+
+**子集型回溯与组合型的区别**：**子集是"每个元素选或不选"，每个节点（不只叶节点）都是一个解。** 所以"记录结果"放在"进入函数时"，而非"结束条件满足时"：
+
+```go
+func subsets(nums []int) [][]int {
+    var res [][]int
+    var path []int
+    var dfs func(start int)
+    dfs = func(start int) {
+        tmp := make([]int, len(path))
+        copy(tmp, path)
+        res = append(res, tmp) // 每个节点都是解
+        for i := start; i < len(nums); i++ {
+            path = append(path, nums[i])
+            dfs(i + 1)
+            path = path[:len(path)-1]
+        }
+    }
+    dfs(0)
+    return res
+}
+```
+
+**注意"记录结果"在函数开头**——**这与组合题（"记录在结束条件处"）不同。** **"每个节点都是解"是子集型的标志。**
+
+### 7.2 子集 II（LeetCode 90，含重复元素）
+
+**题目**：给定一个**可能含重复元素**的数组，返回所有可能的子集（不重复）。
+
+**它就是"子集 + 同层去重"**——**与 LC 40 的去重逻辑完全一致**：
+
+```go
+func subsetsWithDup(nums []int) [][]int {
+    sort.Ints(nums) // 先排序
+    var res [][]int
+    var path []int
+    var dfs func(start int)
+    dfs = func(start int) {
+        tmp := make([]int, len(path))
+        copy(tmp, path)
+        res = append(res, tmp)
+        for i := start; i < len(nums); i++ {
+            if i > start && nums[i] == nums[i-1] {
+                continue // 同层去重
+            }
+            path = append(path, nums[i])
+            dfs(i + 1)
+            path = path[:len(path)-1]
+        }
+    }
+    dfs(0)
+    return res
+}
+```
+
+**"子集 + 同层去重"就是"子集 II"**——**去重逻辑与组合题完全相同。**
+
+### 7.3 全排列 II（LeetCode 47，排列 + 去重）
+
+**题目**：给定一个**可能含重复数字**的数组，返回所有不重复的全排列。
+
+**它就是"排列 + 同枝去重"**——**注意是"同枝"而非"同层"**：
+
+```go
+func permuteUnique(nums []int) [][]int {
+    sort.Ints(nums)
+    var res [][]int
+    var path []int
+    used := make([]bool, len(nums))
+    var dfs func()
+    dfs = func() {
+        if len(path) == len(nums) {
+            tmp := make([]int, len(path))
+            copy(tmp, path)
+            res = append(res, tmp)
+            return
+        }
+        for i := 0; i < len(nums); i++ {
+            if used[i] {
+                continue
+            }
+            // 同枝去重：同一层里，若前一个相同元素"刚被用过又撤销"，则跳过
+            if i > 0 && nums[i] == nums[i-1] && !used[i-1] {
+                continue
+            }
+            used[i] = true
+            path = append(path, nums[i])
+            dfs()
+            path = path[:len(path)-1]
+            used[i] = false
+        }
+    }
+    dfs()
+    return res
+}
+```
+
+**注意 `!used[i-1]` 这一条件**——**它表示"前一个相同元素'在这一枝里没被用'"**，即"它是同层的兄弟"。**这正是"同枝去重"的判定。**
+
+**与组合题的"同层去重"（`i > start && nums[i] == nums[i-1]`）对比**——**组合用"`i > start`"（同层），排列用"`!used[i-1]`"（同枝）。** **这是两者最容易混淆的地方。**
+
+### 7.4 递增子序列（LeetCode 491）
+
+**题目**：给定一个整数数组，找出所有不同的递增子序列（长度至少 2）。
+
+**这道题不能排序**（排序会破坏"子序列"的顺序），**所以去重不能用"排序 + 相邻比较"，只能用"同一层用集合记录已用值"**：
+
+```go
+func findSubsequences(nums []int) [][]int {
+    var res [][]int
+    var path []int
+    var dfs func(start int)
+    dfs = func(start int) {
+        if len(path) >= 2 {
+            tmp := make([]int, len(path))
+            copy(tmp, path)
+            res = append(res, tmp)
+        }
+        used := map[int]bool{} // 记录本层用过的值
+        for i := start; i < len(nums); i++ {
+            if used[nums[i]] {
+                continue // 同层去重（用集合）
+            }
+            if len(path) > 0 && nums[i] < path[len(path)-1] {
+                continue // 非递增，跳过
+            }
+            used[nums[i]] = true
+            path = append(path, nums[i])
+            dfs(i + 1)
+            path = path[:len(path)-1]
+        }
+    }
+    dfs(0)
+    return res
+}
+```
+
+**"用集合记录本层已用值"是"不能排序时的去重方案"**——**它比"排序 + 相邻比较"更通用，但需要额外空间。**
+
+### 7.5 四种去重方案对照
+
+| 场景 | 去重方案 |
+|------|---------|
+| 组合 + 可排序 | `i > start && nums[i] == nums[i-1]`（同层） |
+| 排列 + 可排序 | `!used[i-1] && nums[i] == nums[i-1]`（同枝） |
+| 不能排序 | 本层用集合记录已用值 |
+| 元素可重复使用 | 无需去重（本身允许重复选） |
+
+**这张表说明："去重方案"取决于"能否排序"与"是组合还是排列"。**
+
+> [!info] 去重的"三种武器"
+> 去重有三种武器：**"排序 + 相邻比较"（最省空间）、"集合记录本层"（通用但费空间）、"同枝 `used` 判定"（用于排列）。** **选择哪一种，取决于"能否排序"与"组合还是排列"。** 理解了这三种武器，你面对任何"含重复元素"的回溯题，都有了去重方案。
+
+---
+
+## 第 8 章 组合题的面试追问与复杂度速查
+
+### 8.1 五个高频追问
+
+**追问一："为什么组合需要 `start`、排列不需要？"** 答：**组合是"无序"的，为避免"`[1,2]` 与 `[2,1]` 被当成两个解"，用 `start` 强制"只能按递增顺序选"。** 排列是"有序"的，顺序本身是解的一部分，所以用 `used` 而非 `start`。
+
+**追问二："`start` 传 `i` 还是 `i+1`？"** 答：**传 `i` 表示"元素可重复使用"（LC 39）；传 `i+1` 表示"每个元素只用一次"（LC 40）。** 这一字之差，是组合题的核心分叉。
+
+**追问三："同层去重与同枝去重怎么区分？"** 答：**组合用同层（`i > start && nums[i] == nums[i-1]`），排列用同枝（`!used[i-1] && nums[i] == nums[i-1]`）。** **同层是"横向跳过兄弟"，同枝是"纵向跳过祖先"。**
+
+**追问四："去重为什么必须先排序？"** 答：**因为去重依赖"相同元素相邻"**——不排序，`nums[i] == nums[i-1]` 无法可靠识别重复值。
+
+**追问五："不能排序时怎么去重？"** 答：**用"集合记录本层已用值"**（如 LC 491 递增子序列）——**这比"排序 + 相邻比较"更通用，但费空间。**
+
+### 8.2 复杂度速查
+
+| 题目 | 搜索树大小 | 时间 |
+|------|-----------|------|
+| LC 39 组合总和 | 与目标和有关 | 指数级 |
+| LC 40 组合总和 II | $C(n,k)$ 级 | 指数级 |
+| LC 77 组合 | $C(n,k)$ | $O(k \cdot C(n,k))$ |
+| LC 78 子集 | $2^n$ | $O(n \cdot 2^n)$ |
+| LC 46 全排列 | $n!$ | $O(n \cdot n!)$ |
+
+**这张表说明：组合/子集/排列的复杂度，分别由 $C(n,k)$、$2^n$、$n!$ 决定。**
+
+### 8.3 一个值得养成的习惯
+
+**写组合/排列题前，先问三句**：
+
+1. **是组合还是排列？** 决定用 `start` 还是 `used`；
+2. **元素可重复使用吗？** 决定 `start` 传 `i` 还是 `i+1`；
+3. **有重复元素吗？** 决定去重方案（同层/同枝/集合）。
+
+**这三句，能定下组合/排列题的方案。**
+
+> [!info] 组合题的"三处旋钮"
+> 组合/排列题的所有变化，都可以归结为三处旋钮：**`start` 还是 `used`、传 `i` 还是 `i+1`、同层还是同枝去重。** **把这三处想清楚，组合/排列题就成了填空。** 这与栈与队列专栏"单调栈的三处旋钮"、BFS 题"三要素"是同一思路。
+
+### 8.4 一个总体的建议
+
+**组合/排列题的练习，建议"按组合 vs 排列"分类**：
+
+- **组合（含子集）**：39、40、77、78、90、216；
+- **排列**：46、47；
+- **特殊**：491（不能排序）。
+
+**组合题用 `start`，排列题用 `used`**——**这是两类题的标志。**
+
+---
+
+## 第 9 章 组合问题的数学视角与工程应用
+
+### 9.1 组合数与排列数
+
+**组合与排列的"数量"，有明确的公式**：
+
+- **排列数**：$A(n,k) = \frac{n!}{(n-k)!}$（从 $n$ 个里选 $k$ 个、且有序）；
+- **组合数**：$C(n,k) = \frac{n!}{k!(n-k)!}$（从 $n$ 个里选 $k$ 个、且无序）。
+
+**"组合数是排列数除以 $k!$"**——**因为每个组合对应 $k!$ 个排列。** **这解释了为什么"组合题需要 `start`"**——**`start` 的作用，正是"把 $k!$ 个排列归并成 1 个组合"。**
+
+**理解了"组合数是排列数除以 $k!$"，你就从数学上理解了"为什么组合题要去重"。**
+
+### 9.2 子集与 2 的幂
+
+**$n$ 个元素的子集数，恰好是 $2^n$**——**因为每个元素"选或不选"，共 $2^n$ 种。**
+
+**"子集枚举"与"位掩码"是同一件事**——**用 $n$ 位二进制表示"选/不选"，$0$ 到 $2^n-1$ 的每个数对应一个子集：**
+
+```go
+func subsetsBitmask(nums []int) [][]int {
+    n := len(nums)
+    var res [][]int
+    for mask := 0; mask < (1 << n); mask++ {
+        var subset []int
+        for i := 0; i < n; i++ {
+            if mask&(1<<i) != 0 {
+                subset = append(subset, nums[i])
+            }
+        }
+        res = append(res, subset)
+    }
+    return res
+}
+```
+
+**"位掩码枚举子集"是子集问题的"非回溯解法"**——**它用"整数的位"表示"选/不选"，比回溯更直接。** **这又一次印证了"位掩码"的通用性。**
+
+### 9.3 组合问题的工程应用
+
+**组合/排列问题在工程里很常见**：
+
+- **配置生成**：从"选项空间"里生成所有合法配置（如"支持的浏览器组合"）；
+- **A/B 测试**：生成"实验组的所有参数组合"；
+- **测试用例**：枚举"输入参数的所有组合"做穷举测试；
+- **特征组合**：机器学习里的"特征交叉"，是特征的组合；
+- **调度**：把"任务"分配到"机器"，是分配的组合。
+
+**它们的共同点，都是"从集合里选若干"。** **而"回溯 + 去重"，是它们的通用解法。**
+
+### 9.4 一个值得记住的对照
+
+| 概念 | 数量 | 对应 |
+|------|------|------|
+| 子集 | $2^n$ | 每个元素选/不选 |
+| 组合 | $C(n,k)$ | 选 $k$ 个、无序 |
+| 排列 | $A(n,k)$ | 选 $k$ 个、有序 |
+| 全排列 | $n!$ | 所有元素、有序 |
+
+**这张表说明："组合数学"为回溯提供了"搜索空间大小"的理论依据**——**理解了这些公式，你就能估算"回溯的复杂度"。**
+
+> [!info] 从"回溯"到"组合数学"
+> 回溯题背后，是"组合数学"——**子集数、组合数、排列数，都是组合数学的基本对象。** **理解了这些公式，你不仅会解回溯题，也能"从数学上理解搜索空间的大小"。** 这是本专栏"从算法到数学"的一次提升。
+
+### 9.5 一个可复用的判断
+
+**遇到"组合/排列"类问题，按这个顺序问**：
+
+1. **是子集、组合、还是排列？** 决定"数量公式"；
+2. **元素可重复吗？** 决定 `start` 传 `i` 还是 `i+1`；
+3. **有重复元素吗？** 决定去重方案；
+4. **能否用位掩码？** 子集问题可用。
+
+**这四问，能定下组合/排列题的方案。**
+
+---
+
+## 第 10 章 组合问题的完整知识地图
+
+### 10.1 组合/排列题型全景
+
+**把组合/排列相关的题汇总**：
+
+| 题目 | 类型 | `start`/`used` | 去重 |
+|------|------|---------------|------|
+| LC 39 组合总和 | 组合 | `start`（传 `i`） | 无 |
+| LC 40 组合总和 II | 组合 | `start`（传 `i+1`） | 同层 |
+| LC 77 组合 | 组合 | `start` | 无 |
+| LC 78 子集 | 子集 | `start` | 无 |
+| LC 90 子集 II | 子集 | `start` | 同层 |
+| LC 216 组合总和 III | 组合 | `start` | 无 |
+| LC 46 全排列 | 排列 | `used` | 无 |
+| LC 47 全排列 II | 排列 | `used` | 同枝 |
+| LC 491 递增子序列 | 子集 | `start` | 集合（不能排序） |
+
+**这张地图的"根"，是"`start`/`used` + 去重"**——**所有题都在这个框架下。**
+
+### 10.2 组合问题的三个"维度"
+
+**组合/排列题的差异，可以归纳成三个维度**：
+
+**维度一，类型**：组合（用 `start`）、排列（用 `used`）、子集（用 `start`、每个节点都是解）；
+**维度二，元素可重复**：可重复传 `i`、不可重复传 `i+1`；
+**维度三，去重**：同层（组合）、同枝（排列）、集合（不能排序）。
+
+**三个维度的组合，覆盖了所有组合/排列题。**
+
+### 10.3 一个值得记住的对照
+
+**组合/排列与"数学"的关系**：
+
+| 类型 | 数量 | 对应数学 |
+|------|------|---------|
+| 子集 | $2^n$ | 幂集 |
+| 组合 | $C(n,k)$ | 组合数 |
+| 排列 | $A(n,k)$ | 排列数 |
+| 全排列 | $n!$ | 阶乘 |
+
+**这张表说明："组合/排列"的数量由组合数学给出**——**理解了这些公式，你就能估算搜索空间。**
+
+> [!info] 组合问题：从"技巧"到"数学"
+> 组合/排列问题背后，是"组合数学"——**子集数、组合数、排列数，都是组合数学的基本对象。** **理解了这一层，你不仅会解组合题，也能"从数学上理解搜索空间的大小"。** 这是本专栏"从算法到数学"的一次提升。
+
+### 10.4 一个可复用的判断
+
+**遇到"组合/排列"类问题，按这个顺序问**：
+
+1. **是组合、排列、还是子集？** 决定用 `start` 还是 `used`；
+2. **元素可重复吗？** 决定传 `i` 还是 `i+1`；
+3. **有重复元素吗？** 决定去重方案；
+4. **结束条件是什么？** 选够 `k` 个、和为目标、还是每个节点都是解。
+
+**这四问，能定下组合/排列题的完整方案。**
+
+---
+
+## 第 11 章 组合问题的工程应用
+
+### 11.1 配置组合生成
+
+**"配置组合生成"用到组合回溯**——**如"生成所有支持的'浏览器 + 系统 + 分辨率'组合"，用于测试矩阵。**
+
+**它的特点是"多组选项的笛卡尔积"**——**本质上是"每组选一个"的组合。** **而"排除非法组合"（如"某浏览器不支持某分辨率"）则用到"剪枝"。**
+
+### 11.2 A/B 测试与实验设计
+
+**A/B 测试的"参数组合"用到组合回溯**——**如"测试'按钮颜色 × 文案 × 布局'的所有组合"。**
+
+**"正交实验设计"是它的优化版**——**它用"组合数学"选出"有代表性的少量组合"，而非枚举全部。** **这提醒我们："枚举全部"有时不现实，需要"采样"。**
+
+### 11.3 测试用例生成
+
+**"测试用例生成"用到组合回溯**——**如"枚举'输入参数的所有组合'做穷举测试"。**
+
+**"组合测试（Combinatorial Testing）"是软件测试的重要方法**——**它用"覆盖所有参数对"来减少用例数（而非枚举全部）。** **它又一次说明："枚举全部"与"有代表性采样"是两种策略。**
+
+### 11.4 任务分配与调度
+
+**"任务分配"用到组合回溯**——**如"把 $n$ 个任务分配给 $k$ 台机器"，是"分配的组合"。**
+
+**"背包问题"是它的特例**——**"从物品里选若干，使总重不超过容量"**——**它既是"组合"（选哪些），又是"最优化"（最大价值），所以用 DP 而非回溯。**
+
+### 11.5 一个值得记住的对照
+
+| 应用 | 与组合回溯的关系 |
+|------|-----------------|
+| 配置生成 | 笛卡尔积（组合） |
+| A/B 测试 | 参数组合（+ 正交设计） |
+| 测试用例 | 参数组合（+ 组合测试） |
+| 任务分配 | 分配的组合 |
+| 背包问题 | 组合 + 最优化（用 DP） |
+
+**这张表说明："组合回溯"是"组合选择"的通用工具**——**从配置到调度，都用到它。**
+
+> [!info] 组合回溯：组合选择的通用工具
+> 组合回溯不只是算法题——**它是"组合选择"这一大类应用的基础**，从配置生成到任务分配，都用到它。**理解了"选什么 + 去重 + 剪枝"这套骨架，你不仅会解组合题，也能理解这些工程场景的实现。** 这是本专栏反复强调的"从题到工程"。
+
+### 11.6 一个可复用的判断
+
+**遇到"组合选择"类问题，按这个顺序问**：
+
+1. **要"枚举全部"还是"采样"？** 全部用回溯，采样用正交设计；
+2. **要"组合"还是"排列"？** 决定用 `start` 还是 `used`；
+3. **有"非法组合"吗？** 有则剪枝；
+4. **要"最优"吗？** 要最优可能用 DP。
+
+**这四问，能定下"组合选择"题的方案。**
+
+---
+
+## 第 12 章 组合题的复杂度速查与自测
+
+### 12.1 复杂度速查
+
+| 题目 | 搜索树大小 | 时间 |
+|------|-----------|------|
+| LC 39 组合总和 | 与目标和有关 | 指数级 |
+| LC 40 组合总和 II | $C(n,k)$ 级 | 指数级 |
+| LC 77 组合 | $C(n,k)$ | $O(k \cdot C(n,k))$ |
+| LC 78 子集 | $2^n$ | $O(n \cdot 2^n)$ |
+| LC 46 全排列 | $n!$ | $O(n \cdot n!)$ |
+| LC 47 全排列 II | 去重后更少 | 指数级 |
+
+**"搜索树大小 × 每节点时间"是组合题复杂度的通用估算公式。**
+
+### 12.2 自测清单
+
+**每道组合/排列题写完后，用这份清单自查**：
+
+| 检查项 | 对应问题 |
+|--------|---------|
+| 组合是否用 `start` | 重复解 |
+| 排列是否用 `used` | 重复解 |
+| 可重复元素是否传 `i` | 无法重复选 |
+| 去重是否先排序 | 去重失效 |
+| 去重是否用对"同层/同枝" | 漏解或重复 |
+
+**这五条，覆盖了组合/排列题的主要 bug。**
+
+### 12.3 一个值得记住的对照
+
+| 组合 | 排列 |
+|------|------|
+| `start` | `used` |
+| 同层去重 | 同枝去重 |
+| 无序 | 有序 |
+
+**这张表说明："组合与排列，只有两处不同"**——**`start`/`used` 与去重方式。**
+
+> [!info] 从"组合"到"排列"：两处不同
+> 组合与排列，只有两处不同——**用 `start` 还是 `used`、用同层还是同枝去重。** **理解了这两处，你就把"组合"与"排列"统一了。** 这是本专栏"从具体到抽象"的体现。
+
+### 12.4 一个可复用的判断
+
+**遇到"组合/排列"类问题，按这个顺序问**：
+
+1. **是组合还是排列？** 决定 `start` 还是 `used`；
+2. **元素可重复吗？** 决定传 `i` 还是 `i+1`；
+3. **有重复元素吗？** 决定去重方案；
+4. **结束条件是什么？** 选够 `k` 个、和为目标、还是每个节点都是解。
+
+**这四问，能定下组合/排列题的完整方案。**
+
+---
+
+## 第 13 章 一句话总结
+
+**如果只能从本篇带走一句话，那就是：**"组合用 `start`、排列用 `used`；组合用同层去重、排列用同枝去重。"
+
+- **`start` 传 `i`**：元素可重复使用（LC 39）；
+- **`start` 传 `i+1`**：每个元素只用一次（LC 40）；
+- **同层去重**：`i > start && nums[i] == nums[i-1]`（组合）；
+- **同枝去重**：`!used[i-1] && nums[i] == nums[i-1]`（排列）。
+
+**这四处，是组合/排列题的全部变化点。** **把"`start`/`used`、传 `i`/`i+1`、同层/同枝"想清楚，组合题就成了填空。**
+
+**最后，组合问题的"数量"由组合数学给出**——**子集 $2^n$、组合 $C(n,k)$、排列 $n!$。**
+
+> [!note] 一句话带走
+> **"组合用 `start`、排列用 `used`；同层用于组合、同枝用于排列。"** 记住这一句，你面对任何组合/排列题，都能快速定下方案。**而"去重必须先排序"，是它的前提。**
+
+---
+
+## 小结
+
+本篇用四道题讲清了组合型回溯的两个核心：**`start` 参数（给"无序"加"人为顺序"）** 与 **去重（同层去重用于组合、同枝去重用于排列）**。四道题的差异，全在"结束条件、`start` 传递、去重规则"这三处。
+
+贯穿全篇的核心认知有两条。其一，**"组合用 `start`、排列用 `used`"是两类题的标志**——理解了这一点，你就能快速判断"这道题该用哪种框架"。其二，**去重必须先排序、且"同层"与"同枝"要分清**——组合用同层、排列用同枝。**把这两条握住，你面对任何组合/排列题，都有了实现的起点。**
+
+下一篇 [[07 字符串型回溯：分割、括号生成与 IP 地址恢复]] 将进入字符串上的回溯——分割问题的指针模型、合法性前向剪枝、括号配对的状态约束。
+
+**最后补充一点落点。** 组合/排列题看起来"变化多端"，但所有变化都归结为四处旋钮——**`start`/`used`、传 `i`/`i+1`、同层/同枝去重、结束条件。** 把四处旋钮想清楚，组合题就成了填空。**而这四处旋钮背后的数学，是"组合数 = 排列数除以 $k!$"——理解了它，你就从数学上理解了"为什么组合要去重"。**
+
+**再补充一点。** 组合/排列题的"去重"是最容易出错的地方——**"同层"与"同枝"一字之差，用法却完全不同。** 记住"组合用同层、排列用同枝"，以及"去重必须先排序"，就能避开这个坑。**而"不能排序时用集合"，则是第三种去重武器。**
+
+**再补充最后一点。** 组合题的"结束条件"是可替换的——**"选够 `k` 个""和为目标""每个节点都是解"，都只是"结束条件"的不同。** 把"结束条件、`start` 传递、去重"三处想清楚，组合题就成了填空。**而这三处，正是组合题"变化多端"的全部来源。**
+
+---
+
+## 参考资料
+
+1. LeetCode 39. Combination Sum. https://leetcode.cn/problems/combination-sum/
+2. LeetCode 40. Combination Sum II. https://leetcode.cn/problems/combination-sum-ii/
+3. LeetCode 77. Combinations. https://leetcode.cn/problems/combinations/
+4. LeetCode 216. Combination Sum III. https://leetcode.cn/problems/combination-sum-iii/
+
+---
+
+> [!note] 思考题
+> 1. 为什么组合题需要 `start`、排列题不需要？请从"无序 vs 有序"说明。
+> 2. LC 39 传 `i`、LC 40 传 `i+1`，这一字之差对应什么语义差异？
+> 3. "同层去重"与"同枝去重"分别用于什么题型？为什么不能混用？
+> 4. 为什么去重必须"先排序"？不排序会怎样？
+> 5. 请用"结束条件、`start`、去重"这三处旋钮，设计一道新的组合题（如"和为目标的 k 个数的组合，元素可重复"）。

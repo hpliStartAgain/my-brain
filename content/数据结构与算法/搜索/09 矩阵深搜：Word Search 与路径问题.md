@@ -1,508 +1,773 @@
 ---
-title: "矩阵深搜：Word Search、路径问题与 Trie 优化"
-date: 2026-04-28
-tags: [DFS, LeetCode, Trie, Word Search, 矩阵搜索, 算法, 路径问题, 面试]
-aliases: [Word Search, Word Search II, Trie剪枝, 矩阵路径DFS, LeetCode 79, LeetCode 212]
+title: "矩阵深搜：Word Search 与路径问题"
+date: 2026-10-11
+tags: [DFS, LeetCode, 79, 212, 62, WordSearch, Trie, 矩阵, 算法, 面试]
+aliases: [单词搜索, Word Search, 路径问题, LeetCode 79, LeetCode 212]
 ---
 
-# 矩阵深搜：Word Search、路径问题与 Trie 优化
+# 矩阵深搜：Word Search 与路径问题
 
-## 摘要
+**摘要：**
 
-Word Search 是矩阵 DFS 与回溯思想的完美结合——不只是"标记区域"，而是"在矩阵上沿路径匹配字符串"。本文从 Word Search I（LeetCode 79）的基础实现出发，深入分析与"Flood Fill 型 DFS"的关键差异（visited 不能原地修改，必须支持撤销），再进入 Word Search II（LeetCode 212），展示如何用 Trie 树将多词搜索从暴力的 $O(mn \cdot k \cdot 4^L)$ 优化到 $O(mn \cdot 4^L)$（其中 $k$ 为单词数，$L$ 为单词长度）。最后结合 Unique Paths 展示搜索与动态规划的对比与互换。
+矩阵深搜与"矩阵连通分量"（第 05 篇）不同——**它搜索的是"路径"，而不是"区域"**。这带来两个新特征：**其一，需要"回溯"（因为路径不能重复经过同一格）；其二，往往有"额外约束"（如必须拼出目标单词）。** 本文用三道题展开：LeetCode 79（单词搜索）讲**"矩阵上的路径搜索 + 回溯"**；LeetCode 212（单词搜索 II）讲**"用 Trie 剪枝，一次搜索找多个单词"**；LeetCode 62（不同路径）则作为对照，展示"求路径数"为什么用 DP 而非搜索。全文用 Go 语言实现，并逐层追问：为什么矩阵路径搜索必须"回溯标记"、Trie 剪枝如何把"每个单词搜一遍"优化成"一次搜完"、以及"求路径数"与"求路径存在"的解法差异。
 
 ---
 
-## 第 1 章 Word Search vs Flood Fill：两类矩阵 DFS 的差异
+## 第 1 章 LeetCode 79：单词搜索
 
-### 1.1 Flood Fill：标记，不需要撤销
+### 1.1 题目
 
-在 Number of Islands 中，DFS 将整个连通分量的格子都标记为 `'0'`（沉入水中），搜索完成后不需要"恢复"——因为目的就是永久标记。
+**LeetCode 79 - Word Search**（中等）
 
-```java
-void dfs(char[][] grid, int i, int j) {
-    if (...条件...) return;
-    grid[i][j] = '0';  // 永久修改
-    dfs(grid, i+1, j);
-    dfs(grid, i-1, j);
-    ...
-    // 没有 grid[i][j] = '1' 的恢复！
+给定一个 $m \times n$ 的字符网格 `board` 和一个字符串单词 `word`，如果 `word` 存在于网格中，返回 `true`。单词必须按照字母顺序，通过相邻的单元格内的字母构成（相邻单元格是水平或垂直方向上的）。
+
+```text
+输入: board = [["A","B","C","E"],["S","F","C","S"],["A","D","E","E"]], word = "ABCCED"
+输出: true
+```
+
+### 1.2 思路：DFS + 回溯标记
+
+**从每个格子出发，尝试"逐字符匹配单词"**——若当前格子匹配 `word[k]`，就向四个方向递归匹配 `word[k+1]`。**关键是要"标记当前格已用"，避免路径重复经过同一格：**
+
+```go
+func exist(board [][]byte, word string) bool {
+    m, n := len(board), len(board[0])
+    var dfs func(i, j, k int) bool
+    dfs = func(i, j, k int) bool {
+        if k == len(word) {
+            return true // 单词匹配完毕
+        }
+        if i < 0 || i >= m || j < 0 || j >= n || board[i][j] != word[k] {
+            return false // 越界或字符不匹配
+        }
+        board[i][j] = '#' // 标记已用
+        found := dfs(i+1, j, k+1) || dfs(i-1, j, k+1) ||
+            dfs(i, j+1, k+1) || dfs(i, j-1, k+1)
+        board[i][j] = word[k] // 回溯：恢复
+        return found
+    }
+    for i := 0; i < m; i++ {
+        for j := 0; j < n; j++ {
+            if dfs(i, j, 0) {
+                return true
+            }
+        }
+    }
+    return false
 }
 ```
 
-### 1.2 Word Search：路径匹配，必须撤销
+**注意 `board[i][j] = '#'` 与 `board[i][j] = word[k]` 的成对**——**这就是回溯的"标记-恢复"**，与第 04 篇"撤销选择"是同一手法。**不标记，路径会重复经过同一格；不恢复，其他起点的搜索会被污染。**
 
-在 Word Search 中，DFS 沿路径匹配单词字母：格子 `(i,j)` 在当前匹配路径中被"借用"，匹配完当前路径后，这个格子需要还给其他路径使用。
+### 1.3 为什么必须"回溯标记"
 
-```java
-void dfs(char[][] board, int i, int j, String word, int k) {
-    if (...条件...) return;
-    char temp = board[i][j];
-    board[i][j] = '#';  // 临时标记（当前路径占用）
-    dfs(board, i+1, j, word, k+1);
-    dfs(board, i-1, j, word, k+1);
-    ...
-    board[i][j] = temp;  // 必须恢复！允许其他路径使用
-}
-```
+**这是矩阵路径搜索与"矩阵连通分量"（第 05 篇）的关键区别**：
 
-**这是 Word Search 与 Flood Fill 的本质区别**：Flood Fill 是永久染色，Word Search 是临时借用 + 撤销（回溯）。
+- **连通分量**：标记后**不需要恢复**——因为一个格子只属于一个连通分量，标记后就"永远属于它了"；
+- **路径搜索**：标记后**必须恢复**——因为一个格子可能在**多条不同路径**里被用到。
+
+**"标记是否需要恢复"，取决于"这个格子是否可能被多条路径共用"**——**连通分量里不能，路径搜索里能。** 这是两者的分水岭。
+
+> [!info] "标记"的两种语义
+> 矩阵搜索里的"标记"有两种语义：**"永久标记"（连通分量，标记后不恢复）** 与 **"临时标记"（路径搜索，标记后恢复）**。**判断用哪种，只需问一句"这个格子会不会被别的路径用到"**——会，就必须恢复。**这个判断，能帮你在两类矩阵搜索间快速切换。**
 
 ---
 
-## 第 2 章 LeetCode 79：Word Search
+## 第 2 章 LeetCode 212：单词搜索 II（Trie 剪枝）
 
 ### 2.1 题目
 
-**LeetCode 79 - Word Search**（中等）：
+**LeetCode 212 - Word Search II**（困难）
 
-给定一个 $m \times n$ 二维字符网格 `board` 和一个字符串 `word`。如果 `word` 存在于网格中，返回 `true`；否则，返回 `false`。单词必须按照字母顺序，通过相邻的单元格内的字母构成，其中"相邻"单元格是那些水平相邻或垂直相邻的单元格。同一个单元格内的字母不允许被重复使用。
+给定一个字符网格 `board` 和一个单词列表 `words`，返回所有同时在网格和单词列表中出现的单词。
 
-```
-输入：board = [["A","B","C","E"],["S","F","C","S"],["A","D","E","E"]], word = "ABCCED"
-输出：true
+### 2.2 朴素做法的问题
 
-输入：board = [["A","B","C","E"],["S","F","C","S"],["A","D","E","E"]], word = "SEE"
-输出：true
+**朴素做法是"对每个单词调用一次 exist"**——**若 `words` 有 $k$ 个单词，就是 $k$ 次搜索，每次 $O(mn \cdot 4^L)$，总代价极高。**
 
-输入：board = [["A","B","C","E"],["S","F","C","S"],["A","D","E","E"]], word = "ABCB"
-输出：false（B 不能被重复使用）
-```
+### 2.3 Trie 剪枝：一次搜索找所有单词
 
-### 2.2 完整实现
+**把 `words` 建成 Trie（前缀树），然后从每个格子出发 DFS——一次搜索就能匹配所有单词**：
 
-```java
-public boolean exist(char[][] board, String word) {
-    int m = board.length, n = board[0].length;
+```go
+type Trie struct {
+    children map[byte]*Trie
+    word     string // 若非空，表示这里是一个完整单词的结尾
+}
 
-    for (int i = 0; i < m; i++) {
-        for (int j = 0; j < n; j++) {
-            // 从每个格子出发，尝试匹配 word[0]
-            if (board[i][j] == word.charAt(0) && dfs(board, i, j, word, 0)) {
-                return true;
+func findWords(board [][]byte, words []string) []string {
+    // 建 Trie
+    root := &Trie{children: map[byte]*Trie{}}
+    for _, w := range words {
+        node := root
+        for i := 0; i < len(w); i++ {
+            if node.children[w[i]] == nil {
+                node.children[w[i]] = &Trie{children: map[byte]*Trie{}}
             }
+            node = node.children[w[i]]
+        }
+        node.word = w
+    }
+
+    m, n := len(board), len(board[0])
+    res := []string{}
+
+    var dfs func(i, j int, node *Trie)
+    dfs = func(i, j int, node *Trie) {
+        if i < 0 || i >= m || j < 0 || j >= n {
+            return
+        }
+        c := board[i][j]
+        child := node.children[c]
+        if c == '#' || child == nil {
+            return // 已用或 Trie 中无此前缀，剪枝
+        }
+        if child.word != "" { // 找到一个单词
+            res = append(res, child.word)
+            child.word = "" // 去重
+        }
+        board[i][j] = '#' // 标记
+        dfs(i+1, j, child)
+        dfs(i-1, j, child)
+        dfs(i, j+1, child)
+        dfs(i, j-1, child)
+        board[i][j] = c // 恢复
+    }
+
+    for i := 0; i < m; i++ {
+        for j := 0; j < n; j++ {
+            dfs(i, j, root)
         }
     }
-    return false;
-}
-
-private boolean dfs(char[][] board, int i, int j, String word, int k) {
-    // 结束条件：所有字母匹配完成
-    if (k == word.length()) return true;
-
-    // 边界检查
-    int m = board.length, n = board[0].length;
-    if (i < 0 || i >= m || j < 0 || j >= n) return false;
-
-    // 当前格子不匹配，或已被占用
-    if (board[i][j] != word.charAt(k)) return false;
-
-    // 临时标记（借用）
-    char temp = board[i][j];
-    board[i][j] = '#';
-
-    // 向四个方向递归
-    boolean found = dfs(board, i+1, j, word, k+1)
-                 || dfs(board, i-1, j, word, k+1)
-                 || dfs(board, i, j+1, word, k+1)
-                 || dfs(board, i, j-1, word, k+1);
-
-    // 恢复（撤销标记）
-    board[i][j] = temp;
-
-    return found;
+    return res
 }
 ```
 
-**短路求值优化**：`||` 的短路特性——一旦找到 `true`，立即停止，不继续探索其他方向。这使得在找到答案时，不会做多余的计算。
+**Trie 剪枝的威力在于"前缀共享"**——**多个单词共享前缀，一次搜索就能同时推进多个单词的匹配。** **若当前字符在 Trie 中无对应子节点（`child == nil`），说明"没有任何单词以当前路径为前缀"，立即剪枝。**
 
-### 2.3 时间复杂度
+**"Trie + DFS"是"多模式匹配"的经典组合**——**它把"对每个单词搜一遍"（$k$ 次搜索）优化成了"一次搜完所有单词"。**
 
-- 外层循环：$O(mn)$ 个起点
-- 每个起点的 DFS：最多展开 $4^L$ 个路径（$L$ = 单词长度），但因为格子不能重用，实际路径数远小于 $4^L$，更接近 $3^L$（每步除了来路，最多 3 个方向）
-- **总时间复杂度**：$O(mn \cdot 3^L)$
+### 2.4 复杂度
 
-**空间复杂度**：$O(L)$（递归栈深度），不需要额外的 visited 数组（原地标记）。
+- **建 Trie**：$O(\sum |w_i|)$；
+- **DFS**：每个格子最多访问一次（带标记），但 Trie 的分支决定剪枝强度。**最坏 $O(mn \cdot 4^L)$，但 Trie 剪枝大幅降低实际代价。**
 
-### 2.4 几个常见错误
-
-**错误一：先修改格子值，再检查边界**
-
-```java
-// 错误！边界检查必须在修改格子之前
-board[i][j] = '#';
-if (i < 0 || ...) return false;  // 太晚了，board 已经被修改
-```
-
-正确顺序：先边界检查，再比较字符，再标记。
-
-**错误二：忘记撤销 `board[i][j] = '#'`**
-
-```java
-board[i][j] = '#';
-boolean found = dfs(...);
-// 忘记 board[i][j] = temp;
-return found;
-```
-
-不撤销会导致同一个格子在后续搜索中被视为已占用，产生 `false negative`（实际存在但返回 `false`）。
-
-**错误三：`k == word.length()` 的检查时机**
-
-```java
-// 方式一：函数开头检查（推荐）
-if (k == word.length()) return true;
-
-// 方式二：在比较字符时检查 k == word.length()-1
-if (board[i][j] == word.charAt(k)) {
-    if (k == word.length() - 1) return true;  // 最后一个字符匹配
-    ...
-}
-```
-
-两种方式都正确，但方式一更简洁，且避免了 `charAt(k)` 越界（当 `k == word.length()` 时，方式二不做这个检查）。
+> [!info] Trie：字符串集合的"共享前缀"结构
+> **Trie（前缀树）把"字符串集合"组织成一棵树——相同前缀的字符串共享节点。** 它的价值在于"前缀查询"：给定一个前缀，$O(\text{前缀长度})$ 就能判断"是否有字符串以此为前缀"。**在 Word Search II 里，它让"多单词搜索"变成"一次带剪枝的 DFS"。** 这是"用数据结构把多次搜索合并成一次"的典型。
 
 ---
 
-## 第 3 章 LeetCode 212：Word Search II（Trie 优化）
+## 第 3 章 LeetCode 62：不同路径（对照：为什么用 DP）
 
 ### 3.1 题目
 
-**LeetCode 212 - Word Search II**（困难）：
+**LeetCode 62 - Unique Paths**（中等）
 
-给定一个 $m \times n$ 二维字符网格 `board` 和一个单词（字符串）列表 `words`，返回所有同时在二维网格和字典中出现的单词。
+一个机器人位于 $m \times n$ 网格的左上角，每次只能向下或向右移动一步，求到达右下角的不同路径数。
 
-```
-输入：board = [["o","a","a","n"],["e","t","a","e"],["i","h","k","r"],["i","f","l","v"]]
-     words = ["oath","pea","eat","rain"]
-输出：["eat","oath"]
-```
+### 3.2 为什么用 DP 而非搜索
 
-### 3.2 暴力方法的问题
+**这道题"求路径数"，而非"求路径是否存在"**——**用 DFS 会重复计算大量子问题（同一格子被多条路径经过），而 DP 恰好利用了这份"重叠"。**
 
-**朴素方法**：对每个单词 `w` 调用 Word Search I 的解法，判断是否存在。
-
-时间复杂度：$O(k \cdot mn \cdot 3^L)$，其中 $k$ = 单词数，$L$ = 最长单词长度。
-
-当 $k = 10000$，$m = n = 12$，$L = 10$ 时：$10000 \times 144 \times 3^{10} \approx 8.5 \times 10^9$——明显超时。
-
-**瓶颈在哪里？** 每次搜索一个单词，都要遍历整个矩阵并从每个格子出发 DFS。如果两个单词有相同前缀（如 "eat" 和 "eating"），在搜索 "eating" 时，搜索 "eat" 的前三步会重复做一遍。
-
-### 3.3 Trie 的核心作用：共享前缀
-
-**Trie（字典树/前缀树）** 将所有单词构建成一棵前缀共享树：
-
-```
-words = ["eat", "oath"]
-
-Trie 结构：
-root
-├─ 'e' → TrieNode
-│   └─ 'a' → TrieNode
-│       └─ 't' → TrieNode (word = "eat")
-└─ 'o' → TrieNode
-    └─ 'a' → TrieNode
-        └─ 't' → TrieNode
-            └─ 'h' → TrieNode (word = "oath")
-```
-
-在矩阵上做一次 DFS 时，沿路径同时在 Trie 中移动。如果当前格子的字符在 Trie 中的当前节点没有对应子节点，说明以当前路径开头的单词都不存在，立即剪枝——不需要继续匹配任何单词。
-
-**效果**：所有共享前缀的单词，在矩阵上只需要搜索一次对应的路径，而不是重复搜索 $k$ 次。
-
-### 3.4 Trie 节点定义
-
-```java
-class TrieNode {
-    TrieNode[] children = new TrieNode[26];
-    String word = null;  // 不为 null 时，表示从根到这里构成一个完整单词
+```go
+func uniquePaths(m, n int) int {
+    dp := make([][]int, m)
+    for i := range dp {
+        dp[i] = make([]int, n)
+    }
+    for i := 0; i < m; i++ {
+        dp[i][0] = 1 // 第一列只有一条路径
+    }
+    for j := 0; j < n; j++ {
+        dp[0][j] = 1 // 第一行只有一条路径
+    }
+    for i := 1; i < m; i++ {
+        for j := 1; j < n; j++ {
+            dp[i][j] = dp[i-1][j] + dp[i][j-1] // 从上或从左来
+        }
+    }
+    return dp[m-1][n-1]
 }
 ```
 
-`word` 直接存储完整单词（而非只存布尔标记），这样找到单词时可以直接加入结果，不需要重新构建单词字符串。
+**"求路径数"与"求路径存在"的解法差异**：
 
-### 3.5 完整实现
+- **求路径存在（LC 79）**：用 DFS + 回溯——**因为只要找到一条就返回，无需枚举所有**；
+- **求路径数（LC 62）**：用 DP——**因为要统计所有路径，而子问题有重叠，DP 能避免重复计算**。
 
-```java
-class TrieNode {
-    TrieNode[] children = new TrieNode[26];
-    String word = null;
+**"求存在"用搜索，"求数量/最优"用 DP**——**这是搜索与 DP 的一条分界线。**
+
+### 3.3 三道题的对照
+
+| 题目 | 目标 | 方法 | 关键 |
+|------|------|------|------|
+| LC 79 单词搜索 | 路径是否存在 | DFS + 回溯标记 | 标记要恢复 |
+| LC 212 单词搜索 II | 多个单词是否存在 | Trie + DFS | 前缀剪枝 |
+| LC 62 不同路径 | 路径数量 | DP | 子问题重叠 |
+
+**它们共同说明：矩阵上的"路径问题"，解法取决于"求什么"**——求存在用搜索、求数量用 DP、求多单词用 Trie。
+
+---
+
+## 第 4 章 常见误区与自测方法
+
+### 4.1 四个高频误区
+
+**误区一，LC 79 标记后不恢复。** 会污染其他起点的搜索。
+
+**误区二，LC 79 不标记。** 路径会重复经过同一格。
+
+**误区三，LC 212 不用 Trie，对每个单词搜一遍。** 效率极低。
+
+**误区四，LC 62 用 DFS 而非 DP。** 会重复计算，效率低。
+
+### 4.2 一套自测用例
+
+| 用例 | 检验什么 |
+|------|---------|
+| 单词长于格子总数 | 不可能 |
+| 单词单字符 | 最简 |
+| 单词需绕路 | 回溯标记 |
+| 多个单词共享前缀（LC 212） | Trie 剪枝 |
+| `m=1` 或 `n=1`（LC 62） | DP 边界 |
+
+**其中"单词需绕路"最值得测**——它检验"标记-恢复"是否正确。
+
+---
+
+## 第 5 章 Trie 的工程应用与矩阵深搜的更多变体
+
+### 5.1 Trie 的实现要点
+
+**Trie（前缀树）的核心是"用树的边表示字符，用路径表示字符串"**：
+
+```go
+type Trie struct {
+    children map[byte]*Trie
+    isEnd    bool
 }
 
-public List<String> findWords(char[][] board, String[] words) {
-    // 构建 Trie
-    TrieNode root = new TrieNode();
-    for (String w : words) {
-        TrieNode node = root;
-        for (char c : w.toCharArray()) {
-            int idx = c - 'a';
-            if (node.children[idx] == null) {
-                node.children[idx] = new TrieNode();
+func (t *Trie) Insert(word string) {
+    node := t
+    for i := 0; i < len(word); i++ {
+        if node.children[word[i]] == nil {
+            node.children[word[i]] = &Trie{children: map[byte]*Trie{}}
+        }
+        node = node.children[word[i]]
+    }
+    node.isEnd = true
+}
+
+func (t *Trie) Search(word string) bool {
+    node := t
+    for i := 0; i < len(word); i++ {
+        if node.children[word[i]] == nil {
+            return false
+        }
+        node = node.children[word[i]]
+    }
+    return node.isEnd
+}
+```
+
+**Trie 的三个操作**：插入 $O(L)$、查询 $O(L)$、前缀匹配 $O(L)$。**它的空间是 $O(\sum L)$（最坏），但"共享前缀"能大幅省空间。**
+
+### 5.2 Trie 在工程里的应用
+
+**Trie 是"字符串集合"的核心结构，工程里无处不在**：
+
+- **自动补全**：搜索框的"输入提示"，用 Trie 做前缀匹配；
+- **拼写检查**：判断"单词是否在词典中"；
+- **IP 路由**：路由表用"前缀树（Patricia Trie）"做最长前缀匹配；
+- **敏感词过滤**：用 Trie（或 AC 自动机）做多模式匹配；
+- **词频统计**：Trie 的节点可携带"词频"。
+
+**它们的共同点，都是"需要高效的'前缀'操作"。** **而 Trie 恰好提供了 $O(L)$ 的前缀匹配。**
+
+### 5.3 矩阵深搜的更多变体
+
+**跳跃游戏 III（LeetCode 1306）**：从起点出发，每次可以跳到 `i ± arr[i]` 的位置，判断能否到达值为 0 的位置。
+
+**它是"一维上的图搜索"**——**把"数组下标"当作节点，"可达位置"当作边，用 BFS/DFS 判断可达性**：
+
+```go
+func canReach(arr []int, start int) bool {
+    n := len(arr)
+    visited := make([]bool, n)
+    queue := []int{start}
+    visited[start] = true
+    for len(queue) > 0 {
+        cur := queue[0]
+        queue = queue[1:]
+        if arr[cur] == 0 {
+            return true
+        }
+        for _, next := range []int{cur + arr[cur], cur - arr[cur]} {
+            if next >= 0 && next < n && !visited[next] {
+                visited[next] = true
+                queue = append(queue, next)
             }
-            node = node.children[idx];
-        }
-        node.word = w;
-    }
-
-    int m = board.length, n = board[0].length;
-    List<String> result = new ArrayList<>();
-
-    // 从每个格子出发，同时遍历矩阵和 Trie
-    for (int i = 0; i < m; i++) {
-        for (int j = 0; j < n; j++) {
-            dfs(board, i, j, root, result);
         }
     }
-    return result;
-}
-
-private void dfs(char[][] board, int i, int j, TrieNode node, List<String> result) {
-    int m = board.length, n = board[0].length;
-    if (i < 0 || i >= m || j < 0 || j >= n) return;
-    char c = board[i][j];
-    if (c == '#') return;  // 已被当前路径占用
-
-    // Trie 剪枝：当前字符在 Trie 中无对应子节点
-    int idx = c - 'a';
-    TrieNode next = node.children[idx];
-    if (next == null) return;  // 不存在以当前路径为前缀的单词，剪枝！
-
-    // 找到单词
-    if (next.word != null) {
-        result.add(next.word);
-        next.word = null;  // 避免重复加入（同一个单词可能从不同路径找到）
-    }
-
-    // 临时标记
-    board[i][j] = '#';
-
-    // 四方向递归
-    dfs(board, i+1, j, next, result);
-    dfs(board, i-1, j, next, result);
-    dfs(board, i, j+1, next, result);
-    dfs(board, i, j-1, next, result);
-
-    // 恢复
-    board[i][j] = c;
+    return false
 }
 ```
 
-### 3.6 进一步优化：找到单词后删除 Trie 节点
+**"把数组下标当节点"是一维搜索的通用技巧**——**它与矩阵搜索"把格子当节点"是同一思路，只是"图"从二维降成了一维。**
 
-当一个单词被找到并加入结果后，对应的 Trie 节点不需要再被匹配。可以将其从 Trie 中"剪掉"，减少后续搜索的无效分支：
+**迷宫问题（LeetCode 490）**：球在迷宫里滚动，直到撞墙才停，判断能否到达终点。**它展示了"状态转移不是'走一步'，而是'滚到底'"**——**状态空间的定义要贴合问题本身。**
 
-```java
-// 回溯时，如果某个节点的所有子节点都为空且没有 word，可以删除
-private boolean dfs(...) {
-    ...
-    // 回溯阶段：检查是否可以删除当前节点
-    if (isLeaf(next)) {
-        node.children[idx] = null;  // 删除叶节点
-    }
-    ...
-}
+### 5.4 一个值得记住的对照
 
-private boolean isLeaf(TrieNode node) {
-    if (node.word != null) return false;
-    for (TrieNode child : node.children) {
-        if (child != null) return false;
-    }
-    return true;
-}
-```
+| 题目 | 状态 | 转移 |
+|------|------|------|
+| LC 79 单词搜索 | (i, j, k) | 四方向走一步 |
+| LC 212 单词搜索 II | (i, j) + Trie 节点 | 四方向走一步 |
+| LC 1306 跳跃游戏 III | 下标 i | 跳到 i±arr[i] |
+| LC 490 迷宫 | (i, j) | 滚到撞墙 |
 
-这个优化在大量单词被找到后，能显著减少 Trie 的节点数，从而加速后续搜索。
+**这张表说明："状态"与"转移"由问题本身决定**——**"走一步""滚到底""跳一段"，都是"转移"的不同形态。** **理解了这一点，你就明白为什么"状态空间建模"是搜索题的第一步。**
 
-### 3.7 时间复杂度对比
+> [!info] 从"矩阵"到"任意状态空间"
+> 矩阵搜索的"格子 + 四方向"，只是"状态空间"的一种特例。**当"状态"变成"数组下标""球的位置 + 方向"时，搜索的骨架不变。** **理解了"状态空间"这一抽象，你就能把矩阵搜索的思路，迁移到任何"离散状态"的问题上。** 这是本专栏反复强调的"从具体到抽象"。
 
-| 方法 | 时间复杂度 |
-|------|-----------|
-| 暴力（每词独立搜索） | $O(k \cdot mn \cdot 3^L)$ |
-| Trie 优化 | $O(mn \cdot 3^L + \sum len(w))$（Trie 构建 + 一次 DFS） |
+### 5.5 一个可复用的判断
 
-当 $k$ 很大时，Trie 方法将复杂度从线性于 $k$ 降为与 $k$ 无关（只多了 Trie 构建的 $O(\sum len(w))$）。
+**遇到"路径/可达性"类问题，按这个顺序问**：
+
+1. **状态是什么？** (i,j)、下标、还是 (位置, 方向)；
+2. **转移是什么？** 走一步、滚到底、还是跳一段；
+3. **标记是否恢复？** 路径搜索要恢复，连通性不恢复；
+4. **多个目标？** 若是，考虑 Trie/AC 自动机。
+
+**这四问，能定下矩阵/一维搜索题的方案。**
 
 ---
 
-## 第 4 章 Unique Paths：搜索与动态规划的桥梁
+## 第 6 章 矩阵深搜的面试追问与复杂度速查
 
-### 4.1 LeetCode 62 - Unique Paths
+### 6.1 五个高频追问
 
-**题目**（中等）：一个机器人位于一个 $m \times n$ 网格的左上角。机器人每次只能向下或向右移动一步。机器人试图到达网格的右下角。问总共有多少条不同的路径？
+**追问一："LC 79 为什么标记后要恢复？"** 答：**因为一个格子可能被多条不同路径用到**——不恢复会污染其他起点的搜索。**这与连通分量（标记后不恢复）是分水岭。**
 
-```
-输入：m=3, n=7
-输出：28
+**追问二："Trie 剪枝为什么能合并多次搜索？"** 答：**因为多个单词共享前缀**——Trie 的节点代表"前缀"，一次 DFS 就能同时推进多个单词的匹配。
 
-输入：m=3, n=2
-输出：3
-```
+**追问三："LC 62 为什么用 DP 而非搜索？"** 答：**因为要"统计所有路径"，而子问题有重叠**——同一格子被多条路径经过，DP 恰好利用了这份重叠。
 
-### 4.2 记忆化 DFS（搜索的视角）
+**追问四："'求路径存在'与'求路径数'为什么解法不同？"** 答：**求存在用搜索（找到一条就返回）；求数量用 DP（要统计所有，且子问题重叠）。**
 
-从 $(0,0)$ 出发，每步选择向右或向下，统计到达 $(m-1, n-1)$ 的路径数。
+**追问五："LC 212 的复杂度是多少？"** 答：**建 Trie $O(\sum |w_i|)$；DFS 最坏 $O(mn \cdot 4^L)$，但 Trie 剪枝大幅降低实际代价。**
 
-```java
-// 朴素 DFS（指数复杂度，会超时）
-int dfs(int i, int j, int m, int n) {
-    if (i == m-1 && j == n-1) return 1;
-    if (i >= m || j >= n) return 0;
-    return dfs(i+1, j, m, n) + dfs(i, j+1, m, n);
-}
-```
+### 6.2 复杂度速查
 
-这个朴素 DFS 有大量重复计算——`dfs(i, j)` 会被调用多次。加入记忆化：
+| 题目 | 时间 | 空间 |
+|------|------|------|
+| LC 79 单词搜索 | $O(mn \cdot 4^L)$ | $O(L)$（栈） |
+| LC 212 单词搜索 II | $O(mn \cdot 4^L)$（Trie 剪枝） | $O(\sum |w_i|)$ |
+| LC 62 不同路径 | $O(mn)$ | $O(mn)$ / $O(n)$ |
+| LC 1306 跳跃游戏 III | $O(n)$ | $O(n)$ |
 
-```java
-int uniquePaths(int m, int n) {
-    int[][] memo = new int[m][n];
-    return dfs(0, 0, m, n, memo);
-}
+**这张表说明：矩阵深搜的复杂度，由"状态数 × 每状态的分支"决定。**
 
-int dfs(int i, int j, int m, int n, int[][] memo) {
-    if (i == m-1 && j == n-1) return 1;
-    if (i >= m || j >= n) return 0;
-    if (memo[i][j] != 0) return memo[i][j];  // 已计算过
-    memo[i][j] = dfs(i+1, j, m, n, memo) + dfs(i, j+1, m, n, memo);
-    return memo[i][j];
-}
-```
+### 6.3 一个值得养成的习惯
 
-**时间复杂度**：$O(mn)$（每个格子只计算一次）。
+**写矩阵深搜题前，先问三句**：
 
-### 4.3 等价的动态规划
+1. **标记是否恢复？** 路径搜索恢复，连通性不恢复；
+2. **求存在还是求数量？** 存在用搜索，数量用 DP；
+3. **多个目标？** 若是，考虑 Trie。
 
-记忆化 DFS 和 DP 在本题是**完全等价的**：
+**这三句，能定下矩阵深搜题的方案。**
 
-```java
-// DP 版本（bottom-up）
-int uniquePathsDP(int m, int n) {
-    int[][] dp = new int[m][n];
-    // 边界初始化
-    for (int i = 0; i < m; i++) dp[i][0] = 1;
-    for (int j = 0; j < n; j++) dp[0][j] = 1;
-    // 状态转移
-    for (int i = 1; i < m; i++) {
-        for (int j = 1; j < n; j++) {
-            dp[i][j] = dp[i-1][j] + dp[i][j-1];
+> [!info] 矩阵深搜的"三要素"
+> 矩阵深搜题的差异，可以归结为三要素：**标记语义（恢复/不恢复）、目标（存在/数量）、是否多模式。** **把这三要素想清楚，矩阵深搜题就成了填空。** 这与矩阵搜索"三要素"、回溯题"三要素"是同一思路。
+
+### 6.4 一个总体的建议
+
+**矩阵深搜题的练习，建议"按目标"分类**：
+
+- **路径存在**：79、1306、490；
+- **多模式**：212；
+- **路径数量**：62、63（有障碍）。
+
+**"目标"决定了"用搜索还是 DP"。**
+
+---
+
+## 第 7 章 矩阵路径问题的数学视角与更多变体
+
+### 7.1 不同路径的数学公式
+
+**"从 $(0,0)$ 到 $(m-1,n-1)$，只能向右或向下"的路径数，有闭式解**：
+
+$$C(m+n-2, m-1) = \frac{(m+n-2)!}{(m-1)!(n-1)!}$$
+
+**因为"总步数"是 $m+n-2$，其中"向下"占 $m-1$ 步、"向右"占 $n-1$ 步**——**"选哪几步向下"就是一个组合数。**
+
+**"路径数 = 组合数"这一洞察，把 DP 的 $O(mn)$ 降到了"直接算组合数"**——**但组合数涉及阶乘，容易溢出，所以工程上仍用 DP（递推）更稳妥。**
+
+**"DP 与组合公式"是同一问题的两种解法**——**DP 用递推（避免溢出），组合公式用数学（更直接）。**
+
+### 7.2 不同路径 II（LeetCode 63）：加障碍
+
+**题目**：在网格中加"障碍物"，求从左上到右下的路径数。
+
+**它就是"不同路径 + 障碍判断"**——**DP 时若当前格是障碍，则 `dp[i][j] = 0`：**
+
+```go
+func uniquePathsWithObstacles(obstacleGrid [][]int) int {
+    m, n := len(obstacleGrid), len(obstacleGrid[0])
+    dp := make([][]int, m)
+    for i := range dp {
+        dp[i] = make([]int, n)
+    }
+    for i := 0; i < m && obstacleGrid[i][0] == 0; i++ {
+        dp[i][0] = 1 // 第一列：遇到障碍后都为 0
+    }
+    for j := 0; j < n && obstacleGrid[0][j] == 0; j++ {
+        dp[0][j] = 1
+    }
+    for i := 1; i < m; i++ {
+        for j := 1; j < n; j++ {
+            if obstacleGrid[i][j] == 0 {
+                dp[i][j] = dp[i-1][j] + dp[i][j-1]
+            }
+            // 障碍格保持 0
         }
     }
-    return dp[m-1][n-1];
+    return dp[m-1][n-1]
 }
 ```
 
-`dp[i][j]` 的含义与 `dfs(i, j, ...)` 的返回值完全相同：到达 $(i, j)$ 的路径数。区别只是计算顺序（自顶向下 vs 自底向上）。
+**注意"初始化时遇到障碍就停"**——**因为"第一列/第一行有障碍后，后面的格子都不可达"。**
 
-> [!note] 设计哲学：记忆化 DFS = 带缓存的 DFS = DP
-> 任何有重叠子问题的 DFS（递归），都可以通过"记忆化"转化为 DP，性能相同。选择哪种写法取决于个人习惯和面试官要求：有些面试官更欣赏 DP，因为它消除了递归栈的开销；有些面试官觉得记忆化 DFS 的逻辑更直观。两者都应该掌握。
+### 7.3 最小路径和（LeetCode 64）：求最优
 
-### 4.4 Unique Paths II（有障碍物）
+**题目**：网格中每格有非负整数，求从左上到右下的"最小路径和"。
 
-**LeetCode 63 - Unique Paths II**：同 Unique Paths，但障碍物格子 `obstacleGrid[i][j] = 1`，不能通过。
+**它是"路径 DP"的又一变体**——**转移从"求和"变成"取最小"：**
 
-```java
-int uniquePathsWithObstacles(int[][] obstacleGrid) {
-    int m = obstacleGrid.length, n = obstacleGrid[0].length;
-    if (obstacleGrid[0][0] == 1 || obstacleGrid[m-1][n-1] == 1) return 0;
-
-    int[][] dp = new int[m][n];
-    dp[0][0] = 1;
-    // 第一列：遇到障碍后，后面的格子全为 0
-    for (int i = 1; i < m; i++) dp[i][0] = obstacleGrid[i][0] == 1 ? 0 : dp[i-1][0];
-    // 第一行
-    for (int j = 1; j < n; j++) dp[0][j] = obstacleGrid[0][j] == 1 ? 0 : dp[0][j-1];
-    // 状态转移
-    for (int i = 1; i < m; i++) {
-        for (int j = 1; j < n; j++) {
-            if (obstacleGrid[i][j] == 1) dp[i][j] = 0;
-            else dp[i][j] = dp[i-1][j] + dp[i][j-1];
+```go
+func minPathSum(grid [][]int) int {
+    m, n := len(grid), len(grid[0])
+    dp := make([][]int, m)
+    for i := range dp {
+        dp[i] = make([]int, n)
+    }
+    dp[0][0] = grid[0][0]
+    for i := 1; i < m; i++ {
+        dp[i][0] = dp[i-1][0] + grid[i][0]
+    }
+    for j := 1; j < n; j++ {
+        dp[0][j] = dp[0][j-1] + grid[0][j]
+    }
+    for i := 1; i < m; i++ {
+        for j := 1; j < n; j++ {
+            dp[i][j] = min(dp[i-1][j], dp[i][j-1]) + grid[i][j]
         }
     }
-    return dp[m-1][n-1];
+    return dp[m-1][n-1]
 }
 ```
 
----
+**"路径 DP"的三种变体**：**计数（62、63）、最小（64）、最大**——**它们共享"从上方或左方来"这一转移结构，只是"聚合函数"不同。**
 
-## 第 5 章 矩阵路径问题模式总结
+### 7.4 一个值得记住的对照
 
-### 5.1 "找一条路径是否存在" vs "找所有路径" vs "计数路径"
+| 题目 | 目标 | 聚合 |
+|------|------|------|
+| LC 62 不同路径 | 计数 | 相加 |
+| LC 63 不同路径 II | 计数（有障碍） | 相加 + 障碍判零 |
+| LC 64 最小路径和 | 最小 | 取 min |
+| LC 79 单词搜索 | 存在 | 搜索 |
 
-| 问题类型 | 典型算法 | 典型题目 |
-|---------|---------|---------|
-| 路径是否存在（是/否） | DFS + 回溯 | Word Search (79) |
-| 找所有路径（枚举） | DFS + 回溯（不剪找到即停） | — |
-| 路径数量计数 | 记忆化 DFS / DP | Unique Paths (62/63) |
-| 最短路径（无权） | BFS | 迷宫最短路 |
-| 最短路径（有权） | Dijkstra | — |
+**这张表说明："路径问题"的解法，取决于"求什么"**——**计数/最优用 DP，存在用搜索。**
 
-### 5.2 Word Search 的扩展变体
+> [!info] "路径 DP"的三种变体
+> 网格路径 DP 有三种变体——**计数（62、63）、最小（64）、最大。** **它们共享"从上方或左方来"这一转移结构，只是"聚合函数"从"相加"变成"取 min/max"。** **理解了这一点，你就明白为什么"路径 DP"题如此统一**——**骨架不变，变的是"聚合"。**
 
-**"不只找单个词，而是找多个词"** → Word Search II，使用 Trie 剪枝
+### 7.5 一个可复用的判断
 
-**"单词可以任意拼接"** → 需要额外记录已使用格子集合，不能简单原地标记
+**遇到"网格路径"类问题，按这个顺序问**：
 
-**"允许重复使用格子"** → 去掉临时标记 `#` 的逻辑（但需要防止无限循环，通常用路径长度或其他条件终止）
+1. **求存在、计数、还是最优？** 存在用搜索，计数/最优用 DP；
+2. **有障碍吗？** 有则"障碍格置 0"；
+3. **聚合函数是什么？** 相加、取 min、取 max；
+4. **能否用组合公式？** 无阻碍的计数题可以。
 
-### 5.3 不同 visited 机制的适用场景
-
-| 机制 | 适用场景 | 示例 |
-|------|---------|------|
-| 原地标记（永久） | Flood Fill，不需要回溯 | Number of Islands |
-| 原地标记（临时，带撤销） | 路径搜索，需要回溯 | Word Search |
-| 独立 visited 数组 | 不能修改输入，或需要多次搜索 | 某些图搜索 |
-| 无 visited | 特殊情况（如只向下/右移动，无环） | Unique Paths DFS |
+**这四问，能定下"网格路径"题的方案。**
 
 ---
 
-## 第 6 章 面试代码汇总
+## 第 8 章 矩阵深搜的优化技巧
 
-### 6.1 Word Search I
+### 8.1 剪枝：矩阵深搜的第一优化
 
-```java
-class Solution {
-    public boolean exist(char[][] board, String word) {
-        int m = board.length, n = board[0].length;
-        for (int i = 0; i < m; i++)
-            for (int j = 0; j < n; j++)
-                if (dfs(board, i, j, word, 0)) return true;
-        return false;
+**矩阵深搜的搜索空间可能极大**（$O(mn \cdot 4^L)$），**所以剪枝至关重要。** 三种常见剪枝：
+
+- **前缀剪枝**（Trie）：若"当前路径不是任何单词的前缀"，立即停止；
+- **剩余长度剪枝**：若"剩余步数不足以走完目标"，立即停止；
+- **起点剪枝**：若"首字符不匹配"，跳过该起点。
+
+**"前缀剪枝"是 Word Search II 的核心**——**它把"对每个单词搜一遍"变成"一次带剪枝的搜索"。**
+
+### 8.2 记忆化：有重叠时的手段
+
+**若"同一状态被多条路径经过"，可以用记忆化**——**用 `memo[i][j]` 缓存"从 (i,j) 出发的结果"。**
+
+**例如"矩阵中的最长递增路径"（LeetCode 329）**：**每个格子"向四个方向找更小的值"，可以记忆化：**
+
+```go
+func longestIncreasingPath(matrix [][]int) int {
+    m, n := len(matrix), len(matrix[0])
+    memo := make([][]int, m)
+    for i := range memo {
+        memo[i] = make([]int, n)
     }
-
-    private boolean dfs(char[][] board, int i, int j, String word, int k) {
-        if (k == word.length()) return true;
-        int m = board.length, n = board[0].length;
-        if (i < 0 || i >= m || j < 0 || j >= n || board[i][j] != word.charAt(k)) return false;
-        char tmp = board[i][j]; board[i][j] = '#';
-        boolean res = dfs(board, i+1, j, word, k+1) || dfs(board, i-1, j, word, k+1)
-                   || dfs(board, i, j+1, word, k+1) || dfs(board, i, j-1, word, k+1);
-        board[i][j] = tmp;
-        return res;
+    dirs := [][2]int{{1, 0}, {-1, 0}, {0, 1}, {0, -1}}
+    var dfs func(i, j int) int
+    dfs = func(i, j int) int {
+        if memo[i][j] != 0 {
+            return memo[i][j] // 命中缓存
+        }
+        best := 1
+        for _, d := range dirs {
+            ni, nj := i+d[0], j+d[1]
+            if ni >= 0 && ni < m && nj >= 0 && nj < n && matrix[ni][nj] > matrix[i][j] {
+                if l := dfs(ni, nj) + 1; l > best {
+                    best = l
+                }
+            }
+        }
+        memo[i][j] = best
+        return best
     }
+    ans := 0
+    for i := 0; i < m; i++ {
+        for j := 0; j < n; j++ {
+            if l := dfs(i, j); l > ans {
+                ans = l
+            }
+        }
+    }
+    return ans
 }
 ```
 
-### 6.2 Word Search II 核心代码（见第 3 章，此处汇总关键点）
+**注意这里"不需要 visited"**——**因为"递增"这一约束天然保证了"不会走回头路"**（只能走向更大的值）。**这是"用问题的单调性代替 visited"的典型。**
 
-```
-关键点：
-1. 所有 words 构建一棵 Trie
-2. 从每个格子出发，同时在矩阵和 Trie 上 DFS
-3. Trie 节点为 null → 剪枝
-4. Trie 节点有 word → 加入结果，将 word 置 null（去重）
-5. 矩阵格子临时标记 '#'，回溯时恢复
-```
+**"最长递增路径"的记忆化是必要的**——**因为同一格子会被多条路径经过，不记忆化会重复计算。**
+
+### 8.3 位运算：状态压缩
+
+**若"矩阵很小"（如 $4 \times 4$），可以用位掩码表示"哪些格子已访问"**——**把状态压成一个整数，便于记忆化。**
+
+**例如"火柴拼正方形"（LeetCode 473）**：**用位掩码表示"哪些火柴已用"，是"状态压缩 + 记忆化"的典型。**
+
+**"位运算"与"记忆化"常一起用**——**位掩码提供"紧凑的状态表示"，记忆化提供"避免重复"。**
+
+### 8.4 一个值得记住的对照
+
+| 优化 | 适用 | 代表题 |
+|------|------|--------|
+| 前缀剪枝 | 多模式匹配 | 212 |
+| 剩余长度剪枝 | 有目标长度 | 79 |
+| 记忆化 | 有重叠子问题 | 329 |
+| 位运算 | 状态空间小 | 473 |
+
+**这张表说明："矩阵深搜的优化，取决于'问题的结构'"**——**有前缀用 Trie、有重叠用记忆化、状态小用位运算。**
+
+> [!info] 矩阵深搜的"优化三角"
+> 矩阵深搜的优化，围绕"**剪枝、记忆化、状态压缩**"三者展开——**剪枝减少分支、记忆化避免重复、状态压缩便于缓存。** **三者可以组合使用**（如"Trie 剪枝 + 记忆化"）。**理解了这三者，你面对任何"搜索空间大"的矩阵题，都有了优化手段。**
+
+### 8.5 一个可复用的判断
+
+**遇到"矩阵深搜效率低"时，按这个顺序问**：
+
+1. **能否剪枝？** 前缀、剩余长度、起点；
+2. **有无重叠子问题？** 有则记忆化；
+3. **状态能否压缩？** 小矩阵可用位掩码；
+4. **能否用单调性代替 visited？** 如"递增路径"。
+
+**这四问，能定下矩阵深搜的优化方案。**
 
 ---
 
-## 本章小结
+## 第 9 章 矩阵深搜的工程应用
 
-矩阵路径搜索的两道 Word Search 题，展示了 DFS 从"区域标记"（Flood Fill，不撤销）到"路径匹配"（回溯，必须撤销）的演进。Trie 的引入则是一个更大的优化思路：**当多个搜索目标共享前缀时，将目标预处理为前缀树，在搜索过程中同时推进，实现一次搜索覆盖所有目标**。
+### 9.1 迷宫生成与求解
 
-Unique Paths 补充了"路径计数"这类问题的解法，并展示了记忆化 DFS 与 DP 的等价性。
+**矩阵深搜在"迷宫"问题上有直接应用**：
 
-最后一篇文章将对整个搜索专栏做总结，梳理 BFS/DFS 的选型决策树、常见错误盘点，以及记忆化搜索与 DP 的关系。
+- **迷宫生成**：用"随机化 DFS（挖洞法）"生成迷宫——从起点出发，随机选择方向"挖通"，直到无路可走再回溯；
+- **迷宫求解**：用 DFS/BFS 找"从入口到出口的路径"；
+- **最短路径**：用 BFS 求"最少步数"。
+
+**"随机化 DFS 生成迷宫"是 DFS 的经典应用**——**它用"随机选择 + 回溯"生成"没有环"的迷宫（因为 DFS 的访问树是树）。**
+
+### 9.2 路径规划
+
+**矩阵深搜是"路径规划"的基础**：
+
+- **机器人导航**：在"栅格地图"上规划路径；
+- **游戏寻路**：NPC 的"走位"（A* 是 BFS 的启发式版）；
+- **物流路径**：仓库里的"拣货路径"。
+
+**这些场景的共同点，是"在网格上找一条路径"**——**而 DFS/BFS 是它们的通用方法。**
+
+### 9.3 图像处理
+
+**矩阵深搜在图像处理里也很常见**：
+
+- **连通区域标记**：识别图像里的独立区域（第 05 篇）；
+- **边界追踪**：沿"边缘"追踪轮廓（"摩尔邻域追踪"是一种 DFS）；
+- **洪水填充**：图像编辑的"油漆桶"（第 05 篇）。
+
+**它们的共同点，是"在像素网格上遍历"**——**而"遍历 + 标记"是它们的通用骨架。**
+
+### 9.4 一个值得记住的对照
+
+| 应用 | 方法 | 关键 |
+|------|------|------|
+| 迷宫生成 | 随机化 DFS | 挖洞 + 回溯 |
+| 迷宫求解 | DFS / BFS | 找路径 |
+| 最短路径 | BFS | 最少步数 |
+| 连通区域 | DFS / BFS | 标记 |
+| 轮廓追踪 | DFS | 沿边追踪 |
+
+**这张表说明："矩阵深搜"是"网格上导航"的通用工具**——**从迷宫到图像，都用到它。**
+
+> [!info] 矩阵深搜：网格导航的通用工具
+> 矩阵深搜不只是算法题——**它是"网格导航"这一大类应用的基础**，从迷宫生成到图像处理，都用到它。**理解了"遍历 + 标记 + 回溯"这套骨架，你不仅会解矩阵题，也能理解这些工程场景的实现。** 这是本专栏反复强调的"从题到工程"。
+
+### 9.5 一个可复用的判断
+
+**遇到"网格导航"类问题，按这个顺序问**：
+
+1. **要"路径"还是"数量"？** 路径用搜索，数量用 DP；
+2. **要"最短"还是"任意"？** 最短用 BFS，任意用 DFS；
+3. **要"一条"还是"所有"？** 所有用回溯；
+4. **网格有"障碍"吗？** 有则加入约束。
+
+**这四问，能定下"网格导航"题的方案。**
 
 ---
 
-*关联文章：棋盘型回溯：N-Queens 与数独求解 | 搜索算法面试通关：模式识别与优化策略总结*
+## 第 10 章 矩阵深搜的复杂度速查与练习建议
+
+### 10.1 复杂度速查
+
+| 题目 | 时间 | 空间 |
+|------|------|------|
+| LC 79 单词搜索 | $O(mn \cdot 4^L)$ | $O(L)$ |
+| LC 212 单词搜索 II | $O(mn \cdot 4^L)$（Trie 剪枝） | $O(\sum|w_i|)$ |
+| LC 62 不同路径 | $O(mn)$ | $O(n)$ |
+| LC 63 不同路径 II | $O(mn)$ | $O(n)$ |
+| LC 64 最小路径和 | $O(mn)$ | $O(n)$ |
+| LC 329 最长递增路径 | $O(mn)$（记忆化） | $O(mn)$ |
+
+**注意"LC 329 用记忆化后是 $O(mn)$"**——**因为每个格子只算一次。** **这是"记忆化把指数级降到多项式"的体现。**
+
+### 10.2 练习建议
+
+**按"目标"组织练习**：
+
+| 目标 | 必刷题 |
+|------|--------|
+| 路径存在 | 79、1306 |
+| 多模式 | 212 |
+| 路径数量 | 62、63 |
+| 路径最优 | 64 |
+| 最长路径 | 329 |
+
+**每个目标，做到"不看题解能独立写出"。**
+
+### 10.3 自测清单
+
+**每道矩阵深搜题写完后，用这份清单自查**：
+
+| 检查项 | 对应问题 |
+|--------|---------|
+| 路径搜索标记是否恢复 | 污染其他起点 |
+| 是否有剪枝 | 效率低 |
+| 有无重叠子问题、是否记忆化 | 重复计算 |
+| 求存在还是数量 | 方法选择 |
+
+**这四条，覆盖了矩阵深搜题的主要 bug。**
+
+### 10.4 一个值得记住的对照
+
+| 矩阵深搜 | 对应 DP |
+|---------|---------|
+| LC 79 单词搜索 | 无（搜索） |
+| LC 62 不同路径 | 有（DP） |
+| LC 64 最小路径和 | 有（DP） |
+| LC 329 最长递增路径 | 有（记忆化） |
+
+**这张表说明："矩阵深搜"与"矩阵 DP"是一对**——**"求存在"用搜索，"求数量/最优"用 DP。**
+
+> [!info] 从"搜索"到"DP"：一对孪生
+> 矩阵上的"路径问题"，与"矩阵 DP"是一对——**"求存在"用搜索，"求数量/最优"用 DP。** **理解了这一点，你就把"矩阵深搜"与"矩阵 DP"打通了。** 这是本专栏"从具体到抽象"的体现。
+
+### 10.5 一个可复用的判断
+
+**遇到"矩阵路径"类问题，按这个顺序问**：
+
+1. **求存在、计数、还是最优？** 存在用搜索，计数/最优用 DP；
+2. **标记是否恢复？** 路径搜索恢复；
+3. **多个目标？** 若是，考虑 Trie；
+4. **有无重叠子问题？** 有则记忆化。
+
+**这四问，能定下矩阵路径题的完整方案。**
+
+---
+
+## 第 11 章 一句话总结
+
+**如果只能从本篇带走一句话，那就是：**"矩阵深搜的解法，取决于'求什么'——求存在用搜索、求数量用 DP、求多模式用 Trie。"
+
+- **求存在**（LC 79）：DFS + 回溯标记；
+- **求数量**（LC 62）：DP；
+- **求多模式**（LC 212）：Trie + DFS。
+
+**而"标记是否恢复"仍是关键**——**路径搜索要恢复，与连通分量的"永久标记"相对。**
+
+**最后，矩阵深搜与"网格导航"相通**——**从迷宫生成到图像处理，都用到"遍历 + 标记 + 回溯"。**
+
+> [!note] 一句话带走
+> **"求存在用搜索、求数量用 DP、求多模式用 Trie；标记要恢复。"** 记住这一句，你面对任何矩阵深搜题，都能快速定下方案。**而"剪枝、记忆化、状态压缩"是它的三大优化手段。**
+
+---
+
+## 小结
+
+本篇用三道题讲清了矩阵上的"路径问题"。LeetCode 79 用"DFS + 回溯标记"搜索单词，其关键区别是"标记要恢复"（与连通分量的"永久标记"相对）；LeetCode 212 用"Trie + DFS"把"多次搜索"合并成"一次带剪枝的搜索"；LeetCode 62 则作为对照，说明"求路径数"为什么用 DP。
+
+贯穿全篇的核心认知有两条。其一，**"标记是否恢复"取决于"格子是否会被多条路径共用"**——连通分量不恢复，路径搜索要恢复。其二，**"求存在用搜索、求数量用 DP、求多模式用 Trie"**——解法取决于"求什么"。**把这两条握住，你面对任何矩阵路径问题，都有了实现的起点。**
+
+下一篇 [[10 搜索算法面试通关：模式识别与优化策略总结]] 是本专栏的收尾，将给出 BFS/DFS 的选型决策树、常见错误盘点，以及"记忆化搜索与 DP 的桥梁"。
+
+**最后补充一点落点。** 矩阵深搜把"搜索"与"DP"的分界线暴露得最清楚——**"求存在"用搜索、"求数量/最优"用 DP，这条判断来自"子问题是否重叠"。** 而"标记是否恢复"则区分了"路径搜索"与"连通分量"。**把这两条握住，你面对任何"矩阵上的路径问题"，都能先判断"求什么、怎么标记"。**
+
+**再补充一点。** 矩阵深搜的"Trie 剪枝"与"记忆化"是两种不同的优化——**前者"减少分支"（不是前缀就停），后者"避免重复"（算过就取）。** 两者可以组合使用，把"指数级"的搜索压到"可行"。**而"位运算"则是第三件武器——"把状态压进整数"。**
+
+**再补充最后一点。** 矩阵深搜的"标记-恢复"是它与"矩阵连通分量"的分水岭——**前者是"临时标记"（多条路径共用格子），后者是"永久标记"（格子只属于一个分量）。** 判断用哪种，只需问一句"这个格子会不会被别的路径用到"。**这一问，能帮你在两类矩阵搜索间快速切换。** 而"求存在还是求数量"则决定了"用搜索还是 DP"——**这两条判断，是矩阵路径题的第一道关卡。** 而"Trie 剪枝"与"记忆化"则是第二道关卡——**它们把"指数级"的搜索压到"可行"。**
+
+---
+
+## 参考资料
+
+1. LeetCode 79. Word Search. https://leetcode.cn/problems/word-search/
+2. LeetCode 212. Word Search II. https://leetcode.cn/problems/word-search-ii/
+3. LeetCode 62. Unique Paths. https://leetcode.cn/problems/unique-paths/
+4. Cormen, T. H., et al. *Introduction to Algorithms* (4th ed.). MIT Press, 2022. 第 20 章"基本的图算法"。
+
+---
+
+> [!note] 思考题
+> 1. LC 79 为什么"标记后要恢复"，而 LC 200（岛屿数量）不用？请从"格子是否被多条路径共用"说明。
+> 2. Trie 剪枝为什么能把"$k$ 次搜索"合并成"一次"？
+> 3. "求路径存在"与"求路径数"为什么解法不同？请从"子问题重叠"说明。
+> 4. 若 LC 79 的单词长度为 $L$，最坏复杂度是多少？为什么？
+> 5. 请设计一个"用 Trie + DFS"解决"矩阵中找所有词典单词"的完整方案。

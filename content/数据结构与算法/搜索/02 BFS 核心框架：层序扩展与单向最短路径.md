@@ -1,56 +1,52 @@
 ---
 title: "BFS 核心框架：层序扩展与单向最短路径——Word Ladder 深度解析"
-date: 2026-04-28
-tags: [BFS, LeetCode, Word Ladder, 广度优先搜索, 最短路径, 算法, 面试]
+date: 2026-10-11
+tags: [BFS, LeetCode, 127, 433, Word Ladder, 广度优先搜索, 最短路径, 算法, 面试]
 aliases: [Word Ladder BFS, BFS最短路径, 单词接龙, LeetCode 127]
 ---
 
 # BFS 核心框架：层序扩展与单向最短路径——Word Ladder 深度解析
 
-## 摘要
+**摘要：**
 
-Word Ladder（单词接龙）是 BFS 的教科书级例题，也是面试中考察"能否将 BFS 模板运用于非显式图"的标准题目。本文以这道题为主线，深入剖析 BFS 的三个核心设计决策：为什么入队时就要标记 visited、如何构建隐式图、以及为什么单向 BFS 在某些情况下不够快——后者引出了下一篇文章的双向 BFS。全程通过详细的过程推演和逐步改进，帮助你真正理解 BFS 而不只是记住模板。
+Word Ladder（单词接龙）是 BFS 的教科书级例题，也是面试中考察"**能否把 BFS 模板运用于非显式图**"的标准题目。本文以它为主线，深入剖析 BFS 的三个核心设计决策：**为什么入队时就要标记 `visited`、如何高效构建隐式图的邻居关系、以及为什么单向 BFS 在某些情况下不够快**——后者引出了下一篇的双向 BFS。文中用 Go 语言实现，并逐层追问：为什么不能用 DFS、为什么"枚举 26 个字母"比"遍历整个字典"快、`steps` 的初值与返回值为什么容易搞错。全程通过详细的过程推演与逐步改进，帮你真正理解 BFS 而非只记住模板。
 
 ---
 
 ## 第 1 章 题目解析：Word Ladder 是什么
 
-### 1.1 LeetCode 127 - Word Ladder
+### 1.1 题目
 
-**题目**（中等，实际难度偏难）：
+**LeetCode 127 - Word Ladder**（中等，实际偏难）
 
-给你两个单词 `beginWord` 和 `endWord`，以及一个字典 `wordList`。如果两个单词**每次只改变一个字母**，且改变后的单词必须在字典里，那么从 `beginWord` 到 `endWord` 的最短转换序列的长度是多少？如果不能转换，返回 0。
+给你两个单词 `beginWord`、`endWord` 和一个字典 `wordList`。若两个单词**每次只改变一个字母**、且改变后的单词必须在字典里，求从 `beginWord` 到 `endWord` 的**最短转换序列长度**。不能转换则返回 0。
 
-```
-输入：beginWord = "hit", endWord = "cog", wordList = ["hot","dot","dog","lot","log","cog"]
-输出：5
-解释："hit" → "hot" → "dot" → "dog" → "cog"，共 5 个单词
+```text
+输入: beginWord="hit", endWord="cog", wordList=["hot","dot","dog","lot","log","cog"]
+输出: 5（"hit"→"hot"→"dot"→"dog"→"cog"）
 
-输入：beginWord = "hit", endWord = "cog", wordList = ["hot","dot","dog","lot","log"]
-输出：0
-解释：endWord "cog" 不在字典中，无法完成转换
+输入: beginWord="hit", endWord="cog", wordList=["hot","dot","dog","lot","log"]
+输出: 0（"cog" 不在字典中）
 ```
 
 ### 1.2 问题的本质：最短路径
 
-"每次改变一个字母"是从一个状态到另一个状态的转移规则；"改变后必须在字典里"是转移的合法性约束；"最短转换序列的长度"是最短路径。
+把问题映射到图论模型：
 
-将问题映射到图论模型：
+- **节点**：每个单词（含 `beginWord`）；
+- **边**：两个单词差一个字母则连边（无权图，边代价为 1）；
+- **问题**：从 `beginWord` 到 `endWord` 的最短路径长度。
 
-- **节点**：每个单词（包括 `beginWord`）
-- **边**：两个单词之间差一个字母，则连一条边（无权图，每条边代价为 1）
-- **问题**：从 `beginWord` 到 `endWord` 的最短路径长度
-
-这是一个**等权无向图上的单源最短路径**问题，BFS 是最优算法。
+**这是一个"等权无向图上的单源最短路径"问题，BFS 是最优算法。**
 
 > [!info] 核心概念：隐式图
-> 本题的图没有被显式给出，而是由"两词差一字母"这一规则隐式定义。面试中大量搜索题都是隐式图——图的节点和边需要在搜索过程中动态生成。BFS 完全适用于隐式图。
+> 本题的图**没有被显式给出**，而是由"两词差一字母"这一规则隐式定义。**面试中大量搜索题都是隐式图**——图的节点和边需要在搜索过程中动态生成。**BFS 完全适用于隐式图。**
 
 ### 1.3 为什么不能用 DFS
 
-如果用 DFS，从 `beginWord` 出发，一头扎入某条路径，可能走了很长才到 `endWord`，但这不是最短路径。DFS 需要探索所有路径后取最短，代价极高。
+**若用 DFS，从 `beginWord` 出发一头扎入某条路径，可能走了很长才到 `endWord`，但这不是最短路径。** DFS 要探索所有路径后取最短，代价极高。
 
-BFS 则按层扩展，**第一次到达 `endWord` 时的步数，就是最短路径长度**。
+**BFS 按层扩展，第一次到达 `endWord` 时的步数就是最短路径长度。**
 
 ---
 
@@ -58,325 +54,241 @@ BFS 则按层扩展，**第一次到达 `endWord` 时的步数，就是最短路
 
 ### 2.1 朴素方法的问题
 
-最直观的方法：对每个单词 $w$，遍历所有字典单词，检查是否差一个字母。
+最直观的方法：对每个单词，遍历所有字典单词、检查是否差一个字母。
 
-```java
-// 朴素方法：O(n * L) 来找一个单词的所有邻居
-// n = 字典大小，L = 单词长度
-List<String> getNeighbors(String word, Set<String> wordSet) {
-    List<String> neighbors = new ArrayList<>();
-    for (String dictWord : wordSet) {
-        if (differByOne(word, dictWord)) {
-            neighbors.add(dictWord);
+```go
+// 朴素方法：O(n·L) 找一个单词的所有邻居
+func getNeighborsNaive(word string, wordSet map[string]bool) []string {
+    var neighbors []string
+    for dictWord := range wordSet {
+        if differByOne(word, dictWord) {
+            neighbors = append(neighbors, dictWord)
         }
     }
-    return neighbors;
+    return neighbors
 }
 
-boolean differByOne(String a, String b) {
-    int diff = 0;
-    for (int i = 0; i < a.length(); i++) {
-        if (a.charAt(i) != b.charAt(i)) diff++;
+func differByOne(a, b string) bool {
+    diff := 0
+    for i := 0; i < len(a); i++ {
+        if a[i] != b[i] {
+            diff++
+        }
     }
-    return diff == 1;
+    return diff == 1
 }
 ```
 
-这样每次查找邻居需要 $O(n \cdot L)$。对于 $n$ 个单词的 BFS，总复杂度为 $O(n^2 L)$。
-
-**LeetCode 题目约束**：`wordList.length <= 5000`，`beginWord.length <= 10`。$n^2 L \approx 5000^2 \times 10 = 2.5 \times 10^8$，接近超时边界。
+**这样每次查邻居是 $O(n \cdot L)$，整个 BFS 是 $O(n^2 L)$。** 题目约束 `n ≤ 5000`、`L ≤ 10`，$5000^2 \times 10 = 2.5 \times 10^8$，**接近超时边界**。
 
 ### 2.2 高效方法：枚举变形
 
-更好的方法：对当前单词的每个位置，枚举 26 个字母（'a' 到 'z'），检查变形后的单词是否在字典中。
+**更好的方法：对当前单词的每个位置，枚举 26 个字母，检查变形后的单词是否在字典中。**
 
-```java
-// 高效方法：O(26 * L) 来找一个单词的所有邻居
-List<String> getNeighbors(String word, Set<String> wordSet) {
-    List<String> neighbors = new ArrayList<>();
-    char[] chars = word.toCharArray();
-
-    for (int i = 0; i < chars.length; i++) {
-        char original = chars[i];
-        for (char c = 'a'; c <= 'z'; c++) {
-            if (c == original) continue;  // 不改变（不是有效转移）
-            chars[i] = c;
-            String newWord = new String(chars);
-            if (wordSet.contains(newWord)) {
-                neighbors.add(newWord);
+```go
+// 高效方法：O(26·L) 找一个单词的所有邻居
+func getNeighbors(word string, wordSet map[string]bool) []string {
+    var neighbors []string
+    b := []byte(word)
+    for i := 0; i < len(b); i++ {
+        orig := b[i]
+        for c := byte('a'); c <= 'z'; c++ {
+            if c == orig {
+                continue
+            }
+            b[i] = c
+            if wordSet[string(b)] {
+                neighbors = append(neighbors, string(b))
             }
         }
-        chars[i] = original;  // 恢复，准备修改下一个位置
+        b[i] = orig // 恢复
     }
-    return neighbors;
+    return neighbors
 }
 ```
 
-每次查找邻居的复杂度降为 $O(26L)$，总复杂度 $O(26nL)$，远快于朴素方法。
+**为什么这样更快？** 因为它**不遍历整个字典**，只枚举 $26L$ 个"可能的变形"，再用哈希表 $O(1)$ 判断"变形是否在字典中"。**总代价 $O(26L)$ 级别，远快于 $O(nL)$。**
 
-**为什么这样更快？** 哈希集合的 `contains` 操作是 $O(L)$（计算字符串哈希的代价），所以枚举 $26 \times L$ 个变形，每次 $O(L)$ 检查，总计 $O(26L^2)$。比起朴素方法对每个字典单词 $O(L)$ 比较，这种方式不需要遍历整个字典。
+**"枚举可能的后继"而非"遍历所有节点找后继"，是隐式图搜索的关键优化**——**当"后继空间"远小于"节点空间"时，前者更优。**
 
 ---
 
 ## 第 3 章 BFS 实现：完整代码与逐行解析
 
-### 3.1 完整实现
+### 3.1 Go 实现
 
-```java
-public int ladderLength(String beginWord, String endWord, List<String> wordList) {
-    // 1. 将字典转为 HashSet，支持 O(L) 的查找
-    Set<String> wordSet = new HashSet<>(wordList);
-
-    // 2. endWord 不在字典中，直接返回 0
-    if (!wordSet.contains(endWord)) return 0;
-
-    // 3. BFS 初始化
-    Queue<String> queue = new LinkedList<>();
-    Set<String> visited = new HashSet<>();
-    queue.offer(beginWord);
-    visited.add(beginWord);  // 入队时立即标记
-
-    int steps = 1;  // 起点本身算 1 个单词（题目要求返回序列长度，不是边数）
-
-    // 4. BFS 主循环
-    while (!queue.isEmpty()) {
-        int size = queue.size();  // 当前层的单词数量
-
-        for (int i = 0; i < size; i++) {
-            String cur = queue.poll();
-
-            // 5. 对当前单词的每个位置，枚举 26 个字母
-            char[] chars = cur.toCharArray();
-            for (int j = 0; j < chars.length; j++) {
-                char original = chars[j];
-                for (char c = 'a'; c <= 'z'; c++) {
-                    if (c == original) continue;
-                    chars[j] = c;
-                    String next = new String(chars);
-
-                    // 6. 找到终点，返回步数
-                    if (next.equals(endWord)) return steps + 1;
-
-                    // 7. 有效且未访问的邻居，加入下一层
-                    if (wordSet.contains(next) && !visited.contains(next)) {
-                        queue.offer(next);
-                        visited.add(next);  // 入队时标记，防止重复入队
-                    }
-                }
-                chars[j] = original;  // 恢复
-            }
-        }
-        steps++;  // 当前层处理完，步数 +1
+```go
+func ladderLength(beginWord, endWord string, wordList []string) int {
+    wordSet := make(map[string]bool, len(wordList))
+    for _, w := range wordList {
+        wordSet[w] = true
+    }
+    if !wordSet[endWord] {
+        return 0 // endWord 不在字典，不可达
     }
 
-    return 0;  // 无法到达 endWord
+    queue := []string{beginWord}
+    visited := map[string]bool{beginWord: true}
+    steps := 1 // 起点本身算 1 个单词
+
+    for len(queue) > 0 {
+        size := len(queue)
+        for i := 0; i < size; i++ {
+            cur := queue[0]
+            queue = queue[1:]
+
+            b := []byte(cur)
+            for j := 0; j < len(b); j++ {
+                orig := b[j]
+                for c := byte('a'); c <= 'z'; c++ {
+                    if c == orig {
+                        continue
+                    }
+                    b[j] = c
+                    next := string(b)
+
+                    if next == endWord {
+                        return steps + 1 // 找到终点
+                    }
+                    if wordSet[next] && !visited[next] {
+                        queue = append(queue, next)
+                        visited[next] = true // 入队时标记
+                    }
+                }
+                b[j] = orig // 恢复（注意位置）
+            }
+        }
+        steps++
+    }
+    return 0
 }
 ```
 
-### 3.2 关键设计决策逐一解释
+### 3.2 四个关键设计决策
 
-**决策一：为什么 `steps` 初始化为 1？**
+**决策一：为什么 `steps` 初始化为 1？** 题目要的是**序列长度（单词数）**，不是**边数**。`beginWord` 本身算一个单词，所以从 1 开始；找到 `endWord` 时返回 `steps + 1`。
 
-题目要求返回的是转换序列的**长度**（单词数量），而不是转换的**次数**（边的数量）。`beginWord` 本身算序列中的一个单词，所以 `steps` 从 1 开始。当找到 `endWord` 时，返回 `steps + 1`（加上 `endWord` 本身）。
+**决策二：为什么 `visited[next] = true` 在入队时做？** 看一个场景——`cur=A` 的邻居有 `B`、`cur=D` 的邻居也有 `B`：
 
-另一种理解：`steps` 始终表示"当前正在处理的这一层，距离 `beginWord` 的边数"。第 0 层（`beginWord` 本身）不在循环中处理，所以进入循环时 `steps = 1` 表示第 1 层。找到 `endWord` 时，`steps + 1` 是总单词数。
+```text
+若出队才标记：
+  处理 A：B 入队（未标记）
+  处理 D：B 再次入队（还没出队）
+  队列：[B, B] ← 重复
 
-**决策二：为什么 `visited.add(next)` 要在入队时做，而不是出队时？**
-
-考虑一个场景：如果 `next` 在 `visited` 中的时间点是出队后：
-
-```
-状态：cur=A，邻居有 B 和 C
-     cur=D，邻居也有 B
-
-处理 A 时：B 入队（未标记）
-处理 D 时：B 再次入队（因为还没出队，还没标记）
-队列：[B, C, B]  ← B 出现了两次！
+若入队就标记：
+  处理 A：B 入队并标记
+  处理 D：B 已标记，跳过
+  队列：[B] ← 正确
 ```
 
-如果 B 入队时立即标记：
+**入队时标记，确保每个节点最多入队一次。**
 
-```
-处理 A 时：B 入队，标记 B
-处理 D 时：B 已被标记，跳过
-队列：[B, C]  ← 正确
-```
+**决策三：`wordSet[next] && !visited[next]` 的检查顺序。** 先查"是否合法单词"，再查"是否已访问"——**两个条件都满足才入队**。注意 `beginWord` 可能不在 `wordSet` 中，但它是起点，无需在字典里。
 
-入队时标记，确保每个节点**最多入队一次**，避免了重复处理，时间复杂度正确。
+**决策四：`endWord` 的检查放在"生成邻居时"还是"出队时"？** 两种都正确：出队时检查，`endWord` 入队后还要等被处理才返回；入队时检查（本文），发现即返回，逻辑更清晰。**注意入队时检查的步数是 `steps + 1`**（因为此时 `steps` 还未递增）。
 
-**决策三：`wordSet.contains(next)` 和 `!visited.contains(next)` 的检查顺序**
-
-习惯上先检查 `wordSet`（是否是合法单词），再检查 `visited`（是否已访问）。两个条件都必须满足才能入队。注意 `beginWord` 可能不在 `wordSet` 中，但它是起点，不需要在字典里。
-
-**决策四：为什么 `endWord` 的检查放在邻居生成时，而不是出队时？**
-
-放在出队时：
-
-```java
-String cur = queue.poll();
-if (cur.equals(endWord)) return steps;  // 出队时检查
-```
-
-放在入队时（即邻居生成时，如本文代码）：
-
-```java
-if (next.equals(endWord)) return steps + 1;  // 入队时检查
-```
-
-两种写法都正确，但效果略有不同：
-- 出队时检查：`endWord` 被入队后还要等到被处理才返回，多耗一点时间（可忽略）
-- 入队时检查（本文代码）：发现 `endWord` 立即返回，逻辑更清晰
-
-本文选用入队时检查，并注意步数要 `+1`（因为此时 `steps` 还未递增）。
+> [!warning] 生产避坑：`b[j] = orig` 的恢复位置
+> `b[j] = orig` 的恢复，**必须放在对位置 `j` 的 26 个字母枚举"全部完成后"**（即外层 `for j` 循环的末尾），而不是内层 `for c` 循环里。**若位置放错，`b[j]` 会残留为 `'z'`，导致下一个位置 `j+1` 的枚举基于错误的字符数组。** 这是本题最隐蔽的 bug 之一。
 
 ---
 
-## 第 4 章 逐步模拟：追踪 BFS 的执行过程
+## 第 4 章 逐步模拟
 
-用 `beginWord = "hit"`, `endWord = "cog"`, `wordList = ["hot","dot","dog","lot","log","cog"]` 模拟：
+以 `beginWord="hit"`、`endWord="cog"`、`wordList=["hot","dot","dog","lot","log","cog"]` 模拟：
 
-**初始化**：
-```
-queue = ["hit"]
-visited = {"hit"}
-steps = 1
-```
+```text
+初始化: queue=["hit"], visited={"hit"}, steps=1
 
-**第 1 层（steps=1）**：处理 "hit"
+第 1 层（steps=1）：处理 "hit"
+  枚举变形 → 发现 "hot"（h→o 位置 1）在字典
+  queue=["hot"], visited={"hit","hot"}, steps=2
 
-枚举变形：
-- h→a,b,...,z 位置 0：无字典单词
-- i→a,b,...,z 位置 1：`hot`（h**o**t）在字典中，入队
-- t→a,b,...,z 位置 2：无字典单词
+第 2 层（steps=2）：处理 "hot"
+  位置 0(h)：发现 "dot"、"lot"
+  queue=["dot","lot"], visited 加 "dot","lot", steps=3
 
-```
-queue = ["hot"]
-visited = {"hit", "hot"}
-steps = 2
-```
+第 3 层（steps=3）：处理 "dot"、"lot"
+  "dot" → 位置 2(t)：发现 "dog"
+  "lot" → 位置 2(t)：发现 "log"
+  queue=["dog","log"], steps=4
 
-**第 2 层（steps=2）**：处理 "hot"
-
-枚举变形：
-- 位置 0 (h)：`dot`(d**o**t)、`lot`(l**o**t) 在字典中，入队
-- 位置 1 (o)：无
-- 位置 2 (t)：无
-
-```
-queue = ["dot", "lot"]
-visited = {"hit", "hot", "dot", "lot"}
-steps = 3
+第 4 层（steps=4）：处理 "dog"、"log"
+  "dog" → 位置 2(g)：发现 "cog" == endWord → 返回 steps+1 = 5 ✓
 ```
 
-**第 3 层（steps=3）**：处理 "dot" 和 "lot"
-
-处理 "dot"：
-- 位置 0 (d)：`lot`（已访问）
-- 位置 1 (o)：无
-- 位置 2 (t)：`dog`(do**g**) 在字典中，入队
-
-处理 "lot"：
-- 位置 0 (l)：`dot`（已访问）
-- 位置 2 (t)：`log`(lo**g**) 在字典中，入队
-
-```
-queue = ["dog", "log"]
-visited = {"hit", "hot", "dot", "lot", "dog", "log"}
-steps = 4
-```
-
-**第 4 层（steps=4）**：处理 "dog" 和 "log"
-
-处理 "dog"：
-- 位置 2 (g)：`cog`(co**g**) 在字典中
-- `cog` 等于 `endWord`！返回 `steps + 1 = 4 + 1 = 5` ✅
-
-**最终答案**：5，对应路径 `hit → hot → dot → dog → cog`
+**最终答案 5，路径 `hit → hot → dot → dog → cog`。**
 
 ---
 
-## 第 5 章 复杂度分析与优化空间
+## 第 5 章 复杂度与 BFS 的内在局限
 
-### 5.1 时间复杂度
+### 5.1 复杂度
 
-设：
-- $n$ = 字典大小
-- $L$ = 单词长度
-- $d$ = 最短路径长度（层数）
+设 $n$ 为字典大小、$L$ 为单词长度：
 
-每一层，我们处理若干单词，每个单词枚举 $26 \times L$ 个变形，每次 HashSet 查找 $O(L)$：
+- **时间**：每个单词枚举 $26L$ 个变形、每次哈希查找 $O(L)$，故每词 $O(26L^2)$；最多处理 $n$ 个单词 → **$O(26 n L^2)$**；
+- **空间**：`wordSet`、`visited`、`queue` 各 $O(nL)$ → **$O(nL)$**。
 
-- 每个单词的处理代价：$O(26 \times L \times L) = O(26L^2)$
-- 最多处理 $n$ 个单词（每个单词最多入队一次）
-- **总时间复杂度**：$O(26 \times n \times L^2)$
+### 5.2 BFS 的内在局限：搜索的不对称性
 
-### 5.2 空间复杂度
+**单向 BFS 从 `beginWord` 出发，一层层向外扩散，直到碰到 `endWord`。** 若状态空间很大（分支因子 $b$ 很大），第 $k$ 层就有 $b^k$ 个节点——**BFS 处理的节点数随层数指数增长。**
 
-- `wordSet`：$O(nL)$
-- `visited`：$O(nL)$
-- `queue`：$O(nL)$（最坏情况下所有单词同时在队列中）
-- **总空间复杂度**：$O(nL)$
+若目标在第 $d$ 层，BFS 需处理 $O(b^d)$ 个节点。
 
-### 5.3 BFS 的内在局限：搜索的不对称性
+**一个关键问题：能不能更快？** ——**从两端同时搜，各搜 $d/2$ 层**：
 
-单向 BFS 从 `beginWord` 出发，一层一层向外扩散，直到碰到 `endWord`。想象一下，如果状态空间很大（如分支因子 $b$ 很大），第 $k$ 层就有 $b^k$ 个节点，BFS 需要处理的节点数随层数**指数增长**。
+$$O(b^{d/2}) + O(b^{d/2}) = 2 \cdot O(b^{d/2}) \ll O(b^d)$$
 
-如果目标节点在第 $d$ 层，BFS 需要处理 $O(b^d)$ 个节点。
-
-**一个关键问题**：能不能更快？——从两端同时搜，各搜 $d/2$ 层：
-
-$$O(b^{d/2}) + O(b^{d/2}) = 2 \times O(b^{d/2}) \ll O(b^d)$$
-
-这就是**双向 BFS**的核心思想，也是下一篇文章 Word Ladder II 引入的技术。
+**这就是双向 BFS 的核心思想**，也是下一篇 Word Ladder II 引入的技术。**"从两端搜"这一想法，把指数级的 $b^d$ 压成了 $b^{d/2}$——这是一次量级的改善。**
 
 ---
 
 ## 第 6 章 变体题目与举一反三
 
-### 6.1 变体一：返回所有最短路径
+### 6.1 返回所有最短路径（LeetCode 126）
 
-这正是 Word Ladder II（LeetCode 126）的要求，难度大幅提升，需要在 BFS 中构建"前驱图"，再用 DFS 枚举所有路径。详见下一篇文章。
+这正是 Word Ladder II 的要求，难度大幅提升——需在 BFS 中构建"前驱图"，再用 DFS 枚举所有路径。详见下一篇。
 
-### 6.2 变体二：最少跳跃步数（Jump Game II）
+### 6.2 最少跳跃步数（LeetCode 45 Jump Game II）
 
-**LeetCode 45 - Jump Game II**：数组中每个元素表示在该位置可以跳跃的最大步数，求从 `nums[0]` 到达最后一个位置的最少跳跃次数。
+数组中每个元素表示"在该位置能跳的最大步数"，求到达最后一个位置的最少跳跃次数。
 
-这也是一个"最少步数"问题，可以用 BFS 解（把位置看作节点，可达的位置连边）：
+**这也是"最少步数"问题**，可用 BFS 解（位置是节点，可达位置连边）：
 
-```java
-// BFS 解法（非最优，但展示了 BFS 的泛化能力）
-public int jump(int[] nums) {
-    int n = nums.length;
-    Queue<Integer> queue = new LinkedList<>();
-    Set<Integer> visited = new HashSet<>();
-    queue.offer(0);
-    visited.add(0);
-    int steps = 0;
-
-    while (!queue.isEmpty()) {
-        int size = queue.size();
-        for (int i = 0; i < size; i++) {
-            int cur = queue.poll();
-            if (cur == n - 1) return steps;
-            for (int j = 1; j <= nums[cur]; j++) {
-                int next = cur + j;
-                if (next < n && !visited.contains(next)) {
-                    queue.offer(next);
-                    visited.add(next);
+```go
+func jump(nums []int) int {
+    n := len(nums)
+    queue := []int{0}
+    visited := map[int]bool{0: true}
+    steps := 0
+    for len(queue) > 0 {
+        size := len(queue)
+        for i := 0; i < size; i++ {
+            cur := queue[0]
+            queue = queue[1:]
+            if cur == n-1 {
+                return steps
+            }
+            for j := 1; j <= nums[cur]; j++ {
+                next := cur + j
+                if next < n && !visited[next] {
+                    queue = append(queue, next)
+                    visited[next] = true
                 }
             }
         }
-        steps++;
+        steps++
     }
-    return -1;
+    return -1
 }
 ```
 
-（注：Jump Game II 实际上有 $O(n)$ 的贪心解，BFS 是 $O(n^2)$，但理解 BFS 的通用性更重要。）
+**注意这道题实际有 $O(n)$ 的贪心解**（BFS 是 $O(n^2)$）——**但它展示了 BFS 的泛化能力**：任何"最少步数"问题都能套 BFS 模板。
 
-### 6.3 变体三：最短路径变形——最小基因变化
+### 6.3 最小基因变化（LeetCode 433）
 
-**LeetCode 433 - Minimum Genetic Mutation**：和 Word Ladder 几乎相同，区别是字符集从 26 个字母变成了 `{'A', 'C', 'G', 'T'}` 4 个字符。直接套用 Word Ladder 的模板，修改枚举字符集即可。这说明 BFS 模板的核心是框架，字符集/转移规则是参数。
+与 Word Ladder 几乎相同，只是字符集从 26 个字母变成 `{'A','C','G','T'}` 4 个字符。**直接套用模板，修改枚举字符集即可。** **这说明 BFS 模板的核心是框架，字符集/转移规则只是参数。**
 
 ### 6.4 识别"BFS 最短路径"题型的特征
 
@@ -384,74 +296,525 @@ public int jump(int[] nums) {
 |------|------|
 | 要求"最少步数/最短路径/最小操作次数" | BFS 的经典信号 |
 | 每次操作代价相同（无权图） | BFS 适用；代价不同则用 Dijkstra |
-| 有明确的"合法性"约束（如必须在字典里） | 对应 BFS 中的 `wordSet.contains` 检查 |
-| 状态可以用哈希表表示 | 说明 visited 集合可以高效实现 |
-| 状态空间有限（否则 BFS 会无限扩展） | 确保 BFS 能终止 |
+| 有明确的"合法性"约束 | 对应 `wordSet[next]` 检查 |
+| 状态可用哈希表表示 | 说明 `visited` 可高效实现 |
+| 状态空间有限 | 确保 BFS 能终止 |
+
+**这五条特征，能帮你在看到新题时立刻判断"这是不是 BFS 最短路径题"。**
 
 ---
 
-## 第 7 章 完整代码汇总与面试注意事项
+## 第 7 章 面试注意事项
 
-### 7.1 面试可直接使用的代码
+### 7.1 四个常见错误
 
-```java
-class Solution {
-    public int ladderLength(String beginWord, String endWord, List<String> wordList) {
-        Set<String> wordSet = new HashSet<>(wordList);
-        if (!wordSet.contains(endWord)) return 0;
+1. **`steps` 的初值/返回值搞错**：题目要"序列长度"，`beginWord` 算 1，找到 `endWord` 时加 1；
+2. **`visited` 标记在出队时做**：导致同一单词多次入队，变慢；
+3. **没检查 `endWord` 是否在字典中**：不在则永远不可达，直接返回 0；
+4. **用 `List` 而非 `Set` 存字典**：`List.contains` 是 $O(n)$，`Set` 是 $O(1)$，差距巨大。
 
-        Queue<String> queue = new LinkedList<>();
-        Set<String> visited = new HashSet<>();
-        queue.offer(beginWord);
-        visited.add(beginWord);
-        int steps = 1;
+### 7.2 一个可复用的表达模板
 
-        while (!queue.isEmpty()) {
-            int size = queue.size();
-            for (int i = 0; i < size; i++) {
-                String cur = queue.poll();
-                char[] chars = cur.toCharArray();
-                for (int j = 0; j < chars.length; j++) {
-                    char orig = chars[j];
-                    for (char c = 'a'; c <= 'z'; c++) {
-                        if (c == orig) continue;
-                        chars[j] = c;
-                        String next = new String(chars);
-                        if (next.equals(endWord)) return steps + 1;
-                        if (wordSet.contains(next) && !visited.contains(next)) {
-                            queue.offer(next);
-                            visited.add(next);
-                        }
-                        chars[j] = orig;  // 注意：这行应在内循环中！
-                    }
-                    chars[j] = orig;  // 恢复当前位置的字符
-                }
+面试中讲 Word Ladder，建议按这条链：
+
+1. **抽象为图**："单词是节点，差一字母连边，问题是最短路径。"
+2. **选 BFS**："等权图最短路径，必须用 BFS。"
+3. **讲邻居构建**："枚举 26 个字母的变形，而非遍历字典。"
+4. **讲 visited 时机**："入队时标记，防重复入队。"
+5. **讲复杂度**：$O(26nL^2)$ 时间、$O(nL)$ 空间。
+
+**第 1 步是关键**——它表明你理解了"隐式图"这一抽象，而非在套模板。
+
+> [!info] 从"显式图"到"隐式图"
+> 教科书上的 BFS 都是在**显式图**（邻接表已给出）上讲的。而面试里的 BFS，**大多是隐式图**——图的边需要"即时生成"。**"如何高效生成邻居"因此成了隐式图搜索的关键**（本题的"枚举 26 字母"就是答案）。**理解了这一差异，你就明白为什么"会背 BFS 模板"不等于"会解 BFS 题"。**
+
+---
+
+## 第 8 章 BFS 的更多变体与工程应用
+
+### 8.1 多源 BFS
+
+**普通 BFS 是"单源"的**——从一个起点出发。**而"多源 BFS"从多个起点同时出发**，一次 BFS 就能求出"每个点到最近源的距离"。
+
+**实现上，只需把"所有源"一开始就放进队列**：
+
+```go
+// 多源 BFS：求每个 0 到最近的 0 的距离（LC 542 矩阵）
+func updateMatrix(mat [][]int) [][]int {
+    m, n := len(mat), len(mat[0])
+    dist := make([][]int, m)
+    queue := [][2]int{}
+    for i := 0; i < m; i++ {
+        dist[i] = make([]int, n)
+        for j := 0; j < n; j++ {
+            if mat[i][j] == 0 {
+                dist[i][j] = 0
+                queue = append(queue, [2]int{i, j}) // 所有 0 都是源
+            } else {
+                dist[i][j] = -1
             }
-            steps++;
         }
-        return 0;
     }
+    dirs := [][2]int{{1, 0}, {-1, 0}, {0, 1}, {0, -1}}
+    for len(queue) > 0 {
+        cur := queue[0]
+        queue = queue[1:]
+        for _, d := range dirs {
+            ni, nj := cur[0]+d[0], cur[1]+d[1]
+            if ni >= 0 && ni < m && nj >= 0 && nj < n && dist[ni][nj] == -1 {
+                dist[ni][nj] = dist[cur[0]][cur[1]] + 1
+                queue = append(queue, [2]int{ni, nj})
+            }
+        }
+    }
+    return dist
 }
 ```
 
-> [!warning] 生产避坑：chars[j] 的恢复时机
-> `chars[j] = orig` 的恢复必须放在对 `j` 这个位置的 26 个字母枚举**全部完成后**，而不是在内层 `for c` 循环里。如果写在内层循环里（如某些错误实现），每次修改后立即恢复，下次循环又会从 `orig` 开始修改，逻辑正确。但如果写在内层循环外又没有写，则 `chars[j]` 的值会是 'z'（最后一次枚举的字符），导致下一个位置 `j+1` 的枚举基于错误的字符数组。**正确位置是外层 `for j` 循环的末尾**。
+**"多源 BFS"的巧妙在于"把多个源一起入队"**——**于是 BFS 的"层"自动对应"到最近源的距离"。** **它避免了"对每个源各做一次 BFS"（$O(k \cdot mn)$），一次 BFS（$O(mn)$）就够。**
 
-### 7.2 面试中的常见错误
+### 8.2 0-1 BFS
 
-1. **`steps` 的初值和返回值搞错**：题目要的是序列长度（单词数），不是边数。`beginWord` 算 1，找到 `endWord` 时加 1。
-2. **visited 标记在出队时做**：导致同一单词多次入队，BFS 速度变慢。
-3. **没有检查 `endWord` 是否在字典中**：`endWord` 若不在字典中，永远无法到达，直接返回 0。
-4. **使用 List 而非 Set 存字典**：`List.contains` 是 $O(n)$，而 `Set.contains` 是 $O(L)$（哈希），差距巨大。
+**若边权只有 0 和 1，可以用"0-1 BFS"**——**用双端队列（Deque）：边权 0 的邻居放队头、边权 1 的放队尾。** 这样仍能保证"按距离递增"扩展，复杂度 $O(V+E)$。
+
+**"0-1 BFS"是"BFS 与 Dijkstra 的中间态"**——**它处理"边权只有两种"的特殊情况，比 Dijkstra 更简单、更快。** 它说明：**"BFS 只适用于无权图"这一说法不够精确——它适用于"边权相等的图"，0-1 BFS 则处理"边权为 0/1"的图。**
+
+### 8.3 BFS 的工程应用
+
+**BFS 在工程里最常见的应用，是"无权图最短路径"**：
+
+- **社交网络**：两个人之间的"最短好友链"（几度人脉）；
+- **网络路由**：以"跳数"为代价找最短路径；
+- **游戏 AI**：格子上"最少步数"到达目标；
+- **爬虫**：按"距起点的层数"逐层抓取；
+- **依赖解析**：从某包出发，逐层找出它依赖的所有包。
+
+**它们的共同点，是"每一步代价相同"**——**而 BFS 保证"第一次访问到某点时的距离就是最短距离"。**
+
+### 8.4 一个值得记住的对照
+
+| BFS 变体 | 适用 | 数据结构 |
+|---------|------|---------|
+| 普通 BFS | 无权图最短路径 | 队列 |
+| 多源 BFS | 多起点、求最近源 | 队列（多源入队） |
+| 0-1 BFS | 边权 0/1 | 双端队列 |
+| 双向 BFS | 已知终点、求最短路 | 两个队列 |
+| Dijkstra | 边权非负 | 优先队列 |
+
+**这张表说明：BFS 是一个"家族"**——**从普通 BFS 到多源、0-1、双向、Dijkstra，是"在'代价'与'信息'上逐步放宽/增强"。** **理解了这一家族，你面对任何"最短路径"问题，都能选对工具。**
+
+> [!info] BFS 家族：一条"代价轴"
+> BFS 家族的演化，可以看成一条"代价轴"：**边权全等 → 普通 BFS；边权 0/1 → 0-1 BFS；边权非负 → Dijkstra。** **理解了这条轴，你就明白"为什么 BFS 只适用于无权图"——因为一旦边权不等，'按层扩展'就不再保证最短。** 这是"算法选择取决于问题结构"的又一例证。
 
 ---
 
-## 本章小结
+## 第 9 章 BFS 的面试追问与复杂度速查
 
-Word Ladder 是一道把 BFS 的所有核心要素都体现出来的题目：隐式图的构建、visited 的设计、层序感知、以及与"最短路径"的联系。掌握了这道题，就掌握了 BFS 的框架。
+### 9.1 五个高频追问
 
-下一篇文章 Word Ladder II 在此基础上加了"返回所有最短路径"的要求，这将引出两个关键技术：前驱图构建（在 BFS 阶段记录路径来源）和双向 BFS（从两端同时搜索以减少复杂度）。
+**追问一："为什么 `visited` 要在入队时标记？"** 答：出队时标记会导致同一节点多次入队——**入队时标记保证"每节点最多入队一次"。**
+
+**追问二："为什么用 `size := len(queue)` 切层？"** 答：当前层节点出队时会加入下一层节点，**不固定 `size` 就会把两层混在一起。** 切层是"按层聚合"类需求的基础。
+
+**追问三："`steps` 为什么从 1 开始？"** 答：题目要的是"序列长度（单词数）"，而非"边数"——**`beginWord` 本身算一个单词。**
+
+**追问四："为什么枚举 26 个字母，而不是遍历字典？"** 答：枚举"可能的变形"只需 $O(26L)$，而遍历字典需要 $O(nL)$——**当"后继空间"远小于"节点空间"时，枚举后继更优。**
+
+**追问五："单向 BFS 的瓶颈在哪？"** 答：空间与时间都是 $O(b^d)$——**层宽随层数指数增长。** 加速手段是"双向 BFS"（降到 $O(b^{d/2})$）。
+
+### 9.2 复杂度速查
+
+| 变体 | 时间 | 空间 |
+|------|------|------|
+| 普通 BFS | $O(V+E)$ | $O(V)$ |
+| 矩阵 BFS | $O(mn)$ | $O(mn)$ |
+| Word Ladder | $O(26nL^2)$ | $O(nL)$ |
+| 双向 BFS | $O(b^{d/2})$ | $O(b^{d/2})$ |
+
+**这张表的价值，是"让你在面试中能快速给出复杂度"。**
+
+### 9.3 一个值得养成的习惯
+
+**写 BFS 前，先问三句**：
+
+1. **状态是什么？** 单词、格子、还是位置；
+2. **邻居怎么生成？** 枚举变形、四方向、还是转移规则；
+3. **`visited` 存什么？** 字符串、坐标、还是状态编码。
+
+**这三句，能定下 BFS 题的实现细节。**
+
+> [!info] BFS 的"三要素"
+> 任何 BFS 题，都可以拆成"**状态、邻居生成、visited**"三要素。**状态是"节点是什么"，邻居生成是"边怎么来"，visited 是"如何去重"。** 把这三要素想清楚，BFS 题就成了填空——**这与回溯题"三要素"、组合题"三处旋钮"是同一思路：把变化点提炼成要素。**
+
+### 9.4 一个总体的建议
+
+**BFS 题的练习，建议"按邻居生成方式"分类**：
+
+- **枚举变形**：Word Ladder、基因变化；
+- **四方向**：矩阵最短路、Flood Fill；
+- **转移规则**：跳跃游戏、迷宫；
+- **显式邻接表**：经典图。
+
+**四种邻居生成方式，对应四套实现细节。** **识别出"邻居怎么生成"，BFS 题就不难了。**
 
 ---
 
-*关联文章：BFS 与 DFS 全景导览：搜索算法的本质与适用边界 | 双向 BFS 与路径还原：Word Ladder II 深度解析*
+## 第 10 章 BFS 与状态压缩
+
+### 10.1 状态编码：把复杂状态压成一个 key
+
+**当"状态"是一个复杂的结构（如一个二维棋盘、一个字符串）时，需要把它"编码"成一个可哈希的 key**，以便放进 `visited`。
+
+**常见编码方式**：
+
+- **字符串拼接**：把状态拼成字符串（如 Word Ladder 的单词本身）；
+- **整数编码**：把状态压成一个整数（如位掩码、进制转换）；
+- **元组编码**：把多个值拼成一个 key（Go 里可用 `fmt.Sprintf` 或结构体）。
+
+**"状态编码"是 BFS 的一个关键实现细节**——**它决定了 `visited` 能否高效去重。**
+
+### 10.2 滑动谜题（LeetCode 773）：状态空间 BFS
+
+**题目**：在一个 $2 \times 3$ 的棋盘上，有数字 0-5，0 表示空位。每次可以把 0 与相邻的数字交换，求把棋盘变成 `[[1,2,3],[4,5,0]]` 的最少移动次数。
+
+**这是"状态空间 BFS"的典型**——**每个"棋盘布局"是一个状态，每次"交换"是一次转移：**
+
+```go
+func slidingPuzzle(board [][]int) int {
+    start := encode(board)
+    target := "123450"
+    if start == target {
+        return 0
+    }
+    // 每个位置能与之交换的位置（0 在位置 i 时，可交换的邻居）
+    neighbors := [][]int{
+        {1, 3}, {0, 2, 4}, {1, 5}, {0, 4}, {1, 3, 5}, {2, 4},
+    }
+    queue := []string{start}
+    visited := map[string]bool{start: true}
+    moves := 0
+    for len(queue) > 0 {
+        size := len(queue)
+        for i := 0; i < size; i++ {
+            cur := queue[0]
+            queue = queue[1:]
+            zero := strings.IndexByte(cur, '0')
+            for _, nb := range neighbors[zero] {
+                b := []byte(cur)
+                b[zero], b[nb] = b[nb], b[zero]
+                next := string(b)
+                if next == target {
+                    return moves + 1
+                }
+                if !visited[next] {
+                    visited[next] = true
+                    queue = append(queue, next)
+                }
+            }
+        }
+        moves++
+    }
+    return -1
+}
+
+func encode(board [][]int) string {
+    var b []byte
+    for i := 0; i < len(board); i++ {
+        for j := 0; j < len(board[i]); j++ {
+            b = append(b, byte('0'+board[i][j]))
+        }
+    }
+    return string(b)
+}
+```
+
+**这道题的关键是"把棋盘编码成字符串"**——**于是 `visited` 能高效去重，"状态"也能方便地"交换、还原"。**
+
+### 10.3 状态空间 BFS 的通用框架
+
+**"状态空间 BFS"的框架**：
+
+```go
+start := encode(初始状态)
+queue := []状态{start}
+visited := map[状态]bool{start: true}
+steps := 0
+for len(queue) > 0 {
+    for 本层每个状态 {
+        if 是目标 { return steps }
+        for 每个相邻状态 {
+            if !visited[相邻] { 入队并标记 }
+        }
+    }
+    steps++
+}
+```
+
+**这个框架覆盖了所有"状态空间最短路径"问题**——**从滑动谜题到"打开转盘锁"（LC 752）、"青蛙过河"，都是它的实例。**
+
+**"状态空间 BFS"与"图 BFS"的唯一区别，是"状态需要编码"**——**因为状态可能是复杂结构，无法直接当 `visited` 的 key。**
+
+### 10.4 一个值得记住的对照
+
+| 问题 | 状态 | 编码 |
+|------|------|------|
+| LC 127 Word Ladder | 单词 | 字符串本身 |
+| LC 773 滑动谜题 | 棋盘布局 | 字符串/整数 |
+| LC 752 打开转盘锁 | 4 位密码 | 字符串 |
+| LC 542 矩阵 | 坐标 | (i, j) |
+
+**这张表说明："状态编码"是状态空间 BFS 的第一步**——**把复杂状态压成可哈希的 key，后续一切才能进行。**
+
+> [!info] 状态空间 BFS：BFS 的"最一般形式"
+> 状态空间 BFS 是 BFS 的"最一般形式"——**它的"状态"可以是任何东西（字符串、棋盘、密码），只要能被编码、能生成邻居。** **理解了这一点，你就明白为什么"BFS 是最短路径的通用算法"**——**它不关心"状态是什么"，只关心"如何扩展"。** 这是本专栏"从具体到抽象"的又一次体现。
+
+### 10.5 一个可复用的判断
+
+**遇到"最少步数"类问题，按这个顺序问**：
+
+1. **状态是什么？** 如何编码？
+2. **邻居怎么生成？** 交换、变形、还是转移规则；
+3. **单向还是双向？** 知道终点且可逆，可双向；
+4. **状态空间多大？** 太大时考虑双向或剪枝。
+
+**这四问，能定下"状态空间 BFS"的方案。**
+
+---
+
+## 第 11 章 BFS 的完整知识地图
+
+### 11.1 BFS 家族的完整图谱
+
+**把本专栏涉及的 BFS 变体汇总**：
+
+| 变体 | 数据结构 | 适用 | 代表题 |
+|------|---------|------|--------|
+| 普通 BFS | 队列 | 无权图最短路 | 127、433 |
+| 多源 BFS | 队列（多源） | 多起点最近距离 | 542 |
+| 0-1 BFS | 双端队列 | 边权 0/1 | — |
+| 双向 BFS | 两个队列 | 已知终点最短路 | 126、752 |
+| 状态空间 BFS | 队列 + 状态编码 | 状态是复杂结构 | 773、752 |
+| 层序 BFS | 队列 + 切层 | 按层聚合 | 二叉树层序 |
+
+**这张地图的"根"，是"按层扩展"**——**所有变体都在"按距离从小到大扩展"，只是"代价""方向""状态表示"不同。**
+
+### 11.2 BFS 的三个"维度"
+
+**BFS 的变体，可以归纳成三个维度**：
+
+**维度一，代价**：全等（普通 BFS）、0/1（0-1 BFS）、非负（Dijkstra）；
+**维度二，方向**：单向、双向、多源；
+**维度三，状态**：简单（坐标、单词）、复杂（棋盘、密码）。
+
+**三个维度的组合，覆盖了所有 BFS 变体**：
+
+| 组合 | 变体 |
+|------|------|
+| 全等 + 单向 + 简单 | 普通 BFS |
+| 全等 + 双向 + 简单 | 双向 BFS |
+| 全等 + 多源 + 简单 | 多源 BFS |
+| 全等 + 单向 + 复杂 | 状态空间 BFS |
+
+**"三个维度的组合"是理解 BFS 家族的钥匙。**
+
+### 11.3 一个值得记住的对照
+
+**BFS 与"其他算法"的关系**：
+
+| 算法 | 与 BFS 的关系 |
+|------|--------------|
+| Dijkstra | 边权非负时的 BFS（用优先队列） |
+| A* | 带"启发式"的 Dijkstra |
+| DFS | 把队列换成栈 |
+| 动态规划 | 按"拓扑序"而非"层序"扩展 |
+
+**这张表说明："BFS"是"按层扩展"这一思想的原型**——**Dijkstra、A* 都是它的"带权版"。**
+
+> [!info] BFS：按层扩展的原型
+> BFS 是"按距离从小到大扩展"这一思想的原型——**Dijkstra 是它的"带权版"、A* 是它的"启发式版"。** **理解了 BFS 的"按层扩展"，你就理解了"最短路径算法"这一家族的共同内核。** 这是本专栏"从具体到抽象"的又一次体现。
+
+### 11.4 一个可复用的判断
+
+**遇到"最短路径"类问题，按这个顺序问**：
+
+1. **代价是否全等？** 全等用 BFS，非全等用 Dijkstra；
+2. **是否多源？** 是则多源 BFS；
+3. **是否已知终点？** 已知可双向；
+4. **状态是否复杂？** 复杂需编码。
+
+**这四问，能定下"最短路径"题的 BFS 变体。**
+
+---
+
+## 第 12 章 BFS 的工程实现细节与常见 bug
+
+### 12.1 Go 里实现 BFS 的注意事项
+
+**Go 里用切片当队列，有两个细节**：
+
+**其一，`queue = queue[1:]` 不释放底层数组**——**长期运行会内存膨胀。** 对算法题无碍，但生产代码应用"环形缓冲区"（栈与队列专栏第 03 篇）。
+
+**其二，`visited` 用 `map` 还是 `bool` 数组**——**若状态是"小整数"，用数组更快；若是"字符串/复杂状态"，用 `map`。**
+
+**这两点，是 Go 里 BFS 的"语言细节"。**
+
+### 12.2 五个常见 bug
+
+**bug 一，`visited` 在出队时标记。** 导致重复入队。
+
+**bug 二，不固定 `size`。** 层混淆。
+
+**bug 三，忘记"检查起点是否就是终点"。** 某些题要"提前返回 0"。
+
+**bug 四，双向 BFS 的 `visited` 不共享。** 错过会合点。
+
+**bug 五，状态编码有歧义。** 如"用字符串拼接时忘了分隔符"，导致不同状态编码相同。
+
+**这五个 bug，覆盖了 BFS 实现的绝大多数问题。**
+
+### 12.3 一个调试技巧
+
+**调试 BFS，建议"打印每一轮的队列与 `visited`"**——**观察"队列是否在增长、`visited` 是否正确去重"。**
+
+**若"队列不缩小"或"节点重复入队"，通常是"`visited` 时机"或"层隔离"的问题。**
+
+### 12.4 一个值得记住的对照
+
+| bug | 正确做法 |
+|-----|---------|
+| `visited` 时机 | 入队时标记 |
+| 层混淆 | 固定 `size` |
+| 起点即终点 | 提前返回 |
+| 双向 visited | 共享 |
+| 状态编码歧义 | 加分隔符 |
+
+**这张表说明："BFS 的实现细节，是失分的重灾区"。**
+
+> [!info] BFS：思想简单，实现有坑
+> BFS 的思想很简单（按层扩展），但实现有坑——**`visited` 时机、层隔离、状态编码。** **任何一个细节出错，都会导致"结果错"或"死循环"。** **这提醒我们："会讲 BFS"与"会写 BFS"是两回事。** 面试中，能"一次写对 BFS"，是熟练度的直接体现。
+
+### 12.5 一个可复用的判断
+
+**写 BFS 时，按这个检查清单核对**：
+
+1. **`visited` 在入队时标记了吗？**
+2. **层内循环固定 `size` 了吗？**
+3. **起点即终点的情况处理了吗？**
+4. **状态编码有歧义吗？**
+
+**这四条，是 BFS 的"必查项"。**
+
+---
+
+## 第 13 章 BFS 的复杂度速查与练习建议
+
+### 13.1 复杂度速查
+
+| 变体 | 时间 | 空间 |
+|------|------|------|
+| 普通 BFS | $O(V+E)$ | $O(V)$ |
+| 矩阵 BFS | $O(mn)$ | $O(mn)$ |
+| Word Ladder | $O(26nL^2)$ | $O(nL)$ |
+| 多源 BFS | $O(mn)$ | $O(mn)$ |
+| 双向 BFS | $O(b^{d/2})$ | $O(b^{d/2})$ |
+| 状态空间 BFS | $O(\text{状态数})$ | $O(\text{状态数})$ |
+
+**"状态总数 × 每状态时间"是 BFS 复杂度的通用估算公式。**
+
+### 13.2 练习建议
+
+**按"邻居生成方式"组织练习**：
+
+| 邻居生成 | 必刷题 |
+|---------|--------|
+| 枚举变形 | 127、433 |
+| 四方向 | 542、994 |
+| 状态交换 | 773、752 |
+| 显式邻接表 | 经典图 |
+
+**每道题，做到"不看题解能独立写出"。**
+
+### 13.3 自测清单
+
+**每道 BFS 题写完后，用这份清单自查**：
+
+| 检查项 | 对应问题 |
+|--------|---------|
+| `visited` 在入队时标记 | 重复入队 |
+| 层内循环固定 `size` | 层混淆 |
+| 起点即终点 | 提前返回 |
+| 状态编码无歧义 | 编码冲突 |
+
+**这四条，覆盖了 BFS 题的主要 bug。**
+
+### 13.4 一个值得记住的对照
+
+| BFS | DFS |
+|-----|-----|
+| 队列 | 栈 |
+| 按层 | 按深度 |
+| 保证最短 | 不保证 |
+| 空间 $O(w)$ | 空间 $O(h)$ |
+
+**这张表说明："BFS 与 DFS 的唯一区别，是'容器'"**——**队列 vs 栈。**
+
+> [!info] 从"BFS"到"DFS"：一个容器的差异
+> BFS 与 DFS 的唯一区别，是"用队列还是栈"——**把队列换成栈，就得到了 DFS。** **但这一"容器差异"，导致了"按层 vs 按深度""保证最短 vs 不保证"等一系列差异。** **理解了这一点，你就明白"为什么数据结构的选择如此重要"。** 这是本专栏"从具体到抽象"的体现。
+
+### 13.5 一个可复用的判断
+
+**遇到"最短路径"类问题，按这个顺序问**：
+
+1. **状态是什么？** 如何编码；
+2. **邻居怎么生成？** 枚举、方向、还是转移；
+3. **单向还是双向？** 知道终点且可逆可双向；
+4. **状态空间多大？** 太大时考虑双向。
+
+**这四问，能定下 BFS 题的完整方案。**
+
+---
+
+## 第 14 章 一句话总结
+
+**如果只能从本篇带走一句话，那就是：**"隐式图搜索的关键，是'高效生成邻居'——当'后继空间'远小于'节点空间'时，枚举后继比遍历节点更优。"
+
+- **Word Ladder**：枚举 26 字母的变形，而非遍历字典；
+- **矩阵**：四方向，而非遍历所有格子；
+- **状态空间**：状态转移，而非遍历所有状态。
+
+**这一条判断，是"隐式图搜索"的通用优化。** **而"`visited` 在入队时标记"与"固定 `size` 切层"，是 BFS 的两条纪律。**
+
+**最后，单向 BFS 的复杂度是 $O(b^d)$**——**"层宽爆炸"是它的瓶颈，而"双向 BFS"是它的解药。**
+
+> [!note] 一句话带走
+> **"枚举后继而非遍历节点；`visited` 入队时标记、层内固定 `size`。"** 记住这一句，你面对任何 BFS 题，都能快速定下方案。**而"层宽爆炸"是它的瓶颈，"双向 BFS"是它的解药。**
+
+---
+
+## 小结
+
+Word Ladder 是一道把 BFS 所有核心要素都体现出来的题：**隐式图的构建、`visited` 的设计、层序感知、以及与"最短路径"的联系**。它的三个关键决策——入队时标记 `visited`、枚举变形而非遍历字典、`steps` 的初值与返回值——都是 BFS 的通用经验。
+
+贯穿全篇的核心认知有两条。其一，**隐式图搜索的关键，是"高效生成邻居"**——当"后继空间"远小于"节点空间"时，枚举后继比遍历节点更优。其二，**单向 BFS 的复杂度是 $O(b^d)$，而"从两端搜"能压到 $O(b^{d/2})$**——这是双向 BFS 的动机，也是下一篇的主题。**把这两条握住，你面对任何 BFS 最短路径题，都有了优化与实现的起点。**
+
+下一篇 [[03 双向 BFS 与路径还原：Word Ladder II 深度解析]] 将在此基础上加"返回所有最短路径"的要求，引出两个关键技术：**前驱图构建**（在 BFS 阶段记录路径来源）与**双向 BFS**（从两端同时搜索以降低复杂度）。
+
+**最后补充一点落点。** BFS 是"最短路径"的原型——**从普通 BFS 到多源、双向、0-1、Dijkstra，是"在代价与方向上逐步放宽/增强"。** 而"枚举后继而非遍历节点""`visited` 入队时标记"，则是所有 BFS 变体的共同纪律。**把这两条握住，你面对任何 BFS 题，都有了实现的起点。**
+
+---
+
+## 参考资料
+
+1. LeetCode 127. Word Ladder. https://leetcode.cn/problems/word-ladder/
+2. LeetCode 126. Word Ladder II. https://leetcode.cn/problems/word-ladder-ii/
+3. LeetCode 433. Minimum Genetic Mutation. https://leetcode.cn/problems/minimum-genetic-mutation/
+4. Cormen, T. H., et al. *Introduction to Algorithms* (4th ed.). MIT Press, 2022. 第 20 章"基本的图算法"。
+
+---
+
+> [!note] 思考题
+> 1. 为什么"枚举 26 个字母的变形"比"遍历整个字典找邻居"快？请从"后继空间 vs 节点空间"分析。
+> 2. `visited` 若在出队时标记，会出现什么后果？请构造一个"同一节点多次入队"的场景。
+> 3. 为什么 BFS 的空间是 $O(b^d)$？在什么形状的状态空间下，这个空间会爆炸？
+> 4. 双向 BFS 为什么能降到 $O(b^{d/2})$？它有什么前提（提示：需要知道终点）？
+> 5. 请用"隐式图 + 最短路径"这一框架，把"最小基因变化"（LC 433）的解法重新描述一遍。

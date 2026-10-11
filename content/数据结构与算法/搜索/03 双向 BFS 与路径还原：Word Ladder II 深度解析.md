@@ -1,524 +1,664 @@
 ---
 title: "双向 BFS 与路径还原：Word Ladder II 深度解析"
-date: 2026-04-28
-tags: [BFS, LeetCode, Word Ladder II, 双向BFS, 算法, 路径还原, 面试]
-aliases: [双向BFS, Word Ladder II, 前驱图, LeetCode 126]
+date: 2026-10-11
+tags: [BFS, LeetCode, 126, 双向BFS, Word Ladder, 路径还原, 算法, 面试]
+aliases: [Word Ladder II, 双向BFS, 路径还原, LeetCode 126]
 ---
 
 # 双向 BFS 与路径还原：Word Ladder II 深度解析
 
-## 摘要
+**摘要：**
 
-Word Ladder II 是 LeetCode 上公认难度最大的 BFS 题目之一。它在 Word Ladder 的基础上加了一个看似简单的要求——"返回所有最短路径"——却让复杂度和实现难度都大幅跃升。本文深入分析为什么单纯在 BFS 上加路径记录会出错，引入前驱图（Predecessor Graph）作为核心数据结构，再结合双向 BFS 进一步优化性能。全过程通过逐步推演，帮你透彻理解这道"最难 BFS 题"背后的每一个设计决策。
-
----
-
-## 第 1 章 题目解析：Word Ladder II 比 I 难在哪里
-
-### 1.1 LeetCode 126 - Word Ladder II
-
-**题目**（困难）：
-
-给你两个单词 `beginWord` 和 `endWord`，以及一个字典 `wordList`。找出并返回所有从 `beginWord` 到 `endWord` 的**最短转换序列**。如果不存在这样的转换序列，返回一个空列表。
-
-```
-输入：beginWord = "hit", endWord = "cog"
-     wordList = ["hot","dot","dog","lot","log","cog"]
-
-输出：[["hit","hot","dot","dog","cog"],
-       ["hit","hot","lot","log","cog"]]
-
-（两条最短路径，长度均为 5）
-```
-
-### 1.2 "所有最短路径"比"最短路径长度"难在哪里
-
-Word Ladder I 只需要返回最短路径**长度**，BFS 一旦碰到 `endWord` 就能立即返回当前步数。
-
-Word Ladder II 要求返回所有**完整路径**（不只是长度），这引入了三个新挑战：
-
-**挑战一：不能在第一次碰到 endWord 时停止**
-
-BFS 按层扩展，某一层可能有多条路径同时到达 `endWord`，必须把当前层处理完，才能收集到所有最短路径。
-
-**挑战二：路径记录引发的"层内交叉"问题**
-
-考虑这样一个场景：
-
-```
-BFS 搜索过程中，单词 A 在第 k 层，单词 B 在第 k 层，单词 C 在第 k+1 层
-A 可以到 C，B 也可以到 C
-```
-
-如果我们在 BFS 中用 `Map<String, List<String>> prevMap`（前驱图）记录 C 的前驱，C 的前驱应该是 `{A, B}`。
-
-但如果按照朴素的 visited 做法，处理 A 时把 C 加入 visited 并入队，处理 B 时发现 C 已在 visited 中跳过——这样就丢失了 `B → C` 这条路径。
-
-**这是 Word Ladder II 的核心难点**。
-
-**挑战三：路径还原需要额外数据结构**
-
-单纯的 BFS 只能告诉我们"能否到达"，不记录路径。要还原路径，需要额外的数据结构。
+LeetCode 126（Word Ladder II）在 127 题的基础上加了一个要求——**返回所有最短路径**。这个要求让题目难度从"中等偏难"跃升为"困难"，因为它逼出了两个关键技术：**双向 BFS**（从两端同时搜索，把 $O(b^d)$ 压到 $O(b^{d/2})$）与**前驱图 + DFS 回溯**（在 BFS 阶段记录"路径从哪来"，再用 DFS 枚举所有路径）。本文用 Go 语言实现，并逐层追问：单向 BFS 为什么会"层宽爆炸"、双向 BFS 如何"交替扩展"、以及"层内不许互相访问"这条约束为什么必须遵守。掌握这两项技术，你就掌握了"最短路径"类问题的进阶武器。
 
 ---
 
-## 第 2 章 解法一：BFS 构建前驱图 + DFS 还原路径
+## 第 1 章 题目与难点
 
-### 2.1 核心思路
+### 1.1 题目
 
-解题分为两个阶段：
+**LeetCode 126 - Word Ladder II**（困难）
 
-1. **BFS 阶段**：不记录完整路径，而是记录**前驱图**（每个单词的所有合法前驱）。前驱图捕获了所有属于最短路径的"边"。
-2. **DFS 阶段**：从 `endWord` 出发，沿前驱图反向回溯，枚举所有从 `beginWord` 到 `endWord` 的完整路径。
+给定 `beginWord`、`endWord`、`wordList`，返回**所有**从 `beginWord` 到 `endWord` 的**最短转换序列**。
 
-### 2.2 为什么用前驱图而不是直接在 BFS 中记录路径
+```text
+输入: beginWord="hit", endWord="cog",
+     wordList=["hot","dot","dog","lot","log","cog"]
+输出: [["hit","hot","dot","dog","cog"],["hit","hot","lot","log","cog"]]
+```
 
-如果在 BFS 中直接记录路径（每个节点存储从 `beginWord` 到该节点的完整路径列表），内存开销会极大：路径数量可能指数级增长，每条路径长度为 $O(d)$，总内存为 $O(\text{路径数} \times d)$。
+### 1.2 难点：从"一条"到"所有"
 
-前驱图只存储"谁是我的前驱"，空间是 $O(nL)$（字典大小），然后在 DFS 阶段按需还原路径，只需要 $O(d)$ 的栈空间。**这是空间效率的本质优化。**
+**127 题只要"一条最短路径的长度"，126 题要"所有最短路径"。** 这个变化带来两个新问题：
 
-### 2.3 解决"层内交叉"问题的关键：分层 visited
+- **如何找到所有最短路径？** 光有 BFS 不够，需要"记录路径的来源"（前驱图）；
+- **如何高效地找？** 单向 BFS 可能"层宽爆炸"，需要双向 BFS。
 
-BFS 按层处理时，同一层内的节点可以互相作为前驱。具体来说：
+**换句话说，126 = 127 的"路径还原" + "双向加速"。** 理解了这两点，就理解了这道题。
 
-- **当前层**的节点不标记为 visited（对于前驱图的构建而言）
-- 只有**整层处理完之后**，才把当前层所有节点加入 visited
+---
 
-这样，在处理第 $k+1$ 层的节点 C 时，第 $k$ 层的所有节点（A 和 B）都还不在 visited 中，因此 A 和 B 都能成为 C 的前驱。
+## 第 2 章 单向 BFS 的局限与双向 BFS 的动机
 
-```java
-// 关键：分层处理 visited
-Set<String> visited = new HashSet<>();
-visited.add(beginWord);
+### 2.1 单向 BFS 为什么慢
 
-while (!queue.isEmpty()) {
-    int size = queue.size();
-    Set<String> currentLayer = new HashSet<>();  // 当前层产生的新单词
+**BFS 处理的节点数，随层数指数增长**——若分支因子 $b$、目标在第 $d$ 层，BFS 要处理 $O(b^d)$ 个节点。
 
-    for (int i = 0; i < size; i++) {
-        String cur = queue.poll();
-        // ... 枚举邻居 next
-        if (!visited.contains(next)) {
-            if (!currentLayer.contains(next)) {
-                // 第一次在本层发现 next，入队
-                queue.offer(next);
-                currentLayer.add(next);
-            }
-            // 不管是否第一次，只要 visited 中没有，就记录前驱关系
-            prevMap.getOrDefault(next, new ArrayList<>()).add(cur);
-        }
+**在 Word Ladder 里，分支因子 $b$ 可以很大**（一个词可能有很多"差一字母"的邻居）。于是"第 $d$ 层"的节点数可能是天文数字，**内存与时间都会爆炸**。
+
+### 2.2 双向 BFS：从两端同时搜
+
+**关键洞察：从 `beginWord` 和 `endWord` 同时 BFS，各搜 $d/2$ 层，在中间"会合"。**
+
+$$O(b^{d/2}) + O(b^{d/2}) = 2 \cdot O(b^{d/2}) \ll O(b^d)$$
+
+**这是一次"量级"的改善**——例如 $b=10$、$d=10$：单向是 $10^{10}$，双向是 $2 \times 10^5$。**差距是五个数量级。**
+
+**但双向 BFS 有前提：必须知道"终点"**（否则无法从终点出发）。**这正是"最短路径到指定终点"类问题适合双向 BFS 的原因。**
+
+> [!info] 双向 BFS 的直觉：从两端挖隧道
+> 想象从山的两侧同时挖一条隧道——**单向挖要挖 $d$ 米，双向各挖 $d/2$ 米，总工作量（按指数计）小得多。** 而"会合点"就是隧道贯通的地方。**这个比喻的关键是"指数"**——正因为工作量随长度指数增长，"各挖一半"才带来量级改善。
+
+---
+
+## 第 3 章 双向 BFS 的实现要点
+
+### 3.1 交替扩展，优先扩展"层小"的一侧
+
+**双向 BFS 的核心是"交替扩展两端"，且每次优先扩展"当前层更小"的那一端**——因为**扩展小的一侧，新增节点更少**，效率更高。
+
+```go
+// 双向 BFS 骨架（求最短距离）
+func bidirectionalBFS(beginWord, endWord string, wordSet map[string]bool) int {
+    if !wordSet[endWord] {
+        return 0
     }
+    front := map[string]bool{beginWord: true} // 前向边界
+    back := map[string]bool{endWord: true}    // 后向边界
+    visited := map[string]bool{beginWord: true, endWord: true}
+    steps := 2 // 两端各算一个单词
 
-    // 整层处理完后，才把本层加入 visited
-    visited.addAll(currentLayer);
-}
-```
-
-这里 `visited` 只在整层处理完后更新，而不是在发现 `next` 时立即更新。这保证了同层的多个前驱都能被记录。
-
-### 2.4 完整 BFS 阶段代码
-
-```java
-public List<List<String>> findLadders(String beginWord, String endWord, List<String> wordList) {
-    Set<String> wordSet = new HashSet<>(wordList);
-    List<List<String>> result = new ArrayList<>();
-
-    if (!wordSet.contains(endWord)) return result;
-
-    // 前驱图：key = 单词，value = 所有可以一步到达 key 且在最短路径上的单词
-    Map<String, List<String>> prevMap = new HashMap<>();
-
-    // BFS：从 beginWord 出发，构建前驱图
-    Queue<String> queue = new LinkedList<>();
-    Set<String> visited = new HashSet<>();
-    queue.offer(beginWord);
-    visited.add(beginWord);
-    boolean found = false;  // 是否已找到 endWord（找到后，当前层处理完就停止）
-
-    while (!queue.isEmpty() && !found) {
-        int size = queue.size();
-        // currentLayer 存本轮发现的新单词（避免层内覆盖）
-        Set<String> currentLayer = new HashSet<>();
-
-        for (int i = 0; i < size; i++) {
-            String cur = queue.poll();
-            char[] chars = cur.toCharArray();
-
-            for (int j = 0; j < chars.length; j++) {
-                char orig = chars[j];
-                for (char c = 'a'; c <= 'z'; c++) {
-                    if (c == orig) continue;
-                    chars[j] = c;
-                    String next = new String(chars);
-
-                    if (wordSet.contains(next) && !visited.contains(next)) {
-                        // 记录 next 的前驱为 cur
-                        prevMap.computeIfAbsent(next, k -> new ArrayList<>()).add(cur);
-
-                        if (!currentLayer.contains(next)) {
-                            // 本层第一次发现 next，入队
-                            currentLayer.add(next);
-                            queue.offer(next);
-                        }
-
-                        if (next.equals(endWord)) {
-                            found = true;  // 标记找到，当前层处理完后停止
-                        }
+    for len(front) > 0 && len(back) > 0 {
+        // 优先扩展更小的一侧
+        if len(front) > len(back) {
+            front, back = back, front
+        }
+        next := map[string]bool{}
+        for word := range front {
+            b := []byte(word)
+            for i := 0; i < len(b); i++ {
+                orig := b[i]
+                for c := byte('a'); c <= 'z'; c++ {
+                    if c == orig {
+                        continue
+                    }
+                    b[i] = c
+                    w := string(b)
+                    if back[w] {
+                        return steps // 两端会合，找到最短
+                    }
+                    if wordSet[w] && !visited[w] {
+                        next[w] = true
+                        visited[w] = true
                     }
                 }
-                chars[j] = orig;
+                b[i] = orig
             }
         }
-
-        // 整层处理完，才更新 visited（保证同层节点都能作为前驱）
-        visited.addAll(currentLayer);
+        front = next
+        steps++
     }
-
-    // BFS 阶段结束，prevMap 中存储了所有最短路径上的前驱关系
-    if (!found) return result;
-
-    // DFS 阶段：沿 prevMap 从 endWord 反向还原路径
-    dfs(endWord, beginWord, prevMap, new LinkedList<>(), result);
-    return result;
+    return 0
 }
 ```
 
-### 2.5 DFS 阶段：沿前驱图还原路径
+**三处要点**：
 
-```java
-private void dfs(String cur, String beginWord,
-                 Map<String, List<String>> prevMap,
-                 LinkedList<String> path,
-                 List<List<String>> result) {
-    // 将当前节点加到路径头部（因为是反向还原）
-    path.addFirst(cur);
+- **优先扩展小的一侧**——减少每轮的新增节点；
+- **`visited` 共享**——避免两端重复访问同一节点；
+- **`back[w]` 命中即会合**——此时返回的 `steps` 就是最短距离。
 
-    if (cur.equals(beginWord)) {
-        // 到达起点，记录当前完整路径
-        result.add(new ArrayList<>(path));
-    } else {
-        // 沿前驱图继续向前还原
-        for (String prev : prevMap.getOrDefault(cur, Collections.emptyList())) {
-            dfs(prev, beginWord, prevMap, path, result);
-        }
+### 3.2 一个致命细节：层内不许互相访问
+
+**在双向 BFS 中，"同一层内的节点不许互相访问"**——**因为若允许，就可能找到"不是最短"的路径。**
+
+**为什么？** 因为同层节点互相访问，意味着"路径在同一层里拐了弯"，这会让"步数"失真。**正确做法是：用"本层新节点集合 `next`"来隔离——只把 `next` 作为下一轮的边界。**
+
+**这个细节是双向 BFS 最容易出错的地方。** 它提醒我们：**BFS 的"层"是"距离的等值线"，一旦层内互访，等值线就被破坏了。**
+
+> [!warning] 生产避坑：双向 BFS 的"层内隔离"
+> 双向 BFS 必须保证"同一层的节点不能互相访问"——**否则会破坏"按层扩展"的等距性，导致非最短路径被误认为最短。** 实现上，用"本轮新增的集合"作为下一轮的边界即可。
+
+---
+
+## 第 4 章 路径还原：前驱图 + DFS 回溯
+
+### 4.1 为什么需要前驱图
+
+**BFS 只能告诉我们"最短距离是多少"，却不知道"路径长什么样"。** 要还原路径，必须在 BFS 时**记录"每个节点是从哪些前驱到达的"**——这就是**前驱图（predecessor graph）**。
+
+**注意是"哪些"而非"哪个"**——因为要"所有最短路径"，一个节点可能有多条最短路径到达（多个前驱）。
+
+### 4.2 前驱图的构建
+
+**在 BFS 的每一层，记录"本层节点 → 上一层的前驱列表"**：
+
+```go
+// 前驱图：node → 它的所有前驱（上一层中能一步到达它的节点）
+predecessors := map[string][]string{}
+```
+
+**关键约束**：**只在"上一层"中找前驱**（而非整个 visited 集合）——**这样才能保证"路径长度最短"**。若在"所有已访问节点"里找前驱，可能找到"绕远路"的前驱，导致路径非最短。
+
+### 4.3 用 DFS 枚举所有路径
+
+**有了前驱图，从 `endWord` 出发、沿前驱反向 DFS 到 `beginWord`，就能枚举所有最短路径**：
+
+```go
+func dfsPath(word string, predecessors map[string][]string, path []string, res *[][]string) {
+    if len(predecessors[word]) == 0 { // 到达起点（无前驱）
+        p := make([]string, len(path))
+        copy(p, path)
+        *res = append(*res, p)
+        return
     }
-
-    // 回溯：移除当前节点（撤销选择）
-    path.removeFirst();
+    for _, prev := range predecessors[word] {
+        dfsPath(prev, predecessors, append(path, prev), res)
+    }
 }
 ```
 
-**为什么 DFS 从 `endWord` 出发反向走？**
+**注意"从后往前"回溯**——因为前驱图是"从前往后"建的（记录"谁指向我"），所以从 `endWord` 沿前驱反向走，就能回到 `beginWord`。
 
-前驱图 `prevMap` 记录的是"谁是我的前驱"，所以自然地从 `endWord` 开始，沿前驱链走回到 `beginWord`，每条完整链就是一条最短路径。用 `addFirst` 而非 `add` 是因为我们反向遍历，最终路径需要是正向的。
+**复杂度**：BFS 是 $O(26nL^2)$，DFS 枚举路径的代价与"路径数 × 路径长度"成正比。**这是"输出敏感"的**——若最短路径有 $k$ 条、每条长 $d$，则至少要 $O(kd)$ 输出。
 
----
-
-## 第 3 章 逐步模拟：追踪 BFS 前驱图的构建
-
-用 `beginWord = "hit"`, `endWord = "cog"`, `wordList = ["hot","dot","dog","lot","log","cog"]` 模拟：
-
-**初始**：`queue = ["hit"]`, `visited = {"hit"}`, `prevMap = {}`
-
-**第 1 层**：处理 "hit"
-
-发现：
-- "hot"（新），`prevMap["hot"] = ["hit"]`，加入 currentLayer
-
-currentLayer = {"hot"}，整层后 `visited = {"hit", "hot"}`
-
-**第 2 层**：处理 "hot"
-
-发现：
-- "dot"（新），`prevMap["dot"] = ["hot"]`，加入 currentLayer
-- "lot"（新），`prevMap["lot"] = ["hot"]`，加入 currentLayer
-
-currentLayer = {"dot", "lot"}，整层后 `visited = {"hit", "hot", "dot", "lot"}`
-
-**第 3 层**：处理 "dot" 和 "lot"
-
-处理 "dot"：
-- "dog"（新），`prevMap["dog"] = ["dot"]`，加入 currentLayer
-- "lot"（已在 visited，跳过）
-
-处理 "lot"：
-- "dot"（已在 visited，跳过）
-- "log"（新），`prevMap["log"] = ["lot"]`，加入 currentLayer
-- "dog"（已在 currentLayer，不重复入队，但记录前驱）：`prevMap["dog"]` 追加 "lot"？
-
-等等，"dog" 是从 "dot" 发现的，然后从 "lot" 也能到达（lo**g**? 不对，lot → l_g = log，不是 dog；dot → d_g = dog）。让我重新检查：
-
-- lot 的变形：l**o**t，位置 0 变：aot,bot,...,dot(已访问)；位置 1 变：lat,lbt,...,lgt(不在字典)；位置 2 变：loa,lob,...,log(在字典!)
-
-所以 "lot" 能到 "log"，"dot" 能到 "dog"，两者不交叉。
-
-正确的 prevMap：
-```
-prevMap["dog"] = ["dot"]
-prevMap["log"] = ["lot"]
-```
-
-currentLayer = {"dog", "log"}，整层后 `visited = {"hit", "hot", "dot", "lot", "dog", "log"}`
-
-**第 4 层**：处理 "dog" 和 "log"
-
-处理 "dog"：
-- "cog"（新），`prevMap["cog"] = ["dog"]`，加入 currentLayer，`found = true`
-
-处理 "log"：
-- "cog"（已在 currentLayer，不重复入队），但 "log" 是 "cog" 的另一个前驱，追加：`prevMap["cog"].add("log")`
-
-currentLayer = {"cog"}，整层处理完（found = true，停止）
-
-**最终 prevMap**：
-```
-"hot" ← ["hit"]
-"dot" ← ["hot"]
-"lot" ← ["hot"]
-"dog" ← ["dot"]
-"log" ← ["lot"]
-"cog" ← ["dog", "log"]
-```
-
-**DFS 从 "cog" 出发还原路径**：
-
-```
-dfs("cog", ...)
-  path = ["cog"]
-  prevs = ["dog", "log"]
-
-  dfs("dog", ...)
-    path = ["dog", "cog"]
-    prevs = ["dot"]
-    dfs("dot", ...)
-      path = ["dot", "dog", "cog"]
-      prevs = ["hot"]
-      dfs("hot", ...)
-        path = ["hot", "dot", "dog", "cog"]
-        prevs = ["hit"]
-        dfs("hit", ...)
-          path = ["hit", "hot", "dot", "dog", "cog"]  ← 到达 beginWord！记录！
-
-  dfs("log", ...)
-    path = ["log", "cog"]
-    prevs = ["lot"]
-    dfs("lot", ...)
-      path = ["lot", "log", "cog"]
-      prevs = ["hot"]
-      dfs("hot", ...)
-        path = ["hot", "lot", "log", "cog"]
-        prevs = ["hit"]
-        dfs("hit", ...)
-          path = ["hit", "hot", "lot", "log", "cog"]  ← 到达 beginWord！记录！
-```
-
-**结果**：
-```
-[["hit","hot","dot","dog","cog"],
- ["hit","hot","lot","log","cog"]]
-```
+> [!info] 从"求距离"到"求路径"：BFS 的一次升级
+> 普通 BFS 只回答"多远"，**加上前驱图后，它能回答"怎么走"。** 这个升级的关键，是"在 BFS 时多记录一份信息（前驱）"。**这种"在搜索时顺带记录结构信息"的思路，可以迁移到很多问题**——如"求最短路 + 还原路径""求拓扑序 + 记录入度"等。
 
 ---
 
-## 第 4 章 解法二：双向 BFS 加速搜索
+## 第 5 章 完整思路与复杂度
 
-### 4.1 单向 BFS 的瓶颈
+### 5.1 两种实现策略
 
-在 Word Ladder I 中提到，单向 BFS 的节点数随层数指数增长。对于分支因子 $b$（每个单词平均有 $b$ 个合法邻居），搜索深度为 $d$，BFS 需要扩展约 $b^d$ 个节点。
+**策略一（单向 BFS + 前驱图）**：用单向 BFS 逐层构建前驱图，再 DFS 还原。**简单，但可能层宽爆炸。**
 
-**具体数字**：若 $b = 10$，$d = 10$，则 BFS 需要扩展 $10^{10}$ 个节点——明显不可行。
+**策略二（双向 BFS + 前驱图）**：双向 BFS 会合后，合并两端的前驱图，再 DFS 还原。**复杂，但更快。**
 
-### 4.2 双向 BFS 的核心思想
+**面试中，建议先给"单向 BFS + 前驱图"（清晰），若面试官追问"能否更快"，再提双向 BFS。** **这与"先给好懂的、再给更优的"是同一策略。**
 
-双向 BFS 从 `beginWord` 和 `endWord` 同时出发，各自向中间扩展，直到两端"相遇"。
+### 5.2 复杂度
 
-```
-单向 BFS：
-beginWord ——→ ——→ ——→ endWord    需要扩展 b^d 个节点
+- **时间**：单向 $O(26nL^2)$；双向 $O(26 \cdot b^{d/2} \cdot L^2)$ 级别（显著更快）；
+- **空间**：$O(nL)$（visited、前驱图）。
 
-双向 BFS：
-beginWord ——→ ——→        d/2 层
-                ←—— ←—— endWord  d/2 层
-共扩展约 2 * b^(d/2) 个节点
-```
+### 5.3 一个易错点：前驱只在"上一层"找
 
-当 $b = 10$，$d = 10$ 时：
-- 单向：$10^{10}$ 个节点
-- 双向：$2 \times 10^5$ 个节点（**减少 5 个数量级！**）
+**这是本题最容易写错的地方。** 若在"所有已访问节点"里找前驱，就会引入"非最短"的前驱，导致路径变长。**必须在"上一层"里找。**
 
-### 4.3 双向 BFS 的实现细节
+**为什么？** 因为 BFS 的"层"对应"距离"。**只有"上一层"的节点，才是"距离恰好少 1"的前驱**；其他已访问节点要么更远（不可能一步到达），要么同层（会破坏最短性）。
 
-双向 BFS 的关键：**每次扩展较小的那一端**（而不是交替扩展）。这样可以尽量保持两端扩展出的集合大小相近，最大化加速效果。
+---
 
-```java
-public List<List<String>> findLaddersBidirectional(String beginWord, String endWord,
-                                                    List<String> wordList) {
-    Set<String> wordSet = new HashSet<>(wordList);
-    List<List<String>> result = new ArrayList<>();
-    if (!wordSet.contains(endWord)) return result;
+## 第 6 章 常见误区与自测方法
 
-    // 两个 frontier（前沿集合），替代队列
-    Set<String> beginSet = new HashSet<>(), endSet = new HashSet<>();
-    beginSet.add(beginWord);
-    endSet.add(endWord);
+### 6.1 四个高频误区
 
-    // 前驱图：两个方向各一份
-    Map<String, List<String>> prevMap = new HashMap<>();
+**误区一，双向 BFS 允许层内互访。** 会破坏等距性，找到非最短路径。
 
-    Set<String> visitedBegin = new HashSet<>(beginSet);
-    Set<String> visitedEnd = new HashSet<>(endSet);
-    boolean found = false;
-    boolean forward = true;  // 标记当前扩展方向
+**误区二，前驱在"所有已访问"里找。** 会引入非最短前驱。
 
-    while (!beginSet.isEmpty() && !endSet.isEmpty() && !found) {
-        // 始终扩展较小的集合
-        if (beginSet.size() > endSet.size()) {
-            // 交换，改为从 end 端扩展
-            Set<String> temp = beginSet;
-            beginSet = endSet;
-            endSet = temp;
-            Set<String> tempV = visitedBegin;
-            visitedBegin = visitedEnd;
-            visitedEnd = tempV;
-            forward = !forward;
-        }
+**误区三，`visited` 两端不共享。** 会导致两端重复访问，甚至找不到会合点。
 
-        // 扩展 beginSet 一层
-        Set<String> nextLayer = new HashSet<>();
-        for (String cur : beginSet) {
-            char[] chars = cur.toCharArray();
-            for (int j = 0; j < chars.length; j++) {
-                char orig = chars[j];
-                for (char c = 'a'; c <= 'z'; c++) {
-                    if (c == orig) continue;
-                    chars[j] = c;
-                    String next = new String(chars);
+**误区四，忘记检查 `endWord` 在字典中。** 直接返回空。
 
-                    if (wordSet.contains(next) && !visitedBegin.contains(next)) {
-                        // 记录前驱（注意方向）
-                        if (forward) {
-                            prevMap.computeIfAbsent(next, k -> new ArrayList<>()).add(cur);
-                        } else {
-                            prevMap.computeIfAbsent(cur, k -> new ArrayList<>()).add(next);
-                        }
+### 6.2 一套自测用例
 
-                        if (endSet.contains(next)) {
-                            found = true;  // 两端相遇！
-                        }
-                        nextLayer.add(next);
-                    }
+| 用例 | 检验什么 |
+|------|---------|
+| `endWord` 不在字典 | 边界 |
+| `beginWord == endWord` | 退化情形 |
+| 只有一条最短路径 | 路径还原 |
+| 有多条最短路径 | 前驱图（多前驱） |
+| 无解 | 返回空 |
+
+**其中"有多条最短路径"最值得测**——它检验"前驱图是否正确记录了多个前驱"。
+
+---
+
+## 第 7 章 双向 BFS 的工程实现与变体
+
+### 7.1 双向 BFS 的通用模板
+
+**双向 BFS 的模板，可以抽出来复用**：
+
+```go
+func bidirectionalBFS(isGoal func(string) bool, neighbors func(string) []string, start string) int {
+    front := map[string]bool{start: true}
+    visited := map[string]bool{start: true}
+    steps := 0
+    for len(front) > 0 {
+        next := map[string]bool{}
+        for node := range front {
+            if isGoal(node) {
+                return steps
+            }
+            for _, nb := range neighbors(node) {
+                if !visited[nb] {
+                    next[nb] = true
+                    visited[nb] = true
                 }
-                chars[j] = orig;
             }
         }
-
-        visitedBegin.addAll(nextLayer);
-        beginSet = nextLayer;
+        front = next
+        steps++
     }
-
-    if (!found) return result;
-    dfs(endWord, beginWord, prevMap, new LinkedList<>(), result);
-    return result;
+    return -1
 }
 ```
 
-> [!warning] 生产避坑：双向 BFS 的方向跟踪
-> 当交换 `beginSet` 和 `endSet` 时，记录前驱的方向也要调整。`forward` 标志跟踪当前是"正向扩展"还是"反向扩展"，决定了 `prevMap` 中边的方向。如果方向搞反，DFS 阶段还原路径时会走向错误的方向。
+**把它与"终点"结合，就成了"双向"**——**关键在于"两个边界交替扩展、优先扩展小的一侧"。**
+
+### 7.2 双向 BFS 的前提与局限
+
+**双向 BFS 有明确的前提**：
+
+- **必须知道终点**——否则无法"从终点出发"；
+- **必须能"反向生成邻居"**——有些问题"正向转移容易、反向转移难"（如"只能向右跳"），此时双向 BFS 不适用；
+- **图必须"可逆"**——即"从 A 能到 B"蕴含"从 B 能到 A"（无向图天然满足）。
+
+**"知道终点 + 可反向"是双向 BFS 的两个前提。** **若不满足，只能用单向 BFS。**
+
+**这提醒我们：双向 BFS 不是"万能的加速"**——**它有明确的适用边界。** 面试中若面试官问"能不能用双向 BFS"，先确认"终点是否已知、转移是否可逆"。
+
+### 7.3 路径还原的工程实现
+
+**"前驱图 + DFS"还原路径，有一个工程上的坑——"路径数可能爆炸"**：
+
+**若最短路径有指数级条数，那么"枚举所有路径"本身就是指数级的。** 此时任何算法都无能为力——**因为"输出规模"就是指数级的。**
+
+**这与字符串专栏"生成所有 BST""输出敏感"是同一现象**——**当答案本身很大时，复杂度下界就是"输出规模"。** **面试中若能主动指出这一点，会显得你对复杂度有更深的理解。**
+
+### 7.4 双向 BFS 与"双向 Dijkstra"
+
+**双向 BFS 的思想，可以推广到带权图——即"双向 Dijkstra"**：从两端各跑 Dijkstra，在中间会合。**它同样能把"单向的搜索空间"减半。**
+
+**"双向"是一种通用的搜索加速思想**——**只要"知道终点、且转移可逆"，就能"从两端搜"。** 这与"双向链表""双向映射"是同一类"两头并进"的思路。
+
+> [!info] "双向"：一个通用的加速范式
+> "从两端同时推进"，是一个通用的加速范式——**双向 BFS、双向 Dijkstra、双向链表、双向映射，都是它的实例。** **它的价值在于"把单向的规模减半（或开平方）"。** 理解了这一范式，你在遇到"规模太大"的问题时，就会多问一句"能不能从两端来"。
+
+### 7.5 一个可复用的判断
+
+**遇到"最短路径"类问题，按这个顺序问**：
+
+1. **有权还是无权？** 无权用 BFS、有权用 Dijkstra；
+2. **终点已知吗？** 已知可考虑双向；
+3. **转移可逆吗？** 可逆才能双向；
+4. **要"距离"还是"路径"？** 要路径需加前驱图。
+
+**这四问，能定下"最短路径"问题的完整方案。**
 
 ---
 
-## 第 5 章 复杂度对比与适用场景
+## 第 8 章 Word Ladder II 的面试追问与实现细节
 
-### 5.1 单向 BFS vs 双向 BFS
+### 8.1 五个高频追问
 
-| 指标 | 单向 BFS | 双向 BFS |
-|------|---------|---------|
-| 时间复杂度 | $O(b^d \cdot L^2)$ | $O(b^{d/2} \cdot L^2)$ |
-| 空间复杂度 | $O(b^d \cdot L)$ | $O(b^{d/2} \cdot L)$ |
-| 实现复杂度 | 低 | 较高（需处理方向和集合交换） |
-| 适用场景 | 分支因子小或 d 较小 | 分支因子大且 d 较大 |
+**追问一："为什么 126 比 127 难这么多？"** 答：因为 126 要"所有最短路径"，**需要"前驱图"来还原路径**——而"记录路径来源"比"记录距离"复杂得多。
 
-### 5.2 什么时候选双向 BFS
+**追问二："前驱图为什么必须'只在上一层找前驱'？"** 答：因为 BFS 的"层"对应"距离"，**只有"上一层"的节点才是"距离恰好少 1"的前驱**——其他已访问节点会引入"非最短"的前驱。
 
-双向 BFS 在**以下条件同时满足**时有显著优势：
+**追问三："双向 BFS 为什么必须'层内不许互访'？"** 答：因为同层互访意味着"路径在同一层里拐弯"，**破坏了"按层扩展"的等距性，会找到非最短路径。**
 
-1. **已知起点和终点**（单向 BFS 只需已知起点）
-2. **图的分支因子较大**（否则加速效果不明显）
-3. **状态空间关于起终点对称**（两端扩展速度相近时效果最好）
+**追问四："双向 BFS 有什么前提？"** 答：**必须知道终点、且转移可逆**——否则无法"从终点出发"。
 
-Word Ladder 满足所有条件：`beginWord` 和 `endWord` 都已知，且每个单词有多个邻居。
+**追问五："为什么双向 BFS 能降到 $O(b^{d/2})$？"** 答：因为"各搜一半"——**单向搜 $d$ 层是 $b^d$，双向各搜 $d/2$ 层是 $2 \times b^{d/2}$。**
 
-### 5.3 Word Ladder II 的整体复杂度
+### 8.2 实现细节：两个易错点
 
-BFS 阶段：$O(26 \times n \times L^2)$（同 Word Ladder I，枚举所有邻居）
+**易错点一，前驱图的"层隔离"。** **必须在"上一层"里找前驱**——实现上，要在"每层开始前"记录"上一层的节点集合"，再在新一层里"只与上一层比对"。
 
-DFS 阶段：$O(\text{路径数} \times d)$，其中路径数最坏情况为 $n!$（极端情况），但实际因题目约束远小于此。
+**易错点二，双向 BFS 的"visited 共享"。** **两端的 visited 必须共享**——否则两端会重复访问同一节点，甚至错过会合点。
 
----
+**这两个细节，是本题最容易出错的地方。**
 
-## 第 6 章 代码 Bug 的常见根源与调试指南
+### 8.3 复杂度速查
 
-Word Ladder II 是面试中极易出 bug 的题目。以下列出最常见的错误：
+| 实现 | 时间 | 空间 |
+|------|------|------|
+| 单向 BFS + 前驱图 | $O(26nL^2)$ | $O(nL)$ |
+| 双向 BFS + 前驱图 | $O(26 \cdot b^{d/2} \cdot L^2)$ | $O(b^{d/2})$ |
+| DFS 枚举路径 | $O(k \cdot d)$（$k$ 条路径） | $O(d)$ |
 
-### 6.1 Bug 一：层内未去重导致重复入队
+**注意"DFS 枚举路径"是"输出敏感"的**——**若路径有 $k$ 条、每条长 $d$，至少要 $O(kd)$ 输出。**
 
-**症状**：同一条路径出现多次，或 TLE（超时）。
+### 8.4 一个值得养成的习惯
 
-**原因**：同层内发现同一个新单词时，没有通过 `currentLayer` 去重，多次入队。
+**写"最短路径 + 还原"类题，先问三句**：
 
-**修复**：使用 `currentLayer` 集合记录本层已入队的单词，在入队前检查。
+1. **要距离还是要路径？** 要路径需前驱图；
+2. **单向还是双向？** 知道终点且可逆，可双向；
+3. **路径数会爆炸吗？** 若会，复杂度下界就是"输出规模"。
 
-### 6.2 Bug 二：visited 在层内更新导致路径丢失
+**这三句，能定下"最短路径 + 还原"题的方案。**
 
-**症状**：输出路径不全，漏掉了某些最短路径。
-
-**原因**：在处理当前层时，把发现的新单词立即加入全局 `visited`，导致同层的其他单词无法将同一节点作为目标。
-
-**修复**：`visited.addAll(currentLayer)` 必须在**整层处理完之后**执行。
-
-### 6.3 Bug 三：DFS 中忘记回溯
-
-**症状**：路径包含重复元素，或路径长度不对。
-
-**原因**：DFS 做了 `path.addFirst(cur)`，但没有对应的 `path.removeFirst()`（回溯）。
-
-**修复**：确保每一次 `addFirst` 对应一次 `removeFirst`，无论是正常返回还是递归结束。
-
-### 6.4 Bug 四：prevMap 中前驱方向弄反
-
-**症状**：DFS 阶段无法从 `endWord` 走回 `beginWord`，或走出无限循环。
-
-**原因**：`prevMap` 存储的应该是"每个词的前驱"（反向边），但被写成了"每个词的后继"（正向边）。
-
-**修复**：明确 `prevMap[next] = cur` 的含义是"next 的一个前驱是 cur"，DFS 从 `endWord` 出发，沿前驱链走回 `beginWord`。
+> [!info] "最短路径"题的三层能力
+> "最短路径"题分三层：**第一层"求距离"（普通 BFS）；第二层"求路径"（前驱图 + DFS）；第三层"求所有最短路径且加速"（双向 BFS + 前驱图）。** **每上一层，都要多一份"记录"与一份"技巧"。** 理解了这三层，你面对"最短路径"题就有了清晰的进阶路径。
 
 ---
 
-## 第 7 章 面试答题示范
+## 第 9 章 双向 BFS 的更多应用
 
-Word Ladder II 在面试中通常作为"追加题"出现，考察能否在 Word Ladder I 基础上快速扩展。
+### 9.1 打开转盘锁（LeetCode 752）：双向 BFS 的经典应用
 
-**推荐答题步骤**：
+**题目**：有一个 4 位密码锁，每位是 0-9。每次可以把某一位上拨或下拨一格。给定"死亡密码"列表（不能拨到这些），求从 `"0000"` 拨到 `target` 的最少次数。
 
-1. 明确两个阶段：BFS 构建前驱图 + DFS 还原路径
-2. 解释"分层 visited"的必要性（避免层内交叉丢失路径）
-3. 先实现 BFS 阶段，再实现 DFS 阶段（分治降低复杂度）
-4. 如果面试官追问性能，提出双向 BFS 优化
+**它是"状态空间 BFS"**——**状态是 4 位密码，邻居是"拨动一位得到的 8 个密码"。** **而由于"起点和终点都已知"，它天然适合双向 BFS：**
 
-**一个常见的面试陷阱**："直接在 BFS 中存完整路径"——这会导致指数级内存占用，面试官会追问空间复杂度，到时候就被动了。主动用前驱图方案，体现了对内存效率的思考。
+```go
+func openLock(deadends []string, target string) int {
+    dead := map[string]bool{}
+    for _, d := range deadends {
+        dead[d] = true
+    }
+    if dead["0000"] || dead[target] {
+        return -1
+    }
+    front := map[string]bool{"0000": true}
+    back := map[string]bool{target: true}
+    visited := map[string]bool{"0000": true, target: true}
+    steps := 0
+
+    for len(front) > 0 && len(back) > 0 {
+        if len(front) > len(back) {
+            front, back = back, front // 优先扩展小的一侧
+        }
+        next := map[string]bool{}
+        for cur := range front {
+            for _, nb := range neighbors(cur) {
+                if back[nb] {
+                    return steps + 1 // 会合
+                }
+                if !dead[nb] && !visited[nb] {
+                    next[nb] = true
+                    visited[nb] = true
+                }
+            }
+        }
+        front = next
+        steps++
+    }
+    return -1
+}
+```
+
+**注意"优先扩展小的一侧"**——**它保证每轮扩展的节点数最少。** **这是双向 BFS 效率的关键。**
+
+### 9.2 双向 BFS 的"会合判定"
+
+**双向 BFS 的"会合判定"，有三种写法**：
+
+- **在扩展时判定**（本文）：扩展一侧时，若邻居在另一侧，则"会合"；
+- **用集合交集判定**：每轮结束后，检查两端的边界是否有交集；
+- **用 visited 判定**：若"新节点已被另一端访问过"，则会合。
+
+**三种写法都正确，但"扩展时判定"最直接。** **注意"会合时返回的步数"，要仔细核对是否要 `+1`**（因为"两端各算一个起点"）。
+
+### 9.3 双向 BFS 的"层"计数
+
+**双向 BFS 的"步数"容易算错**——**因为两端各走了一部分，总的步数是"两端步数之和"。**
+
+**一个稳妥的做法是"维护一个总步数 `steps`，每扩展一层就 `+1`"**——**它不区分"是哪一端走的"，只统计"总共走了多少层"。** **当两端会合时，`steps` 就是最短距离。**
+
+**这与单向 BFS 的"`steps` 计数"一致，只是"层"由两端共同贡献。**
+
+### 9.4 一个值得记住的对照
+
+| 题目 | 状态 | 是否双向 |
+|------|------|---------|
+| LC 127 Word Ladder | 单词 | 可（终点已知） |
+| LC 126 Word Ladder II | 单词 | 可（+ 前驱图） |
+| LC 752 打开转盘锁 | 4 位密码 | 可（终点已知） |
+| LC 773 滑动谜题 | 棋盘 | 可（终点已知） |
+
+**这张表说明："终点已知"的题，几乎都能用双向 BFS**——**而"打开转盘锁""滑动谜题"这类"状态空间题"，正是双向 BFS 的最佳舞台。**
+
+> [!info] 双向 BFS 的"最佳舞台"
+> 双向 BFS 最适合"**状态空间大、但起点和终点都已知**"的题——**如密码锁、滑动谜题、词梯。** 因为这类题的"状态空间"往往指数级，单向 BFS 会爆炸；**而"从两端搜"能把指数级开平方。** **理解了"什么时候该用双向"，你就多了一件应对"状态爆炸"的武器。**
+
+### 9.5 一个可复用的判断
+
+**遇到"最少步数"类问题，按这个顺序问**：
+
+1. **终点已知吗？** 已知可双向；
+2. **转移可逆吗？** 可逆才能双向；
+3. **状态空间多大？** 大则双向收益大；
+4. **要距离还是路径？** 要路径加前驱图。
+
+**这四问，能定下"最短路径"题是否用双向 BFS。**
 
 ---
 
-## 本章小结
+## 第 10 章 最短路径问题的完整知识地图
 
-Word Ladder II 把一道 BFS 题升华成了一道涉及**前驱图**、**分层 visited**、**双向 BFS** 三个技术点的综合难题。核心洞察是：
+### 10.1 最短路径算法家族
 
-1. 记录所有最短路径时，**路径还原**和**最短路径搜索**是两个独立的子问题——分开解决，各自清晰
-2. 同层节点对后续节点都可能是合法前驱，**visited 必须在整层结束后更新**
-3. 双向 BFS 将指数级复杂度压缩为平方根级，对大规模数据至关重要
+**把"最短路径"算法汇总**：
 
-下一篇文章将转换视角，从 BFS 转入 DFS 的核心框架，以及回溯算法的通用模板，并以 Surrounded Regions 为例展示 DFS 在矩阵问题上的应用。
+| 算法 | 边权 | 数据结构 | 适用 |
+|------|------|---------|------|
+| BFS | 全等 | 队列 | 无权图 |
+| 0-1 BFS | 0/1 | 双端队列 | 边权 0/1 |
+| Dijkstra | 非负 | 优先队列 | 带权图 |
+| Bellman-Ford | 任意 | 迭代松弛 | 含负权 |
+| Floyd | 任意 | DP | 全源最短路 |
+| A* | 非负 + 启发 | 优先队列 | 有启发函数 |
+
+**这张表的"主轴"是"边权"**——**从全等到非负到任意，算法逐步"放宽"。**
+
+### 10.2 "路径还原"的通用方法
+
+**任何"最短路径算法"都能还原路径**——**方法都是"记录前驱"**：
+
+- **BFS**：记录"从哪个节点到达"（前驱数组/前驱图）；
+- **Dijkstra**：记录"松弛时从哪个节点来"；
+- **Floyd**：记录"中间点"。
+
+**"记录前驱"是"从距离到路径"的通用方法**——**它与"前驱图 + DFS 枚举所有路径"是同一思路的不同层次。**
+
+### 10.3 一个值得记住的对照
+
+| 需求 | 方法 |
+|------|------|
+| 最短距离（无权） | BFS |
+| 最短距离（带权） | Dijkstra |
+| 最短路径（一条） | BFS/Dijkstra + 前驱 |
+| 所有最短路径 | 前驱图 + DFS |
+| 加速 | 双向 BFS |
+
+**这张表说明："最短路径"问题有清晰的"进阶路径"**——**从"距离"到"路径"到"所有路径"到"加速"，每层都有对应技术。**
+
+> [!info] 最短路径：一个清晰的进阶体系
+> "最短路径"问题有一个清晰的进阶体系——**从"求距离"到"求路径"到"求所有路径"到"加速"，每层都有对应的技术。** **理解了这一体系，你面对任何"最短路径"题，都能判断"它属于哪一层、该用什么技术"。** 这是本专栏"从点到面"的体现。
+
+### 10.4 一个可复用的判断
+
+**遇到"最短路径"类问题，按这个顺序问**：
+
+1. **边权是什么？** 全等、0/1、还是非负；
+2. **要距离还是路径？** 路径需前驱；
+3. **要一条还是所有？** 所有需前驱图 + DFS；
+4. **能否加速？** 已知终点且可逆，用双向。
+
+**这四问，能定下"最短路径"题的完整方案。**
 
 ---
 
-*关联文章：BFS 核心框架：层序扩展与单向最短路径 | DFS 与回溯核心框架：状态树的系统性遍历*
+## 第 11 章 双向 BFS 的实现细节与常见 bug
+
+### 11.1 五个实现细节
+
+**细节一，用"集合"而非"队列"表示边界。** **双向 BFS 的"边界"是"当前层的所有节点"**——用 `map[string]bool` 表示，便于"取交集"与"交换"。
+
+**细节二，`visited` 必须两端共享。** **否则两端会重复访问同一节点，甚至错过会合点。**
+
+**细节三，每轮"交换"要成对。** **`front, back = back, front` 交换后，下一轮的"新增"要赋给 `front`**——注意别把方向搞反。
+
+**细节四，会合判定的位置。** **"扩展时判定"（邻居在另一端即会合）最直接**，但要注意"步数 +1"。
+
+**细节五，"层内隔离"。** **用"本轮新增集合 `next`"作为下一轮的边界**——**不要让"本轮的节点"与"新增的节点"混在一起。**
+
+### 11.2 四个常见 bug
+
+**bug 一，忘了检查"起点或终点在死路"。** 如"打开转盘锁"里 `"0000"` 是死亡密码——**直接返回 -1。**
+
+**bug 二，`visited` 初始化遗漏。** **起点和终点都要放进 `visited`**——否则会"重复访问"。
+
+**bug 三，步数计算错。** **双向 BFS 的步数是"两端步数之和"**——用"总步数 `steps`"计数最稳妥。
+
+**bug 四，"层内互访"。** **必须用"本轮新增集合"隔离**——否则会破坏等距性。
+
+### 11.3 一个调试技巧
+
+**调试双向 BFS，建议"打印每一轮的 front、back、steps"**——**观察"边界是否在缩小、是否在会合"。**
+
+**若"边界不缩小"或"来回震荡"，通常是"层内互访"或"visited 不共享"导致的。**
+
+### 11.4 一个值得记住的对照
+
+| 细节/bug | 正确做法 |
+|---------|---------|
+| 边界表示 | 用集合 |
+| visited | 两端共享 |
+| 步数 | 总步数计数 |
+| 层内隔离 | 用本轮新增集合 |
+| 起点/终点死路 | 提前返回 |
+
+**这张表说明："双向 BFS 的实现细节，比单向多得多"。**
+
+> [!info] 双向 BFS：细节决定成败
+> 双向 BFS 的"思想"很简单（从两端搜），但"实现细节"很多——**`visited` 共享、层内隔离、步数计数、边界交换。** **任何一个细节出错，都会导致"结果错"或"死循环"。** **这提醒我们："算法的思想"与"算法的实现"是两回事**——**理解思想只需一分钟，写对实现可能需要半小时。** 面试中，能"一次写对双向 BFS"，是熟练度的直接体现。
+
+### 11.5 一个可复用的判断
+
+**写双向 BFS 时，按这个检查清单核对**：
+
+1. **起点/终点是否在死路？** 提前返回；
+2. **visited 是否共享？** 两端都要初始化；
+3. **步数如何计数？** 总步数 `steps`；
+4. **层内是否隔离？** 用本轮新增集合。
+
+**这四条，是双向 BFS 的"必查项"。**
+
+---
+
+## 第 12 章 双向 BFS 的复杂度速查与练习建议
+
+### 12.1 复杂度速查
+
+| 实现 | 时间 | 空间 |
+|------|------|------|
+| 单向 BFS | $O(b^d)$ | $O(b^d)$ |
+| 双向 BFS | $O(b^{d/2})$ | $O(b^{d/2})$ |
+| 前驱图 | $O(n)$ | $O(n)$ |
+| DFS 枚举路径 | $O(k \cdot d)$ | $O(d)$ |
+
+**"双向 BFS 把指数级开平方"是它的核心价值。**
+
+### 12.2 练习建议
+
+**按"是否双向"组织练习**：
+
+| 类型 | 必刷题 |
+|------|--------|
+| 单向 BFS | 127、433 |
+| 双向 BFS | 126、752 |
+| 状态空间 BFS | 773、752 |
+
+**每道题，做到"不看题解能独立写出"。**
+
+### 12.3 自测清单
+
+**每道双向 BFS 题写完后，用这份清单自查**：
+
+| 检查项 | 对应问题 |
+|--------|---------|
+| 起点/终点是否在死路 | 提前返回 |
+| `visited` 是否共享 | 错过会合点 |
+| 步数如何计数 | 结果错 |
+| 层内是否隔离 | 非最短路径 |
+
+**这四条，覆盖了双向 BFS 的主要 bug。**
+
+### 12.4 一个值得记住的对照
+
+| 单向 | 双向 |
+|------|------|
+| 一个队列 | 两个队列 |
+| $O(b^d)$ | $O(b^{d/2})$ |
+| 终点无需已知 | 终点必须已知 |
+
+**这张表说明："双向 BFS 的代价是'必须知道终点'"。**
+
+> [!info] 从"单向"到"双向"：一次量级提升
+> 双向 BFS 把"单向的 $O(b^d)$"压成"$O(b^{d/2})$"——**这是一次量级的提升。** **但代价是"必须知道终点、且转移可逆"。** **理解了这一取舍，你就明白"什么时候该用双向"。** 这是本专栏"从具体到抽象"的体现。
+
+### 12.5 一个可复用的判断
+
+**遇到"最短路径"类问题，按这个顺序问**：
+
+1. **终点已知吗？** 已知可双向；
+2. **转移可逆吗？** 可逆才能双向；
+3. **状态空间多大？** 大则双向收益大；
+4. **要距离还是路径？** 要路径加前驱图。
+
+**这四问，能定下"最短路径"题是否用双向 BFS。**
+
+---
+
+## 第 13 章 一句话总结
+
+**如果只能从本篇带走一句话，那就是：**"双向 BFS 把指数级开平方——但前提是'知道终点、转移可逆'。"
+
+- **加速**：从两端搜，各搜 $d/2$ 层，$O(b^d) \to O(b^{d/2})$；
+- **路径还原**：前驱图 + DFS 枚举；
+- **关键细节**：`visited` 共享、层内隔离、步数计数。
+
+**这三条，是 Word Ladder II 的全部。** **而"前驱只在上一层找"与"层内不许互访"，是两个最容易出错的细节。**
+
+**最后，双向 BFS 是"双向搜索"这一加速范式的一个实例**——**它与"双向 Dijkstra""双向链表"共享"两头并进"的思想。**
+
+> [!note] 一句话带走
+> **"从两端搜、各搜一半；前驱图还原路径、层内不许互访。"** 记住这一句，你面对任何"最短路径 + 加速"的题，都有了进阶武器。**而"知道终点、转移可逆"，是双向 BFS 的前提。**
+
+---
+
+## 小结
+
+Word Ladder II 是"最短路径"类问题的进阶题。它逼出了两个关键技术：**双向 BFS**（把 $O(b^d)$ 压到 $O(b^{d/2})$）与**前驱图 + DFS 回溯**（还原所有最短路径）。前者的关键细节是"优先扩展小的一侧"与"层内不许互访"；后者的关键约束是"前驱只在上一层找"。
+
+贯穿全篇的核心认知有两条。其一，**"从两端搜"是"最短路径"类问题的通用加速手段**——它把指数级复杂度开平方。其二，**"求路径"比"求距离"多一份信息**——前驱图。**把这两条握住，你面对任何"最短路径 + 还原"的问题，都有了进阶武器。**
+
+下一篇 [[04 DFS 与回溯核心框架：状态树的系统性遍历]] 将转入 DFS/回溯。回溯是面试频率最高的搜索变体——它把"做选择、探索、撤销"这一模式，用递归统一起来。
+
+**最后补充一点落点。** 双向 BFS 与"路径还原"，分别代表"最短路径"问题上的两种进阶——**"加速"与"还原"。** 前者把指数级开平方，后者把"距离"变成"路径"。**而它们的前提与细节（知道终点、层内隔离、前驱只在上一层找），正是"进阶"的代价。**
+
+**再补充一点。** Word Ladder II 是"最短路径"题的一个分水岭——**它同时要求"所有最短路径"（路径还原）与"高效"（双向 BFS），因此成了"困难"题。** 能把这道题讲清楚（前驱图 + 双向 BFS + 两个细节），说明你对"最短路径"的理解已经相当扎实。
+
+---
+
+## 参考资料
+
+1. LeetCode 126. Word Ladder II. https://leetcode.cn/problems/word-ladder-ii/
+2. LeetCode 127. Word Ladder. https://leetcode.cn/problems/word-ladder/
+3. Cormen, T. H., et al. *Introduction to Algorithms* (4th ed.). MIT Press, 2022. 第 20 章"基本的图算法"。
+
+---
+
+> [!note] 思考题
+> 1. 双向 BFS 为什么能降到 $O(b^{d/2})$？它有什么前提？
+> 2. 为什么双向 BFS 必须"层内不许互访"？若允许，会找到什么？
+> 3. 前驱图为什么必须"只在上一层找前驱"？请构造一个反例。
+> 4. "求最短路"与"求所有最短路"，在信息量上差了什么？
+> 5. 若最短路径的条数是指数级的，这道题的复杂度会变成多少？为什么？

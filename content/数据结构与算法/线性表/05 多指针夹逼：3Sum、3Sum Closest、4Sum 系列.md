@@ -1,45 +1,48 @@
 ---
 title: "多指针夹逼：3Sum、3Sum Closest、4Sum 系列"
-date: 2026-04-27
-tags: [LeetCode, 双指针, 排序, 数据结构, 数组, 算法, 面试]
+date: 2026-10-11
+tags: [LeetCode, 15, 16, 18, 双指针, 排序, 数组, 算法, 面试]
 aliases: [3Sum, 三数之和, kSum, 多数之和]
 ---
 
 # 多指针夹逼：3Sum、3Sum Closest、4Sum 系列
 
-## 摘要
+**摘要：**
 
-Three Sum（LeetCode 15）是面试中最高频的中等题之一，也是很多候选人的"翻车现场"——不是因为思路难，而是因为**去重逻辑极易写错**。本文以 15（3Sum）、16（3Sum Closest）、18（4Sum）三道题为主线，深入讲解"排序 + 固定外层 + 内层双指针夹逼"的完整解题框架，尤其重点拆解去重的每一个细节，以及如何将这个框架泛化到任意 k 数之和问题。
+Three Sum（LeetCode 15）是面试中最高频的中等题之一，也是许多候选人的"翻车现场"——倒不是思路有多难，而是**去重逻辑极易写错**：多跳过一步会漏解，少跳过一步会重复。本文以 15（3Sum）、16（3Sum Closest）、18（4Sum）三道题为主线，拆解"排序 + 固定外层 + 内层双指针夹逼"这套完整框架。我们不会停留在给出代码，而是逐层追问：k 数之和为什么能被归约到 Two Sum、排序到底为这套框架贡献了什么、对撞双指针为什么在有序数组上必然正确、以及去重为什么必须在"收集答案之后"而不能在之前。掌握这些"为什么"之后，你会得到一个可以递归泛化到任意 k 数之和的通用框架，以及一套能覆盖所有变体的去重准则。本文的代码示例统一使用 Go。
 
 ---
 
 ## 第 1 章 问题本质：降维归约
 
-### 1.1 从 Two Sum 到 k-Sum 的递推关系
+### 1.1 从 Two Sum 到 k-Sum 的递推
 
-[[04 哈希表与连续序列：Two Sum 与 Longest Consecutive Sequence|Two Sum]] 的核心是"在数组中找两个数之和等于目标值"。3Sum 是"找三个数之和等于 0"，4Sum 是"找四个数之和等于目标值"。
+上一章 [[04 哈希表与连续序列：Two Sum 与 Longest Consecutive Sequence]] 解决的是"在数组中找两个数，使其和等于目标值"。3Sum 要找三个数之和为 0，4Sum 要找四个数之和等于给定目标。表面上看，这是三个递进难度的问题；但更深一层看，**它们其实是同一个问题在不同维数下的展开**。
 
-这类题有一个统一的**降维思路**：
+这套统一思路叫**降维归约**：固定最外层的一个数（用一个 `for` 循环枚举它），问题就缩小为"在剩余数组里求 $(k-1)$ 数之和"；如此反复降维，直到 $k = 2$，再用双指针或哈希表在 $O(n)$ 内收尾。
 
-$$\text{k-Sum}(n, \text{target}) = \text{枚举第一个数} \times (k-1)\text{-Sum}(n-1, \text{target} - \text{nums}[i])$$
+$$\text{k-Sum}(n, \text{target}) = \text{枚举第一个数} \times (k-1)\text{-Sum}(n-1,\ \text{target} - \text{nums}[i])$$
 
-即：固定最外层的一个数（通过 `for` 循环枚举），把问题规约为在剩余数组中求 $(k-1)$ 数之和。不断降维，直到 $k=2$，用双指针或哈希表解决。
+各维度的最终复杂度由此一目了然：
 
 | k | 最终算法 | 总时间复杂度 |
 |---|----------|-------------|
 | 2 | 双指针 $O(n)$ | $O(n)$ |
-| 3 | 枚举 $\times$ 双指针 | $O(n^2)$ |
-| 4 | 枚举 $\times$ 枚举 $\times$ 双指针 | $O(n^3)$ |
+| 3 | 枚举 × 双指针 | $O(n^2)$ |
+| 4 | 枚举 × 枚举 × 双指针 | $O(n^3)$ |
 | k | 递归降维 | $O(n^{k-1})$ |
 
-这是算法设计中非常典型的"问题分解"思路，值得深刻体会。
+**"把陌生问题归约到熟悉问题"是算法设计里最可靠的一招**。与其为 3Sum、4Sum 各记一套解法，不如抓住"固定一个数、降一维"这条主线——因为它不但统一了三道题，还能顺手推出任意 k 数之和的递归框架（见第 7 章）。理解了归约，你解的就不再是三道题，而是一类题。
 
-### 1.2 为什么要排序
+### 1.2 为什么排序是这套框架的前提
 
-这类题的前置步骤都是**排序**，原因有三：
-1. **双指针夹逼需要有序性**：只有有序数组才能保证"当 sum < target 时，移动左指针可以让 sum 增大"这个单调性
-2. **去重依赖有序性**：排序后相同的元素相邻，可以用简单的"跳过与前一个相同的元素"实现去重
-3. **代价可接受**：排序 $O(n \log n)$，总体复杂度仍由双层或三层循环主导，排序不是瓶颈
+这套框架的前置步骤永远是**排序**，而且这一步不能省。它同时服务于两个目的：
+
+**其一，对撞双指针需要有序性。** 只有数组有序，"和偏小就右移左指针、和偏大就左移右指针"才具有单调性，每一步的调整才是可证明的、不重不漏的。无序数组上，移动指针带来的和变化毫无规律，夹逼也就无从谈起。
+
+**其二，去重依赖有序性。** 排序之后，相同的元素必然相邻，于是"跳过与前一个相同的元素"这样一个简单的相邻比较，就足以完成去重；若数组无序，判重就得借助哈希集合，代价和复杂度都要上升。
+
+**其三，排序的代价可接受。** 排序是 $O(n \log n)$，而整套框架的主导复杂度是 $O(n^2)$ 或更高，$O(n \log n)$ 被它吸收，不构成瓶颈。**一次性的排序投入，换来的是后续线性扫描的确定性——这正是第 02 篇里"先排序再处理"这一思路的又一次应用。**
 
 ---
 
@@ -49,219 +52,234 @@ $$\text{k-Sum}(n, \text{target}) = \text{枚举第一个数} \times (k-1)\text{-
 
 **LeetCode 15 - 3Sum**（中等）
 
-给你一个整数数组 `nums`，判断是否存在三元组 `[nums[i], nums[j], nums[k]]`，满足 `i != j != k` 且 `nums[i] + nums[j] + nums[k] == 0`。
+给你一个整数数组 `nums`，判断是否存在三元组 `[nums[i], nums[j], nums[k]]`，满足 `i != j != k` 且 `nums[i] + nums[j] + nums[k] == 0`。**返回所有不重复的三元组。**
 
-**返回所有不重复的三元组**。
-
-```
-输入: nums = [-1,0,1,2,-1,-4]
-输出: [[-1,-1,2],[-1,0,1]]
-
-输入: nums = [0,1,1]
-输出: []
-
-输入: nums = [0,0,0]
-输出: [[0,0,0]]
+```text
+输入: nums = [-1,0,1,2,-1,-4]  →  输出: [[-1,-1,2],[-1,0,1]]
+输入: nums = [0,1,1]           →  输出: []
+输入: nums = [0,0,0]           →  输出: [[0,0,0]]
 ```
 
-注意题目要求**不重复的三元组**，这是难点。
+"不重复的三元组"这六个字，正是本题的难点所在。
 
 ### 2.2 算法框架
 
-**第一步：排序**
+**第一步，排序。** `[-1,0,1,2,-1,-4]` 排序后得到 `[-4,-1,-1,0,1,2]`。
 
-```
-[-1, 0, 1, 2, -1, -4]  排序后  →  [-4, -1, -1, 0, 1, 2]
-```
+**第二步，固定第一个数，内层双指针夹逼。** 外层 `for` 枚举 `nums[i]` 作为三元组的第一个数，随后在区间 `[i+1, n-1]` 内用左指针 `left = i+1`、右指针 `right = n-1` 相向夹逼，寻找满足 `nums[left] + nums[right] == -nums[i]` 的组合。
 
-**第二步：固定第一个数，双指针夹逼**
-
-外层 `for` 循环枚举 `nums[i]`（第一个数），然后在 `i+1` 到 `n-1` 的范围内，用左指针 `left = i+1` 和右指针 `right = n-1` 夹逼，寻找 `nums[left] + nums[right] == -nums[i]`（即三数之和为 0）。
-
-```
+```text
 nums = [-4, -1, -1, 0, 1, 2]
 
-i=0, nums[i]=-4: 在 [-1,-1,0,1,2] 中找两数之和为 4
-  left=1,right=5: -1+2=1 < 4, left++
-  left=2,right=5: -1+2=1 < 4, left++
-  left=3,right=5: 0+2=2 < 4, left++
-  left=4,right=5: 1+2=3 < 4, left++
-  left=right=5: 退出 → 无解
+i=0, nums[i]=-4：在 [-1,-1,0,1,2] 中找两数之和为 4
+  left=1,right=5: -1+2=1 < 4 → left++
+  left=2,right=5: -1+2=1 < 4 → left++
+  left=3,right=5: 0+2=2 < 4  → left++
+  left=4,right=5: 1+2=3 < 4  → left++
+  left==right → 退出，无解
 
-i=1, nums[i]=-1: 在 [-1,0,1,2] 中找两数之和为 1
-  left=2,right=5: -1+2=1 == 1 → 找到 [-1,-1,2]，left++,right--
-  left=3,right=4: 0+1=1 == 1 → 找到 [-1,0,1]，left++,right--
-  left=right=4: 退出
+i=1, nums[i]=-1：在 [-1,0,1,2] 中找两数之和为 1
+  left=2,right=5: -1+2=1 == 1 → 收集 [-1,-1,2]，left++、right--
+  left=3,right=4: 0+1=1 == 1  → 收集 [-1,0,1]，left++、right--
+  left==right → 退出
 
-i=2, nums[i]=-1: 与 nums[i=1]=-1 相同 → 跳过（去重）
+i=2, nums[i]=-1：与 nums[i=1] 相同 → 跳过（外层去重）
 
-i=3, nums[i]=0: 在 [1,2] 中找两数之和为 0
-  left=4,right=5: 1+2=3 > 0, right--
-  left=4,right=4: 退出 → 无解
-
-i=4,5: 剩余元素不足3个（或 nums[i]>0 可以提前终止），跳过
+i=3, nums[i]=0：在 [1,2] 中找两数之和为 0
+  left=4,right=5: 1+2=3 > 0 → right--
+  left==right → 退出，无解
 ```
 
-### 2.3 去重逻辑详解
+**这套夹逼为什么成立？** 因为它依赖有序性带来的单调性：当 `nums[left] + nums[right] < -nums[i]` 时，说明当前和偏小，而数组升序，右移 `left` 只会让和增大——于是"右指针此刻不该动"是可证明的；反之则左移 `right`。**每一步都能确定性地排除一批组合，这正是双指针把 $O(n^2)$ 的枚举压成 $O(n)$ 的根据。**
 
-这是本题最容易出错的部分，需要在两个地方去重：
+### 2.3 Go 实现
 
-**去重点 1：外层循环跳过重复的 nums[i]**
+```go
+func threeSum(nums []int) [][]int {
+    sort.Ints(nums) // 前置步骤：排序，为夹逼与去重奠基
+    n := len(nums)
+    var res [][]int
 
-```java
-for (int i = 0; i < nums.length - 2; i++) {
-    if (i > 0 && nums[i] == nums[i - 1]) continue; // 跳过重复的第一个数
-    // ...
-}
-```
-
-**为什么是 `i > 0`？** 如果写 `i >= 0`，那 `i=0` 也会被跳过（和 `nums[-1]` 比较，会越界或永远不满足），所以要从 `i=1` 开始才能去重。
-
-**为什么和 `nums[i-1]` 而非 `nums[i+1]` 比较？** 我们要跳过"与前一个 i 重复的情况"。如果 `nums[i] == nums[i-1]`，那么以 `nums[i]` 为第一个数找到的所有三元组，以 `nums[i-1]` 为第一个数时已经全找过了，重复，跳过。
-
-**去重点 2：找到解后跳过重复的 nums[left] 和 nums[right]**
-
-```java
-if (nums[left] + nums[right] == -nums[i]) {
-    result.add(Arrays.asList(nums[i], nums[left], nums[right]));
-    // 跳过相同的 left 值
-    while (left < right && nums[left] == nums[left + 1]) left++;
-    // 跳过相同的 right 值
-    while (left < right && nums[right] == nums[right - 1]) right--;
-    // 移动到下一个不重复的位置
-    left++;
-    right--;
-}
-```
-
-**为什么要在收集答案后才去重，而不是之前？** 因为如果先跳过再判断，可能跳过了有效答案。必须先记录当前的 `(left, right)` 是一个解，然后再跳过后续重复的。
-
-**示意图**：
-```
-nums = [−2, 0, 0, 2, 2]，i=0（nums[i]=-2，找两数之和为2）
-
-left=1(0), right=4(2): 0+2=2 == 2，收集 [-2,0,2]
-  跳过重复 left: nums[1]=nums[2]=0，left++ → left=2
-  跳过重复 right: nums[3]=nums[4]=2，right-- → right=3
-  left++, right-- → left=3, right=2, 退出
-```
-
-若没有去重，`left=2(0), right=3(2)` 也会匹配，产生重复的 `[-2,0,2]`。
-
-### 2.4 完整代码
-
-```java
-public List<List<Integer>> threeSum(int[] nums) {
-    List<List<Integer>> result = new ArrayList<>();
-    Arrays.sort(nums); // 关键前置步骤
-    
-    for (int i = 0; i < nums.length - 2; i++) {
-        // 优化：nums[i] > 0 时，三数之和一定 > 0，提前终止
-        if (nums[i] > 0) break;
-        
-        // 跳过重复的第一个数
-        if (i > 0 && nums[i] == nums[i - 1]) continue;
-        
-        int left = i + 1, right = nums.length - 1;
-        
-        while (left < right) {
-            int sum = nums[i] + nums[left] + nums[right];
-            
-            if (sum == 0) {
-                result.add(Arrays.asList(nums[i], nums[left], nums[right]));
-                // 跳过重复的 left 和 right
-                while (left < right && nums[left] == nums[left + 1]) left++;
-                while (left < right && nums[right] == nums[right - 1]) right--;
-                left++;
-                right--;
-            } else if (sum < 0) {
-                left++;  // sum 太小，左指针右移增大 sum
-            } else {
-                right--; // sum 太大，右指针左移减小 sum
+    for i := 0; i < n-2; i++ {
+        if nums[i] > 0 { // 剪枝：最小的数已大于 0，三数之和不可能为 0
+            break
+        }
+        if i > 0 && nums[i] == nums[i-1] { // 外层去重
+            continue
+        }
+        left, right := i+1, n-1
+        for left < right {
+            sum := nums[i] + nums[left] + nums[right]
+            switch {
+            case sum == 0:
+                res = append(res, []int{nums[i], nums[left], nums[right]})
+                // 收集之后再跳过重复的 left / right
+                for left < right && nums[left] == nums[left+1] {
+                    left++
+                }
+                for left < right && nums[right] == nums[right-1] {
+                    right--
+                }
+                left++
+                right--
+            case sum < 0:
+                left++ // 和偏小，右移左指针以增大和
+            default:
+                right-- // 和偏大，左移右指针以减小和
             }
         }
     }
-    
-    return result;
+    return res
 }
 ```
 
-**复杂度**：时间 $O(n^2)$（排序 $O(n \log n)$ + 双层循环 $O(n^2)$），空间 $O(1)$（不计结果）。
+**复杂度**：时间 $O(n^2)$（排序 $O(n \log n)$ 被双层循环 $O(n^2)$ 吸收），空间 $O(1)$（不计结果本身）。
 
-### 2.5 几个容易漏掉的优化
+### 2.4 三处容易漏掉的细节
 
-1. **`if (nums[i] > 0) break`**：排序后，如果当前最小的数已经大于 0，三数之和不可能为 0，提前终止。
-2. **外层循环的上界是 `nums.length - 2`**：至少要留 2 个元素给 left 和 right，不然越界。
-3. **`i > 0` 条件**：防止第一轮（`i=0`）做无意义的比较。
+- **`if nums[i] > 0 { break }`**：排序后若当前最小的数已经大于 0，则任意三数之和都大于 0，不可能等于 0，可以提前终止整个外层循环。这是剪枝，不影响正确性。
+- **外层上界是 `n-2`**：必须给 `left` 与 `right` 留出至少两个元素，否则越界。
+- **`i > 0` 这个条件**：它保证第一轮（`i = 0`）不做与"前一个元素"的比较——因为 `i = 0` 时并不存在前一个元素。
 
 ---
 
-## 第 3 章 LeetCode 16：最接近的三数之和
+## 第 3 章 去重逻辑详解：本篇最易出错之处
 
-### 3.1 题目
+去重是 3Sum 的核心难点，也是最容易在面试中翻车的地方。它需要在**两个位置**分别处理，且顺序不能颠倒。
+
+### 3.1 去重点一：外层跳过重复的第一个数
+
+```go
+if i > 0 && nums[i] == nums[i-1] {
+    continue
+}
+```
+
+**为什么必须是 `i > 0`？** 因为当 `i = 0` 时并不存在"前一个元素"，若不加以限制就去访问 `nums[i-1]`，会越界。
+
+**为什么是与 `nums[i-1]` 比，而不是与 `nums[i+1]` 比？** 这一点极易搞反，值得单独说清。我们想跳过的，是"**当前这个 `i` 与前一个 `i` 取值相同**"的情况——因为若 `nums[i] == nums[i-1]`，那么以 `nums[i]` 为首找到的所有三元组，在以 `nums[i-1]` 为首时早已找过一遍，重复。所以比较方向是"当前与前一个"，跳过的是**重复出现的后者**。若误写成与 `nums[i+1]` 比较，就会把"第一次出现的那个值"也一并跳过，导致漏解。
+
+### 3.2 去重点二：收集答案后跳过重复的 `left` / `right`
+
+```go
+// 先收集答案
+res = append(res, []int{nums[i], nums[left], nums[right]})
+// 再跳过重复的 left / right
+for left < right && nums[left] == nums[left+1] {
+    left++
+}
+for left < right && nums[right] == nums[right-1] {
+    right--
+}
+left++
+right--
+```
+
+**为什么必须在"收集之后"而不是"之前"去重？** 因为若在判断之前就先跳过，可能连同当前这组有效答案一起跳过去，直接漏解。**正确顺序永远是：先记录当前这组解，再越过后续与之重复的元素。** 这一顺序，是把"去重"与"不漏解"两个目标同时满足的关键。
+
+来看一个具体的例子。`nums = [-2, 0, 0, 2, 2]`，`i = 0`（`nums[i] = -2`，需要在 `[0,0,2,2]` 中找两数之和为 2）：
+
+```text
+left=1(0), right=4(2): 0+2=2 == 2 → 收集 [-2,0,2]
+  跳过重复的 left：nums[1]==nums[2]==0，left 移到 2
+  跳过重复的 right：nums[3]==nums[4]==2，right 移到 3
+  left++、right-- → left=3, right=2，退出
+
+若不去重：left=2(0), right=3(2) 也会匹配，产生重复的 [-2,0,2]
+```
+
+**去重的本质，是"在有序数组里，相同的值只让第一个有机会参与答案"。** 外层如此，内层亦然。
+
+### 3.3 两个典型的错误写法
+
+```go
+// 错误一：外层去重漏了 i > 0，i=0 时 nums[-1] 越界
+if nums[i] == nums[i-1] {
+    continue
+}
+
+// 错误二：比较方向写反，把"第一次出现的值"也跳过了
+if i > 0 && nums[i] == nums[i+1] {
+    continue // 数组 [-1,-1,0] 时，i=0 会被错误跳过，导致漏解
+}
+```
+
+**错误二尤其隐蔽**，因为它在很多测试用例下都能"碰巧"通过，只在有重复元素时才暴露。**判断方向的口诀是：比较当前元素与前一个元素（`nums[i]` 与 `nums[i-1]`），跳过的是重复出现的后者。**
+
+---
+
+## 第 4 章 LeetCode 16：最接近的三数之和
+
+### 4.1 题目
 
 **LeetCode 16 - 3Sum Closest**（中等）
 
-给你一个整数数组 `nums` 和一个目标值 `target`，找出 `nums` 中和最接近 `target` 的三个整数，返回这三个数的和。**假设每组输入只存在唯一答案**。
+给你一个整数数组 `nums` 和一个目标值 `target`，找出 `nums` 中和最接近 `target` 的三个整数，返回这三个数的和。假设每组输入只存在唯一答案。
 
-```
+```text
 输入: nums = [-1,2,1,-4], target = 1
-输出: 2（[-1,2,1] 的和是 2，是最接近 1 的）
+输出: 2（[-1,2,1] 的和为 2，最接近 1）
 ```
 
-### 3.2 思路
+### 4.2 思路：框架不变，目标函数变了
 
-与 3Sum 框架完全相同，区别在于：
-- 不再寻找 `sum == 0`，而是寻找 `|sum - target|` 最小的 sum
-- 不需要去重（返回的是一个数值，不是三元组列表）
+这道题与 3Sum 的框架完全相同，区别只在两点：不再寻找"和恰好为 0"，而是寻找使 $|sum - target|$ 最小的那个和；并且**不需要去重**——因为返回的是一个数值，不是三元组列表，重复的解自然会被"取最小"这一步吸收掉。
 
-```java
-public int threeSumClosest(int[] nums, int target) {
-    Arrays.sort(nums);
-    int closest = nums[0] + nums[1] + nums[2]; // 初始化为前三个数之和
-    
-    for (int i = 0; i < nums.length - 2; i++) {
-        int left = i + 1, right = nums.length - 1;
-        
-        while (left < right) {
-            int sum = nums[i] + nums[left] + nums[right];
-            
-            // 更新最近的和
-            if (Math.abs(sum - target) < Math.abs(closest - target)) {
-                closest = sum;
+```go
+func threeSumClosest(nums []int, target int) int {
+    sort.Ints(nums)
+    n := len(nums)
+    // 初始化为一个合法的三数之和，而非 math.MaxInt
+    closest := nums[0] + nums[1] + nums[2]
+
+    for i := 0; i < n-2; i++ {
+        left, right := i+1, n-1
+        for left < right {
+            sum := nums[i] + nums[left] + nums[right]
+            if abs(sum-target) < abs(closest-target) {
+                closest = sum
             }
-            
-            if (sum == target) {
-                return sum; // 完全相等，无需继续
-            } else if (sum < target) {
-                left++;
-            } else {
-                right--;
+            switch {
+            case sum == target:
+                return sum // 完全相等，已是最优，无需继续
+            case sum < target:
+                left++
+            default:
+                right--
             }
         }
     }
-    
-    return closest;
+    return closest
+}
+
+func abs(x int) int {
+    if x < 0 {
+        return -x
+    }
+    return x
 }
 ```
 
 **复杂度**：时间 $O(n^2)$，空间 $O(1)$。
 
-这道题逻辑比 3Sum 简单，但面试时常被当作变体考察。关键点是**初始化 `closest`**：必须初始化为一个合法的三数之和（如前三个数的和），不能初始化为 `Integer.MAX_VALUE`，因为后面的 `sum - target` 可能溢出。
+### 4.3 一个容易被忽视的初始化陷阱
+
+`closest` 的初始化看似无关紧要，实则藏着一个坑：**不能初始化为 `math.MaxInt`**。原因在于后续要做 `sum - target` 的减法，若 `target` 为负、`closest` 又是最大整数，`closest - target` 会溢出，得出荒谬的比较结果。正确做法是把它初始化成**一个真实存在的三数之和**（譬如前三个元素之和）——这样它天然合法，也不会有溢出之虞。
+
+> [!warning] 生产避坑：求"最值"时的初始化
+> 凡是"求最接近值/最大最小值"的题目，初始值的选取都有讲究。用类型上界（如 `MaxInt`）看似安全，一旦参与算术运算就可能溢出。**更稳妥的习惯是：用一个真实合法的候选值初始化，而不是一个象征性的极值。** 这与第 03 篇里用 $\pm\infty$ 代替越界访问的手法正好互补——那里是"用哨兵避免特判"，这里是"避免哨兵参与运算"。两处取舍的分野在于：哨兵会不会被拿来计算。
 
 ---
 
-## 第 4 章 LeetCode 18：四数之和
+## 第 5 章 LeetCode 18：四数之和
 
-### 4.1 题目
+### 5.1 题目
 
 **LeetCode 18 - 4Sum**（中等）
 
-给你一个整数数组 `nums` 和一个目标值 `target`，请你返回所有满足以下条件的不重复四元组 `[nums[a], nums[b], nums[c], nums[d]]`：
-- `a, b, c, d` 各不相同
-- `nums[a] + nums[b] + nums[c] + nums[d] == target`
+给你一个整数数组 `nums` 和一个目标值 `target`，返回所有满足条件的不重复四元组 `[nums[a], nums[b], nums[c], nums[d]]`：四个下标互不相同，且四数之和等于 `target`。
 
-```
+```text
 输入: nums = [1,0,-1,0,-2,2], target = 0
 输出: [[-2,-1,1,2],[-2,0,0,2],[-1,0,0,1]]
 
@@ -269,169 +287,322 @@ public int threeSumClosest(int[] nums, int target) {
 输出: [[2,2,2,2]]
 ```
 
-### 4.2 在 3Sum 的基础上再套一层
+### 5.2 在 3Sum 之上再套一层
 
-4Sum = 外层固定一个数 + 3Sum 框架（内层固定一个数 + 双指针）。
+按归约思路，4Sum 就是"外层再固定一个数 + 内层的 3Sum 框架"。代码只是多了一层循环、多了一次去重，骨架完全一致：
 
-```java
-public List<List<Integer>> fourSum(int[] nums, int target) {
-    List<List<Integer>> result = new ArrayList<>();
-    Arrays.sort(nums);
-    int n = nums.length;
-    
-    for (int i = 0; i < n - 3; i++) {
-        // 剪枝：最小四数之和 > target，后面只会更大
-        if ((long)nums[i] + nums[i+1] + nums[i+2] + nums[i+3] > target) break;
-        // 剪枝：当前 nums[i] 加最大三数之和 < target，nums[i] 太小，跳过
-        if ((long)nums[i] + nums[n-1] + nums[n-2] + nums[n-3] < target) continue;
-        
-        // 外层去重
-        if (i > 0 && nums[i] == nums[i - 1]) continue;
-        
-        for (int j = i + 1; j < n - 2; j++) {
-            // 内层剪枝
-            if ((long)nums[i] + nums[j] + nums[j+1] + nums[j+2] > target) break;
-            if ((long)nums[i] + nums[j] + nums[n-1] + nums[n-2] < target) continue;
-            
-            // 内层去重
-            if (j > i + 1 && nums[j] == nums[j - 1]) continue;
-            
-            int left = j + 1, right = n - 1;
-            
-            while (left < right) {
-                long sum = (long)nums[i] + nums[j] + nums[left] + nums[right];
-                
-                if (sum == target) {
-                    result.add(Arrays.asList(nums[i], nums[j], nums[left], nums[right]));
-                    while (left < right && nums[left] == nums[left + 1]) left++;
-                    while (left < right && nums[right] == nums[right - 1]) right--;
-                    left++;
-                    right--;
-                } else if (sum < target) {
-                    left++;
-                } else {
-                    right--;
+```go
+func fourSum(nums []int, target int) [][]int {
+    sort.Ints(nums)
+    n := len(nums)
+    var res [][]int
+
+    for i := 0; i < n-3; i++ {
+        // 剪枝：当前最小四数之和已超过 target，后面只会更大
+        if sum4(nums[i], nums[i+1], nums[i+2], nums[i+3]) > target {
+            break
+        }
+        // 剪枝：当前 nums[i] 配最大三数之和仍不足 target，nums[i] 太小
+        if sum4(nums[i], nums[n-1], nums[n-2], nums[n-3]) < target {
+            continue
+        }
+        if i > 0 && nums[i] == nums[i-1] { // 外层去重
+            continue
+        }
+        for j := i + 1; j < n-2; j++ {
+            if sum4(nums[i], nums[j], nums[j+1], nums[j+2]) > target {
+                break
+            }
+            if sum4(nums[i], nums[j], nums[n-1], nums[n-2]) < target {
+                continue
+            }
+            if j > i+1 && nums[j] == nums[j-1] { // 内层去重
+                continue
+            }
+            left, right := j+1, n-1
+            for left < right {
+                sum := sum4(nums[i], nums[j], nums[left], nums[right])
+                switch {
+                case sum == target:
+                    res = append(res, []int{nums[i], nums[j], nums[left], nums[right]})
+                    for left < right && nums[left] == nums[left+1] {
+                        left++
+                    }
+                    for left < right && nums[right] == nums[right-1] {
+                        right--
+                    }
+                    left++
+                    right--
+                case sum < target:
+                    left++
+                default:
+                    right--
                 }
             }
         }
     }
-    
-    return result;
+    return res
+}
+
+// sum4 用 int64 累加，避免四个 int 相加溢出
+func sum4(a, b, c, d int) int64 {
+    return int64(a) + int64(b) + int64(c) + int64(d)
 }
 ```
 
-**注意：使用 `long` 防止溢出**。`target` 可以是 `Integer.MIN_VALUE` 或 `Integer.MAX_VALUE`，四个 `int` 相加可能溢出，需要用 `long`。
+### 5.3 内层去重为什么是 `j > i+1`
 
-### 4.3 内层去重的条件
+内层 `j` 的去重条件写成 `j > i+1`，而非 `j > 0`。理由与外层 `i > 0` 完全对称：`j` 的合法起点是 `i+1`，**"首次出现"的那个 `j`（即 `j == i+1`）不该被跳过**，只有当 `j` 越过起点之后，才需要与它前一个位置比较是否重复。
 
-内层循环中，`j` 的去重条件是 `j > i + 1`（而不是 `j > 0`），因为 `j` 的起点是 `i+1`，`j` 最小合法值是 `i+1`，要保证 `j` 至少从第二个值开始才去重（第一次出现的值不应该被跳过）。
+**这条规律可以推广成一句口诀：去重的边界，永远相对于"该指针的起点"而非"数组的起点"。** 外层 `i` 的起点是 0，所以条件是 `i > 0`；内层 `j` 的起点是 `i+1`，所以条件是 `j > i+1`。理解了这个"相对起点"的视角，无论套多少层循环，去重条件都不会写错。
 
-类比外层 `i > 0` 的逻辑：`j` 相对于其起点 `i+1` 的"首次出现"不应被跳过，只有 `j > i+1` 时才需要和前一个 `j` 比较是否重复。
+### 5.4 溢出：4Sum 特有的坑
+
+与 3Sum 不同，4Sum 有一个专属陷阱——**整数溢出**。`target` 可以取到 `int` 的极值，而四个 `int` 相加极易越界。**在 Go 中，`int` 是 64 位，实际几乎不会溢出，但若把代码移植到 32 位平台，或把题目改到更大的数据范围，就必须用 `int64` 累加。** 上面代码里的 `sum4` 函数专门做这件事，它是一个"防御性"的习惯，成本极低而收益明确。
 
 ---
 
-## 第 5 章 k-Sum 通用递归框架
+## 第 6 章 k-Sum 通用递归框架
 
-### 5.1 代码实现
+### 6.1 递归实现
 
-如果面试官让你实现任意 k 数之和，可以用递归框架：
+如果面试官让你实现任意 k 数之和，前面所有代码都可以收敛进一个递归框架：基础情况（$k = 2$）用双指针收尾，其余情况则"枚举一个数 + 递归求 $(k-1)$ 数之和"。
 
-```java
-public List<List<Integer>> kSum(int[] nums, int target, int k) {
-    Arrays.sort(nums);
-    return kSumHelper(nums, target, k, 0);
+```go
+// kSum 返回 nums 中所有不重复的、和为 target 的 k 元组
+func kSum(nums []int, target int, k int) [][]int {
+    sort.Ints(nums)
+    return kSumHelper(nums, int64(target), k, 0)
 }
 
-private List<List<Integer>> kSumHelper(int[] nums, long target, int k, int start) {
-    List<List<Integer>> result = new ArrayList<>();
-    
-    // 基础情况：k=2，用双指针
-    if (k == 2) {
-        int left = start, right = nums.length - 1;
-        while (left < right) {
-            long sum = nums[left] + nums[right];
-            if (sum == target) {
-                result.add(new ArrayList<>(Arrays.asList(nums[left], nums[right])));
-                while (left < right && nums[left] == nums[left+1]) left++;
-                while (left < right && nums[right] == nums[right-1]) right--;
-                left++; right--;
-            } else if (sum < target) {
-                left++;
-            } else {
-                right--;
+func kSumHelper(nums []int, target int64, k, start int) [][]int {
+    var res [][]int
+    n := len(nums)
+
+    // 基础情况：k == 2，用对撞双指针
+    if k == 2 {
+        left, right := start, n-1
+        for left < right {
+            sum := int64(nums[left]) + int64(nums[right])
+            switch {
+            case sum == target:
+                res = append(res, []int{nums[left], nums[right]})
+                for left < right && nums[left] == nums[left+1] {
+                    left++
+                }
+                for left < right && nums[right] == nums[right-1] {
+                    right--
+                }
+                left++
+                right--
+            case sum < target:
+                left++
+            default:
+                right--
             }
         }
-        return result;
+        return res
     }
-    
-    // 递归：枚举第一个数，递归求 (k-1)-Sum
-    for (int i = start; i <= nums.length - k; i++) {
-        if (i > start && nums[i] == nums[i-1]) continue; // 去重
-        
-        List<List<Integer>> subResult = kSumHelper(nums, target - nums[i], k - 1, i + 1);
-        for (List<Integer> sub : subResult) {
-            List<Integer> combined = new ArrayList<>();
-            combined.add(nums[i]);
-            combined.addAll(sub);
-            result.add(combined);
+
+    // 递归：枚举第一个数，再求 (k-1)-Sum
+    for i := start; i <= n-k; i++ {
+        if i > start && nums[i] == nums[i-1] { // 去重：相对起点
+            continue
+        }
+        sub := kSumHelper(nums, target-int64(nums[i]), k-1, i+1)
+        for _, s := range sub {
+            res = append(res, append([]int{nums[i]}, s...))
         }
     }
-    
-    return result;
+    return res
 }
 ```
 
-**复杂度**：时间 $O(n^{k-1})$（k 层循环，最内层双指针 $O(n)$），空间 $O(k)$（递归栈深度）。
+**复杂度**：时间 $O(n^{k-1})$（k 层枚举，最内层双指针 $O(n)$），空间 $O(k)$（递归栈深度）。
 
-### 5.2 剪枝的作用
+### 6.2 剪枝的作用
 
-上面 4Sum 代码里的剪枝（提前 `break` 或 `continue`）在实际面试中不是必须的，但能显著提升性能：
+4Sum 代码里的 `break` 与 `continue` 并非正确性所必需，却是性能上的关键：
 
-- **`break`（当最小可能和 > target）**：数组有序，当前 `nums[i]` 加上接下来最小的几个数之和已经超过 `target`，后续只会更大，直接终止当前层循环。
-- **`continue`（当最大可能和 < target）**：当前 `nums[i]` 加上接下来最大的几个数之和还不够 `target`，当前 `nums[i]` 太小，跳过当前 `i`，尝试下一个。
+- **`break`**：当"当前 `nums[i]` 配上后续最小的几个数"已经超过 `target`，由于数组有序，往后只会更大，于是整个当前层循环可以终止；
+- **`continue`**：当"当前 `nums[i]` 配上后续最大的几个数"仍不足 `target`，说明 `nums[i]` 太小，本层无需再枚举它，直接跳到下一个。
 
-这两个剪枝对于重复元素多的情况效果显著（可以跳过大量无效搜索），对于 LeetCode 这类有严格时间限制的场景，有时是通过测试的关键。
-
----
-
-## 第 6 章 去重逻辑的全面梳理
-
-本篇最核心的难点是去重，最后做一个系统性总结：
-
-### 6.1 去重的位置和逻辑
-
-对于 3Sum 中的三个指针 `i`、`left`、`right`：
-
-| 指针 | 去重时机 | 代码 | 解释 |
-|------|----------|------|------|
-| `i` | 循环开始时 | `if (i > 0 && nums[i] == nums[i-1]) continue;` | 跳过与前一个 i 相同的情况，避免找到重复的三元组 |
-| `left` | 找到答案后，在 left++ 之前 | `while (left < right && nums[left] == nums[left+1]) left++;` | 跳过与当前 left 相同的值，避免同一组解被重复收集 |
-| `right` | 找到答案后，在 right-- 之前 | `while (left < right && nums[right] == nums[right-1]) right--;` | 同上，针对 right |
-
-### 6.2 一个常见的错误写法
-
-```java
-// 错误！在外层去重时多写了 i == 0 的情况
-if (nums[i] == nums[i - 1]) continue; // 当 i=0 时，nums[-1] 越界！
-
-// 正确写法
-if (i > 0 && nums[i] == nums[i - 1]) continue;
-```
-
-```java
-// 错误！去重时比较的方向搞反了
-if (i > 0 && nums[i] == nums[i + 1]) continue; // 这是在跳过"后面的 i"，而不是"当前这个 i 是重复的"
-// 这会导致：如果数组是 [-1, -1, 0]，i=0 时 nums[0]==-1==nums[1]==-1，会跳过 i=0
-// 但 i=0 是第一次遇到 -1，应该处理，不应该跳过！
-
-// 正确：跳过的是"当前 i 与前一个 i 相同"的情况（即当前 i 是重复的）
-if (i > 0 && nums[i] == nums[i - 1]) continue;
-```
-
-这个方向错误是最常见的面试 bug，务必牢记：**去重时，比较的是当前元素和前一个元素（`nums[i]` vs `nums[i-1]`），跳过的是"重复出现的后者"**。
+**当数组里重复元素很多时，这两个剪枝能跳过大量无效搜索。** 在 LeetCode 严格的时限下，它们有时正是通过评测的关键。**剪枝的本质，是利用单调性提前判定"这一支不可能有解"，从而整支砍掉**——这与二分"排除一半"是同一思想的两种尺度。
 
 ---
 
-## 下一篇预告
+## 第 7 章 去重准则的系统梳理
 
-[[06 全排列与字典序：Next Permutation、Permutation Sequence、Gray Code]] 将进入一个完全不同的数组专题：排列与序列生成。这类题考察的不是搜索或求和，而是**对字典序和数学规律的理解**。Next Permutation 是很多排列问题的基础操作，Permutation Sequence 引入了阶乘数系（Factoradic Number System），Gray Code 则涉及二进制的优雅变换。
+去重是本篇的核心难点，最后把它系统化，形成一张可以随身携带的准则表。对 3Sum 的三个指针 `i`、`left`、`right`：
+
+| 指针 | 去重时机 | Go 代码 | 解释 |
+|------|----------|---------|------|
+| `i` | 循环开始时 | `if i > 0 && nums[i] == nums[i-1] { continue }` | 跳过与前一 `i` 重复者，避免重复三元组 |
+| `left` | 收集答案后、`left++` 前 | `for left < right && nums[left] == nums[left+1] { left++ }` | 跳过与当前 `left` 相同者，避免同一组解被重复收集 |
+| `right` | 收集答案后、`right--` 前 | `for left < right && nums[right] == nums[right-1] { right-- }` | 同上，针对 `right` |
+
+三条准则背后的共同逻辑只有一句话：**在有序数组里，让每一个"相同的值"只有一个代表有机会进入答案，而代表必须是这批相同值中最先出现的那一个。** 外层用"与前一个比较"实现，内层用"先收集、后越过"实现。理解了这句话，任何 k 数之和的去重都能照此推演，而无需逐题记忆。
+
+---
+
+## 第 8 章 去重的错误图鉴与验证方法
+
+去重写错，是 3Sum 类题目最典型的翻车方式，而且很多错误写法在简单测试用例下"碰巧能过"，直到遇到重复元素才暴露。本章把常见的错误写法集中陈列，并给出一套可自测的方法。
+
+### 8.1 四种典型错误
+
+**错误一：外层去重漏了 `i > 0`。**
+
+```go
+if nums[i] == nums[i-1] { continue } // i=0 时 nums[-1] 越界
+```
+
+根因是没有意识到"第一个元素没有前一个可比"。
+
+**错误二：比较方向写反。**
+
+```go
+if i > 0 && nums[i] == nums[i+1] { continue } // 错误：跳过了"首次出现"的那个值
+```
+
+这种写法会把"某值第一次出现"的 `i` 也一并跳过，直接漏解。**它在无重复的数组上完全正常，只在有重复时才出错**——这也是它最阴险的地方。
+
+**错误三：先跳过、后判断。**
+
+```go
+for left < right && nums[left] == nums[left+1] { left++ } // 去重写在收集之前
+if nums[i]+nums[left]+nums[right] == 0 { ... }            // 此时可能已跳过有效解
+```
+
+去重必须在**收集当前解之后**再做，否则可能把当前这组有效解一起跳过去。
+
+**错误四：内层循环缺了 `left < right` 边界。**
+
+```go
+for nums[left] == nums[left+1] { left++ } // 没有 left < right 保护，可能越界
+```
+
+去重的 `while` 循环必须带 `left < right` 上界，否则当后半段全是相同值时，`left` 会越过 `right` 继续前进，访问越界。
+
+### 8.2 一套自测方法
+
+去重是否写对，用下面三个用例一测便知：
+
+| 用例 | 检验什么 | 期望 |
+|------|---------|------|
+| `[-1,-1,-1,2,2]` | 外层与内层去重同时生效 | `[[-1,-1,2]]`，只一组 |
+| `[0,0,0,0]` | 全同元素时的去重 | `[[0,0,0]]`，只一组 |
+| `[-2,0,0,2,2]` | 收集后越过后缀重复值 | `[[-2,0,2]]`，只一组 |
+
+**这三个用例的共同特征是"重复元素密集"**——它们正是错误写法最藏不住的地方。**与其凭直觉判断去重写对没有，不如固定用一组"重复密集"的用例来自测**，这是比反复读代码更可靠的验证方式。
+
+---
+
+## 第 9 章 延伸：4Sum 的哈希解法与 k-Sum 的边界
+
+### 9.1 4Sum 的另一种解法：两两打包 + 哈希
+
+第 05 篇给出的 4Sum 是"三层循环 + 双指针"，时间 $O(n^3)$。其实还有一条更快的路：**把问题拆成"两数之和"，用哈希表把 $O(n^3)$ 降到 $O(n^2)$。**
+
+思路与第 04 篇的 LeetCode 454 如出一辙：先枚举所有下标对 $(i, j)$（$i < j$），把 `nums[i] + nums[j]` 作为键、下标对作为值存入哈希表；再枚举另一对 $(k, l)$，查哈希表中是否存在键 `target - nums[k] - nums[l]`。两两配对，总时间 $O(n^2)$。
+
+```go
+// 4Sum 的哈希思路（示意，需额外处理去重）
+func fourSumHash(nums []int, target int) [][]int {
+    n := len(nums)
+    // 键为两数之和，值为所有满足该和的下标对
+    pairs := make(map[int][][2]int)
+    for i := 0; i < n; i++ {
+        for j := i + 1; j < n; j++ {
+            pairs[nums[i]+nums[j]] = append(pairs[nums[i]+nums[j]], [2]int{i, j})
+        }
+    }
+    // 遍历另一对，查补数（注意下标不重叠与结果去重）
+    // ...
+    return nil
+}
+```
+
+**但请注意，哈希解法有一个明显的代价：去重变得非常棘手。** 因为哈希表里存的是"下标对"，同一个四元组会以多种下标排列被反复命中，需要额外做一轮结果去重（通常用集合或排序后比对）。**这正是"排序 + 双指针"方案在 k-Sum 类题目里更受青睐的原因——它用有序性把去重变成了一次简单的相邻比较，而哈希方案则要花大力气处理重复。** 时间更短，未必等于更好写、更不易错。
+
+### 9.2 k-Sum 的复杂度边界
+
+回顾第 06 章的递归框架：$k$ 数之和的时间是 $O(n^{k-1})$。当 $k$ 增大时，这个复杂度迅速失控——$k=5$ 就是 $O(n^4)$，$k=6$ 是 $O(n^5)$。**这说明"逐层枚举"的框架并非万能，它有一个明确的适用范围。**
+
+有没有突破的办法？有一条经典思路叫 **Meet in the Middle（折半相遇）**：把 $k$ 个数分成两半，分别枚举各自的和，再用哈希或双指针把两半拼起来。这样复杂度大约从 $O(n^{k-1})$ 降到 $O(n^{k/2})$——例如 $k=6$ 时，从 $O(n^5)$ 降到 $O(n^3)$，改善是数量级的。
+
+**代价是空间的急剧膨胀**：折半枚举需要存储"一半的所有和"，空间同样是 $O(n^{k/2})$。**这又是一次典型的空间换时间**——用指数级的空间，换指数级的加速。它提醒我们：k-Sum 类问题没有"银弹"，随着 $k$ 增长，任何解法都逃不过组合爆炸，能做的只是**在时间与空间之间挪动这条爆炸的曲线**。
+
+### 9.3 一个实用的判断
+
+综合本篇所有解法，可以给出一条实践中的选型判断：
+
+| 场景 | 推荐方案 | 理由 |
+|------|---------|------|
+| $k \le 4$，要求结果去重 | 排序 + 双指针 | 去重简单，代码可控 |
+| $k \le 4$，只要计数（如 454） | 两两打包 + 哈希 | $O(n^2)$ 更快，无需去重 |
+| $k$ 较大 | Meet in the Middle | 否则复杂度爆炸 |
+| 数组无序且要求返回原下标 | 哈希（但要处理去重） | 排序会丢失下标 |
+
+**这张表没有"最优解"，只有"最匹配当前约束的解"**——这恰好是整个专栏反复回到的那条主线：约束决定选型，而不是复杂度数字的大小。
+
+---
+
+## 第 10 章 复杂度再审视与面试追问
+
+### 10.1 为什么排序"不算"进总复杂度
+
+本文反复说"3Sum 的时间是 $O(n^2)$"，但排序本身是 $O(n \log n)$——为什么可以把它"忽略"？
+
+答案是**渐进复杂度的支配关系**：当 $n$ 趋于无穷时，$O(n^2)$ 的增长远快于 $O(n \log n)$，因此 $O(n \log n) + O(n^2) = O(n^2)$。**排序的代价被双层循环"吸收"了。** 但请注意，这只是一个渐进意义上的说法——在 $n$ 不大、或者题目只要求 $k=2$（Two Sum）时，排序的 $O(n \log n)$ 就不再是"小项"，选型时反而要慎重。**"忽略低阶项"是渐进分析的便利，不是工程决策的全部依据。**
+
+### 10.2 三类常见追问
+
+**追问一："为什么必须先排序？不排序行不行？"** 答：排序贡献了两件事——对撞双指针所需的单调性，以及去重所需的相邻性。不排序的话，前者要改用哈希（但去重变得棘手），后者要改用集合。**排序是"一次性投资，全程受益"。**
+
+**追问二："3Sum 能不能做到比 $O(n^2)$ 更快？"** 答：在一般的计算模型下，不能。因为 3Sum 有一类"输出敏感"的下界——它本质上要找出所有满足条件的三元组，而三元组可能有 $O(n^2)$ 个。**任何算法至少要把答案写出来，因此输出规模本身就构成了 $O(n^2)$ 的下界。**
+
+**追问三："如果数组里有重复元素，双指针的单调性还成立吗？"** 答：成立。单调性依赖的是"值的大小关系"，重复元素不影响"左指针右移使和增大"这一性质——只是需要额外的去重逻辑来处理"相同的值"。**去重与单调性是两件独立的事，不要混淆。**
+
+### 10.3 一个贯穿的落点
+
+3Sum、3Sum Closest、4Sum 三题，从"找恰好等于"到"找最接近"再到"多一维"，表面在变，内核不变——**都是"排序 + 固定 + 夹逼"这一条主线的不同投影**。而它之所以能反复奏效，靠的正是排序带来的那份"确定性"：**只要数组有序，"该往哪个方向动指针"就是一个可证明的结论，而不是猜测。**
+
+**这就是为什么"先排序"几乎出现在所有 k-Sum 类题目的第一步**——它用 $O(n \log n)$ 的代价，为后续所有操作买来了一份"可预测性"。在算法世界里，**"把无序变有序"常常是打开局面的第一把钥匙**，这一点从本篇的 k-Sum，到第 03 篇的二分、第 06 篇的字典序，贯穿始终。
+
+### 10.4 留一道自测题
+
+若把 3Sum 的目标从 0 改成任意值 `target`，代码需要改动哪里？答案是——只需把 `sum == 0` 的判断换成 `sum == target`，其余逻辑（排序、固定、夹逼、去重）一字不改。
+
+**这正说明：本篇的框架是一个"参数化"的框架，题目的具体数值只是它的一个实例。** 能把"框架"与"实例"分开看，是"掌握"与"记住"的分水岭——记住的人换个数就懵了，掌握的人换个数只觉得"哦，改个判断而已"。**学算法最终要获得的，正是这种"看穿框架"的眼光。**
+
+---
+
+## 小结
+
+本篇从一个降维归约出发，把 3Sum、3Sum Closest、4Sum 乃至任意 k 数之和统一成了一类问题：**固定一个数，把 $k$ 数之和降为 $(k-1)$ 数之和，直至落到可用双指针解决的 Two Sum。** 支撑这套框架的，是排序带来的两件礼物——对撞双指针所需的单调性，以及去重所需的相邻性。
+
+三道题各有侧重，也各留下一课。3Sum 教我们看清去重的两处位置与"先收集、后越过"的顺序铁律；3Sum Closest 提醒我们"求最值"时初始值必须是一个真实合法的候选，而非象征性的极值；4Sum 则用四数相加溢出这一细节，把"数据类型要跟着运算范围走"的工程习惯摆到台前。而贯穿全篇的 k-Sum 递归框架与剪枝，则示范了"把特例抽象成通法"的价值。
+
+在认知层面，本篇反复出现的一个词是**归约**。它既是算法设计的方法，也是一种通用的解题心法：面对陌生的高维问题，先问一句"能不能固定一个变量，把它变成我熟悉的低维问题"。**降一维，往往就是打开局面的那把钥匙。** 与之相配的另一条经验是：**去重的本质是"去冗余"，而冗余的判定依赖有序**——这也解释了为什么排序几乎出现在所有 k-Sum 类题目的第一步。
+
+下一篇 [[06 全排列与字典序：Next Permutation、Permutation Sequence、Gray Code]] 将转入一个截然不同的数组专题：排列与序列生成。这类题考察的不再是搜索或求和，而是**对字典序与数学规律的洞察**——Next Permutation 是许多排列问题的基础操作，Permutation Sequence 引入了阶乘数系，Gray Code 则藏着二进制的优雅变换。
+
+---
+
+## 参考资料
+
+1. LeetCode 15. 3Sum. https://leetcode.cn/problems/3sum/
+2. LeetCode 16. 3Sum Closest. https://leetcode.cn/problems/3sum-closest/
+3. LeetCode 18. 4Sum. https://leetcode.cn/problems/4sum/
+4. Cormen, T. H., et al. *Introduction to Algorithms* (4th ed.). MIT Press, 2022. 第 2.3 节"分治法的分析"与问题归约的相关讨论。
+5. Skiena, S. S. *The Algorithm Design Manual* (3rd ed.). Springer, 2020. 第 1.3 节"推理与证明"，关于排序在搜索问题中的前置作用。
+
+---
+
+> [!note] 思考题
+> 1. 3Sum 里"排序 + 双指针"的时间是 $O(n^2)$。能否用哈希表做到同样复杂度？两者在去重难度上有何差别？
+> 2. 4Sum 的两处剪枝依赖数组有序。若数组无序而题目要求返回原下标，剪枝还能成立吗？
+> 3. k-Sum 递归框架的时间是 $O(n^{k-1})$。当 $k$ 很大时，是否有比"逐层枚举"更好的做法？请从"Meet in the Middle"的角度思考。
+> 4. 若题目要求返回的是"下标"而非"数值"，去重逻辑要如何改写？此时排序会带来什么问题？
+> 5. 请证明：在有序数组上，对撞双指针不会漏掉任何一组满足和为 `target` 的元素对。
