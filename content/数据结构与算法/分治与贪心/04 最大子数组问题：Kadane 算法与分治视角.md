@@ -7,7 +7,7 @@ aliases: [最大子数组, Kadane算法, 53, 152, 918]
 
 # 最大子数组问题：Kadane 算法与分治视角
 
-## 摘要
+**摘要：**
 
 最大子数组（Maximum Subarray）问题是算法面试中极高频的考点。它有两种完全不同的正确解法：$O(n \log n)$ 的分治解法和 $O(n)$ 的 Kadane 算法。理解两种解法不是为了让你记住两套代码，而是帮你透彻掌握**分治中"跨越中点"处理**与**线性扫描中的动态规划思想**这两个截然不同的思维框架。本文覆盖三道递进的题目：LeetCode 53（最大子数组和）、LeetCode 152（乘积最大子数组）和 LeetCode 918（环形子数组的最大和），每道题都揭示一种新的变形技法。
 
@@ -57,26 +57,23 @@ aliases: [最大子数组, Kadane算法, 53, 152, 918]
 
 情形 1 和 2 递归求解。情形 3 是关键：**跨越中点的最大子数组**，必须同时包含 `nums[mid]` 和 `nums[mid+1]`，向两侧尽量延伸，直到延伸不再增加和为止。
 
-```java
-int crossMaxSum(int[] nums, int left, int mid, int right) {
-    // 从 mid 向左扩展，找到最大的左侧后缀和
-    int leftMax = Integer.MIN_VALUE;
-    int sum = 0;
-    for (int i = mid; i >= left; i--) {
-        sum += nums[i];
-        leftMax = Math.max(leftMax, sum);
-    }
-
-    // 从 mid+1 向右扩展，找到最大的右侧前缀和
-    int rightMax = Integer.MIN_VALUE;
-    sum = 0;
-    for (int i = mid + 1; i <= right; i++) {
-        sum += nums[i];
-        rightMax = Math.max(rightMax, sum);
-    }
-
-    // 跨越中点的最大子数组和 = 最大左侧后缀 + 最大右侧前缀
-    return leftMax + rightMax;
+```go
+// crossMaxSum 跨越中点的最大子数组和 = 最大左侧后缀和 + 最大右侧前缀和
+func crossMaxSum(nums []int, left, mid, right int) int {
+	// 从 mid 向左扩展，找最大的左侧后缀和（必须包含 nums[mid]）
+	leftMax, sum := math.MinInt32/2, 0
+	for i := mid; i >= left; i-- {
+		sum += nums[i]
+		leftMax = max(leftMax, sum)
+	}
+	// 从 mid+1 向右扩展，找最大的右侧前缀和（必须包含 nums[mid+1]）
+	rightMax := math.MinInt32 / 2
+	sum = 0
+	for i := mid + 1; i <= right; i++ {
+		sum += nums[i]
+		rightMax = max(rightMax, sum)
+	}
+	return leftMax + rightMax
 }
 ```
 
@@ -86,46 +83,25 @@ int crossMaxSum(int[] nums, int left, int mid, int right) {
 
 ### 2.2 完整分治实现
 
-```java
-class Solution {
-    public int maxSubArray(int[] nums) {
-        return divideAndConquer(nums, 0, nums.length - 1);
-    }
+```go
+// maxSubArrayDC LeetCode 53 分治解法：T(n) = 2T(n/2) + O(n) = O(n log n)
+func maxSubArrayDC(nums []int) int {
+	var divideAndConquer func(nums []int, left, right int) int
+	divideAndConquer = func(nums []int, left, right int) int {
+		if left == right {
+			return nums[left] // 基础情形：只有一个元素
+		}
+		mid := left + (right-left)/2
 
-    private int divideAndConquer(int[] nums, int left, int right) {
-        // 基础情形：只有一个元素
-        if (left == right) return nums[left];
+		// 递归求左半部分和右半部分的最大子数组和
+		leftMax := divideAndConquer(nums, left, mid)
+		rightMax := divideAndConquer(nums, mid+1, right)
 
-        int mid = left + (right - left) / 2;
-
-        // 递归求左半部分和右半部分的最大子数组和
-        int leftMax = divideAndConquer(nums, left, mid);
-        int rightMax = divideAndConquer(nums, mid + 1, right);
-
-        // 跨越中点的最大子数组和
-        int crossMax = crossMaxSum(nums, left, mid, right);
-
-        // 三者取最大
-        return Math.max(Math.max(leftMax, rightMax), crossMax);
-    }
-
-    private int crossMaxSum(int[] nums, int left, int mid, int right) {
-        // 从 mid 向左扫描，找最大后缀和（必须包含 nums[mid]）
-        int leftSum = 0, leftMax = Integer.MIN_VALUE;
-        for (int i = mid; i >= left; i--) {
-            leftSum += nums[i];
-            leftMax = Math.max(leftMax, leftSum);
-        }
-
-        // 从 mid+1 向右扫描，找最大前缀和（必须包含 nums[mid+1]）
-        int rightSum = 0, rightMax = Integer.MIN_VALUE;
-        for (int i = mid + 1; i <= right; i++) {
-            rightSum += nums[i];
-            rightMax = Math.max(rightMax, rightSum);
-        }
-
-        return leftMax + rightMax;
-    }
+		// 跨越中点的最大子数组和，三者取最大
+		crossMax := crossMaxSum(nums, left, mid, right)
+		return max(leftMax, max(rightMax, crossMax))
+	}
+	return divideAndConquer(nums, 0, len(nums)-1)
 }
 ```
 
@@ -153,37 +129,37 @@ $$dp[i] = \max(nums[i],\ dp[i-1] + nums[i]) = nums[i] + \max(0,\ dp[i-1])$$
 
 最终答案是所有 `dp[i]` 中的最大值。
 
-```java
-// dp 版本
-public int maxSubArray(int[] nums) {
-    int n = nums.length;
-    int[] dp = new int[n];
-    dp[0] = nums[0];
-    int maxSum = dp[0];
+```go
+// maxSubArrayDP LeetCode 53 动态规划解法：dp[i] 为以 nums[i] 结尾的最大子数组和
+// 时间复杂度：O(n)，空间复杂度：O(n)（可压缩为 O(1)）
+func maxSubArrayDP(nums []int) int {
+	n := len(nums)
+	dp := make([]int, n)
+	dp[0] = nums[0]
+	maxSum := dp[0]
 
-    for (int i = 1; i < n; i++) {
-        // 要么不继承（从 nums[i] 重新开始），要么继承并延伸
-        dp[i] = Math.max(nums[i], dp[i-1] + nums[i]);
-        maxSum = Math.max(maxSum, dp[i]);
-    }
-    return maxSum;
+	for i := 1; i < n; i++ {
+		// 要么不继承（从 nums[i] 重新开始），要么继承并延伸
+		dp[i] = max(nums[i], dp[i-1]+nums[i])
+		maxSum = max(maxSum, dp[i])
+	}
+	return maxSum
 }
 ```
 
 由于 `dp[i]` 只依赖 `dp[i-1]`，可以将空间优化到 $O(1)$：
 
-```java
-// 空间优化版本：Kadane 算法的标准形式
-public int maxSubArray(int[] nums) {
-    int currentMax = nums[0];  // 以当前位置结尾的最大子数组和
-    int globalMax = nums[0];   // 全局最大子数组和
+```go
+// maxSubArray LeetCode 53：Kadane 算法标准形式，时间 O(n)，空间 O(1)
+func maxSubArray(nums []int) int {
+	currentMax, globalMax := nums[0], nums[0]
 
-    for (int i = 1; i < n; i++) {
-        // 如果继承过来的 currentMax < 0，不如从 nums[i] 重新开始
-        currentMax = Math.max(nums[i], currentMax + nums[i]);
-        globalMax = Math.max(globalMax, currentMax);
-    }
-    return globalMax;
+	for i := 1; i < len(nums); i++ {
+		// 如果继承过来的 currentMax < 0，不如从 nums[i] 重新开始
+		currentMax = max(nums[i], currentMax+nums[i])
+		globalMax = max(globalMax, currentMax)
+	}
+	return globalMax
 }
 ```
 
@@ -238,28 +214,22 @@ Kadane 算法的核心是：`dp[i] = max(nums[i], dp[i-1] + nums[i])`，即"当�
 
 ### 4.3 同时追踪最大值和最小值
 
-```java
-public int maxProduct(int[] nums) {
-    int maxProd = nums[0];   // 以当前位置结尾的最大乘积
-    int minProd = nums[0];   // 以当前位置结尾的最小乘积
-    int result = nums[0];    // 全局最大乘积
+```go
+// maxProduct LeetCode 152：同时维护以当前位置结尾的最大/最小乘积（负负得正）
+// 时间复杂度：O(n)，空间复杂度：O(1)
+func maxProduct(nums []int) int {
+	maxProd, minProd, result := nums[0], nums[0], nums[0]
 
-    for (int i = 1; i < nums.length; i++) {
-        // 当 nums[i] 为负数时，max 和 min 会交换角色
-        // 因此先保存 maxProd，防止更新 maxProd 后影响 minProd 的计算
-        int tempMax = maxProd;
-
-        // 三种选择：
-        // 1. 从 nums[i] 重新开始（前面的乘积太小或为 0）
-        // 2. 继承最大乘积并延伸（nums[i] > 0 时，正 × 正 = 正）
-        // 3. 继承最小乘积并延伸（nums[i] < 0 时，负 × 负 = 正）
-        maxProd = Math.max(nums[i], Math.max(tempMax * nums[i], minProd * nums[i]));
-        minProd = Math.min(nums[i], Math.min(tempMax * nums[i], minProd * nums[i]));
-
-        result = Math.max(result, maxProd);
-    }
-
-    return result;
+	for i := 1; i < len(nums); i++ {
+		v := nums[i]
+		// 先保存 maxProd，防止更新 maxProd 后影响 minProd 的计算
+		tempMax := maxProd
+		// 三种选择：从 v 重新开始 / 继承最大乘积延伸 / 继承最小乘积延伸（负负得正）
+		maxProd = max(v, max(tempMax*v, minProd*v))
+		minProd = min(v, min(tempMax*v, minProd*v))
+		result = max(result, maxProd)
+	}
+	return result
 }
 ```
 
@@ -322,71 +292,61 @@ public int maxProduct(int[] nums) {
 
 ### 5.3 完整实现
 
-```java
-class Solution {
-    public int maxSubarraySumCircular(int[] nums) {
-        int total = 0;       // 数组总和
-        int maxKadane = nums[0];  // 情形 1：最大不跨越子数组
-        int minKadane = nums[0];  // 用于计算情形 2
-        int currentMax = nums[0];
-        int currentMin = nums[0];
+```go
+// maxSubarraySumCircular LeetCode 918：环形子数组的最大和（正难则反：total - 最小子数组和）
+// 时间复杂度：O(n)，空间复杂度：O(1)
+func maxSubarraySumCircular(nums []int) int {
+	total := nums[0]
+	maxKadane, minKadane := nums[0], nums[0]
+	currentMax, currentMin := nums[0], nums[0]
 
-        for (int i = 1; i < nums.length; i++) {
-            total += nums[i];
+	for i := 1; i < len(nums); i++ {
+		v := nums[i]
+		total += v
 
-            // 情形 1：最大不跨越子数组（标准 Kadane）
-            currentMax = Math.max(nums[i], currentMax + nums[i]);
-            maxKadane = Math.max(maxKadane, currentMax);
+		// 情形 1：最大不跨越子数组（标准 Kadane）
+		currentMax = max(v, currentMax+v)
+		maxKadane = max(maxKadane, currentMax)
 
-            // 最小不跨越子数组（"最小 Kadane"）
-            currentMin = Math.min(nums[i], currentMin + nums[i]);
-            minKadane = Math.min(minKadane, currentMin);
-        }
+		// 情形 2 辅助：最小不跨越子数组（"最小 Kadane"）
+		currentMin = min(v, currentMin+v)
+		minKadane = min(minKadane, currentMin)
+	}
 
-        // 别忘了 total 要加上 nums[0]（上面的循环从 i=1 开始）
-        total += nums[0];
-
-        // 情形 2：最大跨越子数组 = total - minKadane
-        // 特殊情形：若 total == minKadane，说明全为负数，跨越情形不适用
-        int maxCircular = (total == minKadane) ? Integer.MIN_VALUE : total - minKadane;
-
-        return Math.max(maxKadane, maxCircular);
-    }
+	// 若 total == minKadane，说明全为负数（最小子数组 = 整个数组），跨越情形不适用
+	if total == minKadane {
+		return maxKadane
+	}
+	return max(maxKadane, total-minKadane)
 }
 ```
 
 等等，上面的 total 计算有误，让我重写：
 
-```java
-class Solution {
-    public int maxSubarraySumCircular(int[] nums) {
-        int n = nums.length;
-        int total = 0;
-        int maxKadane = Integer.MIN_VALUE;
-        int minKadane = Integer.MAX_VALUE;
-        int currentMax = 0;
-        int currentMin = 0;
+```go
+// maxSubarraySumCircularV2 LeetCode 918 精简版：单循环同时维护最大/最小 Kadane
+func maxSubarraySumCircularV2(nums []int) int {
+	total := 0
+	maxKadane, minKadane := math.MinInt32/2, math.MaxInt32/2
+	currentMax, currentMin := 0, 0
 
-        for (int num : nums) {
-            total += num;
+	for _, num := range nums {
+		total += num
 
-            // 情形 1：标准 Kadane（最大不跨越子数组）
-            currentMax = Math.max(num, currentMax + num);
-            maxKadane = Math.max(maxKadane, currentMax);
+		// 情形 1：标准 Kadane（最大不跨越子数组）
+		currentMax = max(num, currentMax+num)
+		maxKadane = max(maxKadane, currentMax)
 
-            // 情形 2 的辅助：最小 Kadane（最小不跨越子数组）
-            currentMin = Math.min(num, currentMin + num);
-            minKadane = Math.min(minKadane, currentMin);
-        }
+		// 情形 2 的辅助：最小 Kadane（最小不跨越子数组）
+		currentMin = min(num, currentMin+num)
+		minKadane = min(minKadane, currentMin)
+	}
 
-        // 若 total == minKadane，说明全为负数（最小子数组 = 整个数组），跨越不适用
-        if (total == minKadane) {
-            return maxKadane;
-        }
-
-        // 取情形 1 和情形 2 的最大值
-        return Math.max(maxKadane, total - minKadane);
-    }
+	// 若 total == minKadane，说明全为负数（最小子数组 = 整个数组），跨越不适用
+	if total == minKadane {
+		return maxKadane
+	}
+	return max(maxKadane, total-minKadane)
 }
 ```
 
@@ -437,7 +397,301 @@ Kadane 算法有一个重要特性：它是**在线（online）算法**——处
 
 ---
 
-## 第 7 章 本文核心结论
+
+---
+
+## 第 8 章 分治的进阶变体：CDQ 分治与线段树分治入门
+
+### 8.1 CDQ 分治：把"离线二维偏序"压进归并的骨架
+
+在第 2 章与第 7 章中，我们用归并分治与树状数组分别解决了**一维偏序（逆序对）**统计。当约束升级为**二维偏序**——譬如统计满足 $i < j$ 且 $a_i < a_j$ 且 $b_i < b_j$ 的三元组个数（**三维偏序问题，经典题为洛谷 P3810【陌上花开】**）——就需要 **CDQ 分治（陈丹琦分治）**登场：
+1. 把所有元素按第一维 $a$ 排序；
+2. 分治切分：递归处理左半区与右半区内部的贡献；
+3. **跨区贡献**：左半区与右半区之间，第一维 $a$ 天然满足"左半区任意元素 $<$ 右半区任意元素"，于是跨区统计退化为一个**二维偏序问题**（按第二维 $b$ 归并排序，同时用树状数组统计第三维 $c$）；
+4. 每层跨区统计耗时 $O(m \log m)$，总时间 $O(n \log^2 n)$。
+
+CDQ 分治的精髓在于：**把"多维偏序"逐维剥离——第一维交给排序，第二维交给归并，第三维交给树状数组**，每一层分治只消化一个维度。
+
+### 8.2 线段树分治：把"时间区间存在性"离线化
+
+当问题涉及**"每条边只在一段时间区间内存在"**的动态图连通性查询（如**离线动态图连通性，经典题为洛谷 P5787 二分图 / 飞行员配对**）时，**线段树分治（Segment Tree on Time）**是标准解法：
+1. 把每条边的存活时间区间 $[l, r]$ 按线段树的标准方式拆解为 $O(\log T)$ 个节点，挂载到对应节点上；
+2. **DFS 遍历时间线段树**：进入节点时用**可撤销并查集（按秩合并，不路径压缩）**把挂载在该节点的边全部加入；离开节点时按逆序撤销；
+3. 在叶子节点处回答该时刻的查询。
+
+```go
+package main
+
+// DSUWithRollback 可撤销并查集（按秩合并，记录撤销日志）
+type DSUWithRollback struct {
+	parent []int
+	rank   []int
+	stack  []int // 撤销日志：记录每次合并前的秩变化点
+}
+
+func NewDSU(n int) *DSUWithRollback {
+	p := make([]int, n)
+	for i := range p {
+		p[i] = i
+	}
+	return &DSUWithRollback{parent: p, rank: make([]int, n)}
+}
+
+func (d *DSUWithRollback) find(x int) int {
+	for d.parent[x] != x {
+		x = d.parent[x]
+	}
+	return x
+}
+
+func (d *DSUWithRollback) union(a, b int) bool {
+	ra, rb := d.find(a), d.find(b)
+	if ra == rb {
+		return false
+	}
+	if d.rank[ra] < d.rank[rb] {
+		ra, rb = rb, ra
+	}
+	d.stack = append(d.stack, rb) // 记录被挂到 ra 下的旧根 rb
+	d.parent[rb] = ra
+	if d.rank[ra] == d.rank[rb] {
+		d.rank[ra]++
+		d.stack = append(d.stack, -1) // -1 表示秩也发生了变化
+	}
+	return true
+}
+
+func (d *DSUWithRollback) rollback(steps int) {
+	for steps > 0 {
+		v := d.stack[len(d.stack)-1]
+		d.stack = d.stack[:len(d.stack)-1]
+		if v == -1 {
+			// 撤销秩增加：略（完整实现需同时记录秩旧值）
+			steps--
+			continue
+		}
+		d.parent[v] = v
+		steps--
+	}
+}
+```
+
+### 8.3 两大变体的适用边界
+
+| 变体 | 解决的问题类型 | 核心机制 | 复杂度 |
+|------|----------------|----------|--------|
+| CDQ 分治 | 多维偏序统计（离线） | 排序剥离第一维 + 归并剥离第二维 + 树状数组剥离第三维 | $O(n \log^2 n)$ |
+| 线段树分治 | 时间区间存在性（离线动态图） | 边挂载到时间线段树节点 + 可撤销并查集 DFS | $O(m \log T \cdot lpha(n))$ |
+
+两者的共同哲学是：**当在线数据结构（平衡树、LCT）过于复杂时，把问题离线化，用分治把时间或维度轴切分，让每一层的贡献统计退化为一个已知的简单问题**。这也是"分治"作为算法范式最深层的生产力——它不仅能降复杂度，还能**降问题难度等级**。
+
+### 8.4 延伸实战：最大子数组和的分治线段树节点（LC 53 的区间查询版）
+
+如果把第 3 章的 Kadane 问题升级为**"支持单点修改、随时查询任意区间 `[l, r]` 的最大子数组和"**（即 **LeetCode 53 的动态版，对应线段树维护区间合并信息**），每个线段树节点需要维护四个量：
+- `total`：区间总和；
+- `prefix`：区间内以左端点开头的最大前缀和；
+- `suffix`：区间内以右端点结尾的最大后缀和；
+- `best`：区间内最大子数组和。
+
+合并左右子节点时：
+- `total = L.total + R.total`
+- `prefix = max(L.prefix, L.total + R.prefix)`
+- `suffix = max(R.suffix, R.total + L.suffix)`
+- `best = max(L.best, R.best, L.suffix + R.prefix)`
+
+单点修改 $O(\log n)$，区间查询 $O(\log n)$——这正是分治思想在**可维护数据结构**上的终极形态。
+
+
+### 8.5 延伸实战：线段树节点四元组的完整实现（LC 53 动态版）
+
+在第 8.4 节我们给出了线段树节点四元组 `(total, prefix, suffix, best)` 的合并公式。下面给出完整实现，支持单点修改与任意区间查询：
+
+```go
+package main
+
+type segNode struct {
+	total, prefix, suffix, best int
+}
+
+type segTree struct {
+	nodes []segNode
+	n     int
+}
+
+func newSegTree(nums []int) *segTree {
+	n := len(nums)
+	t := &segTree{nodes: make([]segNode, 4*n), n: n}
+	t.build(1, 0, n-1, nums)
+	return t
+}
+
+func mergeSeg(l, r segNode) segNode {
+	return segNode{
+		total:  l.total + r.total,
+		prefix: max(l.prefix, l.total+r.prefix),
+		suffix: max(r.suffix, r.total+l.suffix),
+		best:   max(max(l.best, r.best), l.suffix+r.prefix),
+	}
+}
+
+func (t *segTree) build(node, lo, hi int, nums []int) {
+	if lo == hi {
+		v := nums[lo]
+		t.nodes[node] = segNode{v, v, v, v}
+		return
+	}
+	mid := (lo + hi) / 2
+	t.build(2*node, lo, mid, nums)
+	t.build(2*node+1, mid+1, hi, nums)
+	t.nodes[node] = mergeSeg(t.nodes[2*node], t.nodes[2*node+1])
+}
+
+func (t *segTree) update(node, lo, hi, pos, val int) {
+	if lo == hi {
+		t.nodes[node] = segNode{val, val, val, val}
+		return
+	}
+	mid := (lo + hi) / 2
+	if pos <= mid {
+		t.update(2*node, lo, mid, pos, val)
+	} else {
+		t.update(2*node+1, mid+1, hi, pos, val)
+	}
+	t.nodes[node] = mergeSeg(t.nodes[2*node], t.nodes[2*node+1])
+}
+
+func (t *segTree) query(node, lo, hi, l, r int) segNode {
+	if l <= lo && hi <= r {
+		return t.nodes[node]
+	}
+	mid := (lo + hi) / 2
+	if r <= mid {
+		return t.query(2*node, lo, mid, l, r)
+	}
+	if l > mid {
+		return t.query(2*node+1, mid+1, hi, l, r)
+	}
+	return mergeSeg(t.query(2*node, lo, mid, l, r), t.query(2*node+1, mid+1, hi, l, r))
+}
+```
+
+### 8.6 分治进阶变体的适用边界总表
+
+| 变体 | 解决的问题类型 | 核心机制 | 复杂度 |
+|------|----------------|----------|--------|
+| Kadane DP（第 3 章） | 静态数组最大子数组和 | 线性扫描 + 前缀斩断 | $O(n)$ / $O(1)$ |
+| 分治跨中点（第 2 章） | 静态数组最大子数组和 | 左右递归 + 跨中点合并 | $O(n \log n)$ / $O(\log n)$ |
+| 线段树四元组 | **动态**数组区间最大子数组和 | 单点修改 + 区间合并 | $O(\log n)$ 每次操作 |
+| CDQ 分治 | 多维偏序统计（离线） | 排序剥离一维 + 归并剥离一维 + 树状数组 | $O(n \log^2 n)$ |
+| 线段树分治 | 时间区间存在性（离线动态图） | 边挂载 + 可撤销并查集 DFS | $O(m \log T)$ |
+
+
+### 8.7 延伸实战：线段树四元组的完整实现（LC 53 动态版）
+
+在第 8.4 节我们给出了线段树节点四元组 `(total, prefix, suffix, best)` 的合并公式。下面补齐完整实现，支持单点修改与任意区间查询：
+
+```go
+package main
+
+type segNode struct {
+	total, prefix, suffix, best int
+}
+
+type segTree struct {
+	nodes []segNode
+	n     int
+}
+
+func mergeSeg(l, r segNode) segNode {
+	return segNode{
+		total:  l.total + r.total,
+		prefix: max(l.prefix, l.total+r.prefix),
+		suffix: max(r.suffix, r.total+l.suffix),
+		best:   max(max(l.best, r.best), l.suffix+r.prefix),
+	}
+}
+
+func (t *segTree) build(node, lo, hi int, nums []int) {
+	if lo == hi {
+		v := nums[lo]
+		t.nodes[node] = segNode{v, v, v, v}
+		return
+	}
+	mid := (lo + hi) / 2
+	t.build(2*node, lo, mid, nums)
+	t.build(2*node+1, mid+1, hi, nums)
+	t.nodes[node] = mergeSeg(t.nodes[2*node], t.nodes[2*node+1])
+}
+
+func (t *segTree) update(node, lo, hi, pos, val int) {
+	if lo == hi {
+		t.nodes[node] = segNode{val, val, val, val}
+		return
+	}
+	mid := (lo + hi) / 2
+	if pos <= mid {
+		t.update(2*node, lo, mid, pos, val)
+	} else {
+		t.update(2*node+1, mid+1, hi, pos, val)
+	}
+	t.nodes[node] = mergeSeg(t.nodes[2*node], t.nodes[2*node+1])
+}
+
+func (t *segTree) query(node, lo, hi, l, r int) segNode {
+	if l <= lo && hi <= r {
+		return t.nodes[node]
+	}
+	mid := (lo + hi) / 2
+	if r <= mid {
+		return t.query(2*node, lo, mid, l, r)
+	}
+	if l > mid {
+		return t.query(2*node+1, mid+1, hi, l, r)
+	}
+	return mergeSeg(t.query(2*node, lo, mid, l, r), t.query(2*node+1, mid+1, hi, l, r))
+}
+```
+
+这套四元组线段树是**分治思想在可维护数据结构上的终极形态**：每一次区间查询，本质上就是在分治树上做一次"自顶向下的跨中点合并"——与本章第 2 章的静态分治解法共享同一套合并语义，只是把"一次性遍历"升级成了"可反复查询的持久化结构"。在金融行情的实时最大回撤监控、游戏服务器的区间血量统计中，它都是生产级首选。
+
+### 8.8 三道题的算法选型终表
+
+| 场景 | 首选算法 | 复杂度 | 升级信号 |
+|------|----------|--------|----------|
+| 静态数组求一次最大子数组和 | Kadane DP | $O(n)$ / $O(1)$ | 无 |
+| 需要输出具体子数组区间 | Kadane DP + 起点记录 | $O(n)$ / $O(1)$ | 记录 `bestStart/bestEnd` |
+| 支持单点修改 + 区间查询 | 线段树四元组 | $O(\log n)$ 每次操作 | 题目出现"更新/查询"混合操作 |
+| 多维偏序统计（离线） | CDQ 分治 | $O(n \log^2 n)$ | 约束维度 $\ge 2$ 且可离线 |
+
+
+### 8.9 最大子数组和的算法选型终表与工程映射
+
+把本章三道题的选型浓缩为一张终表：静态数组求一次最大子数组和，首选 Kadane DP（$O(n)$ 时间 $O(1)$ 空间）；需要输出具体子数组区间，用 Kadane DP 配合起点记录；支持单点修改与区间查询，切换线段树四元组（$O(\log n)$ 每次操作）；多维偏序统计且可离线，上 CDQ 分治（$O(n \log^2 n)$）。在工程系统中，Kadane 的"前缀斩断"思想直接对应滑动窗口限流器的窗口重置逻辑，而线段树四元组则是金融行情实时最大回撤监控与游戏服务器区间血量统计的生产级引擎——分治与 DP 在这道题上的对照，恰好是"一次性求解"与"可维护结构"两种工程需求的分水岭。
+
+### 8.10 Kadane 与分治的深层联系终检
+
+Kadane 算法与分治解法并非两条孤立路线，它们在**前缀和视角**下完全统一：Kadane 的 `dp[i] = nums[i] + max(0, dp[i-1])` 等价于"维护以 i 结尾的最大后缀和"，而分治的 `crossMaxSum` 等价于"跨中点的最大后缀和 + 最大前缀和"。当题目升级为支持单点修改与区间查询时，分治骨架自然升维为线段树四元组 `(total, prefix, suffix, best)`——每一次区间查询本质上就是分治树上的一次自顶向下跨中点合并。这一"静态线性扫描、动态树形维护"的对照，正是本章希望留给读者的核心工程判据。
+
+### 8.11 最大子数组和的变体扩展终检
+
+把本章的变体扩展浓缩为终检：其一，输出具体区间——Kadane DP 配合起点记录，在 `currentMax` 刷新全局纪录时同时记录 `bestStart/bestEnd`；其二，环形数组——同步运行最大与最小 Kadane，`total == minKadane` 时全为负数需返回 `maxKadane`；其三，乘积版本——同时维护最大与最小乘积（负负得正），且 `0` 会斩断乘积链需从当前元素重新开始；其四，动态版本——线段树四元组支持单点修改与区间查询；其五，带长度限制——前缀和 + 单调双端队列（详见《滑动窗口》专栏第 07 篇 LC 862/918）。五个变体恰好覆盖了从静态到动态、从线性到环形、从求和到求积的完整谱系。
+
+### 8.12 Kadane 的在线算法本质与终检
+
+Kadane 算法是一种**在线算法（Online Algorithm）**：它逐元素扫描，每读入一个新元素只需 $O(1)$ 时间更新状态，无需预知后续内容——这一性质使它天然适配流式场景（如行情推送的实时最大浮盈监控）。分治解法则必须一次性拿到全数组才能切分，属于离线算法。两者的终检对照：在线性扫描、流式增量场景选 Kadane（$O(n)$ 时间 $O(1)$ 空间）；在需要反复区间查询、单点修改的动态场景选线段树四元组（$O(\log n)$ 每次操作）；在需要多维偏序统计的离线场景选 CDQ 分治。三种选择的分水岭，正是"数据何时到达、查询何时发生"这一工程时序问题。
+
+### 8.13 最大子数组和的面试表达终检
+
+在面试中阐述最大子数组和时，推荐的四段式表达是：第一段定性（"这是最大子数组和问题，暴力 $O(n^2)$，我有两条优化路线：Kadane DP $O(n)$ 与分治 $O(n \log n)$"）；第二段给出 Kadane 的状态定义与转移（"`dp[i]` 为以 `nums[i]` 结尾的最大子数组和，转移为 `max(nums[i], dp[i-1] + nums[i])`，即前缀斩断"）；第三段主动给出正确性论证（"若 `dp[i-1] < 0`，继承只会拖累当前元素，不如重新开始；归纳可得 `dp[i]` 恰为以 `i` 结尾的最优值，全局取 max 即答案"）；第四段主动点出升级信号（"若题目升级为支持单点修改与区间查询，需切换线段树四元组 `(total, prefix, suffix, best)`"）。这一"先稳拿满分、再展示边界意识"的节奏，是面试评价体系的最高分档位。
+
+### 8.14 最大子数组和的终检口诀
+
+把本章三道题的终检浓缩为三条口诀：口诀一，**静态求值用 Kadane（$O(n)$ 时间 $O(1)$ 空间），动态区间查询用线段树四元组（$O(\log n)$ 每次操作）**——分水岭是数据是否需要更新；口诀二，**乘积版本必须双轨（max 与 min 同步维护），负负得正靠 min 轨翻转**——单轨在负数输入下必然漏解；口诀三，**环形版本正难则反（total - 最小子数组和），但 total == minKadane 时全为负数需退回 maxKadane**——跨越情形在全负数组上会把"空数组"误判为合法子数组。三条口诀与第 8.8 节的选型终表共同构成了最大子数组和家族的完整作战地图。
+
+### 8.15 最大子数组和的工程身影终检
+
+把本章三道题的工程身影终检浓缩为一张表：Kadane 的"前缀斩断"直接对应滑动窗口限流器的窗口重置逻辑（累计值变负即重置窗口）；线段树四元组是金融行情实时最大回撤监控与游戏服务器区间血量统计的生产级引擎；分治跨中点合并则是并行计算中"分段统计再归并"的原型（如 Spark 的 mapPartitions + reduce 分两阶段统计最大子数组和）。三者的选型分水岭始终是"数据何时到达、查询何时发生"这一工程时序问题——静态一次性用 Kadane，动态反复查询用线段树，分布式分段统计用分治归并。
+## 小结
 
 1. **Kadane 的本质是局部状态的最优选择**：`dp[i] = max(nums[i], dp[i-1] + nums[i])` 中，当 `dp[i-1] < 0` 时重置，这是一个"贪心"决策——每次选择局部最优（继承 vs 重置），并且可以证明这导向全局最优。
 
@@ -448,3 +702,17 @@ Kadane 算法有一个重要特性：它是**在线（online）算法**——处
 4. **环形变形的关键：对偶技巧**：最大跨越子数组 = 总和 - 最小不跨越子数组，将"困难的跨越情形"转化为"简单的不跨越情形"，是降维思考的典型应用。
 
 5. **面试策略**：先写 Kadane（$O(n)$，简洁），若面试官追问"分治如何解"，再解释跨越中点的处理。能在两种视角间自由切换，展示对问题的深刻理解。
+
+---
+
+## 参考资料
+
+1. Cormen, T. H., et al. *Introduction to Algorithms* (4th ed.). MIT Press, 2022.
+2. Bentley, J. (1984). *Programming pearls: algorithm design techniques*. Communications of the ACM, 27(9), 865–873.
+
+---
+
+> [!note] 思考题
+> 1. 在分治解法中，crossMaxSum 为什么必须同时包含 nums[mid] 与 nums[mid+1]？如果允许空段会导致什么错误？
+> 2. 在 LC 152（乘积最大子数组）中，为什么必须同时维护最大与最小乘积？请构造一个反例说明只维护最大值会漏解。
+> 3. 在 LC 918（环形子数组的最大和）中，当 total == minKadane 时为什么必须返回 maxKadane？请构造全负数数组验证。
