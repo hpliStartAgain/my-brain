@@ -2,6 +2,100 @@
 
 本文件记录 my-brain 数字花园的重大内容变更。
 
+## 2026-10-24
+
+### 重构：content/LLM 全面升级（结构重组 + 55 篇扩写达标 + 时效更新）
+
+#### 一、结构重组（阶段①，独立提交）
+
+- 合并「Agent 开发技术」+「Coding-Agent 运行范式」为「Agent 技术」大专栏（21 篇正文 + 新导览，三层结构：基础范式 01-07 / 应用开发 08-16 / Coding-Agent 解构 17-21），去重篇目（旧 Agent开发技术/04 MCP 与 Coding-Agent/04 重复，独有内容逐一核实已存在于 基础范式/04、05 与 应用开发/14 后删除）
+- AiOps 系列（10 篇 + 导览）自 content/LLM/AiOps 迁至 content/SRE/AiOps
+- 全库链接重写（22 处旧路径 + 系列内 basename 链接）、修复「大模型日常使用」死链、content/index.md 卡片更新（LLM 卡片收拢为 4 系列，SRE 卡片新增 AiOps）
+- 提交：66c58a18
+
+#### 二、全系列扩写达标（55 篇正文，全部 12000-16000 中文字 / 500+ 行）
+
+| 系列 | 篇数 | 字数区间 | 提交 |
+|---|---|---|---|
+| LLM原理 | 8 | 12,380-15,996 | 5fb182fc |
+| Agent技术/基础范式 | 7 | 12,745-15,980 | 3482081f |
+| Agent技术/应用开发 | 9 | 12,401-15,972 | 38a84b60 |
+| Agent技术/Coding-Agent 解构 | 5 | 13,060-15,958 | 509cc3cb |
+| Agent沙箱技术 | 15 | 12,967-15,998 | 8f2a79b8 / 29ed19f7 / defce26e |
+| SRE/AiOps | 10 | 12,409-15,999 | f2a42cb0 |
+
+全部按 writing-technical-article skill（凤凰架构 DNA）扩写：保留全部既有技术资产（frontmatter/图表/代码/链接/思考题零丢失）；摘要 300-600 字未灌水；Mermaid 全库统一 dracula 主题（base/dark 归一化，自定义调色板保留 classDef）；LLM/SRE 范围死链 0；无 ASCII 表格。
+
+#### 三、时效性更新（重点篇目 web 核实至 2026-10）
+
+- **OpenSandbox 07-09**（用户点名过时）：新增「截至 2026 年 10 月的演进」章节——Umbrella Release 1.1.0（2026-09）、Fast Sandbox（Firecracker 64ms P50）、Credential Vault（OSEP-0022）、execd v1.0.22/v1.1.0、egress v1.1.6/v1.1.7、OSEP-0008 快照已实现、Pool 两级容量模型；**事实更正：项目归属「蚂蚁集团」→「阿里巴巴」**（官方仓库 alibaba/OpenSandbox 与 SDK 命名空间三重核实）
+- **LLM原理**：推理模型时代（o1/o3/DeepSeek-R1 GRPO/RLVR）、GPT 演进史至 2025-12、MLA/MoE、数据墙与合成数据、test-time compute、PD 分离、长上下文与原生多模态 2026 规格
+- **Agent 技术**：MCP 2026-07-28 无状态化规范（移除握手/server/discover/MRTR/废弃 Roots 与 Sampling）、MCP 捐赠 Linux Foundation AAIF、厂商 SDK 格局（OpenAI Agents SDK/Claude Agent SDK/Gemini ADK）、A2A v1.0、产品现状（Claude Code v2.1.310/Devin 2.2 与 SWE-2/Cursor 3.0/OpenHands v1.33/Aider v0.86）
+- **事实修正**：Drain 论文归属更正为香港中文大学（原稿误标 IBM；Drain3 才是 IBM Research 移植）；arXiv 错误编号（2408.08196 实为量子物理论文，改用 DistServe 2401.09670）；多处 tokenizer 词表/版本号/年份核对
+- 未核实到的事实一律如实标注（「Scaling Laws for Post-Training」原文、Devin 3.0 官方版本号、部分 OpenSandbox 未检索项），零虚构
+
+#### 四、验证
+
+55 篇正文全部 ≥12000 中文字 / ≥500 行；frontmatter 四字段完整；Mermaid dracula 主题且围栏配平；LLM/SRE 范围 `[[wiki]]` 死链 0；全库残留旧路径引用 0；Hermes-Agent 系列原已达标未动。
+
+## 2026-10-24
+
+### 重写：中间件/深入浅出存储引擎 专栏全量重写（11 文件）
+
+按「只保留旧专栏讨论的课题、内容完全重写」的要求，对原 10 篇书稿做破坏性重写，并新增 00 导览。风格口径为「凤凰架构的叙事弧 + 本专栏的客观陈述」：以历史锚点或设问开场，按「是什么 → 为什么出现 → 不这样会怎样 → 如何落地 → 边界与反例」推进，长句多逗号、零感叹号、每章至少一个自创比喻，结论落在权衡取舍与因地制宜上。旧稿的逐函数源码走读改为「机制为主 + 关键代码片段」，原作者后记改写为技术性结语。
+
+- **篇幅**（11 文件合计 147,261 字；正文 10 篇篇均 13,937 字，9 篇 ≥12,000 字）：00 导览 1,381 字/95 行；01 13,913/419；02 15,373/557；03 15,981/592；04 15,980/562；05 16,579/576；06 12,989/599；07 13,481/607；08 15,953/551；09 13,659/759；10 结语 11,972/400。
+- **课题覆盖**：01 数据库演进、三层架构、编码/索引/介质三大共性问题、两大派系；02 数组/链表、哈希/位图/布隆过滤器、BST/红黑树/跳表、B 树/B+ 树、Trie/ART/学习型索引；03 存储金字塔、虚拟内存、PMEM、HDD/SSD、文件系统、Page Cache/Direct I/O/io_uring；04 B+ 树选型推导与定量估算；05 页映射、读写路径、崩溃恢复、事务与 MVCC；06 BoltDB 页/节点/写事务；07 LSM 从零推导、分层与分级合并、三笔放大；08 RocksDB/WiscKey/Bitcask/Moss/Kafka；09 LevelDB MemTable/WAL/SSTable/Compaction/Version；10 六组权衡、定量换算、选型清单与源码阅读方法。
+- **结构**：新增 00 导览（定位、读者、目录、三条阅读路径、贯穿主线、关联专栏）；01–09 统一 `**摘要：**` + `## 第 N 章` + `## 小结` + `## 参考资料` + `> [!note] 思考题` 骨架；10 增设术语速查、引擎速查与再读路线三个附录。
+- **旧稿清理**：原 10 个书稿文件（`1. 存储引擎概述.md` … `10. 后记.md`）已按老板确认删除，目录只保留 00–10 新稿；删除前已确认站内无入链。
+- **格式**：Mermaid 51 图统一 `%%{init: {'theme': 'dracula'}}%%` 并逐块校验括号配平；Markdown 表格 393 行；无 ASCII 表格；正文零全角感叹号；`[[wiki]]` 全部核实，死链 0。
+- **事实纪律**：B+ 树扇出与树高、LSM 读写空间放大、BoltDB 写放大等定量结论均给出显式假设与算式；论文、标准与产品版本（Bayer & McCreight 1972、O'Neil 1996、RUM 2016、WiscKey 2016、bbolt v1.3.x、LevelDB 1.23、Optane 2022 退场）逐项核对，未虚构性能数字。
+
+#### 验证（全部通过）
+
+- 篇幅：10 篇正文均 ≥11,900 字，9 篇落在 12,000–16,600 字；行数 400–759，9 篇 ≥500 行；
+- 骨架：frontmatter 四字段完整；摘要 247–441 字（未灌水）；小结占比 2.8%–5.2%；
+- 格式：Mermaid 主题统一、围栏配平、标签无裸竖线；无 ASCII 表格；零全角感叹号；
+- 链接：围栏外 `[[wiki]]` 死链 0（导览 10 条目录链接全部指向实际文件）。
+
+## 2026-10-24
+
+### 整改：云原生/Kubernetes/kubernetes架构原则和对象设计 专栏全量重写（7 文件）
+
+该专栏原 6 篇正文仅 3,198–5,793 字/篇（篇均 4,314），且存在叙述扁平（列表化堆砌）、思考题与正文主题错配（04 讲安全上下文、05 讲资源配额、06 讲 Operator）、`etcd` 标签未映射为 `ETCD` 等硬约束问题。按「为了保证叙事结构的完整优先全量重写」的要求，对 00 导览 + 01–06 全部重写（保留文件名/H1/date，保证入链稳定）。
+
+- **定位与错位**：与已达标重写的 `Kubernetes架构深度剖析`（实现层）明确分工——本专栏定位为 K8s 的**总纲 / 接口契约层**（可声明、可关联、可持久化、可扩展四条主线），组件内部机制只做接口级描述并指向兄弟专栏，避免两套大专栏重复讲同一件事；00 导览新增「与兄弟专栏的分工」表。
+- **篇幅**（篇均 13,742 字，各篇 12,635–17,315）：01 为 12,635 字/547 行，02 15,983/660，03 16,146/865，04 16,314/976，05 17,315/783，06 16,073/625。全部 ≥500 行。
+- **叙述逻辑**：每篇按「是什么 → 为什么出现 → 不这样会怎样 → 如何落地 → 边界与反例」展开，并新增「代价/边界」专门章节（01 的原则冲突与反例控制器、02 的 etcd 故障降级、03 的六类反例、04 的标签漂移与高基数、05 的五类反例、06 的规模天花板）；每章配 1 个贴切比喻（设计院与施工队、图书馆标签、宿舍床位、消防灭火器、物业保安与装修队、合同多数股东签字等）。
+- **技术深度补充**：01 补 Borg 超卖/可行性检查、Informer+WorkQueue 管线、原则间冲突；02 补解释权判据、五道关卡失败语义、etcd 不可用降级；03 补 storage version 与 Scheme/Codec/Conversion、CEL 校验、managedFields 账单、六类反例；04 补标签基数与 etcd 索引、EndpointSlice 替代动因、跨 Namespace 约束；05 补原生 sidecar（1.28–1.33 沿革）、partition 灰度、Indexed Job、TTL 控制器、at-least-once；06 补 ReadIndex、Watch Bookmark、key index/bbolt 两级结构、Lease 三种用途、quorum 丢失推演。
+- **格式**：Mermaid 统一 `%%{init: {'theme': 'dracula'}}%%`（共 34 图）；Markdown 表格方案对比；Obsidian callout 4–6 处/篇；`[[wiki]]` 链接全量核实（跨专栏用完整路径 + 别名），死链 0；tags 按全局映射（etcd→ETCD）；思考题全部重写为与本文强相关（每篇 4 条）。
+- **素材纪律**：摘要 310–331 字（未灌水）；结语收束为判断式提炼；未虚构年份/版本/性能数字（Sidecar 1.28/1.29/1.33、DaemonSet 1.12、Watch Bookmark 1.15、`persistentVolumeClaimRetentionPolicy` 1.27 等均按官方 KEP/文档核对）。
+
+#### 验证（全部通过）
+
+- 篇幅：篇均 13,742 字，正文各篇均 ≥12,000 字且 ≥500 行；
+- 骨架：frontmatter 四字段完整；`**摘要：**` / `## 第 N 章` / `## 参考资料` / `> [!note] 思考题` 齐全；
+- 格式：Mermaid 围栏配平、34 个 init 行全部 dracula 单引号格式；无 ASCII 表格；正文零全角感叹号；
+- 链接：围栏外 `[[wiki]]` 死链 0。
+
+## 2026-10-24
+
+### 整改：云原生/Kubernetes/Kubernetes架构深度剖析 专栏清除「延伸思考」灌水（15 文件）
+
+04–18 共 15 篇文末的 `## 延伸思考` 是 8–20 条「你的 X 是否 Y」式检查清单，单条 2–3 句、内容为正文结论的复述，命中 AGENTS.md 反模式第 3 条（延伸思考单条超 3 句、写成小段落、与正文重复）。本次整节删除 **187 条 / 约 7,585 字**，差额全部转为正文机制深度，不在摘要、结语或新清单上凑字。
+
+- **新增正文小节 43 个**，内容限定为机制细节、边界条件、反例、源码级行为与版本演进。代表性补充：APF 的 FlowSchema/PriorityLevel 与席位折算、版本转换的 round-trip 无损契约、Watch Cache 的 410 Gone 失效路径；认证链短路语义与 `escalate`/`bind` 提权面、准入 webhook 的 dry-run 与重入；Reflector 退避与错误分类、DeltaFIFO 的 `knownObjects` 删除推断；Raft 的 PreVote/CheckQuorum/Learner、bbolt freelist 与 defrag、跨故障域延迟权衡；Deployment 的 `Recreate`/`maxSurge=0` 边界、`blockOwnerDeletion` 的权限细节、Finalizer 卡死诊断；OrderedReady 卡住语义、PVC 保留策略、更新窗口的身份与可用性；调度周期与绑定周期分离、抢占的 PDB 打分、SchedulingGates；structural schema 与 CEL、缓存读与 `APIReader` 直读、聚合 API 取舍；沙箱复用判定、镜像 GC 高低水位、驱逐阈值与宽限；iptables 的 conntrack 与 hairpin、EndpointSlice 拓扑提示、两种 trafficPolicy 分工；Flannel `Directrouting`、Calico 封装与 BGP 选路、Cilium tail call 与 identity；ResourceQuota scope 与 LimitRange 注入顺序、seccomp/AppArmor 默认化、Allocatable 容量账；Prometheus relabel 与基数、头部/尾部采样与 context 传播、`kubectl debug`/`crictl` 取证；HPA `behavior` 稳定窗口、CA expander 与缩容延迟、KubeFed 归档后的多集群路径。
+- **结语收紧**：10 篇的 17 条编号清单改写为 4 段判断式提炼（806→约 480 字）；16/17/18 的逐章罗列式长段改为 350–500 字的观点提炼。15 篇结语/总结占比均 ≤5%。
+- **顺带修复的既有缺陷**：05 篇表格被正文截断导致末行孤立（表格复原）；09 篇标题「级联删除的两种模式」与表中三种模式不符（改为「三种」）；14 篇第 8 章重复编号 `8.4`（后者改 `8.5`）；07、15 篇各有一处整段重复（删除第二次出现）；01–08 篇 Mermaid init 统一为 `%%{init: {'theme': 'dracula'}}%%`（原为 JSON 双引号写法）。
+- **更正一处事实错误**：10 篇原称「K8s 1.27 引入 StatefulSet `maxUnavailable`」与另一处「1.25 引入」互相矛盾，统一订正为 KEP-961 的准确沿革（1.24 Alpha、1.35 Beta、默认 1，1.35 曾因回归默认关闭、修复后恢复）。
+
+#### 验证（全部通过）
+
+- 篇幅：15 篇汉字数 12,758–15,492，合计 198,762；行数 493–891，均 ≥500；
+- 骨架：frontmatter 四字段完整；`**摘要：**`、`## 第 N 章`、`## 参考资料`、`> [!note] 思考题` 齐全；「延伸思考」残留 0；
+- 格式：Mermaid 围栏配平、主题统一（86 个 init 行全部单引号格式）；无 ASCII 表格、无小节编号重复；
+- 链接：围栏外 `[[wiki]]` 死链 0。
+
 ## 2026-10-18
 
 ### 完成：数据结构与算法/排序与查找、双指针、滑动窗口、动态规划、分治与贪心 五专栏全量重写（55 文件）
