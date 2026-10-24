@@ -184,6 +184,18 @@ Cilium 的 eBPF Service 实现值得深入。Cilium 用 eBPF 程序替代 kube-p
 
 三种模式的选择策略是——小集群（<100 节点、<100 Service）用 iptables 够用，无需额外配置。大集群（100+ 节点、1000+ Service）用 IPVS，性能稳定。追求极致性能且用 Cilium 的集群用 eBPF，绕过 iptables 开销。大多数生产集群用 IPVS 是最佳选择——性能好、兼容性高、配置简单。
 
+### 2.5 iptables 的 DNAT、conntrack 与 hairpin
+
+上一节把三种模式放在同一张表里比较，但"O(n) 规则匹配"这一行掩盖了真正值得追究的机制。笔者建议把数据包在 iptables 模式下的路径逐跳走一遍。`KUBE-SERVICES` 链按 ClusterIP:port 匹配，命中后跳到 `KUBE-SVC-xxx`；该链里每个 endpoint 一条 `-m statistic --mode random --probability 1/N` 规则，概率随剩余数量递减——三个后端时依次为 1/3、1/2、兜底，保证等概率；命中后由 `KUBE-SEP-xxx` 执行 DNAT，把目的地址改写为 PodIP:targetPort。
+
+关键在于概率只在新建连接时生效一次。conntrack（连接跟踪）记录了首个包 DNAT 之后的结果，同一条流的后续包直接命中已有条目，不再重新随机，**负载均衡的粒度因此是连接而不是包**——HTTP/1.1 的 keep-alive、gRPC 长连接、数据库连接池都会把流量长期钉在一个 Pod 上，即便它已经比其他后端更忙。这也解释了"Pod 数量相同、CPU 使用率却差三倍"的现象为何在 iptables 模式下并不罕见。
+
+hairpin（发夹回环）指 Pod 经 Service 访问自身。这类流量 DNAT 之后目的仍是自己，回包源地址是 PodIP，绕过 conntrack 直接回给发起方，三次握手无法完成。kube-proxy 的解法是先用 `KUBE-MARK-MASQ` 打 mark，再在 `POSTROUTING` 阶段按 mark SNAT 成节点 IP，使回程重新经过 conntrack；`--masquerade-all` 则对所有出 ClusterIP 的流量无条件 SNAT，用于网络插件不支持 hairpin 的场景，代价是 Pod 侧看到的源地址一律是节点 IP。
+
+规则同步决定了这一模式的上限。kube-proxy 由 `--iptables-sync-period`（默认 30 秒）驱动全量同步，复杂度是 O(规则数)，而规则数随 Service 与 Endpoint 的乘积增长——一千个 Service 各十个后端就是数万条规则，单次 `iptables-restore` 要几百毫秒到数秒，期间规则表被锁定。**这才是 iptables 模式在大规模集群变慢的根因，而不是"iptables 本身慢"**：单包匹配开销其实不大，放大的是同步开销，以及同步窗口内新建 Service 的秒级不可达期——Service 刚创建时偶发连接失败，多半来自这段窗口。同步周期另有 `--iptables-min-sync-period` 作为下限，用来抑制 Endpoint 抖动引发的反复重写。
+
+值得一提的是 nftables 后端的演进。KEP-3866 为 kube-proxy 增加了 nftables 模式（1.29 alpha、1.31 beta），用 nftables 的 set 与 verdict map 表达 Service 到 Endpoint 的映射，把逐条规则匹配变成一次集合查找，同步时以事务方式批量提交，不再有 `iptables-restore` 的全表锁。但它继承的仍是"概率只在新建连接时决定"这一语义，因为负载均衡的粒度由 conntrack 决定，与后端是 iptables 还是 nftables 无关。
+
 ---
 
 ## 第 3 章 Service 的四种类型
@@ -335,6 +347,14 @@ EndpointsSlice 的另一个工程细节是"与 Endpoints 的兼容"。K8s 1.21+ 
 
 EndpointsSlice 的实现细节值得深入。EndpointsSlice Controller 为每个 Service 创建多个 Slice，每个 Slice 最多 100 个 Endpoint。Slice 的数量根据后端 Pod 数动态调整——Pod 增加时创建新 Slice，Pod 减少时合并 Slice。Controller 用 EndpointSlice 的 `kubernetes.io/service-name` 标签关联 Slice 与 Service，kube-proxy 通过标签选择器 Watch 相关的 Slice。这种"标签关联"机制使得 kube-proxy 只 Watch 自己关心的 Slice，减少了 Watch 的数据量。EndpointsSlice 还支持 `topology` 字段记录 Endpoint 的拓扑信息（节点名、可用区），为 Topology Aware Routing 提供数据基础，这是 EndpointsSlice 相比 Endpoints 的重要优势。
 
+### 4.3 EndpointSlice 的拓扑提示与流量分布
+
+每个 EndpointSlice 最多 100 个 endpoint，超过就分片；`endpointslice.kubernetes.io/managed-by` 标识管理者，内置控制器写 `endpointslice-controller.k8s.io`，排查时笔者建议先确认这个 slice 归谁管，否则很容易把自定义控制器管理的 slice 当成内置控制器的产物来怀疑。自定义控制器若把 `endpointslice.kubernetes.io/skip-mirror` 设为 `true`，这些 slice 就不会被镜像到同名的 Endpoints 对象，只存在于 EndpointSlice 一侧。
+
+拓扑提示放在每个 endpoint 的 `hints.forZones` 里，由控制器按各 zone 的就绪 Pod 比例分配，kube-proxy 读到之后在本 zone 有可用 endpoint 时优先本地。`service.kubernetes.io/topology-mode: Auto`（1.27+）取代了旧的 `topology-aware-hints: auto`，设成 `Disabled` 可关闭。不过提示不是无条件生效：zone 之间 Pod 分布严重不均、某 zone 没有 Pod 或比例过低时，提示会被整体清空，避免把全部流量压到少数节点上。`trafficDistribution: PreferClose`（1.31 beta）是更高一层的表达，只说"优先就近"、不暴露 zone 概念，具体怎么落地交给实现决定。
+
+边界要讲清楚：拓扑提示是尽力而为，本节点或本 zone 没有 endpoint 时仍会回退到全局；它不改变 Endpoints 语义，只影响 kube-proxy 的选择顺序，所以不能用它来保证任何形式的隔离。提示只由 `topology-mode: Auto` 驱动，手工写进 slice 的 hints 会被控制器覆盖。另外，1.28 起 kube-proxy 增加了 `--endpointslice-updates-batching-period`，把窗口内的多个 slice 变更合并成一次规则重写，默认 0 表示不合并；大集群把它调到几百毫秒可以显著减少重写次数，代价是变更生效更慢。
+
 ---
 
 ## 第 5 章 Headless Service
@@ -422,6 +442,16 @@ externalTrafficPolicy 的一个工程陷阱是"Local 策略的负载不均匀"�
 
 externalTrafficPolicy 的另一个工程考量是"健康检查"。Local 策略下，如果本节点没有 ready 的 Pod，流量被丢弃——外部 LB 健康检查该节点的 NodePort 失败，将该节点从 LB 后端移除。这种"LB 健康检查自动移除无 Pod 节点"的机制避免了流量丢弃——LB 不再转发流量到无 Pod 的节点。但前提是 LB 配置了健康检查——如果没有健康检查，流量仍会转发到无 Pod 节点被丢弃。生产中用 LoadBalancer 类型时，确保 LB 配置了健康检查。
 
+### 6.3 internalTrafficPolicy 与 externalTrafficPolicy 的分工
+
+`internalTrafficPolicy: Local`（1.26 GA）只把 ClusterIP 流量转给本节点上的 Pod，本节点没有 Pod 时直接丢弃，不会回退到其他节点——"本地优先"在这里变成了"本地唯一"。典型故障是部分客户端连不上、另一部分完全正常，因为它们的请求落在不同节点上。
+
+`externalTrafficPolicy: Local` 保留客户端源 IP，代价是流量只能进有 Pod 的节点；为此 kube-proxy 暴露 `healthCheckNodePort`，让外部负载均衡器探活并只把流量发给有 Pod 的节点。`externalTrafficPolicy: Cluster` 允许跨节点转发，但会做 SNAT，客户端源 IP 丢失，基于 IP 的访问控制与访问日志随之失真。
+
+两者的组合各有用途：内部 Local 加外部 Cluster，适合"内部调用要低延迟、外部入口要均匀"；内部 Cluster 加外部 Local，适合"外部要真实源 IP、内部不在乎"。两者同时设为 Local 时，没有 Pod 的节点上 NodePort 与 ClusterIP 流量都会被丢弃，这正是需要 DaemonSet 兜底的原因；另外 `--nodeport-addresses` 可以限制 NodePort 只在指定地址上监听，在多网卡节点上配合 Local 策略收敛入口。
+
+至于 `sessionAffinity: ClientIP`，其 `timeoutSeconds` 默认 10800 秒，即三小时，期间同一客户端固定到同一 Pod；Pod 重建后亲和关系失效，客户端会被重新分配。IPVS 模式下这层亲和由 `ipvsadm -p` 的持久化超时实现，粒度按 Service 端口而不是单个客户端，比 iptables 的 recent 模块更粗。
+
 ---
 
 ## 第 7 章 Service 的 DNS 解析
@@ -500,7 +530,7 @@ Service 故障的另一个常见场景是"ClusterIP 不通"。`curl <cluster-ip>
 
 大规模 Service 的另一个优化是"Topology Aware Routing"（K8s 1.21+ 的拓扑感知路由）。默认 Service 流量可能跨可用区转发——同一可用区的客户端与 Pod 之间流量跨可用区，增加延迟与成本。Topology Aware Routing 使得流量优先转发到同一可用区的 Pod——降低延迟（同可用区流量快），减少跨可用区流量成本。这种优化适合多可用区集群，特别是对延迟敏感的应用。
 
-### 8.4 故障排查
+### 8.5 故障排查
 
 Service 的常见故障——Pod 在 Endpoints 但流量不通（kube-proxy 规则未同步，检查 kube-proxy 日志与规则）、Pod 不在 Endpoints（readinessProbe 失败，检查 Pod 探针状态）、ClusterIP 不通（kube-proxy 规则错误，检查 iptables/IPVS 规则）、Headless Service DNS 返回空（没有匹配 Pod，检查 selector 与 Pod label）。
 
@@ -523,34 +553,6 @@ Service 是 K8s 的虚拟 IP + 负载均衡——ClusterIP 不绑定网卡，由
 
 > [!info] 专栏导航
 > 本文是 [[00 专栏导览|Kubernetes 架构深度剖析专栏]] 的第 14 篇，深入 Service 和 kube-proxy。下一篇 [[15 CNI 网络模型与数据面对比：Flannel Calico Cilium]] 将详细讨论 K8s 网络模型和主流 CNI 插件的实现差异。
-
----
-
-## 延伸思考
-
-1. **你的集群是否用了 IPVS 模式？** 大集群（100+ 节点）建议用 IPVS——iptables 模式大规模性能退化。检查 kube-proxy 的 `--proxy-mode` 参数与 `kubectl logs -n kube-system kube-proxy-xxx`。
-
-2. **你的外部访问是否用了 LoadBalancer？** NodePort 简单但端口有限制（30000-32767）。生产外部访问用 LoadBalancer（云厂商自动创建 LB）或 Ingress（一个 LB 对外，按域名/路径路由）。
-
-3. **你的大规模 Service 是否用了 EndpointsSlice？** K8s 1.21+ 默认启用。检查 EndpointsSlice 是否正常创建——`kubectl get endpointslice`。大规模 Service 用 EndpointsSlice 避免更新冲突。
-
-4. **你的有状态应用是否用了 Headless Service？** StatefulSet 必须配合 Headless Service——提供 Pod 级 DNS 解析（`<pod-name>.<headless-service>`）。这是 StatefulSet 稳定网络身份的基础。
-
-5. **你的 externalTrafficPolicy 是否合理？** 需要客户端 IP 用 Local（但需每节点有 Pod，通常用 DaemonSet），不需要用 Cluster（默认，负载更均匀）。
-
-6. **你的 Service 是否配置了会话亲和性？** 有状态会话用 sessionAffinity: ClientIP。无状态应用不需要——均匀负载更重要。会话亲和性 Pod 故障后会话丢失。
-
-7. **你的 DNS 缓存是否导致 Service 变化不感知？** 客户端缓存 DNS 结果，Pod 删除后仍连旧 IP。调整客户端 TTL（譬如 JVM 的 networkaddress.cache.ttl=5）避免长缓存。
-
-8. **你的 LoadBalancer 成本是否可控？** 每个 LoadBalancer Service 一个云 LB，成本高。用 Ingress（一个 LB 对外，按域名/路径路由到多个 Service）减少 LB 数量。
-
-9. **你的 kube-proxy 规则数是否监控？** 大规模集群的 kube-proxy 规则数可能爆炸——iptables 模式每个 Service 多条规则。监控规则数与同步延迟，及时切换 IPVS 或 eBPF。
-
-10. **你的 Service selector 是否正确匹配 Pod？** Pod 不在 Endpoints 通常是 selector 不匹配或 readinessProbe 失败。`kubectl get endpoints` 查看 Endpoints，`kubectl describe pod` 查看探针状态。
-
-11. **你的 Service 是否用了 Topology Aware Routing？** 多可用区集群用拓扑感知路由降低跨可用区流量——流量优先转发到同可用区 Pod。检查 Service 的 `topologyKeys` 或 `service.kubernetes.io/topology-aware-hints` annotation。
-
-12. **你的 Pod 优雅终止是否考虑了 Service 规则同步延迟？** Pod 删除时，Endpoints 更新与 kube-proxy 规则更新有延迟——Pod 已终止但规则未更新，新连接仍转发到该 Pod（失败）。用 PreStop 钩子 + terminationGracePeriodSeconds 延迟终止，给规则同步留时间。
 
 ---
 

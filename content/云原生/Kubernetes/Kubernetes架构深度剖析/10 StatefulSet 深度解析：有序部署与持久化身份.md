@@ -224,6 +224,16 @@ StatefulSet 控制器实现有序性的机制值得了解。控制器维护一�
 
 这个机制依赖协调循环的持续检查——控制器每次 Reconcile 都检查所有 Pod 的状态，决定下一步操作。如果某个 Pod 卡在 Pending（譬如资源不足），后续 Pod 都不会创建——StatefulSet 会"卡住"在当前序号。这种"卡住"是设计而非 bug——它保证有序性，但生产中需要监控 StatefulSet 的部署进度，避免长时间卡住无人发现。
 
+### 3.4 OrderedReady 卡住的语义与处置
+
+`pod-N` 未进入 Ready 就不会创建 `pod-(N+1)`，这不是实现疏漏，而是"保证拓扑"必须付的代价——控制器宁可让整个 StatefulSet 停在一个序号上，也不肯让拓扑不完整的集群跑起来。把它当成信号而非故障，处置时才不会本能地去调参数。
+
+根因高度集中在几类。最常见的是 PVC 绑定失败：`volumeClaimTemplates` 里的 StorageClass 名不存在，PVC 永久停在 Pending；更隐蔽的是 SC 设了 `volumeBindingMode: WaitForFirstConsumer`，PVC 要等第一个使用它的 Pod 被调度后才绑定，而该 Pod 又因亲和、资源或污点调度不上，两者互相等待，事件里只剩一句"waiting for first consumer"。其余几类同样常见：节点资源不足、readinessProbe 过严以致永远失败、镜像拉取持续 `ImagePullBackOff`、前一个序号的 Pod 已进入 Terminating 却因卷卸载或 finalizer 删不完——最后一种最易误判，`kubectl get pods` 里看到的是"前一个 Pod 还在"，而后一个序号的 Pod 根本不存在。
+
+处置顺序是固定的：先按序号找到最小的那个未 Ready 的 Pod，看它的事件，顺着事件指向的依赖对象逐层排查，看清根因之前不要动任何 StatefulSet 参数。用 `podManagementPolicy: Parallel` 绕过卡住是最常见的误操作——它把启动顺序这一约束整个抽掉，依赖前序节点完成选主的应用会在没有 leader 的情况下同时启动，把"部署慢"升级成数据一致性问题，故障现场也随之被破坏。
+
+还有一处语义边界要分清：`podManagementPolicy` 只影响创建与删除，不影响更新顺序。更新从最大序号逆序推进（默认 `maxUnavailable=1` 时逐个进行），缩容同样逆序、先删最大序号，这两条路径不受 `Parallel` 影响。
+
 ---
 
 ## 第 4 章 持久化存储绑定：StatefulSet 的第三大保证
@@ -316,6 +326,21 @@ StatefulSet 的 volumeClaimTemplates 通常用 ReadWriteOnce——每个 Pod 独
 
 存储类型的选择是有状态应用架构的关键决策。本地存储（local PV）性能最好（无网络开销），但 Pod 绑定节点，节点故障数据不可达；网络存储（NFS/Ceph/EBS）性能略低（网络开销），但 Pod 可跨节点迁移，节点故障数据仍可达。对于性能敏感且能容忍节点故障数据丢失的应用（譬如缓存），本地存储可接受；对于数据安全性要求高的应用（譬如数据库），网络存储是必须的。这个权衡没有银弹——性能与可用性往往不可兼得。
 
+### 4.4 PVC 保留策略：Retain 与 Delete
+
+前面反复出现一句"缩容不删除 PVC"，这个说法在早期版本里是硬编码的行为，如今已经可以配置。`persistentVolumeClaimRetentionPolicy` 提供两个相互独立的维度：`whenDeleted` 决定 StatefulSet 对象被删除时 PVC 的去留，`whenScaled` 决定缩容时 PVC 的去留，取值均为 `Retain` 或 `Delete`，默认两者都是 `Retain`。
+
+```yaml
+spec:
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Delete   # 删除 StatefulSet 时连同 PVC 一起删
+    whenScaled: Retain    # 缩容时保留 PVC
+```
+
+默认的 `Retain` 语义与"身份即数据"一脉相承：缩容删掉 `mysql-2` 之后 `data-mysql-2` 仍在，把副本数调回 3 时控制器会找到同名 PVC 直接挂载，数据自然接续，序号身份与存储身份依然一一对应。代价是孤儿 PVC 越积越多——频繁扩缩容的 StatefulSet 会在集群里沉淀出一堆无人引用却持续计费的卷，需要独立的人工或定时清理流程兜底，而"这个 PVC 里的数据是否还有价值"恰恰无法由控制器代判。
+
+选 `Delete` 时，StatefulSet 不再把 PVC 视为独立对象，而是通过 ownerReference 把 PVC 挂到自己名下，Pod 删除后 PVC 随所有者一同被垃圾回收。这个能力依赖 `StatefulSetAutoDeletePVC` 特性门（1.27 进入 beta 并默认开启，1.32 转为 GA），在此之前的版本上写这段字段会被直接裁剪，配置看着生效实际毫无作用。三条边界必须说清楚：其一，`whenScaled: Delete` 只在缩容时生效，滚动更新与 Pod 重建都不删 PVC——否则每次升级都会清空数据；其二，PVC 删除会连带触发底层 PV 的回收，行为取决于 PV 的 `reclaimPolicy`，`Delete` 策略下后端存储的数据被真正抹除，不可恢复；其三，`whenDeleted` 作用于 PVC，而 `kubectl delete statefulset` 的级联策略作用于 Pod，两者是不同层面的机制，混为一谈很容易在迁移场景中丢掉不该丢的东西。生产里更常见的组合是 `whenDeleted: Delete` 加 `whenScaled: Retain`——整套下线时不留垃圾，日常缩容时保住数据。
+
 ---
 
 ## 第 5 章 滚动更新策略
@@ -347,7 +372,7 @@ spec:
 
 这个"先删后建"的中断期是 StatefulSet 滚动更新与 Deployment 滚动更新的本质差异。Deployment 的滚动更新通过 maxSurge 允许新旧 Pod 同时存在，实现零停机——新 Pod 就绪后才删旧 Pod，整个过程中服务始终可用。StatefulSet 无法做到这一点——PVC 的独占绑定使得同一序号不能有两个 Pod，更新必须先删后建，该序号的 Pod 在更新期间不可用。对于数据库这种有状态应用，这个中断期通常可以接受——数据库主从架构中，更新从节点时主节点仍可服务，从节点短暂不可用只影响读请求（且可以通过多从节点分担）。但对于单副本的有状态应用，更新期间服务完全不可用——这是 StatefulSet 滚动更新的固有代价。
 
-K8s 1.27 引入了 StatefulSet 的 `maxUnavailable` 参数（与 Deployment 的同名参数类似），允许在滚动更新时同时删除多个 Pod（不超过 maxUnavailable），加快更新速度。但这仍然不改变"先删后建"的语义——只是允许同时删多个，而非同时存在新旧。maxUnavailable 的默认值是 1，意味着一次只更新一个 Pod。
+K8s 1.24 为 StatefulSet 引入了 `maxUnavailable`（KEP-961，特性门 `MaxUnavailableStatefulSet`），1.35 升为 Beta，默认值 1——也就是沿用逐序号更新的旧行为。把它设成大于 1，控制器才允许同时有多个序号处于"已删除、待就绪"的状态，滚动窗口随之缩短；但同一序号仍然不能有两个 Pod 并存，PVC 的独占绑定没有变。这个字段在 1.35 曾因与 Parallel 管理策略的回归被默认关闭，修复后重新默认开启，升级前要确认目标版本的特性门状态，否则会看到"字段写了、行为没变"——apiserver 对未知字段是静默裁剪，`kubectl apply` 不报错，`kubectl get -o yaml` 里也看不到。
 
 ### 5.2 partition：灰度更新
 
@@ -386,6 +411,16 @@ OnDelete 与 RollingUpdate 的选择是"自动化程度"与"控制粒度"的权�
 StatefulSet 的滚动更新可以通过 `spec.paused` 暂停——暂停后控制器停止更新操作，当前状态保持不变。这适合"更新到一半发现问题，暂停排查"的场景。暂停后排查完毕，取消暂停，更新继续。
 
 但 StatefulSet 的 paused 机制不如 Deployment 的成熟——Deployment 的 paused 可以在滚动更新中途暂停，StatefulSet 的 paused 行为在某些版本中不够稳定。生产中更稳妥的做法是用 partition 控制更新范围——设 partition 为当前最大序号 +1，等于"暂停"更新（没有 Pod 的序号 >= partition+1），排查后再降低 partition 恢复更新。
+
+### 5.5 更新窗口内的身份与可用性
+
+StatefulSet 的更新窗口比 Deployment 长得多，也危险得多，根子在"同一序号不能有两个 Pod"这一条约束上。Deployment 靠 `maxSurge` 与 `maxUnavailable` 两个旋钮把中断期压到接近零；StatefulSet 在 1.24 之前只有 `partition` 一个字段，1.24 起新增 `maxUnavailable`（默认 1），设成大于 1 才允许跨序号并行，但同一序号依旧只能先删后建。默认配置下更新从最大序号开始逐个推进，某个序号在"旧 Pod 删除完成"到"新 Pod Ready"之间完全不可用。
+
+对主从集群，把序号 0 留到最后正是为了让主节点最后停机，这是可用性设计而非巧合——从节点先升级，新版本与仍在运行的旧主节点之间的协议兼容性被真实流量验证过，主节点才动手；反过来先升级主节点，旧版本从节点一旦复制协议不兼容就会断开同步，故障面从"读请求降级"扩大到"整个集群复制中断"。
+
+`partition` 的语义边界值得强调。它只对 `RollingUpdate` 有效，`OnDelete` 下写这个字段毫无意义，因为 `OnDelete` 不看序号区间、只等人工删 Pod。把 `partition` 从 2 调到 0 也不是"一次性把区间内所有序号同时更新"，而是把序号 2、1、0 依次纳入待更新集合；`maxUnavailable=1` 时仍然逐个推进，调大它才会跨序号并行，但推进顺序依旧从大到小——"调小 partition 就能快速铺开"是错觉，它只改变范围、不改变并发。节奏的真正控制手段是 `minReadySeconds`：新 Pod 在 Ready 之后还要稳定运行 N 秒才算完成，挡住的正是"启动即崩"的版本，否则控制器会以秒级速度把坏版本推过全部副本；代价是整个更新窗口被拉长为 N 秒乘以副本数。
+
+还有一个易被忽略的窗口藏在存储侧。Pod 删除时 PVC 仍挂载在该节点上，kubelet 需先完成卷卸载，新 Pod 才能在可能不同的节点上挂载同一 PVC；卷插件响应缓慢或卡死时卸载会一直重试，新 Pod 停在 ContainerCreating，事件里反复出现 `FailedMount` 或 `Multi-Attach error`。控制面上这表现为"更新卡在某个序号很久"，而串行语义会把单点阻塞放大成整体停滞。
 
 ---
 
@@ -532,7 +567,7 @@ kubectl delete pod mysql-2 --force --grace-period=0
 
 强制删除 Pod（`--force --grace-period=0`）是节点故障时的紧急手段——正常删除 Pod 需要等待 kubelet 优雅终止，但节点故障时 kubelet 不可达，Pod 会一直处于 Terminating。强制删除绕过 grace period，立即从 etcd 删除 Pod 对象，StatefulSet 控制器发现 Pod 缺失，在其他节点重建。但强制删除有风险——如果原节点实际没故障（只是网络分区），原 Pod 可能还在运行，新 Pod 也在运行，两个同名 Pod 同时挂载同一 PVC，可能导致数据损坏。生产中强制删除前应确认节点确实故障（譬如标记节点为 NotReady、驱逐节点）。
 
-K8s 1.25 引入了 `maxUnavailable` 参数对 StatefulSet 的支持，但节点故障场景中还有一个相关参数：`minReadySeconds`。`minReadySeconds` 定义 Pod 在被标记为 Ready 之前必须保持运行的最小秒数（默认 0）。对于有状态应用，设置 `minReadySeconds` 为 30-60 秒可以防止 Pod 刚启动就被认为就绪——应用可能需要时间加载数据、建立连接、完成初始化。如果 `minReadySeconds` 为 0，Pod 启动后立即 Ready，StatefulSet 控制器立即创建下一个 Pod，但前一个 Pod 可能还没真正就绪，导致级联问题，影响整体部署的稳定性。
+节点故障的恢复路径之外，还有一个参数影响就绪判定本身：`minReadySeconds`。它定义 Pod 在通过 readinessProbe 之后还要保持运行多少秒才被标记为 Ready（默认 0）。对于有状态应用，设置 30-60 秒可以挡掉"起来就走"的假就绪——应用可能需要加载大量数据、重放日志、建立复制连接，探针早就返回成功，但真正可服务还要等几十秒。如果 `minReadySeconds` 为 0，控制器在新 Pod 刚 Ready 时就推进到下一个序号，前一个 Pod 实际仍在初始化，级联下去会让整批 Pod 都处于"看着就绪、实际不可用"的状态，这也是滚动更新在数据库上翻车的常见原因之一。
 
 这种"两个同名 Pod 同时运行"的风险被称为**脑裂**（Split-Brain）。脑裂的根因是分布式系统无法区分"节点真的故障了"与"节点只是网络分区但还在运行"。K8s 用 grace period 机制缓解——正常删除 Pod 时设置 grace period（默认 30 秒），kubelet 在 grace period 内优雅终止 Pod，超时后强制终止。但节点故障时 kubelet 不可达，grace period 机制失效，只能用 `--force --grace-period=0` 绕过。绕过 grace period 的代价是放弃了"确认原 Pod 已终止"的保证——这是节点故障恢复的固有风险。
 
@@ -632,68 +667,16 @@ StatefulSet 的能力不是免费的——它带来了 Deployment 没有的复�
 
 ## 总结
 
-StatefulSet 深度解析的核心知识可以归纳为以下主线：
+StatefulSet 的三项保证没有一项是免费的，理解它必须把保证与代价成对看待。稳定网络身份靠 Headless Service 的 Pod 级 DNS 落地，代价是 `serviceName` 必须指向一个 `clusterIP: None` 的 Service——指向普通 Service 时 Pod 照样建得出来，Pod 级 DNS 却根本不生效。有序部署靠 OrderedReady 的串行推进落地，代价是任一序号未就绪，后续序号全部不创建，整条进度被单个 Pod 的 PVC 绑定、调度结果或探针配置绑架。持久化存储绑定靠 `volumeClaimTemplates` 落地，代价是 PVC 的生命周期长于 Pod，缩容不回收、孤儿 PVC 需要独立的清理流程。
 
-1. **StatefulSet 是有状态应用的编排工具**。不是"更复杂的 Deployment"——设计目标完全不同。起源自 PetSet（K8s 1.3），1.5 重命名为 StatefulSet，核心是"个体身份"。
+有序性与可用性之间是一条清晰的交换曲线。创建正序、删除逆序、更新逆序三者同源，都把序号 0 视为"最早就绪、最晚停机"的角色；但同一序号不能存在两个 Pod 这一约束决定了更新只能先删后建，`rollingUpdate` 里的 `partition` 管范围、1.24 起新增的 `maxUnavailable` 管并发（默认 1，即逐个推进）。`partition` 给的是范围控制而非节奏控制，调小它只是扩大被纳入更新的序号区间；真正的节奏控制是 `minReadySeconds`，代价是更新窗口被拉长。
 
-2. **三大保证：稳定网络身份、有序部署、持久化存储绑定**。Pod 名为 `<sts-name>-<ordinal>`，DNS 名稳定；有序创建/删除；每个 Pod 绑定独立 PVC。
+StatefulSet 与 Operator 的分工边界也落在这条线上。StatefulSet 交付的是与具体应用无关的基础设施——身份、顺序、存储；主从切换、备份恢复、分片再平衡属于特定应用的运维知识，只能由 Operator 承担。把两者错位，不是让通用控制器退化成专用控制器，就是重复造轮子。
 
-3. **Headless Service 是 StatefulSet 的必要组件**。无 ClusterIP，DNS 返回 Pod IP。`<pod-name>.<headless-service>` 解析特定 Pod——客户端能定位特定 Pod。serviceName 必须指向 Headless Service。
-
-4. **有序部署：OrderedReady（默认）或 Parallel**。OrderedReady 前一个 Ready 才创建下一个，适合需要严格有序的应用。Parallel 并行创建，适合不需要有序的应用。
-
-5. **volumeClaimTemplates 为每个 Pod 创建独立 PVC**。Pod 重建后仍绑同一 PVC，数据不飘移。缩容不删除 PVC——防止数据丢失。
-
-6. **滚动更新从最大序号逆序进行**。先更新 mysql-2，再 mysql-1，最后 mysql-0——保证主节点（通常是序号 0）最后更新。先删后建，更新期间该序号 Pod 短暂不可用。
-
-7. **partition 实现金丝雀发布**。partition=2 只更新序号 >=2 的 Pod，验证后逐步降低 partition 扩大范围。
-
-8. **OnDelete 模式手动触发更新**。修改 spec.template 后不自动更新，手动删除 Pod 时才更新。给运维完全控制。
-
-9. **典型应用：数据库主从、Kafka、Redis Cluster、ZooKeeper**。这些应用需要稳定身份、有序启动、持久化存储。共同特征是拓扑关系依赖稳定身份。
-
-10. **节点故障时数据安全取决于存储类型**。网络存储（NFS/Ceph/EBS）Pod 重建后可重新挂载——数据安全。本地存储 Pod 重建后无法挂载——数据卡在故障节点。
-
-11. **缩容不删除 PVC**。防止数据丢失。如需释放存储，手动删除 PVC。删除前确保数据已备份。
-
-12. **broker.id 等需要稳定唯一 ID 的场景用序号**。K8s 1.28+ 的 pod-index label 提供序号，适合作为 broker.id/node.id。
-
-13. **有状态应用必须配置 PDB**。PodDisruptionBudget 确保自愿驱逐时保持最小可用副本数。PDB 只对自愿驱逐有效，非自愿驱逐靠副本数与 antiAffinity 防护。
-
-14. **StatefulSet 不解决应用层逻辑**。主从切换、备份恢复、扩容分片是应用层逻辑，需要 Operator。StatefulSet + Operator 是有状态应用的完整方案。
-
-15. **StatefulSet 与 Deployment 是分工而非升级**。选择取决于应用是否有状态，而非"哪个更高级"。用错工具——有状态应用用 Deployment 丢数据一致性，无状态应用用 StatefulSet 徒增复杂度。
-
-16. **有状态应用的运维成本高于无状态应用**。Pet vs Cattle 的比喻揭示——有状态应用需要逐个管理（有序部署、partition 灰度、逐个 PVC 清理），无状态应用可以批量管理。选择 StatefulSet 意味着接受更高的运维成本，这是有状态应用的固有代价，没有银弹。
-
-17. **存储类型决定节点故障时的数据安全**。网络存储（NFS/Ceph/EBS）Pod 可跨节点迁移，数据安全；本地存储 Pod 绑定节点，节点故障数据不可达。性能与可用性往往不可兼得，因地制宜地选择。
+最后一条判断常被忽略——存储类型决定故障语义。网络存储让 Pod 可以跨节点重建并重新挂载，节点故障退化为一次较慢的重建；本地存储把 PV 钉在节点上，节点故障即数据不可达，此时正确的动作是等待节点恢复，而非急着 `--force` 删除 Pod 制造脑裂。
 
 > [!info] 专栏导航
 > 本文是 [[00 专栏导览|Kubernetes 架构深度剖析专栏]] 的第 10 篇，深入 StatefulSet 的设计。下一篇 [[11 Scheduler 调度算法：预选、优选与扩展机制]] 将详细讨论 K8s 调度器的两阶段流程——Filter/Score、节点亲和性/反亲和性、Taint/Toleration，以及调度扩展机制。
-
----
-
-## 延伸思考
-
-1. **你的有状态应用是否用了 StatefulSet？** 如果用 Deployment 跑数据库，Pod 名随机、无序、存储不绑定——数据一致性风险。评估迁移到 StatefulSet。
-
-2. **你的 StatefulSet 是否用了 Headless Service？** StatefulSet 必须指定 serviceName 指向 Headless Service。普通 Service 无法提供 Pod 级 DNS 解析。
-
-3. **你的 StatefulSet 存储是否是网络存储？** 如果用 local PV，节点故障时数据卡在故障节点。关键应用用网络存储（EBS/Ceph/NFS）保证节点故障后数据可访问。
-
-4. **你的 StatefulSet 滚动更新是否用了 partition 灰度？** 对于关键有状态应用，partition 灰度是安全升级的工具。先更新一个 Pod 验证，再扩大范围。
-
-5. **你的 StatefulSet 缩容是否误删了 PVC？** 缩容只删 Pod 不删 PVC——这是保护数据。如果需要释放存储，确认数据已备份后再手动删 PVC。
-
-6. **你的 StatefulSet 是否需要 Parallel 部署？** 如果应用不需要严格有序启动（如 Redis Cluster），用 `podManagementPolicy: Parallel` 大幅缩短部署时间。
-
-7. **你的数据库主节点地址是否通过 Headless Service 解析？** 从节点应配置 `master-host=mysql-0.mysql-headless`，而非具体 IP。mysql-0 重建后 IP 变但 DNS 名不变。
-
-8. **你的 StatefulSet 是否设置了 podManagementPolicy？** 默认 OrderedReady 适合需要严格有序的应用。不需要有序的应用用 Parallel 提升部署速度。
-
-9. **你的有状态应用是否配置了 PDB？** 没有PDB 的有状态应用在节点维护时可能被同时驱逐多个 Pod。配置 minAvailable 确保最小可用副本数。
-
-10. **你的 StatefulSet 是否需要 Operator？** StatefulSet 只提供基础设施（身份、顺序、存储），主从切换、备份恢复等应用逻辑需要 Operator。评估你的应用是否需要 Operator 补充。
 
 ---
 

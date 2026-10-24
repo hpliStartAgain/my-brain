@@ -47,7 +47,7 @@ Borg 将工作负载分为两类：prod 是长期运行的服务（如 Web 服�
 用户通过配置文件（BCL，Borg Configuration Language）描述期望状态——"运行 3 个副本的 Web 服务"——而不是"在机器 A 上启动一个进程，在机器 B 上启动一个进程"。Borg 负责将当前状态调整到期望状态。
 
 ```mermaid
-%%{init: {"theme":"dracula"}}%%
+%%{init: {'theme': 'dracula'}}%%
 graph LR
     BCL["BCL 配置<br/>'我要 3 个副本'"] --> Borg["Borg 调度器"]
     Borg --> M1["机器 A: replica-1"]
@@ -81,7 +81,7 @@ Omega 是 Google 对 Borg 调度架构的一次重大实验，也是一次并不
 Omega 的核心创新是**共享状态调度（Shared-state Scheduling）**：
 
 ```mermaid
-%%{init: {"theme":"dracula"}}%%
+%%{init: {'theme': 'dracula'}}%%
 graph TD
     Cell["Cell 状态<br/>(共享存储)"] --> S1["调度器 1"]
     Cell --> S2["调度器 2"]
@@ -129,7 +129,7 @@ K8s 与 Borg 的关键差异在于面向的用户群体不同：
 ### 1.5 三代传承的脉络
 
 ```mermaid
-%%{init: {"theme":"dracula"}}%%
+%%{init: {'theme': 'dracula'}}%%
 graph LR
     Borg["Borg<br/>2003<br/>声明式 + 集中调度"] -->|"声明式理念<br/>prod/non-prod 分类"| K8s["Kubernetes<br/>2014<br/>声明式 + 可扩展"]
     Borg -->|"集中调度的瓶颈教训"| Omega["Omega<br/>2010<br/>共享状态 + 乐观并发"]
@@ -242,7 +242,7 @@ spec:
 **控制器**是一个持续运行的循环，它不断地：观察（Observe，通过 API Server 获取资源的当前状态）、比较（Diff，计算当前状态与期望状态的差异）、行动（Act，执行操作消除差异，使当前状态趋近于期望状态）。这个循环被称为 **Reconcile Loop（协调循环）**。
 
 ```mermaid
-%%{init: {"theme":"dracula"}}%%
+%%{init: {'theme': 'dracula'}}%%
 graph LR
     O["观察<br/>Observe<br/>获取当前状态"] --> D["比较<br/>Diff<br/>当前 vs 期望"]
     D --> A["行动<br/>Act<br/>消除差异"]
@@ -367,7 +367,7 @@ Level-triggered 与 Edge-triggered 的取舍，本质上是在"效率"与"健壮
 K8s 的组件之间不直接通信——所有通信都通过 API Server 作为中心枢纽。这被称为 **Hub-and-Spoke（辐射轮毂）** 架构。
 
 ```mermaid
-%%{init: {"theme":"dracula"}}%%
+%%{init: {'theme': 'dracula'}}%%
 graph TD
     subgraph "控制平面"
         API["API Server<br/>唯一通信枢纽"]
@@ -481,7 +481,7 @@ K8s 不关心你的代码仓库在哪里、如何编译、如何打包成镜像�
 将六大原则代入一个具体场景——用户执行 `kubectl apply -f deployment.yaml` 创建一个 3 副本的 Deployment：
 
 ```mermaid
-%%{init: {"theme":"dracula"}}%%
+%%{init: {'theme': 'dracula'}}%%
 sequenceDiagram
     participant User as "用户"
     participant API as "API Server"
@@ -527,7 +527,7 @@ sequenceDiagram
 假设一个 Node 宕机了，上面运行着 2 个 Pod（属于一个 replicas=3 的 Deployment）：
 
 ```mermaid
-%%{init: {"theme":"dracula"}}%%
+%%{init: {'theme': 'dracula'}}%%
 graph TD
     Node["Node 宕机"] --> NC["Node Controller<br/>检测心跳超时"]
     NC --> NotReady["标记 Node NotReady"]

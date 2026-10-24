@@ -78,6 +78,20 @@ ResourceVersion 在 K8s 中承载三个工程用途，这三个用途共同构�
 
 这三个用途都依赖 ResourceVersion 的单调递增特性，而单调递增来自 etcd 的全局 revision。K8s 把 etcd 的 MVCC 版本体系"借"过来，用一层字符串封装变成了 ResourceVersion，然后在这层封装之上构建了并发控制、变更监听、新鲜度判断三大能力。理解这层映射，就理解了 K8s 一致性保证的底层逻辑。
 
+### 1.5 为什么没有 ETag：版本号的协议层缺席
+
+HTTP 自身有现成的乐观并发机制：服务端返回 **ETag**（Entity Tag），客户端回写时带 `If-Match`，版本不符就返回 **412 Precondition Failed**。Kubernetes 没有走这条路，而是把版本号放进响应体的 `metadata.resourceVersion`，更新时随整个对象一起 PUT 回去。原因有三层。
+
+第一层是**原子性**。版本号必须与它所描述的对象在同一个报文里被读取、也在同一个报文里被回写。放进 header 就出现了「头里的版本」与「体里的对象」两个可被中间层分别处理的字段，任何改写 header 的代理——譬如为了提升缓存命中率而重写 ETag——都会让语义失真；放进 body 后两者同属一段字节流，要么一起被完整传输，要么一起被拒绝。
+
+第二层是**复用**。同一个版本号还要被拿去当 Watch 的续传起点、当 List 快照的标识，它是对象模型的一部分而不只是传输层元数据；HTTP 头部的 ETag 属于表示层（representation）的协商信息，连接终止即失去意义，而版本号必须能脱离任何一次具体交互被持久化与比较。
+
+第三层是**语义**。K8s 要表达的不是「前置条件不满足」，而是「你读到的版本已经过期，请重读再改」，所以用 409 Conflict 而非 412，客户端据此进入「重读-合并-重试」流程。两者的差别不在风格，而在是否给出了可自动执行的后续动作。
+
+代价也很实在——PUT 是整对象替换，客户端必须持有完整对象才能改一个字段，每次冲突重试都要重传整个对象，其中还夹带着与本次修改无关的字段。这正是 Server-Side Apply 后来要解决的问题：把版本协商从整对象粒度降到字段粒度，用 `managedFields` 记录字段所有者，冲突只落在真正重叠的字段上。
+
+另有一条容易忽略的约束：create 请求里不允许携带 resourceVersion，服务端会直接拒绝，因为新建对象的版本只能由存储层分配——etcd 的 ModRevision 在写入提交那一刻才产生。这条约束反过来说明版本号的所有权归属：客户端只是在读写之间把它搬运一次，从不生产它。
+
 ---
 
 ## 第 2 章 乐观并发控制：为什么 K8s 不用分布式锁
@@ -131,7 +145,7 @@ ResourceVersion 在 K8s 中承载三个工程用途，这三个用途共同构�
 **乐观并发控制**（Optimistic Concurrency Control，OCC）的思路是"先操作，提交时验证，冲突时重试"。它不持锁，操作前读版本，操作时验证版本未变，变了就重试。这个思路与悲观锁的"先持锁，再操作，后释放"形成鲜明对比。
 
 ```mermaid
-%%{init: {"theme":"dracula"}}%%
+%%{init: {'theme': 'dracula'}}%%
 sequenceDiagram
     participant A as "Client A"
     participant API as "API Server"
@@ -467,7 +481,7 @@ manager 的标识由客户端的 `User-Agent` 或 `fieldManager` 参数决定。
 当两个 manager 试图管理同一字段时，SSA 返回 409 Conflict，提示用户"字段已被其他 manager 管理"。
 
 ```mermaid
-%%{init: {"theme":"dracula"}}%%
+%%{init: {'theme': 'dracula'}}%%
 sequenceDiagram
     participant A as "Manager A<br/>(Helm)"
     participant API as "API Server"
@@ -720,30 +734,6 @@ ResourceVersion 是 etcd ModRevision 的字符串映射——全局单调递增�
 
 > [!info] 专栏导航
 > 本文是 [[00 专栏导览|Kubernetes 架构深度剖析专栏]] 的第 08 篇，深入 ResourceVersion 和乐观并发控制。上一篇 [[07 etcd 深度剖析：Raft 共识、MVCC 与 Watch 机制]] 讲透了 etcd 的 Raft 共识、MVCC 版本体系和 Watch 机制，本文承接 etcd 的 MVCC，讲透 K8s 如何基于 etcd 的 ModRevision 实现乐观并发控制。下一篇 [[09 控制器模式与协调循环：从 Deployment 到 Operator]] 将详细讨论 K8s 控制器的通用模式——协调循环、级联控制、最终一致性、以及如何编写自定义控制器。
-
----
-
-## 延伸思考
-
-1. **你的控制器是否正确更新了 observedGeneration？** 检查 Reconcile 函数——处理后是否将 observedGeneration 设为 generation。不更新会导致 kubectl 一直显示 "Progressing"，误导用户判断。
-
-2. **你的更新是否用了 Status 子资源？** 更新 status 用 `Status().Update()` 而非 `Update()`——分离 spec 和 status 的并发控制，避免与用户修改 spec 冲突。
-
-3. **你的多组件协作是否用了 Server-Side Apply？** 如果多个组件管理同一对象，SSA 的字段所有权可以避免冲突覆盖。`kubectl apply --server-side` 启用。
-
-4. **你的冲突重试是否有上限？** 不要无限重试——用 `retry.RetryOnConflict` 最多 5 次，之后返回错误由 WorkQueue 延迟重试。
-
-5. **你是否理解 ResourceVersion=0 的语义？** 它不是"从版本 0 开始"，而是"从缓存最新版本开始"。Informer 初始化用 `resourceVersion=0` 从 Watch Cache 快速获取。
-
-6. **你的控制器是否在协调循环中缓存了 ResourceVersion 跨多次使用？** ResourceVersion 只在单次读-改-写中有效。每次 Reconcile 都应重新读取最新状态。
-
-7. **你是否监控了冲突率？** 高冲突率表明多个组件频繁更新同一对象。监控 API Server 的 409 Conflict 响应率，定位冲突源。
-
-8. **你的高频更新对象是否有分片或批量策略？** Endpoints 等高频更新对象冲突率高。评估用 EndpointsSlice 分片，或批量合并更新。
-
-9. **你是否在控制器中用 retry.RetryOnConflict？** 不要自己实现冲突重试——用 client-go 的 `retry.RetryOnConflict`，它有合理的退避策略和重试上限。
-
-10. **你是否理解 List 的 ResourceVersion 是全局版本？** List 返回的 ResourceVersion 不是某个对象的版本，而是"这个快照对应的全局版本"。Watch 用它作为起始点，从该版本之后监听所有变更。
 
 ---
 

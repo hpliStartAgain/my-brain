@@ -88,6 +88,8 @@ HPA 的一个工程价值是"水平伸缩"。HPA 调整 Pod 副本数——负�
 
 HPA 的一个工程细节是"autoscaling/v2"。K8s 的 HPA 有两个版本——autoscaling/v1（只支持 CPU 指标）和 autoscaling/v2（支持多指标，包括 CPU/内存/自定义指标/外部指标）。生产中用 autoscaling/v2——支持多指标，更灵活。譬如同时根据 CPU 和内存伸缩，或根据自定义指标（譬如 QPS）伸缩。
 
+HPA 的排障入口在它自己的状态里。`kubectl describe hpa` 能看到 `currentMetrics`、`desiredReplicas` 与一组 `conditions`：`AbleToScale` 为 False 说明副本写入被拒绝（譬如目标对象正被其他控制器改动），`ScalingActive` 为 False 且 reason 是 `FailedGetResourceMetric`，基本可以断定 metrics-server 未就绪或者 Pod 缺 `resources.requests`——后者尤其常见，因为使用率的分母就是 requests，没有分母也就没有使用率。HPA 写副本数走的是目标对象的 `scale` 子资源而不是直接 patch Deployment，这意味着凡是有 scale 子资源的对象都能被 HPA 接管，包括 StatefulSet、ReplicaSet，以及实现了 `/scale` 的自定义资源。
+
 ### 2.2 HPA 的副本数计算公式
 
 ```
@@ -133,6 +135,10 @@ HPA 的另一个工程考量是"minReplicas 与 maxReplicas"。minReplicas 是�
 HPA 的一个工程细节是"Pod 启动延迟"。HPA 扩容时创建新 Pod——Pod 启动需要时间（拉镜像、启动容器、就绪检查）。在此期间新 Pod 不处理流量——HPA 可能继续扩容（指标仍高）。这种"Pod 启动延迟"导致 HPA 可能过度扩容——新 Pod 启动后流量已分散，但 HPA 已经创建了过多 Pod。生产中用就绪检查（readiness probe）确保 Pod 就绪后才接收流量，减少过度扩容。
 
 HPA 的行为算法值得深入。HPA 的扩容决策基于"期望副本数 = ceil(当前副本数 × 当前指标值 / 目标指标值)"——这个公式保证了指标值与目标值的比例关系。譬如当前 5 副本，CPU 使用率 90%，目标 70%，期望副本数 = ceil(5 × 90/70) = ceil(6.43) = 7。HPA 的一个工程细节是"容忍度"——HPA 默认有 10% 的容忍度（`--horizontal-pod-autoscaler-tolerance`），指标在目标值的 ±10% 范围内不触发扩缩容，避免频繁调整。譬如目标 CPU 70%，容忍度 10%，CPU 在 63%-77% 之间不触发扩缩容。HPA 的一个工程陷阱是"指标抖动"——指标在阈值附近抖动时，HPA 可能频繁扩缩容。冷却期（downscale-stabilization）只限制缩容，不限制扩容——扩容仍可能频繁。生产中用自定义指标（譬如 QPS）替代 CPU 指标，减少抖动。
+
+### 2.4 HPA 的 behavior 与稳定窗口
+
+`autoscaling/v2` 引入的 `behavior` 字段，把「扩得快、缩得慢」这条经验法则写成了默认值：`scaleUp.stabilizationWindowSeconds` 默认 0，`scaleDown` 默认 300 秒，于是扩容可以立即生效，缩容必须等满 5 分钟。不过稳定窗口（stabilization window）的取值逻辑并不是对窗口内的推荐值做平均，而是在窗口内所有历史推荐值里挑最保守的那一个——扩容时取最小值，缩容时取最大值，这样即使指标在阈值附近来回抖动，副本数也不会被一次次推上去又拉回来。多条 policy 之间的取舍交给 `selectPolicy`：`Max` 选最激进的一条、`Min` 选最保守的一条、`Disabled` 直接关掉该方向的伸缩；单条 policy 的 `periodSeconds` 上限是 1800 秒，超过这个值的对象会被 API Server 的校验拒绝，因为再长的窗口已经失去了「限制速率」的意义。`tolerance` 默认 0.1，当前指标与目标值的偏差落在 10% 以内就视为达标、不做调整，这一条看似不起眼，实际挡掉了大部分无意义的微调。更根本的限制来自 `--horizontal-pod-autoscaler-sync-period`，默认 15 秒，这是 HPA 的最小反应粒度——比 15 秒更短的流量尖峰在采样上根本看不见，只能靠预留容量或者 KEDA 的事件驱动兜住。还有一个常被忽略的指标类型是 `ContainerResource`，它按容器而不是整 Pod 计算使用率：sidecar 占资源多的场景必须用它，否则 sidecar 的用量会稀释业务容器的真实利用率，扩容判断整体失真。两条 policy 常用的类型是 `Pods` 与 `Percent`，后者以当前副本数为基数按百分比放大，`value: 100` 意味着每个周期最多翻一倍——这也是把扩容从「指数爆炸」拉回线性的一种手段。
 
 ---
 
@@ -234,6 +240,10 @@ Cluster Autoscaler 的一个工程考量是"Spot 实例"。Spot 实例（竞价�
 
 Cluster Autoscaler 缩容的实现细节值得深入。Cluster Autoscaler 定期扫描集群中的节点，标记低利用率节点（节点上的 Pod 资源请求低于节点容量的一定比例，默认 50%）为缩容候选。缩容时，Cluster Autoscaler 优雅驱逐节点上的 Pod——调用 Pod 的 eviction API，Pod 重新调度到其他节点。如果所有 Pod 都成功迁移，Cluster Autoscaler 调用云厂商 API 终止节点。Cluster Autoscaler 缩容的一个工程陷阱是"缩容导致服务降级"——缩容时 Pod 重新调度，如果其他节点资源不足，Pod 可能 Pending，导致服务容量下降。生产中确保缩容前有足够冗余节点承载被驱逐的 Pod，这是缩容安全的基础保障。Cluster Autoscaler 的一个工程细节是"节点平衡器"——Cluster Autoscaler 可以配置节点平衡器，在缩容时优先缩容最空的节点，减少 Pod 迁移数量。
 
+### 4.3 CA 的 expander 与缩容延迟
+
+集群扩容的展开器（expander）由 `--expander` 参数指定，它决定在多个节点组之间怎么选：`random` 随机挑一个，`most-pods` 挑能放下最多 Pending Pod 的那个，`least-waste` 挑扩容之后剩余资源最少的那个，`price` 挑最便宜的，`priority` 则按配置里的顺序依次尝试。**扩容不是「看到 Pending 就加节点」**，而是先做一次模拟调度——假设加入一个某类型的节点，看这个 Pod 能不能放进去，放不下就不加。这解释了一个常见现象：Pod 一直 Pending，Cluster Autoscaler 却纹丝不动，因为现有节点组里没有任何一种实例规格能同时满足它的资源请求与亲和性、污点约束，模拟调度每次都失败，日志里留下的只是「没有可用的扩容选项」这类记录。缩容则是一串延迟参数的合力：`--scale-down-delay-after-add` 默认 10 分钟，防止刚扩容就缩回去；`--scale-down-unneeded-time` 默认 10 分钟，要求节点持续低负载够久才进入候选；`--scale-down-utilization-threshold` 默认 0.5，把「低负载」定义为请求量低于节点容量的 50%。此外 `--skip-nodes-with-local-storage` 与 `--skip-nodes-with-system-pods` 默认都为 true，保护挂了本地盘或跑着 kube-system Pod 的节点不被缩容，这正是「节点明明很空却缩不掉」的常见原因。`--max-node-provision-time` 默认 15 分钟，某个节点组超过这个时间还没起来就放弃、换下一个组，避免卡在一个永远起不来的组上；`--balance-similar-node-groups` 让打了相同标签的相似节点组保持均衡，防止某一个组被优先打满。`priority` 的值本身可以是逗号分隔的展开器列表，于是「先按优先级挑组、组内再按 least-waste 挑规格」这类组合不必写插件就能表达；扫描间隔由 `--scan-interval` 控制，默认 10 秒，它决定了从 Pod 进入 Pending 到触发扩容之间的观测延迟。
+
 ---
 
 ## 第 5 章 KEDA：事件驱动伸缩
@@ -282,6 +292,8 @@ KEDA 的一个工程细节是"触发器配置"。KEDA 的触发器（trigger）�
 KEDA 的一个工程考量是"冷启动延迟"。KEDA 缩到 0 后，有事件时需要启动 Pod——Pod 启动需要时间（拉镜像、启动容器）。这种"冷启动延迟"使得第一个事件处理延迟——Pod 启动期间事件积压。生产中可以用 minReplicaCount=1 保持一个 Pod 运行（避免冷启动），或优化镜像大小减少启动时间。
 
 KEDA 的另一个工程考量是"KEDA 与 Prometheus 触发器"。KEDA 支持 Prometheus 触发器——根据 Prometheus 指标伸缩。譬如根据 HTTP 请求 QPS 伸缩——QPS 超过阈值时扩容。这种"Prometheus 触发器"使得 KEDA 可以根据任意 Prometheus 指标伸缩——比 HPA 的自定义指标更灵活（KEDA 支持更多指标源）。
+
+KEDA 的时序细节同样值得记一笔。它的 `pollingInterval` 默认 30 秒、`cooldownPeriod` 默认 300 秒，前者决定多久问一次事件源，后者决定指标归零后多久把副本收回——两者都比 HPA 的 15 秒同步周期粗，所以 KEDA 的响应天然比 CPU 驱动的 HPA 慢半拍。缩到 0 的实现也不是 HPA 直接具备的能力：KEDA 把受管 HPA 的 `minReplicas` 设为 1，自己把工作负载的副本数压到 0，事件源越过 `activationThreshold` 时才把工作负载拉回 1，再把后续伸缩交还给 HPA。理解了这条分工，就明白为什么 KEDA 的冷启动延迟里既有 Pod 启动时间，也有一个 polling 周期的观测延迟。
 
 KEDA 的实现细节值得深入。KEDA 由三个组件组成——Operator（管理 ScaledObject/ScaledJob CRD）、Metrics Adapter（将事件源指标暴露为 K8s Custom Metrics API）、Controller（监听事件源，触发伸缩）。KEDA 的工作流程——ScaledObject 定义触发器（譬如 Kafka lag），Controller 定期查询事件源（Kafka 的消费延迟），通过 Metrics Adapter 暴露为 Custom Metrics，HPA 根据这些指标伸缩 Deployment。KEDA 缩到 0 的实现——当事件源没有事件（譬如 Kafka lag=0）时，KEDA 将 Deployment 的 replicas 设为 0；有事件时，KEDA 将 replicas 设为 minReplicaCount，HPA 接管后续伸缩。KEDA 的一个工程细节是"ScaledJob 的批处理伸缩"——ScaledJob 根据 Job 队列长度创建多个 Job 并行处理，处理完成后 Job 自动完成，不需要手动缩容。生产中批处理任务用 ScaledJob，长运行服务用 ScaledObject，这是 KEDA 使用的核心原则。
 
@@ -371,6 +383,10 @@ graph TD
 
 跨集群容灾的实现细节值得深入。跨集群容灾的核心是"流量切换"——主集群故障时，将流量切到备用集群。流量切换的方式有三种——DNS 切换（修改 DNS 解析，将域名指向备用集群，但 DNS TTL 导致切换延迟）、全局 LB 切换（全局负载均衡器将流量切到备用集群，切换快但依赖 LB 高可用）、客户端切换（客户端配置多集群地址，主集群不可用时自动切到备用集群，切换快但需要客户端支持）。跨集群容灾的一个工程陷阱是"数据不一致"——异步复制有延迟，主集群故障时备用集群数据可能滞后，切换后部分数据丢失。生产中关键业务用同步复制确保数据一致，普通业务用异步复制接受少量数据丢失。跨集群容灾的另一个工程细节是"健康检查"——全局 LB 定期检查集群健康，主集群不可用时自动切换，减少人工干预，这是容灾自动化的基础。
 
+### 6.4 KubeFed 归档后的多集群路径
+
+KubeFed 在 2021 年归档，`FederatedDeployment` 那套 API 不应再出现在新项目的设计里，但它的设计意图——把应用对象分发到多个集群、并允许按集群覆盖差异——被后来的工具分别继承了。只做配置分发时，Argo CD 的 ApplicationSet 按集群生成 Application，由 GitOps 驱动，简单可靠，但它没有跨集群调度能力，集群选错只能由人来改。需要跨集群调度与故障迁移时用 Karmada（CNCF incubating）：`PropagationPolicy` 定义分发策略与副本分配，`OverridePolicy` 覆盖集群差异，支持依赖传播与多集群故障迁移，代价是多一层控制面要自己运维。要管集群自身的生命周期则用 Cluster API：`Cluster`、`MachineDeployment`、`ClusterClass` 把「建集群、扩节点池、升级版本」变成声明式对象，适合集群数量上了规模的组织。服务网格层的跨集群是另一条线：Istio 的 Primary-Remote 与 Multi-Primary 解决的是服务发现与流量，不解决应用对象分发，两者经常叠加使用而不是二选一。**选型的判断线很清楚**：分发配置用 ApplicationSet，要调度与容灾用 Karmada，管集群本身用 Cluster API，跨集群服务通信用 Istio。判断线之下还有一层分工细节：ApplicationSet 的集群生成器（cluster generator）直接读取 Argo CD 里注册的集群 Secret，新增一个集群只要打上标签，Application 就会自动生成；Karmada 侧的 `PropagateDeps` 让依赖对象随工作负载一起下发，`ReplicaSchedulingStrategy` 决定副本在成员集群之间是平均分还是按权重分；Cluster API 的 `MachineHealthCheck` 则在节点失联时自动重建 Machine，把「机器坏了要人上去看」变成控制器行为。
+
 ---
 
 ## 第 7 章 弹性伸缩的组合使用
@@ -430,57 +446,19 @@ graph TD
 
 ## 总结：专栏的完整知识体系
 
-四种弹性伸缩机制：HPA（水平 Pod 伸缩，根据 CPU/内存/自定义指标调整副本数，公式 ceil(当前副本数 × 当前指标值/目标指标值)，多指标取最大值，扩容快缩容慢，冷却期 5 分钟防止震荡，10% 容忍度避免频繁调整，自定义指标需 Prometheus Adapter，HPA Controller 从 metrics-server 获取 Resource 指标）、VPA（垂直 Pod 伸缩，调整 Pod 资源 requests/limits，由 Recommender/Updater/Admission Controller 三组件实现，Auto 模式需重启 Pod，与 HPA 不能同时用于同资源，Recommender 模式只推荐不调整）、Cluster Autoscaler（节点伸缩，定期扫描 Pending Pod 调用云 API 加节点，缩容标记低利用率节点驱逐并终止，PDB 保护自愿驱逐，扩容延迟 1-5 分钟，Spot 实例成本低但可能被回收，节点平衡器优先缩容最空节点）、KEDA（事件驱动伸缩，由 Operator/Metrics Adapter/Controller 三组件实现，根据 Kafka/Redis/Prometheus 等事件源伸缩，支持缩到 0，是 HPA 的超集，ScaledObject 适合长运行，ScaledJob 适合批处理）。弹性伸缩是分层的——HPA/KEDA 秒级响应波动，Cluster Autoscaler 分钟级响应容量，多集群天级响应地理扩展，三层互补。HPA + Cluster Autoscaler 实现端到端弹性——流量增加 → HPA 扩容 Pod → 节点不足 → Cluster Autoscaler 加节点，预留节点减少层级延迟。多集群动机：地理分布、容灾、强隔离、混合云、规模扩展（单集群上限 5000 节点）。多集群管理工具：Cluster API（集群生命周期）、Karmada（跨集群应用分发，PropagationPolicy 定义分发策略，OverridePolicy 覆盖集群差异）、Argo CD（GitOps 多集群）、Istio Multi-Cluster（跨集群服务网格，Primary-Remote 与 Multi-Primary 两种部署模式）。KubeFed 已停止维护不推荐。多集群架构模式：Hub-Spoke、多集群 Service Mesh、GitOps 多集群。跨集群容灾需要流量切换（DNS TTL 延迟、全局 LB、客户端切换）与数据同步（异步复制 vs 同步复制），定期容灾演练确保方案有效。弹性伸缩不是"加机器"——而是"在正确的时间加正确的资源"：HPA 应对短期波动，Cluster Autoscaler 应对长期容量，多集群应对地理扩展。没有弹性伸缩的集群无法应对负载波动，没有多集群管理的组织无法应对规模化与容灾需求。
+四种机制落在四个层级上：HPA 与 KEDA 调副本数、VPA 调单副本的资源配额、Cluster Autoscaler 调节点数、多集群调集群数。它们的时间尺度并不一致——HPA 的最小反应粒度是 15 秒的同步周期，Cluster Autoscaler 加一个节点要 1 到 5 分钟，扩一个集群则是数十分钟到数小时。**层级之间是互补而非替代**：短时尖峰只能由 Pod 级弹性接住，容量增长只能由节点级弹性接住，地理扩展与强隔离只能由集群级弹性接住，任何一层缺失都会把压力推回人工。
+
+HPA 的核心是一条比例公式 `ceil(当前副本数 × 当前指标值 / 目标指标值)`，以及围在公式周围的一圈约束：多指标取最大值、使用率相对 requests 而非 limits、10% 的容忍度挡掉微调、稳定窗口在历史推荐值里取最保守者。**「扩得快、缩得慢」不是风格偏好，而是默认值里写死的工程判断**——扩容慢伤用户，缩容慢只是浪费钱。
+
+Cluster Autoscaler 的关键在于它先模拟调度、再决定是否加节点，而不是看到 Pending 就扩容；缩容则是一串延迟参数与保护开关的合力，本地盘、系统 Pod、PDB、节点组上限任意一条不满足，节点就缩不掉或加不上。
+
+多集群的动机可以归为延迟、可用性、隔离、厂商与规模五件事，工具选型则有一条清晰的判断线：分发配置用 ApplicationSet，要调度与容灾用 Karmada，管集群本身用 Cluster API，跨集群服务通信用 Istio——KubeFed 已归档，不应再作为选项。**弹性的本质不是「加机器」，而是在正确的时间尺度上加正确的资源**；理解了每一层的响应边界与失败模式，成本与可用性之间的取舍才有依据。
 
 > [!info] 专栏结语
 > 本专栏从"K8s 的设计哲学"出发，经过声明式 API、架构全景、API Server、认证授权、List-Watch、etcd、ResourceVersion、控制器、StatefulSet、Scheduler、CRD/Operator、kubelet、Service/kube-proxy、CNI、生产化集群管理、可观测性，最终在"弹性伸缩与多集群"画上句号。18 篇文章形成了一个完整的知识体系——从设计哲学到组件深度剖析到生产实战。希望这个专栏能帮助你建立对 Kubernetes 架构的完整认知，并在实践中做出更好的工程决策。K8s 的复杂性来自于"在一个系统内同时解决调度、自愈、服务发现、滚动更新、配置管理、扩展性等多个问题"——理解每个组件的设计原理和交互方式，才能驾驭这种复杂性。
 
 > [!info] 专栏导航
 > 本文是 [[00 专栏导览|Kubernetes 架构深度剖析专栏]] 的第 18 篇，也是收官之作。建议从 [[00 专栏导览]] 开始顺序阅读，建立完整的知识体系。
-
----
-
-## 延伸思考
-
-1. **你的服务是否用了 HPA？** Web 服务用 HPA 根据 CPU/自定义指标自动伸缩。没有 HPA 的服务在流量波动时需手动扩容。
-
-2. **你的集群是否用了 Cluster Autoscaler？** Pod Pending 时自动加节点。没有 CA 的集群在资源不足时需手动加节点。
-
-3. **你的事件驱动应用是否用了 KEDA？** Kafka/Redis 消费者用 KEDA 根据消费延迟伸缩，支持缩到 0。
-
-4. **你的 VPA 是否用了 Auto 模式？** Auto 模式需要重启 Pod，可能导致服务中断。生产环境用 Recommender 模式。
-
-5. **你的多集群是否有统一管理？** Karmada/Argo CD 统一管理多集群的应用分发。没有统一管理的多集群运维成本高。
-
-6. **你的弹性伸缩是否分层？** HPA 应对短期波动，Cluster Autoscaler 应对长期容量，多集群应对地理扩展。单一机制不足以应对所有场景。
-
-7. **你的 HPA 冷却期是否合理？** 默认 5 分钟防止震荡。成本敏感场景可缩短，稳定性优先场景可延长。
-
-8. **你的多集群容灾是否演练过？** 多集群容灾需要定期演练——切换流量到备用集群，验证服务正常。没有演练过的容灾方案可能在真故障时失效。
-
-9. **你的 HPA 是否用了自定义指标？** CPU 使用率不能反映所有业务的负载——譬如 QPS、延迟。用自定义指标（Prometheus Adapter）根据业务指标伸缩。
-
-10. **你的 Cluster Autoscaler 是否配置了多个节点组？** 小 Pod 用小节点组，大 Pod 用大节点组，GPU Pod 用 GPU 节点组。多节点组提高资源利用率。
-
-11. **你的 KEDA 是否用了 ScaledJob？** 批处理任务用 ScaledJob（伸缩 Job），长运行服务用 ScaledObject（伸缩 Deployment）。
-
-12. **你的多集群是否有跨集群服务发现？** Istio Multi-Cluster 提供跨集群服务发现——跨集群调用透明。没有跨集群服务发现的多集群，服务间调用需要手动配置。
-
-13. **你的 HPA 是否用了 autoscaling/v2？** v1 只支持 CPU 指标，v2 支持多指标（CPU/内存/自定义/外部）。生产中用 v2 更灵活。
-
-14. **你的 VPA 是否考虑了 QoS 影响？** VPA 调整 requests 改变 QoS 等级（Guaranteed/Burstable/BestEffort），影响驱逐优先级。注意 VPA 调整对 QoS 的影响。
-
-15. **你的 Cluster Autoscaler 是否用了 Spot 实例？** Spot 成本低但可能被回收。用 Spot 跑无状态应用（Pod 可迁移），不用 Spot 跑有状态应用。
-
-16. **你的多集群容灾是否有数据同步？** 容灾需要数据同步——主集群数据同步到备用集群。异步复制（延迟但性能好）vs 同步复制（一致但性能差）。根据业务需求选择。
-
-17. **你的弹性伸缩是否考虑了响应时间差异？** HPA/KEDA 秒级，Cluster Autoscaler 分钟级，多集群天级。不同时间尺度的负载变化用不同机制应对。
-
-18. **你的弹性伸缩是否平衡了成本与响应时间？** 快速响应需要预留资源（HPA minReplicas/CA 空闲节点/多集群备用集群）。关键业务多预留，普通业务少预留。
-
-19. **你的 KEDA 是否用了 Prometheus 触发器？** KEDA 支持 Prometheus 触发器——根据 Prometheus 指标伸缩。比 HPA 自定义指标更灵活（支持更多指标源）。
-
-20. **你的多集群是否有统一管理？** Karmada/Argo CD 统一管理多集群的应用分发。没有统一管理的多集群运维成本高——每个集群独立管理。
 
 ---
 

@@ -313,6 +313,10 @@ kubectl rollout history deployment/web
 > [!info] 核心概念：滚动更新是两个 ReplicaSet 的扩缩容交替
 > Deployment 的滚动更新不是"修改 Pod 镜像"——而是创建新 ReplicaSet（新镜像），逐步扩容新 RS 同时缩容旧 RS。这使得回滚简单——只需将旧 RS 重新扩容、新 RS 缩容。每个 ReplicaSet 对应一个版本的 Pod 模板，Deployment 通过管理多个 ReplicaSet 实现版本切换。理解这个"两层控制"很重要——Deployment 不管 Pod，它管 ReplicaSet；ReplicaSet 才管 Pod。
 
+### 5.4 Recreate 与 maxSurge=0 的边界
+
+`strategy.type: Recreate` 走的是另一条路——先把旧 Pod 全部删光，再创建新 Pod，更新期间服务完全中断。它适合新旧版本不能共存的应用，譬如不兼容的 schema 迁移：新版本写下的表结构旧版本读不懂，两版本并存的窗口里必然产生脏数据，此时宁可中断也不要混合运行。滚动参数还有几处边界值得记清：`maxSurge` 与 `maxUnavailable` 不能同时为 0，API 校验直接拒绝——两者都为 0 意味着既不许超建也不许少建，滚动无法推进。两个参数都支持百分比，但取整方向相反——`maxSurge` 向上取整、`maxUnavailable` 向下取整，replicas=10、两者均为 25% 时允许超建 3 个而只许少 2 个；这条不对称规则是为了让副本数很小时仍能滚动。`maxSurge=0` 是先删后建，滚动期间可用副本数必然下降，下降幅度由 `maxUnavailable` 兜住；反过来 `maxUnavailable=0` 是先建后删，要求集群有富余资源承载瞬时多出的 Pod。`minReadySeconds` 让 Pod 在 Ready 之后还需稳定 N 秒才计入 available，Deployment 的推进节奏据此计算；没有它，readinessProbe 刚通过就被当作可用，滚动会一路推到底，把"启动即崩"的版本铺满全集群。`progressDeadlineSeconds`（默认 600 秒）超时后，Deployment 的 `Progressing` condition 变为 False、reason 为 `ProgressDeadlineExceeded`，但 Deployment 不会自动回滚——超时只是"报告卡住"，回滚仍要人执行 `kubectl rollout undo`。`revisionHistoryLimit`（默认 10）决定保留多少个旧 ReplicaSet，设成 0 会让回滚失去目标。
+
 ---
 
 ## 第 6 章 OwnerReference 与垃圾回收
@@ -372,7 +376,7 @@ Garbage Collector 的实现分为两个核心组件：GraphBuilder 和 GarbageCo
 
 Foreground 模式下，垃圾回收器先给父对象打上 deletionTimestamp（标记为"正在删除"），但暂不真正删除——它先删除所有 blockOwnerDeletion=true 的子对象，等所有子对象删除完毕，再真正删除父对象。Background 模式下，垃圾回收器立即删除父对象，然后异步遍历依赖图删除子对象。Orphan 模式下，垃圾回收器删除父对象，但清除子对象的 OwnerReference，让子对象成为"孤儿"继续存在。
 
-### 6.3 级联删除的两种模式
+### 6.3 级联删除的三种模式
 
 | 模式 | 行为 | propagationPolicy |
 |------|------|------------------|
@@ -395,6 +399,10 @@ Foreground 与 Background 的选择，本质是"删除的阻塞语义"与"删除
 
 > [!warning] 生产避坑：Foreground 删除会阻塞直到子对象全部删除
 > Foreground 级联删除会阻塞父对象的删除——直到所有子对象被删除完毕。如果子对象有 Finalizer（如 PVC 等待 Pod 删除），父对象会一直处于 "Terminating" 状态。对于有大量子对象的父对象（如一个 Deployment 有 1000 个 Pod），Foreground 删除可能耗时很长。大多数场景用默认的 Background 删除——立即删父对象，异步删子对象，不阻塞。
+
+### 6.4 blockOwnerDeletion 与删除传播的权限细节
+
+`ownerReferences[].blockOwnerDeletion: true` 的语义是"删 owner 时请等这个 dependent 先删完"，它把 dependent 纳入 Foreground 删除的阻塞范围。设置它需要对 owner 的 `finalizers` 子资源有 `update` 权限，`OwnerReferencesPermissionEnforcement` 准入插件会拦下越权设置——否则任何能创建 dependent 的人都能拖住别人的对象删除，把删除变成拒绝服务。三种删除传播策略（propagationPolicy）的差别常被混淆：`Background` 立即删 owner，GC 异步删 dependent，删除请求很快返回；`Foreground` 先给 owner 加上 `foregroundDeletion` finalizer，等所有 dependent 都删完才真正删掉 owner，客户端会看到 owner 长时间停在 Terminating；`Orphan` 删 owner 时把 dependent 的 ownerReferences 清空，dependent 作为孤儿保留，适合"父对象是临时的、子对象要继续活"的场景。跨 namespace 的 ownerReference 被禁止，GC 的权限模型按 namespace 划界；`controller: true` 的引用只能有一个，`blockOwnerDeletion` 可以有多个。`blockOwnerDeletion` 只对 Foreground 生效——`Background` 下 GC 不看这个字段，删 owner 时 dependent 一律异步清理，所以它不能当作"阻止误删"的护栏。
 
 ---
 
@@ -498,6 +506,10 @@ Finalizer 在生产中有几个常见陷阱需要警惕。
 第二个陷阱是**Finalizer 与级联删除的交互**。Foreground 级联删除会阻塞父对象删除直到子对象删除完毕，如果子对象有 Finalizer，父对象会一直 Terminating。这种"Finalizer 阻塞级联删除"的链式效应，在大规模集群中可能导致删除操作大面积卡住。生产中需要为关键资源设置删除超时与告警，监控长时间 Terminating 的对象。
 
 第三个陷阱是**Finalizer 的命名冲突**。Finalizer 是字符串，没有命名空间的隔离，不同控制器可能用相同的 Finalizer 字符串导致冲突。最佳实践是用域名前缀——`example.com/my-cleanup` 而非 `my-cleanup`，避免与其它控制器冲突。
+
+### 7.5 Finalizer 卡死的诊断与摘除风险
+
+删除请求并不直接抹掉对象，它只设置 `metadata.deletionTimestamp`，对象进入 Terminating；控制器清理完外部资源后，把自己那一项从 `metadata.finalizers` 里移除，对象才真正消失。这套机制的失效面很集中：控制器被卸载、CRD 已被删除、webhook 不可达、控制器本身有 bug 忘记摘除——任何一种都会让对象永久 Terminating，Namespace 删除卡住十有八九是里面还有带 finalizer 的资源。诊断顺序是固定的：先看 `.metadata.finalizers` 里挂的是谁，再确认对应控制器是否还在运行，最后看控制器日志里清理卡在哪一步。强制摘除（patch 掉 finalizers）等于跳过清理，云负载均衡、DNS 记录、PVC 这类外部资源会泄漏，而且不可回滚——只能在确认外部资源已手工清理之后做。finalizer 名字必须是带域名的限定名（qualified name），且没有超时机制：设计上就假设"总有控制器会来摘"，这个假设一旦不成立，只能靠人工兜底。Namespace 删除本身就是一次 Foreground 级联删除——namespace 控制器清空内部资源后才摘掉自己那项 `kubernetes` finalizer，所以 namespace 卡在 Terminating 时，元凶往往在某个自定义资源残留的 finalizer 上。
 
 ---
 
@@ -855,26 +867,6 @@ Operator 的价值边界值得清醒认识。一个"只是创建 StatefulSet/Ser
 
 > [!info] 专栏导航
 > 本文是 [[00 专栏导览|Kubernetes 架构深度剖析专栏]] 的第 09 篇，深入控制器模式和协调循环。下一篇 [[10 StatefulSet 深度解析：有序部署与持久化身份]] 将详细讨论 StatefulSet 的设计——有序部署、稳定网络身份、PV 绑定，以及与 Deployment 的差异。
-
----
-
-## 延伸思考
-
-1. **你的控制器是否遵循三大铁律？** 检查 Reconcile——是否幂等？是否无状态？是否基于当前状态？违反任何一个都会在生产中出 bug。
-
-2. **你的控制器是否处理了删除？** 如果控制器创建了外部资源，必须用 Finalizer 在删除前清理。没有 Finalizer 会泄露外部资源。
-
-3. **你的滚动更新参数是否合理？** 检查 maxUnavailable 和 maxSurge。值大更新快但可用性降低、资源消耗多。根据 SLA 要求调整。minReadySeconds 防止假就绪被当作可用。
-
-4. **你的控制器是否用了 Owns？** 如果控制器管理子资源，用 `Owns` 自动转发子资源事件到父资源 Reconcile，比手动 Watch 简单。
-
-5. **你的控制器是否设置了 MaxConcurrentReconciles？** 默认 1（串行）。大集群中调高可以提升吞吐量，但注意 API Server 压力与协调顺序。
-
-6. **你的控制器是否更新了 observedGeneration？** Reconcile 完成后设 observedGeneration = generation，否则 kubectl 一直显示 "Progressing"。
-
-7. **你的控制器是否处理了冲突重试？** 更新对象时用 `retry.RetryOnConflict`，而非自己实现重试循环。详见 [[08 ResourceVersion 与乐观并发控制]]。
-
-8. **你的 Operator 是否将运维知识编码到了控制器中？** Operator 的价值在于自动化运维专家的手动操作——备份、恢复、升级、扩缩容。如果你的 Operator 只是创建 StatefulSet/Service，它还没体现 Operator 的真正价值。
 
 ---
 

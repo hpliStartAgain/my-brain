@@ -188,6 +188,16 @@ CRD 的另一个用户体验特性是"status conditions"。conditions 是比 pha
 
 CRD 的多版本支持是 API 演进的关键机制。一个 CRD 可以定义多个版本（如 v1alpha1、v1beta1、v1），其中一个是 storage 版本（实际存储在 etcd 的格式）。当用户请求非 storage 版本时，API Server 通过 Conversion Webhook 把请求版本转换为 storage 版本存储，读取时再转换回请求版本。Conversion Webhook 是一个 HTTP 服务，接收 ConversionReview 请求，返回转换后的对象。版本升级的推荐路径是：先新增新版本（与旧版本并存），部署 Conversion Webhook，把 storage 版本切换到新版本，等所有客户端迁移后废弃旧版本，最后删除旧版本。不要直接删除旧版本——还在用旧版本的客户端会失败。
 
+### 2.6 structural schema 的硬性约束与 CEL
+
+Schema 的写法在 CRD 里不是风格问题，而是能不能工作的前提。apiextensions-apiserver 在创建 CRD 时会对 `openAPIV3Schema` 做一次 structural schema（结构化 schema）检查，不通过就直接拒绝 CRD 本身——这意味着 schema 写错的后果不是"验证不生效"，而是"CRD 装不上"。检查规则很硬：每个节点必须有明确的 `type`，想表达"可以是字符串也可以是整数"要用 `x-kubernetes-int-or-string`，想表达"这里放任意结构"要用 `x-kubernetes-preserve-unknown-fields`，不能靠省略 `type` 蒙混过去。`properties` 与 `additionalProperties` 也不能在同一层混用，一旦混用，这个节点的 schema 就退化为非结构化，K8s 随之关掉这条路径上的裁剪（pruning）——客户端提交的多余字段会被原样存进 etcd，事后改 schema 也补不回来。`x-kubernetes-preserve-unknown-fields: true` 是另一条逃生通道，它保留未知字段，但等于彻底放弃裁剪，对象体积完全由客户端决定，一个写错的客户端可以把它撑到几 MB，只有在确实需要透传第三方配置（譬如内嵌一段 Prometheus 的抓取配置）时才该用。
+
+CRD 支持的 OpenAPI v3 是一个子集，这一点常被误解。它不支持 `$ref` 与 `definitions`，没法把公共结构抽出来复用，同一个结构只能在多处重复展开；`oneOf` 不能与 `properties` 混用，想做"要么 A 要么 B"的判别式结构，只能把公共字段提到外层、把差异字段各自声明为可选；`allOf`、`anyOf`、`not` 的支持同样有限。复杂校验因此必须拆成多个字段级约束，而不是指望一段 schema 表达完整语义。
+
+跨字段约束这块短板由 CEL（Common Expression Language）补上。`x-kubernetes-validations` 从 1.25 进入 beta、1.29 转为 GA，每条规则有 `rule`（表达式）、`message`（给人看的固定提示）、`messageExpression`（可拼接当前对象的值生成动态提示）三个字段。`self` 指当前节点，update 请求里还能用 `oldSelf` 拿到旧值，于是"只能扩不能缩"写成 `self.replicas >= oldSelf.replicas`，"上下界自洽"写成 `self.minReplicas <= self.maxReplicas`，都是几行表达式的事。它比 admission webhook 便宜得多——求值发生在 apiserver 进程内，没有网络往返，也不会因为 webhook 后端不可用而阻塞写入；代价是 CEL 有一套成本预算（cost budget），过于昂贵的表达式（譬如对大数组做嵌套遍历）在 CRD 创建时就会被判为超预算而拒绝，不会等到运行时才暴露出慢。
+
+最后一条硬约束关于演进：schema 变更只能加可选字段。删字段、改类型、把可选改成必填，都会让 etcd 里已存在的对象在新 schema 下校验失败——读不出来，也写不回去。这类改动只能走新增版本加 Conversion Webhook 的路径。
+
 ---
 
 ## 第 3 章 controller-runtime：编写控制器的框架
@@ -315,6 +325,16 @@ ctrl.NewControllerManagedBy(mgr).
 > 当 StatefulSet 变化时（如副本数变化），Database Operator 需要知道——因为 Database 的 status 取决于 StatefulSet 的状态。`Owns` 自动建立这个转发——StatefulSet 变化触发所属 Database 的 Reconcile。无需手动 Watch StatefulSet 并查找 OwnerReference。这是 controller-runtime 简化控制器开发的典型设计。
 
 `Watches` 的典型场景是"外部依赖"——譬如 Database Operator 需要 Watch 一个 ConfigMap（存储数据库配置），ConfigMap 变化时重新协调所有 Database。`handler.EnqueueRequestsFromMapFunc` 提供映射函数——输入 ConfigMap，输出需要协调的 Database 列表。这种灵活的事件源管理使得 controller-runtime 能处理复杂的依赖关系。
+
+### 3.4 缓存读取与直读的取舍
+
+`mgr.GetClient()` 返回的 client 默认读的是 informer 缓存（informer cache），只有写操作直连 apiserver。缓存读的延迟在微秒级，但它可能滞后于 etcd，滞后量取决于 watch 链路的状况——apiserver 到 informer 的 watch 被网络抖动、apiserver 负载、事件处理排队拖慢时，缓存里看到的是几秒甚至更久之前的状态。`mgr.GetAPIReader()` 则绕过缓存直读 apiserver，每次一次网络往返，换来的是不旧于请求时刻的视图。
+
+Reconcile 里的常规做法是"缓存读、写冲突重试"，因为绝大多数协调逻辑只关心对象的大致状态——StatefulSet 是否存在、副本数是否等于期望，这些判断对几百毫秒的滞后不敏感，而写操作带 resourceVersion 的乐观并发控制，冲突了重新入队即可。但如果判断依赖"读到最新"，就必须直读：譬如确认某个外部资源是否已被别的控制器改过、做一次性的幂等判定、或者在删除路径上判断自己是不是最后一个 Finalizer，基于过期视图决策的后果是重复创建外部资源或误删。
+
+缓存本身还能收窄。`cache.ByObject` 可以按对象类型配 label selector 与命名空间，只缓存关心的子集，对于管理成千上万个 Pod 的 Operator，内存能降一个量级；`DisableFor` 让某类型完全不进缓存，读的时候直连 apiserver，适合体量大又不常读的对象，譬如只在删除时读一次的大 ConfigMap。`UnsafeDisableDeepCopy` 省掉每次读取的深拷贝开销，但它要求调用方绝不修改返回对象——一旦改了，污染的是整个 informer 缓存，故障现象是"某个不相关的资源莫名其妙带着别人的字段"，极难复现，只在确知只读且性能敏感的路径上才该打开。
+
+缓存与直读混用还会制造一类困惑：同一个对象"缓存里查不到、直读却有"，或者反过来"缓存里有、直读 404"。排查这类问题的第一件事是确认手上这个 client 从哪来——是 `mgr.GetClient()`、`mgr.GetAPIReader()`，还是 `client.New` 出来的裸 client。
 
 ---
 
@@ -669,6 +689,16 @@ ctrl.NewControllerManagedBy(mgr).
 > [!warning] 生产避坑：Operator 必须有监控和告警
 > 生产级 Operator 必须暴露监控指标——Reconcile 次数、延迟、错误率。没有监控的 Operator 是"黑箱"——你不知道它是否正常工作、是否有性能问题。controller-runtime 内置 Prometheus 指标，默认在 :8080/metrics 暴露。配置 Prometheus 抓取这些指标，并设置告警——Reconcile 错误率 >5% 或延迟 P99 >5s 告警。
 
+### 6.7 CRD 的规模上限与聚合 API 的取舍
+
+CRD 有几条绕不过去的上限，做容量规划时要先认下来。etcd 的单请求大小约 1.5 MiB，CR 对象连同 metadata、managedFields 一起受这个约束，把大段配置（譬如整份 dashboard JSON、整段 nginx 配置）内嵌进 CR 很容易撞线，稳妥做法是放进 ConfigMap 再用名字引用。CRD 数量多还会撑大 discovery 响应，kubectl 与 client-go 的 discovery 缓存随之变大变慢，`kubectl get` 首次调用尤其明显——集群里装了几百个 CRD 之后，这种延迟是能感知的，`kubectl api-resources` 也可能要等上一两秒。
+
+更根本的限制在存储层。CRD 走 apiextensions-apiserver 提供的通用存储实现，它对每个自定义资源只做通用的 CRUD 与 watch，因此无法自定义子资源语义（status 与 scale 之外再想加 `exec`、`logs` 这类子资源做不到）、无法提供 exec/attach 这类流式接口（HTTP 连接升级的语义通用存储不支持）、也无法换掉 etcd 后端（想把对象存进关系库或对象存储没有入口）。
+
+需要这些能力时要上 aggregated API server（聚合 API 服务）：自己实现一个符合 K8s API 约定的服务，通过 `APIService` 对象把自定义的 group/version 注册进 apiserver 的聚合层（aggregation layer），之后 apiserver 把该 group 的请求反向代理给你的服务。代价是自己实现 storage、版本转换、watch（包括 resourceVersion 语义与 bookmark 事件）、授权与限流，运维成本远高于 CRD，升级时还要跟着 apiserver 的接口演进——聚合层协商的版本、OpenAPI 的发布、protobuf 编码都得自己维护，metrics-server 与 custom-metrics-apiserver 这类项目走的就是这条路。
+
+判断线其实很清楚：能用声明式 schema 表达、能接受通用 CRUD 语义的，就用 CRD，它便宜、稳定、和 kubectl/RBAC/GC 天然集成；只有需要非 CRUD 语义（譬如 exec 式的流式接口、自定义子资源）或非 etcd 存储时，才值得付出聚合 API 的代价。反过来，用聚合 API 去实现一个本可以写成 CRD 的资源，是最常见的过度设计——多出来的每一样能力都要自己维护。
+
 ---
 
 ## 第 7 章 Operator 的边界与反例
@@ -731,40 +761,6 @@ Operator 起源于 CoreOS 2016 年的运维知识编码理念——把运维专�
 
 > [!info] 专栏导航
 > 本文是 [[00 专栏导览|Kubernetes 架构深度剖析专栏]] 的第 12 篇，深入 CRD 和 Operator 模式。下一篇 [[13 kubelet 深度剖析：Pod 生命周期与容器运行时接口]] 将详细讨论 kubelet 的内部实现——CRI 接口、SyncPod 流程、PLEG、健康检查、垃圾回收。
-
----
-
-## 延伸思考
-
-1. **你的应用是否需要 Operator？** 如果只是创建 StatefulSet/Service，Helm 够了。如果需要备份/恢复/升级/故障转移，Operator 才有价值。判断标准是应用是否需要持续协调。运维逻辑简单用 Helm，复杂用 Operator。
-
-2. **你的 CRD 是否定义了完整 Schema？** 没有 Schema 的 CRD 接受任意字段——容易出错。生产级 CRD 必须定义 OpenAPI v3 Schema，包括类型、枚举、范围、必填。Schema 也是 API 文档，kubectl explain 基于它生成。
-
-3. **你的 Operator 是否有 Finalizer？** 如果创建了外部资源（云 LB/DNS/数据库），必须有 Finalizer 在删除前清理。没有 Finalizer 会泄露外部资源——云数据库继续计费，DNS 残留。
-
-4. **你的 Operator Reconcile 是否幂等？** 用 Resync 测试——Resync 触发所有对象的 onUpdate，如果 Reconcile 不幂等会产生副作用。每次 Reconcile 都重新检查状态，不信任上一次。
-
-5. **你的 Operator 是否有监控指标？** 暴露 Reconcile 次数/延迟/错误率。配置 Prometheus 抓取和告警。没有监控的 Operator 是黑箱——不知道是否正常工作。
-
-6. **你的 Operator RBAC 是否最小权限？** 只授予必要的资源操作权限。避免通配符和 cluster-admin。权限粒度可以到子资源（databases/status 与 databases 分离）。
-
-7. **你的 CRD 是否规划了版本演进路径？** CRD 版本升级是破坏性变更。新版本 served=true 但 storage=false，提供 Conversion Webhook，迁移客户端后旧版本 served=false。
-
-8. **你的 Operator 是否配置了 Leader Election？** 生产环境多副本部署，用 Leader Election 确保高可用。单实例故障不影响运维功能。监控 Leader 切换频率，频繁切换需排查。
-
-9. **你的 Operator 是否用 Helm 部署？** Operator 本身是无状态部署，用 Helm Chart 安装是常见模式。Helm 部署 Operator，Operator 管理有状态应用，各司其职。
-
-10. **你的 Operator 是否过度设计？** 如果 Operator 只创建资源没有运维逻辑，用 Helm 更简单。Operator 的价值在运维自动化，不在资源创建。不要为所有应用都开发 Operator。
-
-11. **你的 Operator 成熟度是几级？** Level 1 只创建资源（与 Helm 无区别），Level 2 能升级，Level 3 能备份恢复，Level 4 能监控诊断，Level 5 能自动扩缩容。真正的 Operator 应至少 Level 2+。
-
-12. **你的 Operator 是否记录 Event？** 关键操作（创建、升级、备份、切换）应记录 Kubernetes Event，通过 kubectl describe 可见。Event 是 Operator 可观测性的补充——指标显示"做了多少"，Event 显示"做了什么"。
-
-13. **你的 Operator 是否区分暂时性失败与永久性失败？** 暂时性失败（API Server 短暂不可用）返回 error 让框架退避重试；永久性失败（配置错误）更新 status.phase 为 Failed，不返回 error 避免无意义重试。区分两者能避免无意义的指数退避。
-
-14. **你的 Webhook 是否高可用？** Webhook 故障会导致资源无法创建/更新。Webhook 服务多副本部署，避免单点故障。Webhook 验证逻辑应该快速，避免调用外部服务，只做本地验证。
-
-15. **你的 Operator 是否考虑了跨命名空间管理？** K8s 默认不允许跨命名空间 OwnerReference。如果 Operator 在 operator-system 命名空间管理 default 命名空间的资源，需要用 Finalizer 手动管理子资源删除，不能用 OwnerReference 级联。
 
 ---
 

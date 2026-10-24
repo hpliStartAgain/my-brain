@@ -127,6 +127,14 @@ NodeResourcesFit 的两种策略值得深入对比。LeastRequested 偏好资源
 > [!info] 核心概念：Score 阶段是"软约束"打分
 > Filter 是"硬约束"——不满足就排除。Score 是"软约束"——满足得高分，不满足得低分但不会被排除。例如，Pod 希望调度到有镜像的节点（ImageLocality），但如果所有节点都没有镜像，仍会选一个节点调度——只是 ImageLocality 得分低。理解硬约束 vs 软约束的区别，是设计调度策略的关键——硬约束用 nodeSelector/Taint，软约束用 Affinity 的 preferredDuringScheduling。
 
+### 2.4 调度周期与绑定周期的分离
+
+上面三段流程听起来是一条直线，但调度器内部把它拆成了两个周期，这个拆分才是吞吐量的真正来源。**调度周期（scheduling cycle）**在单一 goroutine 里串行执行：取队首 Pod、取节点快照、Filter、Score、Reserve、Assume，之所以串行，是为了保证一次决策全程基于同一份缓存视图——如果 Filter 与 Score 之间节点状态被另一个 goroutine 改写，前面算出的可行解就可能当场失效。**绑定周期（binding cycle）**则被挪到独立 goroutine 中并行执行，并发度由 `--parallelism` 控制，理由很朴素：bind 本质上是一次 apiserver 写，它慢，但它不影响下一次决策，把它留在串行路径上只是白白阻塞队列。
+
+决策一完成，调度器立刻调用 `AssumePod` 把 Pod 写进调度器缓存，让后续调度看到"这个节点的这些资源已被占用"；不这么做，并发调度就会把同一份资源判给两个 Pod，两者都以为自己拿到了节点。bind 失败时走 `ForgetPod` 回滚缓存，Pod 重新入队——这也解释了为什么 bind 失败不会在缓存里留下幽灵占位，下一轮 Filter 看到的资源账本是干净的。
+
+评估范围另有一个参数约束：`percentageOfNodesToScore` 默认随集群规模递减（小集群接近 100%，大集群趋近 10%），调度器只评估一部分节点，一旦找到足够高分的节点就提前结束打分。这是用"可接受的次优"换吞吐，也是大集群调度延迟不随节点数线性增长的原因。但缓存毕竟滞后于 etcd，滞后窗口里仍可能把两个 Pod 判到同一节点，kubelet 的实际资源校验是最后一道兜底——它发现节点装不下就拒绝创建容器，Pod 回到 Pending 等下一轮。
+
 ---
 
 ## 第 3 章 节点亲和性与反亲和性
@@ -526,6 +534,14 @@ graph TD
 > [!warning] 生产避坑：抢占可能导致低优先级 Pod 频繁被驱逐
 > 抢占确保高优先级 Pod 能调度，但代价是低优先级 Pod 被驱逐。如果没有 PodDisruptionBudget 保护，低优先级 Pod 可能被频繁驱逐——导致服务不稳定。生产环境：(1) 关键服务用高 PriorityClass；(2) 非关键服务用低 PriorityClass；(3) 低优先级 Pod 配置 PDB 限制驱逐速率；(4) 慎用抢占——确保集群有足够资源避免频繁抢占。
 
+### 7.4 抢占的提名、PDB 与受害者选择
+
+抢占严格发生在 `PostFilter`：只有当 Filter 对所有节点都失败时才会被触发，任务是为 Pending Pod 找一个"驱逐若干低优先级 Pod 后能放下"的节点。受害者（victim）选择是一个两段式的打分过程——先为每个候选方案计算 **PDB 违反数**（`PDBViolations`），取违反最少的方案，再在同等违反数下挑优先级最低、数量最少的一组，所以它天然偏好"用少量最低优先级的 Pod 换一个位置"。
+
+这里有一个常见误解需要点破：抢占并不保证不违反 PDB，它只是尽量少违反。把 PDB 当成抢占的硬保护，迟早会在生产里踩到——PDB 保护的是自愿驱逐（走 eviction API 的那条路），而抢占属于"系统认为必要"的那一类，可以绕过预算，只是把绕过的次数记进 `PDBViolations` 让调度器偏好更温和的方案。
+
+选中受害者后，调度器写入 `status.nominatedNodeName`，语义是"已为它预留这个节点"。但提名不锁定资源：其他高优先级 Pod 仍可能抢先占位，届时提名被清除、Pod 重新排队，下一轮再走一遍 PostFilter。`preemptionPolicy: Never` 的 Pod 是个有意思的折中——它照常参与优先级排序，却从不发起抢占，适合那些"可以等，但不愿挤掉别人"的批处理作业。至于生效时间，被驱逐的 Pod 收到的是正常删除请求，带 grace period，不是立即 kill，所以抢占的实际生效快慢取决于受害者的终止速度，而非调度器的决策速度。
+
 ---
 
 ## 第 8 章 调度器的性能优化
@@ -618,6 +634,16 @@ Pending 的监控是生产运维的重要环节。集群中如果有大量 Pendi
 > [!info] 核心概念：kubectl describe pod 是排查 Pending 的第一步
 > 调度失败时，`kubectl describe pod` 的 Events 部分会显示调度失败的具体原因——"0/5 nodes are available: 5 Insufficient cpu" 说明 CPU 不足。根据原因定位问题——资源不足扩容，亲和性不匹配调整配置。这是排查 Pending Pod 的标准流程。
 
+### 9.3 SchedulingGates：Pending 的第三种原因
+
+`spec.schedulingGates` 让外部控制器来决定 Pod 何时进入调度队列：gate 未移除时，Pod 的 condition 是 `PodScheduled=False, reason=SchedulingGated`，调度器根本不会为它跑 Filter，因此也不会产生"资源不足"事件——这正是它与普通 Pending 最容易混淆的地方，看起来都在等，实际一个是在排队等资源，一个压根还没进场。
+
+三类 Pending 必须分清：调度失败（`Unschedulable`，事件里带 `UnschedulablePlugins` 明确指出是哪个插件拒绝）、等待 gate（`SchedulingGated`）、已调度未绑定（binding 卡住，nodeName 已有值却没有容器起来）。判错类别的代价很直接——把 gate 误判成资源不足就会去扩节点，扩完毫无效果。
+
+这个"不进 Filter"不是靠 Filter 插件自己返回失败实现的，而是由 `PreEnqueue` 扩展点完成的：SchedulingGates 插件作为入队前的守门人，把带 gate 的 Pod 直接挡在活跃队列（activeQ）之外，它连被取出的机会都没有，自然也就不会在事件里留下任何节点级别的拒绝理由。该特性在 1.26 作为 alpha 引入、1.30 转为 beta 默认开启，早期版本需要手工打开特性门。
+
+调度门（SchedulingGate）的典型用途是等依赖就绪：数据预热完成、配额释放、镜像预热到节点。边界在于 gate 是 spec 字段，增删它属于 spec 变更，需要相应的 update 权限；控制器必须保证最终移除 gate，否则 Pod 永远停在队列之外，而且不会有任何"资源不足"的告警来提醒你。
+
 ---
 
 ## 第 10 章 多调度器与调度边界
@@ -668,36 +694,6 @@ Descheduler 的工作模式是定期扫描集群，根据策略（譬如节点�
 
 > [!info] 专栏导航
 > 本文是 [[00 专栏导览|Kubernetes 架构深度剖析专栏]] 的第 11 篇，深入调度器算法。下一篇 [[12 CRD 与 Operator 模式：自定义控制器与扩展 K8s]] 将详细讨论 CRD 的定义、Controller-Runtime 框架、Operator 的设计模式和生产级最佳实践。
-
----
-
-## 延伸思考
-
-1. **你的高可用 Pod 是否用了 PodAntiAffinity 或 PodTopologySpread？** 没有反亲和性的 Deployment，所有 Pod 可能调度到同一节点——节点故障导致全部不可用。配置 hostname 级反亲和或 PodTopologySpread。
-
-2. **你的 GPU 节点是否用了 Taint 专用化？** 没有 Taint 的 GPU 节点可能被普通 Pod 占用。打 `dedicated=gpu:NoSchedule` Taint，只有 GPU Pod 容忍。
-
-3. **你的调度策略是否需要自定义插件？** 如果内置 Filter/Score 不满足需求（如 GPU 拓扑感知），用 Scheduler Framework 编写自定义插件。比 Extender 更高效。
-
-4. **你的低优先级 Pod 是否有 PDB？** 抢占可能驱逐低优先级 Pod。配置 PDB 限制驱逐速率，防止低优先级服务频繁中断。
-
-5. **你的 Pending Pod 是否用 describe 排查？** `kubectl describe pod` 的 Events 显示调度失败原因。根据原因定位——资源不足、亲和性、Taint 等。区分临时与永久 Pending。
-
-6. **你的拓扑分布是否用了 PodTopologySpread？** PodTopologySpread 插件确保 Pod 跨 zone/region 分散，比 PodAntiAffinity 更灵活。K8s 1.19+ 默认启用。
-
-7. **你的调度器是否性能足够？** 大集群（1000+ 节点）中调度器可能成为瓶颈。监控调度延迟和吞吐量，必要时用多调度器或批量调度。
-
-8. **你的 PriorityClass 是否合理？** 关键服务用高优先级，非关键用低优先级。但避免所有 Pod 都高优先级——失去优先级的意义。
-
-9. **你的调度约束是否过严？** PodAntiAffinity 的 required 硬约束可能导致 Pod 永远 Pending（节点数少于副本数）。考虑用 preferred 软约束或 PodTopologySpread 替代。
-
-10. **你的多调度器是否资源协调？** 多调度器并行可能资源超卖。用节点分片（不同调度器管不同节点）或调度器间协调机制缓解。
-
-11. **你的 tolerationSeconds 是否合理？** 节点故障时 Pod 容忍时间太短导致频繁迁移，太长导致服务不可用。300 秒是合理默认值，关键应用调短，容忍短暂不可用的应用调长。
-
-12. **你的调度策略是否考虑了实际负载？** 调度器基于资源请求而非实际使用调度，可能导致节点实际负载不均。监控节点实际负载，必要时用 Descheduler 重调度或 VPA 调整请求。
-
-13. **你的集群是否有足够的节点满足反亲和性约束？** PodAntiAffinity 的 required 硬约束需要节点数 >= 副本数，否则多余 Pod 永远 Pending。集群规划时预留节点余量，或用 preferred 软约束替代。
 
 ---
 

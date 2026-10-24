@@ -169,6 +169,16 @@ Flannel 的另一个局限是"不支持网络策略"。Flannel 专注于"简单�
 
 Flannel 的一个适用边界是"中小集群"。Flannel 的控制平面简单——一个 flanneld 进程 Watch 节点变化更新路由。这种简单设计在中小集群（<100 节点）够用，但大规模集群的 flanneld 性能可能不足——大集群用 Calico 或 Cilium 更稳定。
 
+### 2.4 host-gw 直连路由、Directrouting 混合与 MTU 一致性
+
+`host-gw` 的机制朴素到几乎没有"机制"：flanneld 只是把"目标 Pod 网段 → 目标宿主机 IP"这条下一跳记录写进本节点路由表，数据包出 veth、过网桥、按路由表选中下一跳，由节点网卡直接发出，全程不加封装头。正因什么都不加，它的前提比 VXLAN 更苛刻——所有节点必须在同一二层网络、能直接 ARP 到对方；一旦中间隔了路由器，下一跳虽写在表里，二层却解析不出 MAC，包会在 `ip route get` 查得到路径、实际发不出去的状态里被静默丢弃。
+
+`Directrouting: true` 是混合形态：flanneld 按对端是否同子网逐条决定，同子网节点之间走 host-gw，跨子网才走 VXLAN，一个集群因此同时拿到原生 MTU 与跨三层能力；代价是排障时要先分清某条流走了哪条路径，`ip route` 里既有指向节点 IP 的直连路由、又有指向 `flannel.1` 的隧道路由。
+
+VXLAN 依赖两张表：FDB（Forwarding Database）记录"目标 VTEP 的 MAC → 目标宿主机 IP"，决定外层包发往哪个物理地址；ARP 表由 flanneld 按节点事件静态填充，绕开广播泛洪，这也是它能在禁用组播的云网络里工作的原因。封装开销 50 字节可拆开核对：外层 IP 20、UDP 8、VXLAN 8、内层以太网 14，所以物理 MTU 1500 时 `flannel.1` 通常是 1450，host-gw 则保持 1500。
+
+MTU 不一致的故障很有迷惑性：小包通、大包断，TLS 握手成功而传输卡住。排查时先看 `ip link` 的 mtu 是否全链路一致——节点网卡、`flannel.1`、Pod 内 eth0 三处都要对齐，任一处偏大都会让大包在出方向被静默丢弃。后端类型写在 `net-conf.json` 的 `Backend.Type` 里，改类型不是改配置再重启就完事：旧路由与 `flannel.1` 不会自动消失，残留路由指向已失效的下一跳，症状是"配置已改、故障照旧"。
+
 ---
 
 ## 第 3 章 Calico：企业级 CNI
@@ -261,6 +271,16 @@ Calico 的一个工程价值是"功能全面"。Calico 不仅提供 Pod 网络�
 
 Calico 的一个工程细节是"calico-node 组件"。calico-node 是 Calico 的核心组件——每个节点运行一个 calico-node（DaemonSet），负责 BGP 路由传播、Pod 网络配置、NetworkPolicy 实现。calico-node 故障会导致该节点的 Pod 网络异常——监控 calico-node 健康，及时排查故障。
 
+### 3.4 封装模式与 BGP 选路
+
+Calico 的封装由两个独立参数控制：`ipipMode` 与 `vxlanMode`，各可取 `Always` 或 `CrossSubnet`。`Always` 一律封装、行为最可预测；`CrossSubnet` 同子网直接路由、跨子网才封装，是把性能与跨网能力折中的常用选择。两者代价不同：IPIP 只多一个外层 IP 头，20 字节；VXLAN 加外层 IP、UDP、VXLAN 与内层以太网四段，50 字节。不过 IPIP 有硬边界——纯 IP-in-IP 报文过 NAT 时内层地址无法翻译，跨 NAT 直接不通；VXLAN 走 UDP 可被 NAT 处理，这是云环境宁可多付 30 字节也选 VXLAN 的常见理由。
+
+BGP 模式不封装、性能最好，但要求底层网络支持 BGP 或节点同二层。自治系统号（`ASNumber`）怎么取决定会话性质：每节点不同 AS 是 eBGP，全网统一是 iBGP；规模上去后 iBGP 必须引入 Route Reflector，把 full-mesh 的 O(n²) 连接降到 O(n)，这是规模换架构的必然结果。
+
+数据面的实际动作由 Felix 完成：它是每节点 agent，把策略与路由编程进 iptables/nftables/eBPF 与内核路由表。`calicoctl node status` 看到的只是 BGP peering 状态而非数据面状态，两者要分开排查——会话 Established 只说明路由在交换，不代表规则已进内核；反过来 Felix 正常也不保证对端收到了你的 Pod 网段。Felix 用 ipsets 承载 selector 的匹配集合，把上千个 Pod IP 压成一个集合引用，规则条数因此与 selector 数量相关而非与 Pod 数相关，这也是 Calico 在 iptables 数据面下仍能撑住较大集群的原因。
+
+路由聚合同样值得注意：Pod 网段连续时多条 /26 可聚合成一条 /24 通告，对端路由表收敛一个数量级；碎片化则让对端路由表随节点数线性膨胀，更新报文也成倍增加。这才是"规划 Pod CIDR 要连续"的真实原因。
+
 ---
 
 ## 第 4 章 Cilium：eBPF 原生 CNI
@@ -343,6 +363,16 @@ Cilium 的一个工程考量是"eBPF 程序的调试"。eBPF 程序在内核运�
 
 NetworkPolicy 的实现机制值得深入。NetworkPolicy 是 K8s 的原生资源，但实现由 CNI 插件负责——K8s 只定义 NetworkPolicy 的 API 与语义，CNI 插件负责在数据面执行。Calico 的 NetworkPolicy 实现用 iptables 规则——每条 NetworkPolicy 规则转换为 iptables 规则，匹配源 Pod、目标 Pod、端口，允许或拒绝。Cilium 的 NetworkPolicy 实现用 eBPF 程序——Policy map 存储策略规则，eBPF 程序查 map 做决策。两种实现的核心逻辑相同——白名单机制，默认允许，定义策略后只有允许的流量通过。NetworkPolicy 的一个工程细节是"策略的优先级"——K8s 的 NetworkPolicy 没有 priority 字段，所有策略是"或"关系——只要有一条策略允许，流量就允许。Calico 扩展了 NetworkPolicy，支持 priority 字段与 deny 规则，实现更精细的策略控制，这是 Calico 相比原生 NetworkPolicy 的重要增强。
 
+### 4.3 tail call、身份模型与 socket 层负载均衡
+
+eBPF 程序有指令数与栈深硬限制，一段程序既解析入口、又判策略、还做负载均衡，很快撞上验证器上限。Cilium 用尾调用（`tail_call`）把处理拆成多段程序链：入口、策略、负载均衡、出口各一段，前段结束时跳到后段、上下文在同一份 `ctx` 上延续，既绕开单程序体积限制，也让每段只做一件事、便于独立演进。尾调用的代价是段与段之间只能靠固定的 map 约定共享状态，改动其中一段必须连带检查相邻段的约定，链越长这种隐式契约越难维护。
+
+安全身份（identity）是由 label 集合哈希得到的数字，策略基于 identity 而非 IP——Pod 重建换了 IP，策略照旧生效。iptables 方案的规则数随"Pod 数 × 策略数"增长，几千 Pod 就是上万条规则，每次 Pod 变动都要重写；identity 把"策略数随 Pod 数增长"换成"随 label 组合数增长"，组合数远小于 Pod 数，规则规模因此稳定。
+
+socket 层负载均衡（`socketLB`）把 Service 转换提前到 socket：`connect` 时 eBPF 直接把目的地址改写成后端 Pod IP，内核里根本没发生 DNAT，绕过 iptables 与 conntrack，省掉 NAT 与连接跟踪开销，对短连接尤其明显；`bpf.masquerade` 用 eBPF 做 SNAT 替代 iptables 的 MASQUERADE。不过 kube-proxy replacement 不是开关一开就完事：要求内核与 Cilium 版本匹配，还要处理 hostPort、NodePort、externalIPs 这些边角，混合模式下部分流量仍落回 iptables，排查前要先确认某类流量由哪一层接管。
+
+Hubble 从 eBPF 事件导出流日志，能看到"哪个 identity 到哪个 identity 的连接被哪条策略拒绝"，这是 iptables 方案难以提供的可观测性——那里被拒绝的包只留一个计数器，回溯命中规则往往只能人肉比对顺序。这也是排障场景下最实际的收益。
+
 ---
 
 ## 第 5 章 CNI 选择决策框架
@@ -392,14 +422,6 @@ CNI 选择的第三个决策维度是"是否需要 L7 策略或可观测性"。�
 CNI 选择的一个考量是"迁移成本"。从一种 CNI 迁移到另一种 CNI 成本高——所有 Pod 需要重新配置网络（重建 Pod 或重新调用 CNI）。生产中尽量在集群创建时选好 CNI，避免后期迁移。如果必须迁移，通常新建集群用新 CNI，逐步迁移工作负载。
 
 CNI 选择的另一个考量是"云厂商默认 CNI"。云厂商的托管 K8s 通常有默认 CNI——AWS EKS 默认用 AWS VPC CNI，GKE 默认用 Calico，AKS 默认用 Azure CNI。这些默认 CNI 与云厂商网络深度集成，譬如 AWS VPC CNI 让 Pod 直接用 VPC IP（不封装，性能高）。使用云厂商托管 K8s 时，默认 CNI 通常是最佳选择——与云网络集成最好。
-
-CNI 选择的一个决策维度是"是否需要 NetworkPolicy"。如果不需要（譬如开发/测试集群），Flannel 够用——简单易用。如果需要（譬如生产集群），用 Calico 或 Cilium——都支持 NetworkPolicy。
-
-CNI 选择的另一个决策维度是"集群规模"。小集群（<100 节点）用 Flannel 或 Calico 都够用——iptables 数据面性能足够。大集群（100+ 节点）用 Calico eBPF 或 Cilium——iptables 大规模性能退化，eBPF 数据面性能稳定。
-
-CNI 选择的第三个决策维度是"是否需要 L7 策略或可观测性"。如果需要 L7 NetworkPolicy（HTTP/gRPC/Kafka 策略）或流量可视化，用 Cilium——它支持 L7 策略和 Hubble 可观测性。如果不需要，用 Calico——功能全面，成熟稳定。
-
-CNI 选择的一个考量是"迁移成本"。从一种 CNI 迁移到另一种 CNI 成本高——所有 Pod 需要重新配置网络（重建 Pod 或重新调用 CNI）。生产中尽量在集群创建时选好 CNI，避免后期迁移。如果必须迁移，通常新建集群用新 CNI，逐步迁移工作负载。
 
 CNI 选择的另一个考量是"内核版本"。Cilium eBPF 数据面需要内核 4.10+，某些功能需要 5.x+。如果集群用旧内核（譬如 CentOS 7 的 3.10），不能用 Cilium eBPF——需要升级内核或用 Calico（iptables 数据面兼容旧内核）。
 
@@ -488,38 +510,6 @@ K8s 网络模型定义三大基本要求——Pod 唯一 IP、Pod 间直接通�
 
 > [!info] 专栏导航
 > 本文是 [[00 专栏导览|Kubernetes 架构深度剖析专栏]] 的第 15 篇，深入 CNI 网络模型。下一篇 [[16 生产化集群管理：多租户隔离、资源治理与安全加固]] 将讨论生产环境的集群管理实践。
-
----
-
-## 延伸思考
-
-1. **你的 CNI 是否支持 NetworkPolicy？** 如果用 Flannel 且需要网络隔离，安装 Calico 的 NetworkPolicy 组件或迁移到 Calico/Cilium。Flannel 适合不需要 NetworkPolicy 的简单场景。
-
-2. **你的集群规模是否需要 eBPF 数据面？** 100+ 节点的集群用 Calico eBPF 或 Cilium——iptables 大规模性能退化。监控 iptables 规则数与匹配延迟，及时切换 eBPF。
-
-3. **你的 VXLAN MTU 是否一致？** VXLAN 封装减少 50 字节 MTU。确保各端 MTU 一致避免分片——物理 MTU 1500，VXLAN MTU 1450。jumbo frame 需相应调整。
-
-4. **你的跨节点通信是否正常？** 检查 VXLAN 隧道/BGP 路由/Host-GW 路由。`calicoctl node status` 查看 BGP 状态，`ip -d link show flannel.1` 查看 VXLAN 隧道。
-
-5. **你的 NetworkPolicy 是否过多？** 过多 NetworkPolicy 增加规则匹配开销。定期审计并清理无用策略。用"默认拒绝"策略确保安全——除非显式允许，否则拒绝。
-
-6. **你的 BGP 大规模是否用 Route Reflector？** 100+ 节点的 BGP 集群用 Route Reflector 优化——星型拓扑减少 BGP 连接数。监控 BGP 路由表大小与收敛速度。
-
-7. **你的 Pod 网段是否规划合理？** 避免网段冲突，预留足够 IP。大规模集群的 Pod CIDR 需要足够大（譬如 /16 覆盖 65536 个 Pod）。BGP 路由聚合需要 Pod 网段连续。
-
-8. **你的 CNI 是否需要升级？** CNI 升级可能影响 Pod 网络——升级前测试，低峰期操作。Calico/Cilium 升级通常平滑（DaemonSet 滚动更新），但需确认兼容性。
-
-9. **你的 Cilium 是否用了 kube-proxy replacement？** Cilium 可替代 kube-proxy 实现 Service 转发——性能更高。但需要确认 Cilium 版本与内核支持，充分测试。
-
-10. **你的 NetworkPolicy 是否用了默认拒绝？** 默认允许（无策略）不安全——Pod 间可任意通信。用"默认拒绝"策略（deny-all + 按需允许）确保安全——除非显式允许，否则拒绝。
-
-11. **你的 CNI 是否与云厂商网络集成？** 云厂商托管 K8s 的默认 CNI 通常与云网络深度集成——AWS VPC CNI 让 Pod 直接用 VPC IP，性能高。使用托管 K8s 时优先用默认 CNI。
-
-12. **你的内核参数是否调优？** CNI 性能受内核网络参数影响——netdev_max_backlog、tcp_tw_reuse、ip_forward 等。大规模集群根据流量模式调优内核参数提升性能。
-
-13. **你的 CNI 是否监控了健康？** CNI 插件故障导致 Pod 网络不配置——Flannel 的 flanneld、Calico 的 calico-node、Cilium 的 cilium-agent。监控这些组件健康，及时排查故障。
-
-14. **你的跨子网通信是否用了 IPIP 或 VXLAN？** BGP/Host-GW 要求同二层或物理网络支持 BGP。跨子网且不支持 BGP 时用 IPIP（Calico）或 VXLAN（Flannel/Cilium）封装。
 
 ---
 

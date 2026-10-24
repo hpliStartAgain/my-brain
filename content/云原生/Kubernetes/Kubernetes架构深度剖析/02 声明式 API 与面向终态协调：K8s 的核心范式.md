@@ -278,7 +278,7 @@ conditions 的一个设计细节是 `lastTransitionTime`——它记录条件最
 K8s 控制器的工程实现通常采用三层架构：Informer 负责感知状态变化，WorkQueue 负责调度协调任务，Reconcile 负责执行协调逻辑。这三层架构的分离使得每一层可以独立优化——Informer 优化缓存效率，WorkQueue 优化调度策略，Reconcile 优化业务逻辑——而不影响其他层。这种"关注点分离"的设计是 K8s 控制器框架（如 controller-runtime）能够提供通用抽象的基础。理解这三层架构，是编写自定义控制器的入门门槛。
 
 ```mermaid
-%%{init: {"theme":"dracula"}}%%
+%%{init: {'theme': 'dracula'}}%%
 graph TD
     API["API Server"] --> Informer["Informer<br/>Watch + 缓存"]
     Informer --> EventHandler["EventHandler<br/>事件处理"]
@@ -371,7 +371,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 即使没有收到任何 Watch 事件，Informer 也会定期触发 **Resync**——将本地缓存中的所有对象 key 重新放入 WorkQueue，触发所有对象的 Reconcile。Resync 是 K8s 控制器在"事件驱动"和"状态驱动"之间的一个工程平衡点：纯事件驱动效率高但可能丢事件，纯状态驱动健壮但开销大，Resync 以"定期状态驱动"补充"实时事件驱动"，既保证了效率又保证了健壮性。
 
 ```mermaid
-%%{init: {"theme":"dracula"}}%%
+%%{init: {'theme': 'dracula'}}%%
 graph LR
     Cache["本地缓存<br/>{key: object}"] -->|"Resync 间隔<br/>默认 10 分钟"| Queue["WorkQueue"]
     Queue --> Reconcile["Reconcile<br/>所有对象"]
@@ -444,7 +444,7 @@ kubectl apply ──→ API Server 存储 spec ──→ Controller Watch 到变
 当多个组件同时修改同一对象时，K8s 采用乐观并发控制——resourceVersion 不匹配的更新被拒绝，客户端需要重试。但重试时的合并策略是 **Last-Write-Wins**（最后写入胜出）——后写入的版本覆盖先写入的。这个策略的工程逻辑是：在乐观并发控制下，冲突是概率性的而非确定性的，重试时基于最新版本重新计算 diff，最终所有客户端的修改都会被串行化应用。但"串行化应用"不等于"所有修改都被保留"——如果两个客户端修改的是同一字段，后写入的会覆盖先写入的，先写入的修改丢失。
 
 ```mermaid
-%%{init: {"theme":"dracula"}}%%
+%%{init: {'theme': 'dracula'}}%%
 sequenceDiagram
     participant A as "Client A"
     participant API as "API Server"
@@ -522,7 +522,7 @@ SSA 与 GitOps 的关系也值得提及。GitOps 的核心理念是"Git 作为�
 以 `kubectl apply -f deployment.yaml` 为例，完整链路展示了从用户提交到 Pod 运行的全过程。这个链路是声明式 API 范式的完整体现——每一步都是"观察-比较-行动"的协调循环，每一步都通过 API Server 间接通信，没有组件直接命令另一个组件。理解这个链路，就理解了声明式 API 如何从"用户提交 YAML"到"容器实际运行"的完整工程路径。
 
 ```mermaid
-%%{init: {"theme":"dracula"}}%%
+%%{init: {'theme': 'dracula'}}%%
 sequenceDiagram
     participant U as "用户"
     participant K as "kubectl"

@@ -170,6 +170,14 @@ SyncPod 的并发控制是"每 Pod 串行"——同一 Pod 的 SyncPod 不会并
 > [!info] 核心概念：SyncPod 是声明式协调在节点上的落地
 > SyncPod 把 Pod spec（期望状态）与容器实际状态对比，执行差异操作使实际趋近期望。这是 K8s 声明式协调循环在节点上的落地——控制平面的控制器协调集群状态，kubelet 的 SyncPod 协调节点状态。两者都是"观察-比较-行动"的协调循环，只是作用域不同。
 
+### 3.4 沙箱复用判定：podSandboxChanged
+
+SyncPod 的第一步不是"建容器"，而是 `podSandboxChanged`（沙箱变更判定）。它把容器运行时里现存的沙箱与 PodStatus 里记录的沙箱做比较：先看有没有处于 ready 状态的沙箱、ready 的沙箱是不是多于一个，再比沙箱 ID 与 PodIP 有没有变化，顺带核对网络命名空间模式是否与 Pod spec 一致。判定为"变了"——沙箱被删除、被重建、IP 变了、网络命名空间模式变了，甚至只是非 hostNetwork 的 Pod 拿不到 IP——kubelet 就杀掉该 Pod 的所有容器、重建沙箱，再按顺序重建容器；判定为"没变"就复用现成沙箱，只补缺失的容器、重启已退出的容器。
+
+把这个判定放在最前面有硬道理：沙箱是网络与 IPC 命名空间的载体，沙箱一换，旧容器持有的命名空间引用就全部失效，不重建只会得到一堆连不上网络的容器。它同时解释了现场最常见的一类现象——Pod 重建后 IP 变了，正是因为沙箱被重建、veth 与 IP 都是新的，而不是"旧 IP 被回收后又恰好分配回来"。重建沙箱还有一层连带效应：kubelet 会先清掉已终止的 init 容器再重跑它们，于是那些不幂等的初始化动作（写共享日志、发通知、改外部配置）会被再执行一遍，这是排查看似"重复初始化"问题的常见来源。
+
+返回值里除了"是否重建"，还有重建的尝试次数（attempt）与旧沙箱 ID：attempt 每次重建自增并写进新沙箱的元数据，节点上用 `crictl pods` 就能看到某个 Pod 的沙箱究竟重建过几次，这比翻事件流更直接——笔者排查 IP 漂移时更愿意先看这个计数。SyncPod 失败时返回 SyncResult（携带错误与动作，譬如杀 Pod、同步、无操作），kubelet 据此以 10 秒为基准做指数退避重入，不会以固定间隔猛打运行时；这也意味着"Pod 起不来"的日志里会出现逐渐拉长的重试间隔，而不是稳定的循环，看到"kubelet 好像不动了"时先确认是不是落在退避窗口里。一个例外是网络未就绪（NetworkNotReady）这类瞬时错误，kubelet 走 1 秒的短退避，等 CNI 就绪后尽快重试。
+
 ---
 
 ## 第 4 章 CRI：容器运行时接口
@@ -405,6 +413,16 @@ startupProbe 的设计体现了"启动与运行分离"的理念。应用启动�
 
 两个 GC 的触发条件不同。容器 GC 在每次 SyncPod 后执行——SyncPod 创建/删除容器后，检查是否需要清理已退出容器。镜像 GC 在磁盘使用超过 HighThresholdPercent 时触发——它是"按需执行"的，只有磁盘紧张才清理。这种差异反映了两种 GC 的目标——容器 GC 是"定期清理"（保持节点整洁），镜像 GC 是"按需清理"（释放磁盘空间）。
 
+### 7.4 镜像 GC 的高低水位与拉取失败
+
+`--image-gc-high-threshold`（默认 85%）与 `--image-gc-low-threshold`（默认 80%）构成一对水位：镜像盘使用率超过高水位触发 GC，一直删到低水位为止，中间留出的 5% 是滞回区间，避免在阈值附近反复触发。`--minimum-image-ttl-duration`（默认 2 分钟）保护刚拉取的镜像，防止"刚拉完就被回收"的抖动。回收只针对没有被任何容器使用的镜像，运行中容器的镜像层不会被动。
+
+镜像 GC 与容器 GC 分工明确：前者管镜像层，后者管已退出的容器与日志目录，两者共用同一块磁盘，所以经常是"容器 GC 先触发、镜像 GC 随后跟上"。kubelet 通过 CRI 的 ImageFsInfo 拿镜像盘的用量与设备号，若 imagefs 与 nodefs 落在同一个设备上，日志把盘写满也会被算进镜像盘的用量，于是"日志暴涨 → 镜像 GC → Pod 重建拉不到镜像"这条链就成立了。
+
+一条容易忽略的连锁故障是：GC 把镜像删掉，节点上 Pod 重建需要重新拉取，若镜像仓库此刻不可达，Pod 就卡在 ImagePullBackOff——表象是"镜像拉取失败"，根因却是磁盘压力触发的回收，只看事件很容易误判成仓库问题。排查时要同时看节点磁盘水位与 kubelet 日志里的回收记录，而不是一味怀疑镜像仓库地址或认证配置。
+
+还有两个容易踩的实现细节。其一，镜像的"最后使用时间"记在 kubelet 进程内的镜像记录表里，kubelet 一重启这张表就空了，LRU 退化为按镜像创建时间排序，重启后第一轮 GC 的删除顺序往往和预期不同。其二，镜像拉取失败本身也按指数退避重试（10 秒起、最长 300 秒），所以 Events 里的 `Back-off pulling image` 会以越来越长的间隔出现，出现频率变低不等于问题已经缓解。
+
 ---
 
 ## 第 8 章 驱逐机制
@@ -460,6 +478,16 @@ kubelet 定期（默认 10 秒）检查这些信号，超过阈值时触发驱�
 
 > [!info] 核心概念：驱逐是 kubelet 主动保护节点
 > kubelet 检测到节点资源压力（内存/磁盘不足）时，主动驱逐 Pod 避免节点崩溃。驱逐按优先级——BestEffort 先驱逐，Guaranteed 最后驱逐。驱逐与 OOMKilled 的区别——驱逐是 kubelet 主动行为有 grace period，OOMKilled 是内核行为无 grace period。配置合理驱逐阈值，用驱逐避免 OOMKilled。
+
+### 8.5 驱逐阈值、宽限期与信号选择
+
+驱逐的第一层是阈值：`eviction-hard` 默认包含 `memory.available<100Mi`、`nodefs.available<10%`、`imagefs.available<15%`、`nodefs.inodesFree<5%`，硬阈值触发立即驱逐，没有商量余地。`eviction-soft` 必须配 `eviction-soft-grace-period`，压力持续超过宽限期才动手，这一层是为"瞬时抖动"准备的，没有宽限期的软阈值等于硬阈值——kubelet 在启动校验阶段就会拒绝这种配置。`eviction-pressure-transition-period`（默认 5 分钟）控制节点在"有压力"与"无压力"之间的切换节流，防止阈值附近反复横跳导致驱逐忽启忽停，也防止节点 condition 抖动把调度器带得来回摇摆。
+
+指标口径要特别注意：`memory.available` 取自 cgroup 的可分配内存，不是宿主机 `MemAvailable`，容器运行时与 kubelet 自身占用的内存都算在里面，可回收的页缓存则被扣掉，所以"机器还有空闲内存但节点在驱逐"是正常现象——`free -m` 里的 free 与 available 都不等于 kubelet 眼中的可用量。同理，`nodefs` 与 `imagefs` 若不在同一设备上，两个 available 是两个独立读数，一个紧张不代表另一个紧张；反过来，同设备时一次日志暴涨会同时点亮两个信号。
+
+驱逐顺序按 QoS 排：BestEffort 最先，Burstable 中超出 request 的次之，Guaranteed 最后；同一 QoS 内先看用量是否超过 request（超出的排在前面），再看 Pod 优先级（PriorityClass 高的靠后），最后看用量相对 request 的比例。`--eviction-max-pod-grace-period` 限制驱逐时的优雅终止时长，默认 -1 表示沿用 Pod 自己的 `terminationGracePeriodSeconds`——不设上限的话，一个不响应 SIGTERM 的 Pod 会把驱逐拖成漫长的等待，磁盘压力下这种等待尤其致命。
+
+软阈值还有一个配套参数容易漏掉——`eviction-minimum-reclaim`。不配它，软阈值触发的回收可能只释放一点点空间，压力很快又越线，于是反复驱逐；配上它，kubelet 会一次回收到位（譬如 `imagefs.available=2Gi`），等于把滞回区间做在回收量上，而不是只做在阈值上。
 
 ---
 
@@ -556,40 +584,6 @@ kubelet 是控制平面与数据平面的桥梁——把声明式 API 的期望�
 
 > [!info] 专栏导航
 > 本文是 [[00 专栏导览|Kubernetes 架构深度剖析专栏]] 的第 13 篇，深入 kubelet 的实现。下一篇 [[14 Service 与 kube-proxy：iptables IPVS eBPF 数据面演进]] 将详细讨论 Service 的负载均衡机制和 kube-proxy 的三种数据面模式。
-
----
-
-## 延伸思考
-
-1. **你的 Pod 是否配置了正确的探针？** Web 服务用 httpGet liveness + readiness，慢启动应用加 startupProbe，非 HTTP 服务用 tcpSocket。liveness 与 readiness 用不同端点。
-
-2. **你的 readinessProbe 是否正确？** readinessProbe 失败会从 Endpoints 移除——确保应用真正就绪才通过，避免流量打到未就绪 Pod。检查依赖与缓存是否就绪。
-
-3. **你的镜像 GC 阈值是否合理？** 默认 85%/80% 对大多数场景够用。磁盘小的节点可能需要调低。关键镜像预拉取避免被 GC 清理。
-
-4. **你的节点 NotReady 后 Pod 如何处理？** 检查 pod-eviction-timeout 和 PV 类型。有状态应用用网络存储保证节点故障后可重建。
-
-5. **你是否用 startupProbe 保护慢启动应用？** Java/Python 等慢启动应用用 startupProbe 避免启动期间被 livenessProbe 重启。startupProbe 自动适应启动时间。
-
-6. **你的 ContainerCreating 卡住是否检查了 Events？** `kubectl describe pod` 的 Events 显示具体原因——镜像拉取、CNI、PV 挂载、Secret。根据原因定位问题。
-
-7. **你的 OOMKilled 是否调大了 memory limit？** OOMKilled 是容器内存超限被内核杀。检查 resources.limits.memory 是否足够，或检查应用是否有内存泄露。
-
-8. **你的节点 NotReady 是否检查了 kubelet？** 节点 NotReady 通常是 kubelet 心跳超时——检查 kubelet 进程是否运行、网络是否通畅、磁盘是否满、PLEG 是否健康。
-
-9. **你的 Pod 驱逐是否配置了 PDB？** 自愿驱逐（节点维护）时 PDB 确保最小可用副本数。非自愿驱逐（节点故障）不受 PDB 限制。
-
-10. **你的镜像是否预加载到节点？** 频繁拉取大镜像会增加 Pod 创建时间。考虑用 ImageCache 或预加载镜像到节点，避免镜像被 GC 清理后重新拉取。
-
-11. **你的驱逐阈值是否配置合理？** 默认硬驱逐 memory.available < 100Mi。节点内存大的集群可以调高阈值，避免内存接近耗尽才驱逐。监控驱逐事件，频繁驱逐说明节点资源不足。
-
-12. **你的探针 timeoutSeconds 是否够长？** timeoutSeconds 太短（譬如 1 秒）对慢响应过于敏感，GC 暂停或慢查询导致探针超时重启容器。设为正常响应时间的 2-3 倍。
-
-13. **你的 kubelet 版本与容器运行时是否兼容？** CRI 版本需要 kubelet 与容器运行时匹配。升级 K8s 时同步升级容器运行时，版本不匹配导致节点 NotReady。
-
-14. **你的节点是否监控了 PLEG 健康？** PLEG not healthy 是常见故障，导致节点 NotReady。监控 kubelet 日志中的 "PLEG is not healthy" 关键字，及时排查容器运行时与节点资源。
-
-15. **你的有状态应用是否用了网络存储？** 节点 NotReady 后本地存储的 Pod 无法在其他节点重建。有状态应用用网络存储（PVC + 网络卷）保证节点故障后可重建。
 
 ---
 

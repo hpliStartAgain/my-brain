@@ -58,7 +58,7 @@ Watch 的增量推送模式解决了轮询的两个核心问题——流量和�
 List-Watch 协议的设计体现了"基线加增量"的经典模式——先建立基线（List 获取快照），再跟踪增量（Watch 持续监听）。这种模式在分布式系统中很常见——譬如数据库的快照加 WAL（Write-Ahead Log）、Git 的 clone 加 fetch。List-Watch 协议的特殊之处在于它用 resourceVersion 作为"基线标记"——List 返回的 resourceVersion 标记了快照的版本，Watch 从这个版本开始跟踪增量。如果 Watch 断连，客户端从最后的 resourceVersion 恢复，或全量 List 重新初始化。
 
 ```mermaid
-%%{init: {"theme":"dracula"}}%%
+%%{init: {'theme': 'dracula'}}%%
 graph LR
     List["1. List<br/>获取当前快照<br/>+ resourceVersion"] --> Watch["2. Watch<br/>从 resourceVersion<br/>持续监听增量变更"]
     Watch -->|"连接断开"| Relist["重新 List<br/>或从最后 rv<br/>重新 Watch"]
@@ -92,7 +92,7 @@ API Server 为每种资源类型维护一个 **Cacher** 对象，它是 API Serv
 Cacher 的设计体现了"中间层缓存"的经典模式——在 etcd 和客户端之间加一层缓存，减少 etcd 的压力。这种模式在分布式系统中很常见——譬如数据库前的缓存层、CDN 节点的缓存。Cacher 的特殊之处在于它不仅缓存数据（store），还缓存事件流（watchCache），并支持增量推送（cacheWatcher）。这种"数据缓存加事件缓存加增量推送"的三层设计使得 Cacher 可以同时服务 List 和 Watch 请求，且都不查询 etcd。
 
 ```mermaid
-%%{init: {"theme":"dracula"}}%%
+%%{init: {'theme': 'dracula'}}%%
 graph TD
     ETCD["etcd<br/>Watch 变更流"] -->|"gRPC Watch"| Cacher["API Server Cacher"]
 
@@ -161,6 +161,14 @@ Bookmark 事件的发送频率由 API Server 的 `--default-watch-cache-size` �
 
 Bookmark 的设计体现了 K8s 对大规模集群性能的持续优化。在没有 Bookmark 之前，长时间无事件的 Watcher（如 Watch 低频变更的资源）的 resourceVersion 会长时间不更新。一旦 Watch 断连重连，需要从这个旧版本开始 Watch，可能需要传输大量历史事件。Bookmark 定期发送"空事件"更新 resourceVersion，使得重连时从较新版本开始，减少了历史事件传输量。这种"定期心跳"的设计虽然简单，但对大规模集群的 Watch 性能有显著提升。
 
+### 2.4 Watch 的超时、410 Gone 与重连
+
+API Server 从不允许一条 watch 连接无限期地挂着。客户端未显式指定 `timeoutSeconds` 时，服务端会在 5 到 10 分钟的区间里取一个随机值作为超时，到点主动关闭连接，并在响应里告知实际生效的 `timeoutSeconds`。随机化并非随手为之——集群里成百上千个 watcher 往往在同一批滚动更新、同一批重启中启动，若超时是个定值，它们的重连也会挤在同一秒，API Server 要在一瞬间承受一波建连、鉴权与初始事件回放；把超时打散到 5 至 10 分钟，重连时刻自然错峰。
+
+连接被服务端关闭是**正常事件**，不是故障。客户端拿最后收到的 resourceVersion 重连即可，服务端会把这段空档里的增量事件补发。真正麻烦的是 **410 Gone**（`Expired`）：请求的 resourceVersion 已被 etcd 压缩掉，或已被挤出 watchCache 的环形缓冲区，服务端无法补齐增量，只能返回 `Expired` 让客户端重来。此时唯一的正确动作是重新 List 再 Watch——因为"缺了哪一段"已无从知晓。
+
+`allowWatchBookmarks=true` 让服务端周期性推送 bookmark 事件：它不携带对象，只携带当前 resourceVersion。空闲的 watcher 因此能持续前移自己的"断点"，重连时需要的补课窗口更短。List 侧的 `resourceVersionMatch` 则提供 `Exact` 与 `NotOlderThan` 两种匹配语义，后者是"至少不旧于该版本"，用于分页 List 时把多页对齐到同一快照——`Exact` 要求服务端严格按指定版本返回，在多页之间发生写入时极易退化为 410，`NotOlderThan` 的语义更宽松，才是分页场景的常规选择。
+
 ---
 
 ## 第 3 章 client-go Informer 框架
@@ -174,7 +182,7 @@ Informer 框架的设计体现了"分层架构"的经典思想——每一层有
 Informer 是 client-go 提供的 K8s 控制器编程框架。它封装了 List-Watch、缓存、事件分发、工作队列的复杂性，使得控制器开发者只需实现 Reconcile 函数。Informer 的四层架构是 K8s 控制器高性能的工程基础——每一层都有明确的职责，层间通过清晰的接口协作。这种分层设计是 K8s 控制器编程范式的核心——它把"获取状态、缓存状态、分发事件、调度处理"四个关注点分离，使得每一层可以独立优化和测试。这种"关注点分离"的设计是软件工程的经典原则在 K8s 中的具体应用。
 
 ```mermaid
-%%{init: {"theme":"dracula"}}%%
+%%{init: {'theme': 'dracula'}}%%
 graph TD
     API["API Server"] --> Reflector["Reflector<br/>List-Watch 并写入 DeltaFIFO"]
     Reflector --> DeltaFIFO["DeltaFIFO<br/>去重合并增量事件"]
@@ -256,7 +264,7 @@ type Delta struct {
 ```
 
 ```mermaid
-%%{init: {"theme":"dracula"}}%%
+%%{init: {'theme': 'dracula'}}%%
 graph LR
     In["输入事件流"] --> FIFO["DeltaFIFO"]
     FIFO --> Merge["同 key 合并<br/>Pod-A: [Added, Updated, Updated]"]
@@ -341,7 +349,7 @@ func onAdd(obj interface{}) {
 | **有序** | 同一 key 的多次变更按顺序处理 |
 
 ```mermaid
-%%{init: {"theme":"dracula"}}%%
+%%{init: {'theme': 'dracula'}}%%
 graph LR
     Event["Watch 事件<br/>Pod-A Added"] --> Handler["EventHandler"]
     Handler -->|"Add(key)"| Queue["WorkQueue<br/>去重 + 限速"]
@@ -364,6 +372,14 @@ graph LR
 WorkQueue 的"去重"特性是一个重要的性能优化——如果同一对象在短时间内被多次更新，EventHandler 多次将 key 入队，但 WorkQueue 只保留一个，Reconcile 只处理一次。这避免了控制器被高频更新淹没。WorkQueue 的"延迟"特性支持失败重试——如果 Reconcile 失败，可以将 key 延迟入队（如 30 秒后重试），避免立即重试导致雪崩。WorkQueue 的"限速"特性支持流量控制——限制每秒处理的对象数，避免控制器压垮下游系统。
 
 client-go 的 WorkQueue 提供三种限速器（RateLimiter）实现。`BucketRateLimiter` 基于 token bucket 算法，固定速率发放 token，每次处理消耗一个 token，适合平滑流量。`ExponentialBackoffLimiter` 指数退避——第一次失败后等待 5ms，第二次 10ms，第三次 20ms，以此类推，最大间隔默认 1000s，适合失败重试场景。`MaxOfRateLimiter` 取多个限速器中的最大值——譬如同时配置 BucketRateLimiter（限制 QPS）和 ExponentialBackoffLimiter（控制重试），取两者中较大的等待时间。controller-runtime 默认使用 `MaxOfRateLimiter` 组合 BucketRateLimiter（默认 10 QPS）和 ExponentialBackoffLimiter。
+
+### 3.6 Reflector 的退避与错误分类
+
+Reflector 的健壮性来自一个朴素的前提——**把所有错误当成常态**。List 或 Watch 失败后它按指数退避重试，退避带 jitter，基准从数百毫秒一路爬到 30 秒的上限，再配合一个 2 分钟的重置窗口：只要连续成功过一段时间，下一次失败就重新从短退避开始。没有这个重置窗口，一个长期健康的控制器偶发一次断连就要干等半分钟才重试，恢复延迟被无谓放大；没有 jitter，数千个同时被 API Server 滚动重启踢掉的 Reflector 会以整齐的节奏反复冲击，形成同步的重试风暴。
+
+错误必须分类处理，否则要么白等要么雪崩。`IsResourceExpired` 表示 resourceVersion 已过期，唯一正确的动作是**丢弃 RV 重新 List**；`IsTooManyRequests` 要尊重服务端在响应里给出的 `Retry-After`，用自己的退避硬顶只会把限流窗口越拖越长；其余网络错误才走常规指数退避。
+
+`watchErrorHandler` 是留给使用者的钩子，默认实现只打一行日志——生产里应该在这里接指标与告警，否则 watch 反复失败在监控上完全不可见，只留下没人看的一行日志。初始 List 走分页，`chunk-size` 默认 500，配合客户端 `QPS`/`Burst` 限流，避免一个控制器的首次 List 把 API Server 打满；这也解释了一个常被误判为故障的现象——大集群里控制器启动要几分钟，通常只是分页 List 叠加客户端限流下的正常耗时，而不是卡死。
 
 ---
 
@@ -392,7 +408,7 @@ SharedInformer 是 K8s 控制器高效运行的关键机制。它通过共享 Li
 SharedInformer 的共享机制通过 SharedInformerFactory 实现——工厂模式确保同一资源类型的 Informer 只创建一次，后续请求返回同一个 Informer 实例。多个控制器可以透明地共享 Informer，而不需要显式协调。生产环境中使用 SharedInformer 的标准方式是 `informerFactory.Core().V1().Pods().Informer()`——工厂方法返回共享的 Pod Informer，多个控制器调用同一方法得到同一个实例。
 
 ```mermaid
-%%{init: {"theme":"dracula"}}%%
+%%{init: {'theme': 'dracula'}}%%
 graph TD
     API["API Server"] --> SI["SharedInformer<br/>(Pod)"]
     SI --> Cache["共享本地缓存"]
@@ -448,7 +464,7 @@ Resync 的设计体现了"边缘触发加水平触发"的经典组合。Watch �
 Resync 的实现细节值得了解。SharedInformer 的 `processorListener` 有一个 `resyncPeriod` 参数，默认 10 分钟。Resync 触发时，Informer 遍历 Indexer 中所有对象，把每个对象的 key 作为 `Sync` 类型的 Delta 写入 DeltaFIFO。EventHandler 收到 `OnUpdate` 回调（old 和 new 是同一对象），把 key 放入 WorkQueue。Resync 不触发 API Server 请求——它完全基于本地缓存，不会增加 API Server 负载。但 Resync 会产生大量 WorkQueue 项——5 万 Pod 的集群中，一次 Resync 产生 5 万个 WorkQueue 项，如果 Reconcile 每个耗时 100ms，处理完需要 5000 秒（约 83 分钟）。这期间新的 Watch 事件排队等待，可能导致延迟。生产环境中如果 Resync 期间 WorkQueue 积压严重，可以考虑延长 Resync 间隔或增加 worker 数。
 
 ```mermaid
-%%{init: {"theme":"dracula"}}%%
+%%{init: {'theme': 'dracula'}}%%
 graph LR
     Cache["本地缓存<br/>{key: object}"] -->|"Resync 间隔<br/>默认 10 分钟"| Queue["WorkQueue"]
     Queue --> Reconcile["Reconcile<br/>所有对象"]
@@ -543,6 +559,14 @@ Informer 的性能优化是大规模集群运维的重要课题。优化的核�
 > 在 5 万 Pod 的集群中，一个 Watch Pod + Service + Endpoints + Node 的控制器进程可能占用 1GB+ 内存。如果部署为单进程，可能 OOM。解决方案：(1) 不同控制器分进程部署，各自只 Watch 需要的资源；(2) 用 FieldSelector 限制 Watch 范围（如 kubelet 只 Watch 本节点的 Pod）；(3) 监控内存并在接近限制时告警。Informer 的内存占用与集群规模成正比——这是控制器水平扩展的动机之一。
 
 FieldSelector 限制 Watch 范围是减少内存占用的有效手段。kubelet 只 Watch 本节点的 Pod（通过 FieldSelector `spec.nodeName=<node-name>`），而非所有 Pod。这使得 kubelet 的 Informer 缓存只包含本节点的 Pod（通常几十到几百个），而非集群所有 Pod（可能数万个）。kubelet 可以在任意规模集群中运行，内存占用与节点 Pod 数成正比，而非与集群 Pod 数成正比。
+
+### 6.3 DeltaFIFO 的 knownObjects 与删除推断
+
+DeltaFIFO 只负责"入队什么"，真正决定"什么算删除"的是重新 List 时的 `Replace()`。它拿新 List 的结果与 `knownObjects`（即 Indexer 里的旧缓存）做差集：缓存里有、新 List 里没有的 key，会生成一条 `Deleted` delta 入队。这个推断是 level-triggered 语义的落点——控制器不需要真的收到删除事件，只要对象在最新快照里消失，就一定会被通知一次。反过来说，这也是"控制器重启不会漏删"的原因：重启时缓存是空的，差集自然为空，所有对象都按 `Sync` 走一遍全量对齐，删除由随后的 `Get` 返回 NotFound 来体现。
+
+同一 key 在短时间内多次变化时，DeltaFIFO 不覆盖而是把 delta 追加成列表，`Pop` 返回的是聚合后的 `Deltas`。EventHandler 只看到一次出队，但能看到 `Added` 之后又 `Deleted` 的完整序列——这让"创建即删除"这类瞬时对象有了确定的处理语义，而不是被静默吞掉。列表长度本身也是信号：一次出队里堆了十几个 `Updated`，说明该对象在一个处理周期内被高频改写，通常意味着上游有抖动或写放大。
+
+缓存本身是 `threadSafeMap`，读写锁保护，读多写少。对象在入队前可经 `transformer` 改写，譬如剥掉 `managedFields` 以省内存——改写在 Informer 层做一次，比让每个消费者各做一次划算得多。但改写之后对象与 API Server 的返回不再逐字节一致，凡是依赖完整字段做比较的逻辑都要自己补齐，否则一次 `Update` 就可能把被剥掉的字段写回成空值。
 
 ---
 
@@ -662,26 +686,6 @@ controller-runtime 的"读缓存、写 API"模式是 K8s 控制器编程的标�
 
 > [!info] 专栏导航
 > 本文是 [[00 专栏导览|Kubernetes 架构深度剖析专栏]] 的第 06 篇，深入 List-Watch 和 Informer 的实现原理。上一篇 [[05 认证、授权与准入控制：K8s 的安全三级防线]] 讨论了 K8s 的安全机制，本文深入了控制器获取状态变更的核心机制。下一篇 [[07 etcd 深度剖析：Raft 共识、MVCC 与 Watch 机制]] 将深入 etcd 的内部实现——Raft 共识算法、MVCC 多版本并发控制、Watch 机制。
-
----
-
-## 延伸思考
-
-1. **你的控制器是否用了 SharedInformer？** 如果有多个控制器在同一进程，确认它们共享 Informer 而非各自创建。用 `informerFactory.SharedInformerFactory` 或 controller-runtime 自动管理。
-
-2. **你的 Resync 间隔是否合理？** 默认 10 分钟对大多数场景够用。关键控制器可缩短，非关键控制器可延长。监控 Resync 期间的 WorkQueue 积压情况。
-
-3. **你的 Reconcile 是否幂等？** Resync 会触发所有对象的 onUpdate——如果 Reconcile 不幂等，Resync 会产生副作用。用 Resync 测试幂等性。
-
-4. **你的控制器在大集群中是否会 OOM？** 估算缓存内存占用——Watch 的资源数量 × 平均对象大小。如果超过 1GB，考虑分进程或 FieldSelector 限制范围。
-
-5. **你的 EventHandler 是否快速入队？** EventHandler 不应执行耗时操作——快速将 key 放入 WorkQueue，让独立 worker 处理。阻塞 EventHandler 会卡住整个 Informer 的事件分发。
-
-6. **你的 Watch 是否正确处理断连？** Reflector 自动处理断连恢复，但如果你自己实现了 Watch 逻辑，确保保存最后 resourceVersion 并从该版本恢复。
-
-7. **你是否用 Indexer 的索引加速查询？** 如果控制器频繁按 Label 或 Owner 查询对象，创建自定义索引——比遍历所有对象快得多。
-
-8. **你是否监控了 Informer 的性能？** 监控 Informer 的缓存大小、WorkQueue 深度、Reconcile 延迟。Prometheus 的 controller-runtime metrics 提供这些指标。
 
 ---
 

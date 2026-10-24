@@ -29,7 +29,7 @@ K8s 继承了 Omega 的共享状态架构，但做了两个关键改进：第一
 ### 1.2 控制平面的四个组件
 
 ```mermaid
-%%{init: {"theme":"dracula"}}%%
+%%{init: {'theme': 'dracula'}}%%
 graph TD
     subgraph "控制平面（Control Plane）"
         API["API Server<br/>唯一入口"]
@@ -124,7 +124,7 @@ Scheduler 的"只做决策不做执行"设计还有一个工程收益：调度�
 调度器的两阶段流程：
 
 ```mermaid
-%%{init: {"theme":"dracula"}}%%
+%%{init: {'theme': 'dracula'}}%%
 graph LR
     Pending["Pending Pod<br/>未调度"] --> Filter["Filter 阶段<br/>预选：排除不满足条件的节点"]
     Filter --> Score["Score 阶段<br/>优选：对候选节点打分"]
@@ -185,7 +185,7 @@ graph LR
 kubelet 的工作流程：
 
 ```mermaid
-%%{init: {"theme":"dracula"}}%%
+%%{init: {'theme': 'dracula'}}%%
 graph TD
     Watch["Watch API Server<br/>分配到本节点的 Pod"] --> Sync["SyncPod<br/>同步 Pod 状态"]
     Sync --> CRI["CRI<br/>调用容器运行时"]
@@ -236,7 +236,7 @@ Service 的虚拟 IP（ClusterIP）是一个稳定的网络端点——无论后
 容器运行时的层级结构也值得理解。containerd 本身不直接运行容器——它调用 OCI Runtime（通常是 runc）来创建和运行容器。runc 是 OCI Runtime 规范的参考实现，它直接操作 Linux 的 namespace 和 cgroup 来隔离和限制容器进程。这种"高层运行时（containerd）加低层运行时（runc）"的分层设计使得各层可以独立演进——containerd 负责镜像管理和容器生命周期，runc 负责容器隔离和资源限制。K8s 通过 CRI 与 containerd 通信，containerd 通过 OCI Runtime 接口与 runc 通信，每一层都有明确的职责边界。
 
 ```mermaid
-%%{init: {"theme":"dracula"}}%%
+%%{init: {'theme': 'dracula'}}%%
 graph LR
     KL["kubelet"] -->|"gRPC CRI"| CR["容器运行时<br/>containerd/CRI-O"]
     CR -->|"OCI Runtime"| Runc["runc<br/>容器执行"]
@@ -274,7 +274,7 @@ CRI 接口的主要方法：
 ### 3.1 从 kubectl apply 到 Pod Running 的完整链路
 
 ```mermaid
-%%{init: {"theme":"dracula"}}%%
+%%{init: {'theme': 'dracula'}}%%
 sequenceDiagram
     participant U as "用户"
     participant K as "kubectl"
@@ -427,7 +427,7 @@ ReplicaSet Controller Watch 到 Pod 状态变化，更新 ReplicaSet.status。De
 K8s 组件与 API Server 的主要通信方式是 **List-Watch**。List-Watch 是 K8s 架构的"分布式神经系统"——所有组件都通过它感知状态变化，它是组件间解耦协调的技术基础。没有 List-Watch，组件只能轮询 API Server，在大规模集群中轮询的开销是不可接受的。
 
 ```mermaid
-%%{init: {"theme":"dracula"}}%%
+%%{init: {'theme': 'dracula'}}%%
 sequenceDiagram
     participant C as "Client (Informer)"
     participant API as "API Server"
@@ -518,7 +518,7 @@ K8s 控制平面的高可用采用**多实例加 Leader Election** 模式：
 API Server 是无状态的（状态都在 etcd），可以水平扩展——多个实例并行运行，前面用负载均衡器分发请求。
 
 ```mermaid
-%%{init: {"theme":"dracula"}}%%
+%%{init: {'theme': 'dracula'}}%%
 graph TD
     LB["负载均衡器"] --> API1["API Server 1"]
     LB --> API2["API Server 2"]
@@ -546,7 +546,7 @@ API Server 的水平扩展也受限于 etcd 的性能——虽然 API Server 可
 Scheduler 和 Controller Manager 使用 Leader Election——多个实例运行，但只有 Leader 做实际工作，其他实例待命。Leader 故障后，其他实例通过 Lease 竞选新 Leader。
 
 ```mermaid
-%%{init: {"theme":"dracula"}}%%
+%%{init: {'theme': 'dracula'}}%%
 graph TD
     S1["Scheduler 1<br/>Leader"] -->|"持有 Lease"| API["API Server"]
     S2["Scheduler 2<br/>Standby"] -->|"等待 Lease"| API

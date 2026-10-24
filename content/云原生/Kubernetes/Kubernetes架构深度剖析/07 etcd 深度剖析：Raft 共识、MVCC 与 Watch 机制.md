@@ -29,7 +29,7 @@ etcd 在 K8s 中的角色可以用"唯一记忆"来概括——K8s 集群的所�
 "API Server 作为唯一客户端"的设计还有一个重要的安全价值——所有写操作都经过 API Server 的认证、授权、准入控制，避免了组件直接写 etcd 导致的安全问题。如果组件可以直接写 etcd，任何被攻破的组件都可以任意修改集群状态，安全风险极高。通过 API Server 作为唯一入口，K8s 可以集中控制所有写操作的权限，保证安全。这种"单一入口"的安全设计是 K8s 安全模型的基础。
 
 ```mermaid
-%%{init: {"theme":"dracula"}}%%
+%%{init: {'theme': 'dracula'}}%%
 graph TD
     subgraph "K8s 集群"
         API["API Server<br/>唯一 etcd 客户端"]
@@ -89,7 +89,7 @@ Raft 诞生的背景是 Paxos 的复杂性。Paxos 是 Leslie Lamport 在 1990 �
 Raft 将共识分解为三个子问题：
 
 ```mermaid
-%%{init: {"theme":"dracula"}}%%
+%%{init: {'theme': 'dracula'}}%%
 graph TD
     Raft["Raft 共识"] --> Leader["Leader 选举<br/>谁当 Leader"]
     Raft --> Log["日志复制<br/>如何同步日志"]
@@ -116,7 +116,7 @@ Raft 节点有三种状态——Follower、Candidate、Leader。状态转换的�
 | **Leader** | 处理所有写请求，复制日志到 Followers |
 
 ```mermaid
-%%{init: {"theme":"dracula"}}%%
+%%{init: {'theme': 'dracula'}}%%
 graph LR
     F["Follower"] -->|"选举超时"| C["Candidate"]
     C -->|"赢得选举"| L["Leader"]
@@ -166,7 +166,7 @@ etcd 对选举超时的默认配置值得了解。`--election-timeout` 默认 10
 #### 写请求处理流程
 
 ```mermaid
-%%{init: {"theme":"dracula"}}%%
+%%{init: {'theme': 'dracula'}}%%
 sequenceDiagram
     participant C as "客户端"
     participant L as "Leader (etcd-1)"
@@ -241,7 +241,7 @@ etcd-raft 的另一个重要设计是"Ready"抽象。etcd-raft 不直接执行�
 etcd-raft 的 **Pipeline 复制**：Leader 持续发送 AppendEntries 而不等待确认——假设 Follower 会按顺序确认。如果发现 Follower 的日志落后（通过 nextIndex 不匹配），退回到普通模式重新同步。
 
 ```mermaid
-%%{init: {"theme":"dracula"}}%%
+%%{init: {'theme': 'dracula'}}%%
 graph LR
     subgraph "普通模式"
         L1["Leader"] -->|"AppendEntries"| F1["Follower"]
@@ -270,6 +270,16 @@ graph LR
 Pipeline 复制的设计体现了"假设正常、异常回退"的工程模式。正常情况下，Follower 会按顺序确认 AppendEntries，Leader 可以持续发送而不等待。异常情况下（Follower 日志落后或网络问题），Leader 检测到 nextIndex 不匹配，退回到普通模式重新同步。正常路径高效，异常路径正确——是分布式系统优化的常见模式。
 
 Pipeline 复制的性能提升在高延迟网络中尤为明显。考虑跨数据中心部署的 etcd 集群——数据中心间 RTT 约 10-50ms。普通模式下，每次 AppendEntries 复制需要 10-50ms（等待 ACK），吞吐量约 20-100 次/秒。Pipeline 模式下，Leader 可以持续发送，吞吐量不受 RTT 限制，只受网络带宽限制。这种"RTT 无关吞吐量"的特性使得 Pipeline 复制成为跨数据中心 etcd 部署的关键优化。
+
+### 2.8 PreVote、CheckQuorum 与 Learner
+
+Raft 论文给的骨架不够用，生产环境里有两个著名的坑。
+
+第一个坑是分区节点反复选举带来的任期（Term）膨胀。被隔离的节点收不到心跳，会按选举超时不停自增 term 发起选举，每一轮都失败而 term 已经涨了上去；分区恢复后，这个高 term 节点一发出消息，健康的 Leader 就依规则退位，集群白白抖动一次。**预投票（PreVote）**让节点先发一轮预投票请求，消息携带 term+1 但不修改自己持久化的 term，确认能拿到多数回应才真正自增 term 进入正式选举。该机制在 etcd 3.4 引入，此后成为默认行为。
+
+第二个坑是孤立 Leader。Leader 被分区隔离后并不知道自己已失去多数，仍以 Leader 身份回应请求；叠加 2.5 节的租约读，它可能在一段租约窗口内持续返回过期数据。**法定人数检查（CheckQuorum）**让 Leader 周期性确认与多数节点的联系，一旦在一个选举超时窗口内凑不齐多数响应，就主动退位为 Follower——宁可短暂不可写，也不提供可能过期的读。etcd server 默认开启该选项，与 PreVote 配合构成双重防护。
+
+第三个机制是**学习者（Learner）**，etcd 3.4 引入的第三种角色：接收日志但不参与投票、不计入法定人数（Quorum）、也不发起选举。新节点先以 Learner 身份追日志（`etcdctl member add --learner`），追平后再 `etcdctl member promote` 升为投票成员（Voter）；跳过这一步，空日志的新节点立刻成为 Voter，既可能拖慢多数派确认，也可能在 Leader 故障时以落后状态参与选举。三者合起来说明：Raft 论文给的是正确性骨架，生产级共识还要补上"如何不被抖动拖垮"。
 
 ---
 
@@ -353,7 +363,7 @@ etcd Watch 与 K8s API Server 的 Watch 有层次关系。K8s API Server 的 Wat
 etcd Watch 还有一个重要的实现细节：Watch 事件是过滤后推送的。API Server 为每种资源类型建立到 etcd 的 Watch，但 etcd Watch 监听的是 key 前缀（如 `/registry/pods/`），etcd 推送该前缀下所有 key 的变更。API Server 收到 etcd 事件后，根据 key 解析出资源类型和对象，再根据客户端 Watch 请求的过滤条件（如 Namespace、LabelSelector）过滤后推送给客户端。这意味着同一个 etcd Watch 事件可能被分发给多个客户端 Watcher，每个 Watcher 只收到自己关心的子集，这种过滤机制大幅减少了不必要的网络传输。
 
 ```mermaid
-%%{init: {"theme":"dracula"}}%%
+%%{init: {'theme': 'dracula'}}%%
 graph LR
     Client["Watch 客户端<br/>从 revision=100 开始"] -->|"gRPC Watch"| Etcd["etcd"]
     Etcd -->|"推送事件"| Client
@@ -370,8 +380,6 @@ graph LR
     class E2 event
     class E3 event
 ```
-
-etcd Watch 的工作原理是"从某个 revision 开始推送增量变更"。客户端发起 Watch 请求时指定起始 revision，etcd 推送该 revision 之后的所有变更事件。这种"从某版本开始推送"的模式依赖于 MVCC——etcd 保留了所有历史版本，可以从任意版本开始推送。如果起始 revision 已被压缩（compaction），etcd 返回错误，客户端需要重新 List 获取当前快照。
 
 ### 4.2 Watch 的压缩问题
 
@@ -410,7 +418,7 @@ WAL 的设计体现了"持久性优先"的原则——即使性能受影响，�
 WAL 的一个重要工程细节是"预写"。WAL 是"Write-Ahead Log"——日志必须在数据修改前写入。这个"先写日志"的顺序保证了即使数据修改中途崩溃，日志也已经持久化——重启时通过回放日志恢复数据。如果反过来"先改数据再写日志"，数据修改中途崩溃时日志还没写，无法恢复。这种"先日志后数据"的顺序是 WAL 的核心约束，也是数据库持久性的基础。
 
 ```mermaid
-%%{init: {"theme":"dracula"}}%%
+%%{init: {'theme': 'dracula'}}%%
 graph LR
     Write["写请求"] --> WAL["写入 WAL 文件<br/>(持久化)"]
     WAL --> State["应用到状态机<br/>(内存)"]
@@ -465,6 +473,16 @@ Compaction 与 Snapshot 是协同工作的两个机制。Compaction 清理 MVCC 
 Compaction 有两种模式：按时间（`--auto-compaction-mode=periodic`）和按 revision 数（`--auto-compaction-mode=revision`）。按时间模式如 `--auto-compaction-retention=1h` 表示保留最近 1 小时的历史版本。按 revision 数模式如 `--auto-compaction-retention=1000` 表示保留最近 1000 个 revision。K8s 默认使用按时间模式，每 5 分钟自动压缩一次。Compaction 后，被压缩的 revision 不可再用于 Watch 或历史查询——客户端需要重新 List 获取当前快照。
 
 Compaction 释放的是逻辑空间（删除旧版本），但 etcd 的后端存储（bbolt）不会自动回收物理空间。物理空间回收需要执行 `etcdctl defrag`——defrag 会压缩 bbolt 数据库文件，回收已删除数据的物理空间。defrag 期间 etcd 节点无法服务请求（阻塞约几秒），生产环境中应该逐个节点 defrag（先 defrag Follower，再 defrag Leader），避免同时 defrag 导致服务中断。
+
+### 5.4 boltdb 的 freelist 与碎片整理
+
+etcd 的后端存储是 **bbolt**，一个单文件的 B+ 树，落在数据目录的 `member/snap/db`。压缩明明执行过、数据也删了，文件却一点没小——原因在 bbolt 的**空闲页链表（freelist）**：删除与压缩释放的是页，这些页登记进 freelist 等待复用，并不归还操作系统。写入时 bbolt 优先从 freelist 取页，取不到才向系统申请新页，于是文件大小更接近历史峰值而非当前数据量——这不是泄漏而是设计使然，用 `ls -l` 盯文件大小判断健康是常见的误判来源。
+
+freelist 的组织方式由 `--backend-bbolt-freelist-type` 决定，`array` 遍历快而内存占用随碎片化上升，`map` 在空闲页极多时查找更稳但分配多一层哈希开销；选错会在高频写入下放大分配延迟。
+
+真正让文件缩小要靠**碎片整理（defrag）**：逐节点重写整个 db 文件，按当前有效数据紧凑写出新文件再原子替换。其一是服务受阻——重写期间该节点持有后端锁，对外服务短暂停顿，所以必须逐个 member 做，做完确认健康再动下一个；`etcdctl defrag --cluster` 会同时阻塞所有成员，等于主动制造一次全集群不可写。其二是磁盘余量——紧凑需要一份与当前 db 大小相当的新文件，磁盘紧张时 defrag 会失败收场。其三是先备份——重写中断后没有 snapshot 就只能从别的节点重建数据目录，正确顺序是 snapshot save、snapshot status 确认、逐个 defrag。
+
+碎片之外还有配额这条硬线。后端大小接近 `--quota-backend-bytes` 时 etcd 触发 NOSPACE 告警并转为只读，K8s 侧表现是所有写失败、读仍可用，实际是 etcd 写不进去而非 apiserver 坏了。此时先 `etcdctl alarm list` 确认类型，压缩加 defrag 降体积后再 `etcdctl alarm disarm` 解除只读。`etcdctl snapshot status` 能读出快照的 revision、key 数与大小，是判断"该压缩还是该 defrag"的入口。
 
 ---
 
@@ -564,6 +582,14 @@ etcd 的监控指标可以分为几类。Leader 相关——`etcd_server_has_lea
 
 监控告警的设置需要考虑几个原则。首先是分级告警——Leader 丢失是 P0 级告警（立即处理），WAL fsync 延迟是 P1 级告警（尽快处理），数据库大小接近配额是 P2 级告警（计划处理）。其次是趋势告警——Leader 切换次数和提案失败率应该看趋势，而非瞬时值。譬如 Leader 切换 5 分钟内 >3 次告警，而非单次切换告警。然后是关联告警——etcd 指标与 K8s 症状关联，譬如 etcd WAL fsync 慢 + API Server 延迟高 = 磁盘问题。这些原则使得监控告警更有效，减少误报和漏报。
 
+### 6.6 跨故障域部署与延迟权衡
+
+节点数决定 etcd 能容忍几台机器故障，节点落在哪几个故障域决定它能容忍什么级别的故障——这两件事是正交的。3 节点分布在 3 个**可用区（Availability Zone，AZ）**，能容忍任意一个可用区整体失联；3 节点挤在同一个可用区，机器再多也挡不住一次机房级故障。5 节点按 2-2-1 分布在 3 个可用区，可以同时容忍一个可用区加一台机器，代价是多数派写要跨更多链路。反过来，把 3 节点摊在两个可用区（2-1）是危险拓扑——含 2 个节点那侧失联，剩下 1 个凑不出多数。
+
+但跨区不是免费的。一次写要等多数派落盘，跨区往返时延（Round-Trip Time，RTT）直接叠加进写延迟，最终延迟大约取决于凑够多数派所需的那几个 follower 中最慢的一个。`--heartbeat-interval` 与 `--election-timeout` 必须显著大于跨区 RTT，否则心跳会被网络抖动吞掉，Follower 误判 Leader 失联，集群陷入频繁重选。etcd 官方的经验量级是心跳间隔取平均 RTT 的一倍上下、选举超时取十倍左右；同城三可用区的 RTT 通常在 1-2ms，默认的 100ms/1000ms 绰绰有余。
+
+这里没有普适最优解。同城三可用区的毫秒级 RTT 让把 Raft 摊开几乎没有代价；跨城部署则往往要用异步方案把 etcd 留在同城——譬如每个城市一套独立集群、上层用应用级复制同步数据——而不是硬把 Raft 拉成跨城同步，让每次 K8s 写都背上几十毫秒的跨城往返。另外 apiserver 应只配置本地或同区的 etcd 端点（`--etcd-servers`），让读不必先跨城再回到本地。
+
 ---
 
 ## 结语
@@ -572,30 +598,6 @@ etcd 的监控指标可以分为几类。Leader 相关——`etcd_server_has_lea
 
 > [!info] 专栏导航
 > 本文是 [[00 专栏导览|Kubernetes 架构深度剖析专栏]] 的第 07 篇，深入 etcd 的内部实现。上一篇 [[06 List-Watch 与 Informer：K8s 的分布式神经系统]] 讨论了 List-Watch 和 Informer 的实现原理，本文深入了 List-Watch 底层的 etcd 存储。下一篇 [[08 ResourceVersion 与乐观并发控制]] 将详细讨论 K8s 如何基于 etcd 的 ModRevision 实现乐观并发控制——ResourceVersion 的语义、冲突重试、List-Watch 中的 ResourceVersion 使用。
-
----
-
-## 延伸思考
-
-1. **你的 etcd 是否高可用部署？** 检查 etcd 节点数（应为 3 或 5 的奇数）。所有节点在同一台机器上是单点——不是高可用。
-
-2. **你的 etcd 是否有定期备份？** 检查备份策略和频率。备份应存储到异地（如 S3），而非同机房。
-
-3. **你是否演练过 etcd 恢复？** 如果从没演练过，你的备份可能不可用。在测试环境恢复一份备份，验证 K8s 资源完整性。
-
-4. **你的 etcd 是否用了 SSD？** etcd 对磁盘 IOPS 极其敏感。如果还在用 HDD，升级到 SSD 或 NVMe。etcd 独占磁盘避免争用。
-
-5. **你的 etcd 是否启用了自动压缩？** 检查 `--auto-compaction-retention`。不压缩会导致历史版本无限增长，性能退化。
-
-6. **你的 etcd Leader 是否频繁切换？** 监控 `etcd_server_leader_changes_seen_total`。频繁切换表明网络或磁盘问题。
-
-7. **你的 etcd 内存是否足够？** 监控 `etcd_mvcc_db_total_size_in_bytes`。接近 `--quota-backend-bytes`（默认 8GB）时 etcd 变只读。
-
-8. **你的 etcd 选举超时是否合理？** 默认 1000ms。网络延迟高的环境可能需要调大（如 2000ms），但太大会导致 Leader 故障后恢复慢。
-
-9. **你的 etcd 是否监控了提案失败率？** `etcd_server_proposals_failed_total` 持续增长表明集群不稳定——可能是网络问题、磁盘慢、或节点过载。提案失败意味着写操作被拒绝，影响 K8s API Server 的写入。
-
-10. **你的 etcd 是否跨可用区部署？** 3 节点分散到 3 个可用区比同可用区更健壮——一个可用区故障不会丢失多数。但跨可用区的网络延迟更高，需要评估对写延迟的影响。
 
 ---
 

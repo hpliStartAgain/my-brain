@@ -21,7 +21,7 @@ API Server 是 K8s 的唯一入口，所有对集群状态的读写都通过它�
 一个 HTTP 请求从到达 API Server 到写入 etcd 并通知 Watcher，经历以下处理阶段。每个阶段都有明确的职责和失败行为，任何一个阶段的失败都会导致请求被拒绝，但失败的方式（HTTP 状态码、错误信息）因阶段而异。
 
 ```mermaid
-%%{init: {"theme":"dracula"}}%%
+%%{init: {'theme': 'dracula'}}%%
 graph TD
     REQ["HTTP 请求到达"] --> PR["Panic Recovery<br/>异常捕获"]
     PR --> TR["Request Tracing<br/>请求追踪"]
@@ -89,6 +89,12 @@ graph TD
 理解 Handler Chain 的完整链路对于生产环境的故障排查至关重要。当 API Server 响应慢时，需要定位是哪个阶段慢——是认证阶段（外部 OIDC 提供者慢），还是准入阶段（Webhook 慢），还是 etcd 写入阶段（etcd 磁盘 IOPS 不足）。API Server 通过 Request Tracing 记录每个阶段的耗时，运维者可以通过 `--audit-log-path` 和 tracing 数据定位瓶颈。不理解链路，就只能在"API Server 慢"这个笼统的层面打转，无法精确定位问题。
 
 Handler Chain 的设计也影响了 API Server 的扩展方式。每一层 handler 都是独立的，可以单独替换或增强。譬如想增加限流功能，只需要在链路中插入一个限流 handler；想增加请求日志，只需要插入一个日志 handler。API Server 通过配置（如 `--enable-aggregator-routing`、`--admission-control-config-file`）启用或禁用某些层，而不需要修改核心代码。K8s 的 Admission Webhook 就是这种扩展性的体现——用户可以通过 Webhook 在准入控制层注入自定义逻辑，而不需要修改 API Server 源码。
+
+### 1.4 优先级与公平性：请求排队的第二道闸门
+
+Handler Chain 之后还有一道不画在链路图上的闸门——**API Priority and Fairness（APF）**。它在 1.20 达到 GA，取代了 MaxInFlightLimit 那种"所有请求共享一个计数器"的粗粒度限流。APF 的模型分两级：**FlowSchema** 按请求的 user、group、namespace、resource 等属性把请求匹配到一个 **PriorityLevelConfiguration**，后者再按 `spec.limited.assuredConcurrencyShares` 拿到该优先级层应得的并发份额。份额最终折算成**席位（seats）**——总席位数由 `--max-requests-inflight` 与 `--max-mutating-requests-inflight` 之和决定，再按各层的 shares 比例分配，所以这两个参数在 APF 时代并未消失，只是从"直接上限"退化为"席位总量基数"。`limitResponse.type` 决定超额后的行为：取 `Queue` 时请求进入该 flow 专属的队列排队等待，取 `Reject` 时立即返回 429。
+
+排队本身用 shuffle sharding 加公平排队实现，把一个大 flow 打散到多个队列，避免单个大客户端把队列占满而饿死小客户端。默认配置把请求划成 system、node-high、workload-high、workload-leader-election、global-default、catch-all 六层，catch-all 是 `Reject` 兜底，任何没有被前五个 FlowSchema 匹配上的请求都在这里被拒。watch、exec、proxy 这类长时请求由 LongRunningFunc 识别后绕过 APF——否则一个挂上几分钟的 watch 会长期占住席位，把短请求挤死。需要记住的是 APF 与 MaxInFlightLimit 是二选一：启用 APF 后后者不再生效，但两个 inflight 参数仍作为席位总量基数存在。
 
 ---
 
@@ -169,7 +175,7 @@ K8s 的授权模型基于"显式允许"——默认拒绝所有操作，只有�
 通过认证和授权后，请求进入**准入控制**——在写入 etcd 前的最后修改和验证机会。准入控制是 K8s 安全模型的第三道闸门，也是最后一道——通过准入控制后，对象就会被写入 etcd。准入控制分为两个子阶段：Mutating Admission（变更准入）和 Validating Admission（验证准入）。这种两阶段设计使得 K8s 可以在写入前既修改对象（如注入 sidecar）又验证对象（如检查资源配额），确保写入 etcd 的对象是合规且完整的，是 K8s 安全策略的执行点。
 
 ```mermaid
-%%{init: {"theme":"dracula"}}%%
+%%{init: {'theme': 'dracula'}}%%
 graph LR
     REQ["已认证授权的请求"] --> MA["Mutating Admission<br/>变更准入"]
     MA --> DEC["Decode + Validate<br/>解码与 Schema 校验"]
@@ -264,7 +270,7 @@ API Server 的 API Group 发现机制也依赖 Scheme。客户端通过 `GET /ap
 **Codec** 负责对象与字节流之间的转换——反序列化请求 body 为 Go 对象，序列化 Go 对象为响应 body。API Server 内部只处理 Go 对象，格式转换在入口和出口完成，内部逻辑不受格式影响。
 
 ```mermaid
-%%{init: {"theme":"dracula"}}%%
+%%{init: {'theme': 'dracula'}}%%
 graph LR
     JSON["JSON 字节流"] -->|"Decode"| Codec["Codec"]
     Codec --> GoObj["Go 对象<br/>*appsv1.Deployment"]
@@ -303,7 +309,7 @@ Codec 的协议协商机制值得深入理解。客户端通过 `Accept` header 
 **Converter** 处理 API 版本间的转换——客户端用 `apps/v1beta1` 创建 Deployment，API Server 转换为 `apps/v1`（存储版本）后写入 etcd。etcd 中只存储一个版本（存储版本），客户端可以用任意版本读写，API Server 负责版本转换。引入新版本时，只需要在 Converter 中添加新版本与存储版本的转换逻辑，etcd 中的数据不需要迁移。
 
 ```mermaid
-%%{init: {"theme":"dracula"}}%%
+%%{init: {'theme': 'dracula'}}%%
 graph LR
     Client["客户端<br/>apps/v1beta1"] -->|"POST"| API["API Server"]
     API --> Converter["Converter<br/>v1beta1 → v1"]
@@ -326,6 +332,12 @@ graph LR
 
 > [!warning] 生产避坑：不要轻易删除 API 版本
 > 删除 API 版本（如从 v1beta1 升级到 v1 后删除 v1beta1）是破坏性变更——使用旧版本的客户端会失败。K8s 的版本策略：(1) 新版本引入后旧版本保持一段时间的兼容期；(2) 在兼容期内通过 Deprecated 警告提示用户迁移；(3) 删除旧版本前确保所有客户端已迁移。生产环境升级 API 版本前，检查集群中是否有客户端仍在使用旧版本——kubectl 的 API 调用日志和审计日志可以提供线索。
+
+### 4.4 版本转换的无损性边界
+
+K8s 的类型系统是 hub-and-spoke 结构：存储版本是 hub，其余所有对外版本都是 spoke，任意两个 spoke 之间的转换必须经过 hub 中转，而不是两两直连。`conversion-gen` 只能为字段同构的版本生成机械转换，字段名不同、类型不同或语义不同的版本必须手写 `ConvertTo/ConvertFrom`。真正的约束来自 API 约定中的 **round-trip 无损**——`v1beta1 → v1 → v1beta1` 得到的对象必须与原始对象等价（status 等子资源除外），否则该字段在写入存储版本的那一刻就已经丢失，读回时无论如何都无法还原。这就是"新增字段必须是可选、且不能改变既有字段语义"这条规则的深层原因：它不是风格偏好，而是 round-trip 契约的硬性约束。
+
+有损转换的典型形态有三种——字段重命名、单位变化、默认值从"未设置"变成"显式零值"，最后一种最隐蔽，因为对象看起来"有值"了，但客户端从未设置过它。另一条边界在裁剪：`spec.preserveUnknownFields: false` 时未知字段会在写入前被 pruning 掉，客户端塞进去的自定义字段根本进不了 etcd，也就谈不上读回。CRD 的 conversion webhook 还有独立的失败面——webhook 不可用时该 CRD 的读写会全部失败，不存在"降级为不做转换"的路径，这正是 conversion webhook 必须与 CRD 同生命周期部署的原因。
 
 ---
 
@@ -394,7 +406,7 @@ Watch Cache 是 API Server 性能优化的关键组件——它通过缓存 etcd
 API Server 内部为每种资源维护一个 **Watch Cache**——缓存最近的变更事件和资源对象。当客户端发起 Watch 请求时，API Server 从 Watch Cache 中获取数据，不直接查询 etcd。Watch Cache 是 API Server 内存中的一个数据结构，它通过 Watch etcd 的变更事件保持与 etcd 的同步。这种"缓存 etcd 事件"的设计是 K8s 大规模集群性能的关键优化，也是 K8s 能够支撑万节点级集群的基础，是 API Server 性能优化的核心。
 
 ```mermaid
-%%{init: {"theme":"dracula"}}%%
+%%{init: {'theme': 'dracula'}}%%
 graph TD
     Client["Watcher<br/>(Controller)"] -->|"Watch 请求"| API["API Server"]
     API --> Cache{"Watch Cache<br/>有缓存？"}
@@ -469,6 +481,14 @@ Bookmark 的设计体现了 K8s 对大规模集群性能的持续优化。在 K8
 
 Bookmark 的发送频率由 API Server 的 `--default-bookmark-interval` 参数控制（默认 1 分钟）。对于高频变化的资源（如 Pod），Bookmark 的作用不明显（因为实际事件已经频繁更新 resourceVersion）；对于低频变化的资源（如 ConfigMap），Bookmark 可以显著减少重连时的历史事件传输量。生产环境中通常不需要调整 Bookmark 频率，但需要理解它对 Watch 行为的影响——即使没有实际事件，Watcher 也会定期收到 Bookmark 事件，这是正常行为而非异常。Bookmark 事件在客户端侧的处理也需要注意——Informer 会静默处理 Bookmark，但手写 Watch 客户端需要正确处理 Bookmark 事件类型，避免将其当作错误或异常事件。
 
+### 6.4 缓存失效路径：从事件挤出到 410 Gone
+
+前面把环形缓冲区说成"滑动窗口"，失效路径值得单独展开。每个资源的缓冲区长度可单独用 `--watch-cache-sizes` 配置，当 watcher 的 resourceVersion 落在缓冲区最旧事件之前时，cache 无法补齐中间的事件，只能返回 **`410 Gone`**（内部错误类型为 `Expired`），client-go 的 Reflector 收到后放弃增量、重新 List。另一侧是 RV 超前：请求的 RV 大于 cache 已观测到的最新版本时，apiserver 不会阻塞等待，而是返回 `TooLargeResourceVersion` 一类错误让客户端退避重试。
+
+cache 自身的 RV 推进依赖 etcd 的 progress notify——即使没有任何新写入，etcd 也会周期性通知各 member 当前进度，apiserver 据此推进 cache 版本并发出 bookmark 事件，让空闲 watcher 也能前移 RV，从而缩小断连后需要补课的窗口。1.27 起还有 **WatchList**（`sendInitialEvents`）把首次 List 与后续 Watch 合成一条流式请求，避免大集群初始 List 在客户端与服务端各留一份完整对象集合的内存峰值。
+
+410 的代价不止一次 relist 的带宽。Reflector 通过 `IsResourceExpired` 识别这类错误后放弃增量、重新 List，再用 List 返回的 RV 重建 watch；这中间的变更窗口由服务端从该 RV 起的缓存补齐，所以窗口本身不丢事件，但如果缓存同样太旧，新 watch 会再次 410，形成 relist 循环——这正是缓慢消费的控制器在大集群里反复全量 List 的成因。`--watch-cache-sizes` 接受逗号分隔的 `资源[.group]#大小` 列表，按资源类型分别配置缓冲区长度，比全局调大更省内存。
+
 ---
 
 ## 第 7 章 API Server 的性能调优
@@ -533,7 +553,7 @@ K8s 支持通过 **API Aggregation Layer** 扩展 API 端点——注册一个�
 Aggregation Layer 与 CRD 是 K8s 扩展 API 的两种方式。CRD 是 K8s 1.7 引入的，它简化了扩展 API 的流程——定义一个 YAML 就能注册新资源。Aggregation Layer 是 K8s 1.8 引入的，它提供了更灵活的扩展方式——可以用任何语言实现独立 API Server。两种方式各有适用场景，理解它们的差异是选择扩展方式的基础。
 
 ```mermaid
-%%{init: {"theme":"dracula"}}%%
+%%{init: {'theme': 'dracula'}}%%
 graph LR
     Client["kubectl"] -->|"GET /apis/metrics.k8s.io/v1beta1"| API["API Server<br/>Aggregation Layer"]
     API -->|"代理请求"| Metrics["Metrics Server<br/>APIService"]
@@ -578,26 +598,6 @@ API Server 的设计哲学可以概括为"分层加协商"——每个关注点�
 
 > [!info] 专栏导航
 > 本文是 [[00 专栏导览|Kubernetes 架构深度剖析专栏]] 的第 04 篇，深入 API Server 的请求处理链路。上一篇 [[03 架构全景：控制平面、数据平面与一个 Pod 的完整生命周期]] 建立了架构全景认知，本文深入了 API Server 的内部实现。下一篇 [[05 认证、授权与准入控制：K8s 的安全三级防线]] 将详细讨论 K8s 的安全机制——TLS 双向认证、OIDC 集成、RBAC 权限模型、Pod Security Standards、Admission Webhook 的配置和使用。
-
----
-
-## 延伸思考
-
-1. **你的 API Server 性能参数是否调优？** 检查 max-requests-inflight 和 watch-cache-size。大集群（100+ 节点）通常需要调高这些参数，否则 API Server 成为瓶颈。
-
-2. **你的准入 Webhook 是否有超时和故障兜底？** Webhook 故障可能导致所有创建/更新请求失败。配置 Webhook 的 timeoutSeconds 和 failurePolicy（Fail 或 Ignore）——对关键 Webhook 用 Fail，对非关键 Webhook 考虑 Ignore 兜底。
-
-3. **你的客户端是否避免全量 List？** 检查控制器和监控工具是否有全量 List 行为。改为 Watch 或分页 List，减少 API Server 压力。
-
-4. **你的 API 版本是否在使用前验证兼容性？** 升级 K8s 版本前，检查是否有客户端使用即将移除的 API 版本。`kubectl get --raw "/apis"` 可以列出所有可用版本。
-
-5. **你的 API Server 是否有审计日志？** 审计日志记录"谁、何时、做了什么"，是安全合规和故障排查的基础。配置 audit-policy 文件定义日志级别。
-
-6. **你的 etcd key 是否可直接读？** etcd 存储的是 protobuf 字节流，不是 JSON。调试 etcd 数据时用 `etcdctl get --print-value-only | protoc --decode_raw` 解码，或通过 API Server 的 API 读取。
-
-7. **你的 Watch Cache 大小是否够用？** 大集群中 Watch Cache 可能不够，导致 Watch 频繁回退到 etcd 读取。监控 API Server 的 `apiserver_request_duration_seconds` 和 `etcd_request_duration_seconds` 指标。
-
-8. **你的 API Server 是否水平扩展？** API Server 无状态可水平扩展。大集群用多实例加负载均衡提升吞吐量。注意 etcd 是共享状态，多实例 API Server 共用同一 etcd。
 
 ---
 
