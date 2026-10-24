@@ -37,7 +37,7 @@ Hermes 2 Pro 的核心创新是引入了 `tool_call` token 和一套可靠的解
 "接近但未达到"这六个字也值得公平地解读。单看数字，90% 对 GPT-4 的差距似乎还有一段；但考虑到两者的资源投入差了几个数量级——一个是大厂千卡集群训练的原生能力，一个是社区团队在开放权重上的微调成果——这个差距本身反而是开源路线可行性的证明。**评估开源替代品时，正确的标尺不是"是否追平旗舰"，而是"差距是否在缩小、是否够用"**——90% 的函数调用可靠性对大多数 Agent 场景已经够用，这就够了。
 
 > [!info] 核心概念：tool_call token 的历史意义
-> Hermes 2 Pro 的 tool_call token 是开源 LLM 函数调用的事实标准之一——它影响了后来许多开源模型的函数调用格式设计。这与 [[LLM/Coding-Agent运行范式/03 Tool Use 与 Function Calling——三大厂商的标准化博弈|Coding Agent 专栏第 3 篇]]讨论的"三大厂商（OpenAI/Anthropic/Google）的 Function Calling 标准化博弈"形成了对比——闭源厂商各自定义标准（OpenAI 的 function calling、Anthropic 的 tool_use、Google 的 function_calling），而开源社区通过 Hermes 2 Pro 的 tool_call token 形成了自己的事实标准。Hermes Agent 的工具系统也使用这个格式——模型无关的设计让 Hermes 可以适配不同厂商的格式，但原生支持 Hermes 模型的 tool_call 格式。
+> Hermes 2 Pro 的 tool_call token 是开源 LLM 函数调用的事实标准之一——它影响了后来许多开源模型的函数调用格式设计。这与 [[LLM/Agent技术/基础范式/03 Tool Use 与 Function Calling——三大厂商的标准化博弈|Coding Agent 专栏第 3 篇]]讨论的"三大厂商（OpenAI/Anthropic/Google）的 Function Calling 标准化博弈"形成了对比——闭源厂商各自定义标准（OpenAI 的 function calling、Anthropic 的 tool_use、Google 的 function_calling），而开源社区通过 Hermes 2 Pro 的 tool_call token 形成了自己的事实标准。Hermes Agent 的工具系统也使用这个格式——模型无关的设计让 Hermes 可以适配不同厂商的格式，但原生支持 Hermes 模型的 tool_call 格式。
 
 ### 1.3 JSON 模式
 

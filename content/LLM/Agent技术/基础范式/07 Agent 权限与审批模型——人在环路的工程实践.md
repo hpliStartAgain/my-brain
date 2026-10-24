@@ -5,10 +5,10 @@ tags: [Agent, Agentrail, Cloudflare Agents, Claude Code, HITL, Human-in-the-Loop
 aliases: [Agent 权限与审批模型, 人在环路, HITL, Human Approval, 权限传播]
 ---
 
-# 12 Agent 权限与审批模型——人在环路的工程实践
+# 07 Agent 权限与审批模型——人在环路的工程实践
 
 > [!abstract] 摘要
-> 这是 Coding Agent 运行范式专栏的收官篇。前 11 篇覆盖了 Agent "怎么想"（ReAct 范式）、"怎么调工具"（Function Calling/MCP）、"怎么管上下文"（Context Engineering）、"怎么做事"（Bash/文件/Git 工程化）。本文讨论最后一个核心问题："Agent 做事前要经过谁同意？"——权限与审批模型。文章系统梳理四大平台的人机环路（HITL）实现：OpenAI Agents SDK 的 interruptions 机制（needsApproval 声明 + RunState 序列化/恢复 + 嵌套 Agent.asTool 的双层审批）、Cloudflare Agents 的三种审批模式（MCP Elicitation 分钟级、Workflow waitForApproval 月/年级、Code Mode 连接器调用审批）、Claude Code 的六种权限模式与权限规则优先级（deny/ask 优先于模式）、Agentrail 的工具权限策略（ToolName(content-pattern) 规则匹配）。然后讨论权限传播的工程难点——Claude Code Subagent 的已知权限继承 bug、嵌套 Agent 审批在哪一层 surface、审批的超时与升级策略。最后讨论 MCP Elicitation 作为"Server 向用户请求结构化输入"的标准化方案，以及它与 Sampling 的"Server 借用能力"哲学的呼应。核心认知：权限审批不是"阻碍 Agent 自主性"的负担，而是"让 Agent 可以被信任地部署在生产环境中"的基础设施——没有可靠的审批机制，就没有人敢让 Agent 执行有副作用的操作。
+> 这是 Agent 技术专栏的收官篇。前 11 篇覆盖了 Agent "怎么想"（ReAct 范式）、"怎么调工具"（Function Calling/MCP）、"怎么管上下文"（Context Engineering）、"怎么做事"（Bash/文件/Git 工程化）。本文讨论最后一个核心问题："Agent 做事前要经过谁同意？"——权限与审批模型。文章系统梳理四大平台的人机环路（HITL）实现：OpenAI Agents SDK 的 interruptions 机制（needsApproval 声明 + RunState 序列化/恢复 + 嵌套 Agent.asTool 的双层审批）、Cloudflare Agents 的三种审批模式（MCP Elicitation 分钟级、Workflow waitForApproval 月/年级、Code Mode 连接器调用审批）、Claude Code 的六种权限模式与权限规则优先级（deny/ask 优先于模式）、Agentrail 的工具权限策略（ToolName(content-pattern) 规则匹配）。然后讨论权限传播的工程难点——Claude Code Subagent 的已知权限继承 bug、嵌套 Agent 审批在哪一层 surface、审批的超时与升级策略。最后讨论 MCP Elicitation 作为"Server 向用户请求结构化输入"的标准化方案，以及它与 Sampling 的"Server 借用能力"哲学的呼应。核心认知：权限审批不是"阻碍 Agent 自主性"的负担，而是"让 Agent 可以被信任地部署在生产环境中"的基础设施——没有可靠的审批机制，就没有人敢让 Agent 执行有副作用的操作。
 
 ---
 
@@ -246,7 +246,7 @@ Code Mode 是 Cloudflare 的 Programmatic Tool Calling 实现——模型在代�
 
 ### 4.1 回顾：六种模式
 
-[[07 Claude Code 架构解构——Anthropic 的 CLI Agent 设计哲学|第 7 篇]]已经详细介绍了 Claude Code 的六种权限模式。这里从"审批模型"视角做深化分析：
+[[LLM/Agent技术/Coding-Agent解构/17 Claude Code 架构解构——Anthropic 的 CLI Agent 设计哲学|第 7 篇]]已经详细介绍了 Claude Code 的六种权限模式。这里从"审批模型"视角做深化分析：
 
 | 模式 | 自动批准范围 | 审批需求 | 等价于 |
 | :--- | :--- | :--- | :--- |
@@ -322,7 +322,7 @@ Agentrail 提供了一种声明式的工具权限策略——用规则模式匹�
 
 ### 6.1 Subagent 权限继承
 
-[[07 Claude Code 架构解构——Anthropic 的 CLI Agent 设计哲学|第 7 篇]]已经提到 Claude Code Subagent 的权限继承 bug。从审批模型视角看，这是一个更深层的问题：
+[[LLM/Agent技术/Coding-Agent解构/17 Claude Code 架构解构——Anthropic 的 CLI Agent 设计哲学|第 7 篇]]已经提到 Claude Code Subagent 的权限继承 bug。从审批模型视角看，这是一个更深层的问题：
 
 **问题**：主 Agent 在 `bypassPermissions` 模式下运行（如在 CI/CD 容器中），主 Agent 委派子任务给 Subagent。Subagent 是否应该继承 `bypassPermissions`？
 
@@ -357,7 +357,7 @@ OpenAI Agents SDK 的 `Agent.asTool()` 引入了"嵌套 Agent"——Agent A 作�
 
 ### 7.1 Elicitation 在审批模型中的角色
 
-[[04 MCP 协议深度解析——Agent 与工具的标准化连接|第 4 篇]]介绍了 MCP Elicitation 作为 Client 原语——Server 在执行过程中请求结构化用户输入。从审批模型视角，Elicitation 可以被视为一种"轻量级审批"——不是"是/否"的二元审批，而是"请提供更多信息才能继续"的结构化输入请求。
+[[LLM/Agent技术/基础范式/04 MCP 协议深度解析——Agent 与工具的标准化连接|第 4 篇]]介绍了 MCP Elicitation 作为 Client 原语——Server 在执行过程中请求结构化用户输入。从审批模型视角，Elicitation 可以被视为一种"轻量级审批"——不是"是/否"的二元审批，而是"请提供更多信息才能继续"的结构化输入请求。
 
 **Elicitation vs 传统审批**：
 
@@ -428,7 +428,7 @@ MCP 规范对 Elicitation 的 Schema 做了安全限制——**禁止请求密�
 ### 8.3 专栏关联
 
 > [!info] 专栏导航
-> 本文是 [[00 专栏导览|Coding Agent 运行范式专栏]] 的第 12 篇，也是收官篇。本专栏的姊妹篇 [[LLM/Agent沙箱技术/00 专栏导览|Agent 沙箱技术]] 解决"Agent 在哪安全运行"的问题——从 Linux namespaces/cgroups/seccomp 到 gVisor/Kata/Firecracker 到 E2B/OpenSandbox 平台，深入 Agent 运行环境的隔离与安全。两个专栏共同覆盖了"Agent 怎么工作"和"Agent 在哪安全运行"两个核心问题。
+> 本文是 [[LLM/Agent技术/00 专栏导览|Agent 技术专栏]] 的第 12 篇，也是收官篇。本专栏的姊妹篇 [[LLM/Agent沙箱技术/00 专栏导览|Agent 沙箱技术]] 解决"Agent 在哪安全运行"的问题——从 Linux namespaces/cgroups/seccomp 到 gVisor/Kata/Firecracker 到 E2B/OpenSandbox 平台，深入 Agent 运行环境的隔离与安全。两个专栏共同覆盖了"Agent 怎么工作"和"Agent 在哪安全运行"两个核心问题。
 
 ---
 

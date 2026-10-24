@@ -416,13 +416,13 @@ graph TD
 
 本专栏在以下位置与其他专栏交叉：
 
-- **第 02 篇**（Hermes 模型谱系）←→ [[LLM/Coding-Agent运行范式/03 Tool Use 与 Function Calling——三大厂商的标准化博弈|Coding Agent 专栏第 3 篇]]（Function Calling 标准化）
-- **第 04 篇**（学习闭环）←→ [[LLM/Coding-Agent运行范式/02 ReAct 架构深度解析——Thought-Action-Observation 循环的本质|Coding Agent 专栏第 2 篇]]（ReAct 循环 vs 学习循环）
-- **第 05 篇**（技能系统）←→ [[LLM/Coding-Agent运行范式/05 MCP 生态与实践——Server 开发、集成与生产部署|Coding Agent 专栏第 5 篇]]（MCP vs agentskills.io）
+- **第 02 篇**（Hermes 模型谱系）←→ [[LLM/Agent技术/基础范式/03 Tool Use 与 Function Calling——三大厂商的标准化博弈|Coding Agent 专栏第 3 篇]]（Function Calling 标准化）
+- **第 04 篇**（学习闭环）←→ [[LLM/Agent技术/基础范式/02 ReAct 架构深度解析——Thought-Action-Observation 循环的本质|Coding Agent 专栏第 2 篇]]（ReAct 循环 vs 学习循环）
+- **第 05 篇**（技能系统）←→ [[LLM/Agent技术/基础范式/05 MCP 生态与实践——Server 开发、集成与生产部署|Coding Agent 专栏第 5 篇]]（MCP vs agentskills.io）
 - **第 08 篇**（终端后端）←→ [[LLM/Agent沙箱技术/平台与协议/06 Agent 沙箱平台分层——六层模型与三条产品路线|沙箱专栏第 6 篇]]（Daytona/Modal 沙箱）
-- **第 09 篇**（工具系统/MCP）←→ [[LLM/Coding-Agent运行范式/04 MCP 协议深度解析——Agent 与工具的标准化连接|Coding Agent 专栏第 4 篇]]（MCP 协议）
-- **第 10 篇**（Prompt 工程）←→ [[LLM/Coding-Agent运行范式/06 Prompt 上下文管理——Context Engineering 的艺术|Coding Agent 专栏第 6 篇]]（Context Engineering）
-- **第 12 篇**（安全与审批）←→ [[LLM/Coding-Agent运行范式/12 Agent 权限与审批模型——人在环路的工程实践|Coding Agent 专栏第 12 篇]]（权限审批模型）
+- **第 09 篇**（工具系统/MCP）←→ [[LLM/Agent技术/基础范式/04 MCP 协议深度解析——Agent 与工具的标准化连接|Coding Agent 专栏第 4 篇]]（MCP 协议）
+- **第 10 篇**（Prompt 工程）←→ [[LLM/Agent技术/基础范式/06 Prompt 上下文管理——Context Engineering 的艺术|Coding Agent 专栏第 6 篇]]（Context Engineering）
+- **第 12 篇**（安全与审批）←→ [[LLM/Agent技术/基础范式/07 Agent 权限与审批模型——人在环路的工程实践|Coding Agent 专栏第 12 篇]]（权限审批模型）
 
 ### 5.3 不同读者的最小阅读集
 

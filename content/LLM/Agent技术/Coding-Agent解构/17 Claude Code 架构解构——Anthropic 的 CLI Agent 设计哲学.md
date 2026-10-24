@@ -5,7 +5,7 @@ tags: [Agent, Claude Code, CLI Agent, Dynamic Workflows, Git 操作, MCP, Permis
 aliases: [Claude Code 架构解构, Claude Code 设计哲学, Claude Code Subagent]
 ---
 
-# 07 Claude Code 架构解构——Anthropic 的 CLI Agent 设计哲学
+# 17 Claude Code 架构解构——Anthropic 的 CLI Agent 设计哲学
 
 > [!abstract] 摘要
 > Claude Code 是 Anthropic 于 2025 年发布的 CLI Coding Agent，也是本专栏前 6 篇建立的理论框架的最佳实践案例——它用 ReAct 循环做核心推理、用 Function Calling 做工具调用、原生集成 MCP 做工具扩展、用 Context Engineering 做长时上下文管理。本文深入解构 Claude Code 的完整架构：多表面设计（Terminal/Web/IDE/Slack/GitHub）、核心工具集（Read/Write/Edit/Glob/Grep/Bash/LSP/MCP）的精确机制与权限要求、Subagent 的独立上下文隔离与工具限制、四种并行模式（Subagent/Agent View/Agent Teams/Dynamic Workflows）的适用场景差异、六种权限模式（default/acceptEdits/plan/auto/dontAsk/bypassPermissions）的控制粒度与安全边界、Session 持久化与恢复、Git 操作集成、以及已知 bug 与生产避坑。核心认知：Claude Code 的设计哲学是"渐进式授权"——从最保守的 default 模式（每次操作都问）到最激进的 bypassPermissions 模式（什么都不问），用户可以根据信任度和隔离程度选择合适的控制粒度，而非"全有或全无"。
@@ -61,7 +61,7 @@ Claude Code 的内置工具分为四大类：
 
 Claude Code 的文件操作不是简单的 `cat`/`echo`/`sed` 的包装——它是专门为 LLM 认知模式设计的工具集：
 
-**Read**：支持文本、图片、PDF、Jupyter notebook 的多模态读取。支持 `offset`/`limit` 参数做大文件分页读取——这直接呼应了 [[02 ReAct 架构深度解析——Thought-Action-Observation 循环的本质|第 2 篇]]讨论的 Observation 治理策略，防止大文件毒化上下文。
+**Read**：支持文本、图片、PDF、Jupyter notebook 的多模态读取。支持 `offset`/`limit` 参数做大文件分页读取——这直接呼应了 [[LLM/Agent技术/基础范式/02 ReAct 架构深度解析——Thought-Action-Observation 循环的本质|第 2 篇]]讨论的 Observation 治理策略，防止大文件毒化上下文。
 
 **Edit**：精确字符串替换——`old_string` 必须在文件中唯一匹配。这不是"让 LLM 生成整个文件内容然后覆盖"的粗暴方式，而是"让 LLM 指出要改的确切位置和内容"的精准方式。这减少了 LLM 需要生成的 token 量（只需生成修改部分而非整个文件），也减少了"覆盖时引入非预期改动"的风险。
 
@@ -153,7 +153,7 @@ You are a code review specialist. When reviewing code:
 
 ### 3.4 Subagent 的上下文隔离效果
 
-[[06 Prompt 上下文管理——Context Engineering 的艺术|第 6 篇]]已经分析了 Subagent 的上下文隔离效果。在 Claude Code 的实际使用中，这种隔离的价值体现在：
+[[LLM/Agent技术/基础范式/06 Prompt 上下文管理——Context Engineering 的艺术|第 6 篇]]已经分析了 Subagent 的上下文隔离效果。在 Claude Code 的实际使用中，这种隔离的价值体现在：
 
 - **代码库探索不污染主上下文**：Explore Subagent 可以读 20 个文件来理解代码库结构，但主 Agent 只收到一份 500 token 的结构摘要
 - **并行搜索**：多个 Subagent 可以同时搜索代码库的不同部分，各自有独立上下文
@@ -274,7 +274,7 @@ bypassPermissions 跳过所有权限检查——包括受保护路径的检查�
 
 Claude Code 的会话可以持久化——支持 `resume` 恢复之前的会话。这意味着一个跨多日的长任务可以在每次会话中继续，而非从头开始。
 
-会话持久化与 [[06 Prompt 上下文管理——Context Engineering 的艺术|第 6 篇]]讨论的 Memory Tool 配合——Claude Code 在会话间使用文件系统的 Memory Tool 保存关键发现和项目状态，下次会话开始时读取记忆恢复上下文。
+会话持久化与 [[LLM/Agent技术/基础范式/06 Prompt 上下文管理——Context Engineering 的艺术|第 6 篇]]讨论的 Memory Tool 配合——Claude Code 在会话间使用文件系统的 Memory Tool 保存关键发现和项目状态，下次会话开始时读取记忆恢复上下文。
 
 ### 6.2 Git 操作集成
 
@@ -330,10 +330,10 @@ Subagent 的 `tools` 字段限制了可用工具集，但权限规则（allow/de
 
 ### 8.2 下一篇导读
 
-本文解构了 Anthropic 的 Claude Code。下一篇 [[08 Devin 与 ACI 设计——为 Agent 认知而生的计算机接口]] 将转向 Cognition 的 Devin——一个走完全不同路线的 Coding Agent。Devin 的核心创新不是工具集或权限模型，而是 ACI（Agent Computer Interface）概念——为 Agent 的认知模式而非人类的认知模式设计交互接口。我们将深入 Devin 的沙箱化计算环境、Computer Use 能力、长时任务执行机制，以及 Devin 2.0/2.1 的 Interactive Planning 和 Confidence Reporting 特性。
+本文解构了 Anthropic 的 Claude Code。下一篇 [[LLM/Agent技术/Coding-Agent解构/18 Devin 与 ACI 设计——为 Agent 认知而生的计算机接口]] 将转向 Cognition 的 Devin——一个走完全不同路线的 Coding Agent。Devin 的核心创新不是工具集或权限模型，而是 ACI（Agent Computer Interface）概念——为 Agent 的认知模式而非人类的认知模式设计交互接口。我们将深入 Devin 的沙箱化计算环境、Computer Use 能力、长时任务执行机制，以及 Devin 2.0/2.1 的 Interactive Planning 和 Confidence Reporting 特性。
 
 > [!info] 专栏导航
-> 本文是 [[00 专栏导览|Coding Agent 运行范式专栏]] 的第 7 篇。前 6 篇建立了 Agent 范式、ReAct 循环、Function Calling、MCP 协议、Context Engineering 的技术基础；本文将这些理论落地到 Claude Code 的具体架构。接下来第 8-10 篇将继续解构 Devin、OpenHands/Aider、Cursor 三大 Coding Agent。
+> 本文是 [[LLM/Agent技术/00 专栏导览|Agent 技术专栏]] 的第 7 篇。前 6 篇建立了 Agent 范式、ReAct 循环、Function Calling、MCP 协议、Context Engineering 的技术基础；本文将这些理论落地到 Claude Code 的具体架构。接下来第 8-10 篇将继续解构 Devin、OpenHands/Aider、Cursor 三大 Coding Agent。
 
 ---
 

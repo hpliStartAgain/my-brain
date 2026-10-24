@@ -8,7 +8,7 @@ aliases: [ReAct 架构深度解析, Thought-Action-Observation 循环, ReAct 内
 # 02 ReAct 架构深度解析——Thought-Action-Observation 循环的本质
 
 > [!abstract] 摘要
-> 上一篇 [[01 Agent 运行范式全景——从 ReAct 到 Production Agent 的演进]] 建立了 Agent 范式的全景地图，本文则放大焦距，深入 ReAct 循环的内部机制。ReAct 的"Thought → Action → Observation"三步循环看似简单，但在生产环境中隐藏着大量工程细节：prompt 模板如何设计才能让 LLM 稳定输出正确格式？循环何时终止——靠 stop sequence、靠 stop_reason、还是靠迭代上限？Action 从"自由文本解析"演变为"Function Calling JSON Schema"后，ReAct 的可靠性提升了多少？ Observation 太长如何毒化上下文导致推理漂移？无限循环、参数幻觉、工具误用三大失败模式的根因是什么、如何用拦截器防治？本文从 ReAct 原始论文的 prompt 设计出发，逐一拆解这些工程细节，最后落地到 Anthropic Claude API 的 tool use agentic loop 和 LangGraph `create_react_agent` 的生产实现，揭示"从论文到生产"之间那些不写在论文里但决定了系统能否上线的工程决策。
+> 上一篇 [[LLM/Agent技术/基础范式/01 Agent 运行范式全景——从 ReAct 到 Production Agent 的演进]] 建立了 Agent 范式的全景地图，本文则放大焦距，深入 ReAct 循环的内部机制。ReAct 的"Thought → Action → Observation"三步循环看似简单，但在生产环境中隐藏着大量工程细节：prompt 模板如何设计才能让 LLM 稳定输出正确格式？循环何时终止——靠 stop sequence、靠 stop_reason、还是靠迭代上限？Action 从"自由文本解析"演变为"Function Calling JSON Schema"后，ReAct 的可靠性提升了多少？ Observation 太长如何毒化上下文导致推理漂移？无限循环、参数幻觉、工具误用三大失败模式的根因是什么、如何用拦截器防治？本文从 ReAct 原始论文的 prompt 设计出发，逐一拆解这些工程细节，最后落地到 Anthropic Claude API 的 tool use agentic loop 和 LangGraph `create_react_agent` 的生产实现，揭示"从论文到生产"之间那些不写在论文里但决定了系统能否上线的工程决策。
 
 ---
 
@@ -531,10 +531,10 @@ NVIDIA NeMo Agent Toolkit 的 `pass_tool_call_errors_to_agent` 参数（默认 `
 
 ### 6.2 下一篇导读
 
-本文深入了 ReAct 循环的内部机制，但 Action 的格式化——即 Tool Use / Function Calling——只是浅尝辄止。下一篇 [[03 Tool Use 与 Function Calling——三大厂商的标准化博弈]] 将系统对比 OpenAI、Anthropic、Gemini 三家的 Function Calling 规范，深入剖析 `tool_choice` 参数语义、并行工具调用、Tool Search 动态加载、Programmatic Tool Calling 等前沿特性，以及从 Function Calling 到 MCP 协议的演进动机。
+本文深入了 ReAct 循环的内部机制，但 Action 的格式化——即 Tool Use / Function Calling——只是浅尝辄止。下一篇 [[LLM/Agent技术/基础范式/03 Tool Use 与 Function Calling——三大厂商的标准化博弈]] 将系统对比 OpenAI、Anthropic、Gemini 三家的 Function Calling 规范，深入剖析 `tool_choice` 参数语义、并行工具调用、Tool Search 动态加载、Programmatic Tool Calling 等前沿特性，以及从 Function Calling 到 MCP 协议的演进动机。
 
 > [!info] 专栏导航
-> 本文是 [[00 专栏导览|Coding Agent 运行范式专栏]] 的第 2 篇。上一篇 [[01 Agent 运行范式全景——从 ReAct 到 Production Agent 的演进]] 建立了范式全景；本文深入了 ReAct 内部机制；下一篇将从 ReAct 的"Action 环节"出发，深入 Tool Use 的标准化博弈。
+> 本文是 [[LLM/Agent技术/00 专栏导览|Agent 技术专栏]] 的第 2 篇。上一篇 [[LLM/Agent技术/基础范式/01 Agent 运行范式全景——从 ReAct 到 Production Agent 的演进]] 建立了范式全景；本文深入了 ReAct 内部机制；下一篇将从 ReAct 的"Action 环节"出发，深入 Tool Use 的标准化博弈。
 
 ---
 

@@ -5,7 +5,7 @@ tags: [Agent, Agentlocks, Atomic Writes, Bash Tool, File Locking, Git Worktree, 
 aliases: [Agent 与 OS 交互接口, Bash 工具工程化, Agentlocks, Agent Git 工作流]
 ---
 
-# 11 Agent 与操作系统的交互接口——Bash、文件与 Git 的工程化
+# 21 Agent 与操作系统的交互接口——Bash、文件与 Git 的工程化
 
 > [!abstract] 摘要
 > 前 10 篇从范式理论到 5 大 Coding Agent 架构，建立了对 Agent "怎么想"的理解。本文下沉到工程底层——Agent "怎么做事"的操作系统交互接口。当 Agent 执行一条 Bash 命令、读写一个文件、提交一次 Git commit 时，背后隐藏着大量不写在论文里但决定了系统能否上线的工程决策。文章系统讨论三个核心交互接口的工程化：Bash 执行（shell wrapping 跨平台适配、超时控制的双重边界——inactivity timeout 与 wall-clock backstop、输出截断的 head+tail 策略、两阶段终止 SIGTERM→grace→SIGKILL、stdin 立即关闭防止交互命令 hang、结构化错误区分 timeout/nonzero_exit/denied）；文件读写（原子写入的 temp-fsync-rename 模式、大文件分页读取、二进制文件 Base64 编码、建议性文件锁 Agentlocks 的 acquire/refresh/release/TTL lease 生命周期）；Git 操作（Conventional Commits 格式、auto-stage 与 secret check、branch 命名规范、PR 工作流、worktree 并行隔离、@git/index 锁防止 index 竞争）。核心认知：Coding Agent 的可靠性不仅取决于 LLM 的推理能力，更取决于这些"无聊的工程细节"——一个不处理 stdin hang 的 Bash 工具会让 Agent 在遇到 `cat` 命令时永久卡死，一个不做原子写入的文件工具会在写入中途崩溃导致文件损坏。
@@ -76,7 +76,7 @@ function killProcessTree(pid: number) {
 
 ### 1.5 输出截断——head + tail 策略
 
-[[02 ReAct 架构深度解析——Thought-Action-Observation 循环的本质|第 2 篇]]已经讨论了 Observation 毒化问题。Bash 工具的输出截断是 Observation 治理的前线。
+[[LLM/Agent技术/基础范式/02 ReAct 架构深度解析——Thought-Action-Observation 循环的本质|第 2 篇]]已经讨论了 Observation 毒化问题。Bash 工具的输出截断是 Observation 治理的前线。
 
 **Head + Tail 策略**：当输出超过 `max_lines` 限制时，保留开头 N 行和结尾 M 行，中间用 `... [truncated X lines] ...` 替代。
 
@@ -164,7 +164,7 @@ async function atomicWriteFile(path: string, content: string) {
 
 ### 2.2 大文件分页读取
 
-[[02 ReAct 架构深度解析——Thought-Action-Observation 循环的本质|第 2 篇]]讨论的 Observation 治理策略在文件读取上的具体实现——分页读取：
+[[LLM/Agent技术/基础范式/02 ReAct 架构深度解析——Thought-Action-Observation 循环的本质|第 2 篇]]讨论的 Observation 治理策略在文件读取上的具体实现——分页读取：
 
 ```python
 # 先读前 100 行看文件结构
@@ -311,10 +311,10 @@ rs-agent-gear 通常作为 Node.js/Python Agent 的原生扩展（NAPI/PyO3）�
 
 ### 5.2 下一篇导读
 
-本文讨论了 Agent "怎么做事"的工程细节。最后一篇 [[12 Agent 权限与审批模型——人在环路的工程实践]] 将讨论"Agent 做事前要经过谁同意"——权限与审批模型。从 Claude Code 的六种权限模式、OpenAI Agents SDK 的 interruptions、Cloudflare Agents 的 waitForApproval、Agentrail 的工具权限策略，到 MCP Elicitation 的结构化用户输入请求——系统梳理"人在环路"的工程化实现。
+本文讨论了 Agent "怎么做事"的工程细节。最后一篇 [[LLM/Agent技术/基础范式/07 Agent 权限与审批模型——人在环路的工程实践]] 将讨论"Agent 做事前要经过谁同意"——权限与审批模型。从 Claude Code 的六种权限模式、OpenAI Agents SDK 的 interruptions、Cloudflare Agents 的 waitForApproval、Agentrail 的工具权限策略，到 MCP Elicitation 的结构化用户输入请求——系统梳理"人在环路"的工程化实现。
 
 > [!info] 专栏导航
-> 本文是 [[00 专栏导览|Coding Agent 运行范式专栏]] 的第 11 篇。下一篇是专栏的收官篇，将完成从"Agent 怎么想"到"Agent 怎么做事"到"Agent 做事前要经过谁同意"的完整闭环。
+> 本文是 [[LLM/Agent技术/00 专栏导览|Agent 技术专栏]] 的第 11 篇。下一篇是专栏的收官篇，将完成从"Agent 怎么想"到"Agent 怎么做事"到"Agent 做事前要经过谁同意"的完整闭环。
 
 ---
 

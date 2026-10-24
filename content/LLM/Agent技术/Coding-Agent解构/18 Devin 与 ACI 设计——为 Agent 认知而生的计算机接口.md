@@ -5,10 +5,10 @@ tags: [Agent, ACI, Computer Use, Confidence Reporting, Devin, Devin 2.0, Devin 2
 aliases: [Devin 与 ACI 设计, Agent Computer Interface, Devin 架构, ACI 概念]
 ---
 
-# 08 Devin 与 ACI 设计——为 Agent 认知而生的计算机接口
+# 18 Devin 与 ACI 设计——为 Agent 认知而生的计算机接口
 
 > [!abstract] 摘要
-> [[07 Claude Code 架构解构——Anthropic 的 CLI Agent 设计哲学|上一篇]]解构了 Anthropic 的 Claude Code——一个从 Terminal 出发、用专用工具集和渐进式权限模型构建的 CLI Agent。本文转向 Cognition 的 Devin——一个走完全不同路线的 Coding Agent。Devin 的核心创新不是工具集或权限模型，而是 ACI（Agent Computer Interface）概念——为 Agent 的认知模式而非人类的认知模式设计交互接口。文章从 Princeton SWE-agent 论文的 ACI 概念出发，理解"为什么同样的 LLM，用不同的工具接口设计，性能可以从接近零提升到 SOTA"；然后深入 Devin 的沙箱化计算环境（shell + code editor + browser）、Computer Use 能力（完整桌面环境的鼠标键盘操作）、长时任务执行机制（SWE-bench 13.86% 的突破性表现）；接着剖析 Devin 2.0 的三大新特性——Interactive Planning（主动研究代码库并生成详细计划）、Devin Search（agentic 代码库探索）、Devin Wiki（自动索引仓库）；最后讨论 Devin 2.1 的 Confidence Reporting（🟢🟡🔴 信心度报告）如何解决"Coding Agent 过度自信"问题。核心认知：ACI 设计是 Coding Agent 性能的关键变量——同样的 LLM，好的 ACI 可以让 pass@1 从 1.96% 提升到 13.86%，这是 7 倍的性能差异，完全来自接口设计而非模型能力。
+> [[LLM/Agent技术/Coding-Agent解构/17 Claude Code 架构解构——Anthropic 的 CLI Agent 设计哲学|上一篇]]解构了 Anthropic 的 Claude Code——一个从 Terminal 出发、用专用工具集和渐进式权限模型构建的 CLI Agent。本文转向 Cognition 的 Devin——一个走完全不同路线的 Coding Agent。Devin 的核心创新不是工具集或权限模型，而是 ACI（Agent Computer Interface）概念——为 Agent 的认知模式而非人类的认知模式设计交互接口。文章从 Princeton SWE-agent 论文的 ACI 概念出发，理解"为什么同样的 LLM，用不同的工具接口设计，性能可以从接近零提升到 SOTA"；然后深入 Devin 的沙箱化计算环境（shell + code editor + browser）、Computer Use 能力（完整桌面环境的鼠标键盘操作）、长时任务执行机制（SWE-bench 13.86% 的突破性表现）；接着剖析 Devin 2.0 的三大新特性——Interactive Planning（主动研究代码库并生成详细计划）、Devin Search（agentic 代码库探索）、Devin Wiki（自动索引仓库）；最后讨论 Devin 2.1 的 Confidence Reporting（🟢🟡🔴 信心度报告）如何解决"Coding Agent 过度自信"问题。核心认知：ACI 设计是 Coding Agent 性能的关键变量——同样的 LLM，好的 ACI 可以让 pass@1 从 1.96% 提升到 13.86%，这是 7 倍的性能差异，完全来自接口设计而非模型能力。
 
 ---
 
@@ -46,7 +46,7 @@ SWE-agent 论文总结了 ACI 设计的关键经验：
 
 **原则一：集成 Linter**。编辑命令发出时自动运行 linter——如果代码有语法错误，编辑命令不通过。这防止了 Agent 在代码中引入语法错误后继续基于错误代码推理——一个小的语法错误可能在后续步骤中被放大为严重的逻辑错误。
 
-**原则二：专用文件查看器而非 `cat`**。SWE-agent 为 Agent 设计了专门的文件查看器，每轮只显示 100 行。这直接呼应了 [[02 ReAct 架构深度解析——Thought-Action-Observation 循环的本质|第 2 篇]]讨论的 Observation 治理——防止大文件毒化上下文。文件查看器还支持滚动和文件内搜索，比 `cat` 更适合 Agent 的分步消费模式。
+**原则二：专用文件查看器而非 `cat`**。SWE-agent 为 Agent 设计了专门的文件查看器，每轮只显示 100 行。这直接呼应了 [[LLM/Agent技术/基础范式/02 ReAct 架构深度解析——Thought-Action-Observation 循环的本质|第 2 篇]]讨论的 Observation 治理——防止大文件毒化上下文。文件查看器还支持滚动和文件内搜索，比 `cat` 更适合 Agent 的分步消费模式。
 
 **原则三：简洁的搜索输出**。搜索命令只列出有匹配的文件名，不显示匹配行的上下文。SWE-agent 团队发现"给模型展示更多关于每个匹配的上下文"反而让模型更困惑——简洁的输出让 Agent 先定位文件，再决定是否深入查看。
 
@@ -63,7 +63,7 @@ SWE-agent 论文总结了 ACI 设计的关键经验：
 
 Cognition 在 2024 年 3 月发布 Devin 时，称其为"第一个 AI 软件工程师"。Devin 的核心设计包含三个要素：
 
-**长时推理和规划**：Devin 可以规划和执行需要数千次决策的复杂工程任务——这超越了 ReAct 的"走一步看一步"模式，更接近 [[01 Agent 运行范式全景——从 ReAct 到 Production Agent 的演进|第 1 篇]]讨论的 Plan-and-Execute 范式。
+**长时推理和规划**：Devin 可以规划和执行需要数千次决策的复杂工程任务——这超越了 ReAct 的"走一步看一步"模式，更接近 [[LLM/Agent技术/基础范式/01 Agent 运行范式全景——从 ReAct 到 Production Agent 的演进|第 1 篇]]讨论的 Plan-and-Execute 范式。
 
 **沙箱化计算环境**：Devin 在一个沙箱化的计算环境中工作——包含 shell、code editor 和 browser。这个环境是"完整的开发者工作站"——Devin 可以像人类开发者一样在 shell 中执行命令、在 editor 中修改代码、在 browser 中查阅文档。
 
@@ -295,10 +295,10 @@ Devin 2.1 的 Confidence Scores 可以与 Linear/Jira 集成——批量给多�
 
 ### 7.2 下一篇导读
 
-本文解构了 Devin——一个"模拟人类开发者"的 Coding Agent。下一篇 [[09 OpenHands 与 Aider——开源 Coding Agent 的两种哲学]] 将转向开源世界——OpenHands（原 OpenDevin）和 Aider 两个开源 Coding Agent。OpenHands 用 Event Stream 架构和 Docker 沙箱 Runtime 实现"开源版 Devin"；Aider 用单进程架构和 Repo Map（Tree-sitter + PageRank）实现"轻量级 Terminal Agent"。两者代表了开源 Coding Agent 的两种截然不同的设计哲学。
+本文解构了 Devin——一个"模拟人类开发者"的 Coding Agent。下一篇 [[LLM/Agent技术/Coding-Agent解构/19 OpenHands 与 Aider——开源 Coding Agent 的两种哲学]] 将转向开源世界——OpenHands（原 OpenDevin）和 Aider 两个开源 Coding Agent。OpenHands 用 Event Stream 架构和 Docker 沙箱 Runtime 实现"开源版 Devin"；Aider 用单进程架构和 Repo Map（Tree-sitter + PageRank）实现"轻量级 Terminal Agent"。两者代表了开源 Coding Agent 的两种截然不同的设计哲学。
 
 > [!info] 专栏导航
-> 本文是 [[00 专栏导览|Coding Agent 运行范式专栏]] 的第 8 篇。上一篇解构了 Claude Code；本文解构了 Devin；下一篇将继续解构 OpenHands 和 Aider 两个开源 Coding Agent。
+> 本文是 [[LLM/Agent技术/00 专栏导览|Agent 技术专栏]] 的第 8 篇。上一篇解构了 Claude Code；本文解构了 Devin；下一篇将继续解构 OpenHands 和 Aider 两个开源 Coding Agent。
 
 ---
 

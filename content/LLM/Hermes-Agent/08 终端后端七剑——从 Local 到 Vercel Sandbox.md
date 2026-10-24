@@ -81,7 +81,7 @@ graph LR
 需要说明的是，这条谱系不是严格的线性序——SSH 的"物理隔离"与 Modal 的"gVisor 隔离"属于不同维度（前者是"不在我机器上"，后者是"即使在我机器上也出不来"），Singularity 的"非 root 约束"则是另一种安全模型。**谱系图提供直觉，选型仍要回到具体威胁模型**。
 
 > [!info] 核心概念：TerminalBackend ABC
-> 与第 07 篇的 Adapter ABC 类似，TerminalBackend ABC 是"统一抽象 + 具体实现"模式的另一个应用。Agent 的工具（如 `execute_command`）调用 `TerminalBackend.execute_command()`——ABC 定义接口——具体后端（Local/Docker/SSH 等）实现接口。这种"接口与实现分离"让"执行环境"可以"热切换"——如"开发时用 Local，测试时用 Docker，生产用 SSH"——只改配置，不改代码。这与 [[LLM/Coding-Agent运行范式/08 Devin 与 ACI 设计——为 Agent 认知而生的计算机接口|Coding Agent 专栏第 8 篇]]讨论的"ACI 抽象"理念一致——好的接口让"实现可替换"。
+> 与第 07 篇的 Adapter ABC 类似，TerminalBackend ABC 是"统一抽象 + 具体实现"模式的另一个应用。Agent 的工具（如 `execute_command`）调用 `TerminalBackend.execute_command()`——ABC 定义接口——具体后端（Local/Docker/SSH 等）实现接口。这种"接口与实现分离"让"执行环境"可以"热切换"——如"开发时用 Local，测试时用 Docker，生产用 SSH"——只改配置，不改代码。这与 [[LLM/Agent技术/Coding-Agent解构/18 Devin 与 ACI 设计——为 Agent 认知而生的计算机接口|Coding Agent 专栏第 8 篇]]讨论的"ACI 抽象"理念一致——好的接口让"实现可替换"。
 
 ---
 

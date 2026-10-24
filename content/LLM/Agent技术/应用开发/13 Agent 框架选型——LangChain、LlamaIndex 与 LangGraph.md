@@ -5,7 +5,7 @@ tags: [Agent, AutoGen, CrewAI, LangChain, LangGraph, LCEL, LlamaIndex, LLM, 框�
 aliases: []
 ---
 
-# 07 Agent 框架选型——LangChain、LlamaIndex 与 LangGraph
+# 13 Agent 框架选型——LangChain、LlamaIndex 与 LangGraph
 
 **摘要：**
 
@@ -78,7 +78,7 @@ LCEL 的优势是：所有 LCEL 链天然支持 `.invoke()`、`.stream()`、`.ba
 
 ### 2.3 LangChain Agent
 
-LangChain 的 Agent 实现基于 `create_react_agent`（[[05 Agent 核心能力——推理、规划与工具调用]] 中的 ReAct 框架）。工具通过 `@tool` 装饰器声明：
+LangChain 的 Agent 实现基于 `create_react_agent`（[[LLM/Agent技术/应用开发/11 Agent 核心能力——推理、规划与工具调用]] 中的 ReAct 框架）。工具通过 `@tool` 装饰器声明：
 
 ```python
 from langchain.tools import tool
@@ -139,7 +139,7 @@ LlamaIndex 的出发点与 LangChain 不同：它不是"构建任意 LLM 应用�
 | `KnowledgeGraphIndex` | 实体关系查询 | 三元组提炼 + 图查询 |
 | `PropertyGraphIndex` | 复杂图结构查询 | 属性图 + 混合检索 |
 
-**SubQuestion Query Engine**：自动将复杂问题分解为子问题，分别在不同数据源上检索，再综合答案——这是 [[03 高级 RAG——查询改写、图谱检索与多跳推理]] 中查询分解技术的工程化实现。
+**SubQuestion Query Engine**：自动将复杂问题分解为子问题，分别在不同数据源上检索，再综合答案——这是 [[LLM/Agent技术/应用开发/10 高级 RAG——查询改写、图谱检索与多跳推理]] 中查询分解技术的工程化实现。
 
 ```python
 from llama_index.core import VectorStoreIndex, SimpleDirectoryReader

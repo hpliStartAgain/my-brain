@@ -8,7 +8,7 @@ aliases: [Tool Use 与 Function Calling, 三大厂商 Function Calling 对比, T
 # 03 Tool Use 与 Function Calling——三大厂商的标准化博弈
 
 > [!abstract] 摘要
-> 上一篇 [[02 ReAct 架构深度解析——Thought-Action-Observation 循环的本质]] 揭示了 Action 从"自由文本解析"到"Function Calling JSON Schema"的演进如何系统性解决了 ReAct 的格式不稳定、参数幻觉和多参数表达问题。本文则放大焦距，系统对比 2025 年三大 LLM 厂商——OpenAI、Anthropic、Gemini——的 Function Calling 规范，揭示它们在工具定义格式、工具选择控制（tool_choice）、并行调用、动态加载（Tool Search）、编程化调用（Programmatic Tool Calling）上的设计差异与演进方向。三家规范在基础层面（"让 LLM 输出结构化的工具调用请求"）高度一致，但在高级特性上各走各路：OpenAI 用 `tool_search` + `defer_loading` + namespaces 解决"工具太多塞不进上下文"问题，Anthropic 用 Tool Search Tool（regex/bm25 两种匹配模式）+ Programmatic Tool Calling + Tool Use Examples 三件套应对同样的挑战，Gemini 则用 `function_declarations` + 四种 mode（AUTO/ANY/NONE/VALIDATED）+ 内置工具与自定义工具的组合机制走出了一条更"平台化"的路线。文章最后讨论从 Function Calling 到 MCP 协议的演进动机——为什么"每家厂商各搞一套"不可持续，以及 MCP 如何试图建立跨厂商的标准化连接。核心认知：Function Calling 是 Agent 与工具交互的"汇编语言"，MCP 是试图取代它的"高级语言"——但两者不是替代关系，而是叠加关系。
+> 上一篇 [[LLM/Agent技术/基础范式/02 ReAct 架构深度解析——Thought-Action-Observation 循环的本质]] 揭示了 Action 从"自由文本解析"到"Function Calling JSON Schema"的演进如何系统性解决了 ReAct 的格式不稳定、参数幻觉和多参数表达问题。本文则放大焦距，系统对比 2025 年三大 LLM 厂商——OpenAI、Anthropic、Gemini——的 Function Calling 规范，揭示它们在工具定义格式、工具选择控制（tool_choice）、并行调用、动态加载（Tool Search）、编程化调用（Programmatic Tool Calling）上的设计差异与演进方向。三家规范在基础层面（"让 LLM 输出结构化的工具调用请求"）高度一致，但在高级特性上各走各路：OpenAI 用 `tool_search` + `defer_loading` + namespaces 解决"工具太多塞不进上下文"问题，Anthropic 用 Tool Search Tool（regex/bm25 两种匹配模式）+ Programmatic Tool Calling + Tool Use Examples 三件套应对同样的挑战，Gemini 则用 `function_declarations` + 四种 mode（AUTO/ANY/NONE/VALIDATED）+ 内置工具与自定义工具的组合机制走出了一条更"平台化"的路线。文章最后讨论从 Function Calling 到 MCP 协议的演进动机——为什么"每家厂商各搞一套"不可持续，以及 MCP 如何试图建立跨厂商的标准化连接。核心认知：Function Calling 是 Agent 与工具交互的"汇编语言"，MCP 是试图取代它的"高级语言"——但两者不是替代关系，而是叠加关系。
 
 ---
 
@@ -106,7 +106,7 @@ OpenAI 在 2023 年 11 月 6 日及之后发布的模型支持并行函数调用
 }
 ```
 
-这个特性与 [[01 Agent 运行范式全景——从 ReAct 到 Production Agent 的演进|第一篇]]讨论的 LLMCompiler 范式呼应——LLM 自主识别哪些工具调用可以并行，减少了串行等待延迟。
+这个特性与 [[LLM/Agent技术/基础范式/01 Agent 运行范式全景——从 ReAct 到 Production Agent 的演进|第一篇]]讨论的 LLMCompiler 范式呼应——LLM 自主识别哪些工具调用可以并行，减少了串行等待延迟。
 
 ### 2.4 Tool Search——动态工具加载
 
@@ -506,10 +506,10 @@ M+N 问题：M 个 LLM 厂商各写一个 MCP Client + N 个工具各写一个 M
 
 ### 7.2 下一篇导读
 
-本文讨论了 Function Calling 作为"Agent 与工具交互的汇编语言"的规范差异和标准化趋势。下一篇 [[04 MCP 协议深度解析——Agent 与工具的标准化连接]] 将深入 MCP 协议本身——JSON-RPC 2.0 基础、Host-Client-Server 三层架构、能力协商、三类 Server 原语（Tools/Resources/Prompts）、三类 Client 原语（Sampling/Roots/Elicitation）、传输层演进（stdio → HTTP+SSE → Streamable HTTP），揭示 MCP 如何在协议层面实现"一套 Server 适配所有 Host"的标准化愿景。
+本文讨论了 Function Calling 作为"Agent 与工具交互的汇编语言"的规范差异和标准化趋势。下一篇 [[LLM/Agent技术/基础范式/04 MCP 协议深度解析——Agent 与工具的标准化连接]] 将深入 MCP 协议本身——JSON-RPC 2.0 基础、Host-Client-Server 三层架构、能力协商、三类 Server 原语（Tools/Resources/Prompts）、三类 Client 原语（Sampling/Roots/Elicitation）、传输层演进（stdio → HTTP+SSE → Streamable HTTP），揭示 MCP 如何在协议层面实现"一套 Server 适配所有 Host"的标准化愿景。
 
 > [!info] 专栏导航
-> 本文是 [[00 专栏导览|Coding Agent 运行范式专栏]] 的第 3 篇。上一篇 [[02 ReAct 架构深度解析——Thought-Action-Observation 循环的本质]] 深入了 ReAct 循环内部；本文从 ReAct 的"Action"环节出发，系统对比了三大厂商的 Function Calling 规范；下一篇将从 Function Calling 的标准化趋势出发，深入 MCP 协议的技术细节。
+> 本文是 [[LLM/Agent技术/00 专栏导览|Agent 技术专栏]] 的第 3 篇。上一篇 [[LLM/Agent技术/基础范式/02 ReAct 架构深度解析——Thought-Action-Observation 循环的本质]] 深入了 ReAct 循环内部；本文从 ReAct 的"Action"环节出发，系统对比了三大厂商的 Function Calling 规范；下一篇将从 Function Calling 的标准化趋势出发，深入 MCP 协议的技术细节。
 
 ---
 

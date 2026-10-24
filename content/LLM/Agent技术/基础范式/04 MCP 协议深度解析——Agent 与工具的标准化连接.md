@@ -8,7 +8,7 @@ aliases: [MCP 协议深度解析, Model Context Protocol, MCP 架构, MCP 原语
 # 04 MCP 协议深度解析——Agent 与工具的标准化连接
 
 > [!abstract] 摘要
-> 上一篇 [[03 Tool Use 与 Function Calling——三大厂商的标准化博弈]] 揭示了 Function Calling 碎片化问题如何催生了对标准化协议的需求。本文深入 MCP（Model Context Protocol）协议本身的技术细节——从 2024 年 11 月 Anthropic 发布初始版本，到 2025 年 3 月引入 Streamable HTTP 替代 HTTP+SSE，再到 2025 年 6 月引入 Elicitation 原语、2025 年 11 月规范稳定、2026 年 7 月移除 GET stream 和协议级 session，MCP 在不到两年内经历了四次重大修订。文章系统拆解 MCP 的两层架构（数据层 + 传输层）、Host-Client-Server 三层角色、基于 JSON-RPC 2.0 的有状态连接生命周期（初始化→运行→关闭）、能力协商机制、三类 Server 原语（Tools/Resources/Prompts）的精确定义与控制方归属、三类 Client 原语（Sampling/Roots/Elicitation）的设计动机与安全边界、传输层从 stdio 到 HTTP+SSE 再到 Streamable HTTP 的演进逻辑。核心认知：MCP 的设计灵感直接来自 LSP（Language Server Protocol）——正如 LSP 标准化了编程语言与开发工具的集成方式，MCP 标准化了 AI 应用与外部上下文的集成方式。理解 MCP 的协议细节，才能理解为什么"一套 Server 适配所有 Host"在工程上可行。
+> 上一篇 [[LLM/Agent技术/基础范式/03 Tool Use 与 Function Calling——三大厂商的标准化博弈]] 揭示了 Function Calling 碎片化问题如何催生了对标准化协议的需求。本文深入 MCP（Model Context Protocol）协议本身的技术细节——从 2024 年 11 月 Anthropic 发布初始版本，到 2025 年 3 月引入 Streamable HTTP 替代 HTTP+SSE，再到 2025 年 6 月引入 Elicitation 原语、2025 年 11 月规范稳定、2026 年 7 月移除 GET stream 和协议级 session，MCP 在不到两年内经历了四次重大修订。文章系统拆解 MCP 的两层架构（数据层 + 传输层）、Host-Client-Server 三层角色、基于 JSON-RPC 2.0 的有状态连接生命周期（初始化→运行→关闭）、能力协商机制、三类 Server 原语（Tools/Resources/Prompts）的精确定义与控制方归属、三类 Client 原语（Sampling/Roots/Elicitation）的设计动机与安全边界、传输层从 stdio 到 HTTP+SSE 再到 Streamable HTTP 的演进逻辑。核心认知：MCP 的设计灵感直接来自 LSP（Language Server Protocol）——正如 LSP 标准化了编程语言与开发工具的集成方式，MCP 标准化了 AI 应用与外部上下文的集成方式。理解 MCP 的协议细节，才能理解为什么"一套 Server 适配所有 Host"在工程上可行。
 
 ---
 
@@ -16,7 +16,7 @@ aliases: [MCP 协议深度解析, Model Context Protocol, MCP 架构, MCP 原语
 
 ### 1.1 为什么需要又一个协议
 
-[[03 Tool Use 与 Function Calling——三大厂商的标准化博弈|上一篇]]已经分析了 Function Calling 碎片化导致的 M×N 适配问题。MCP 的诞生动机直接来自这个痛点——Anthropic 在 2024 年与数十个团队合作构建 Agent 系统时发现，每个团队都在重复实现"让 LLM 接入外部工具和数据源"的胶水代码，且这些代码与具体的 LLM 厂商绑定，无法复用。
+[[LLM/Agent技术/基础范式/03 Tool Use 与 Function Calling——三大厂商的标准化博弈|上一篇]]已经分析了 Function Calling 碎片化导致的 M×N 适配问题。MCP 的诞生动机直接来自这个痛点——Anthropic 在 2024 年与数十个团队合作构建 Agent 系统时发现，每个团队都在重复实现"让 LLM 接入外部工具和数据源"的胶水代码，且这些代码与具体的 LLM 厂商绑定，无法复用。
 
 MCP 的目标不是取代 Function Calling，而是在 Function Calling 之上建立一层标准化协议——让工具服务（Server）与 LLM 应用（Host/Client）之间的通信遵循统一规范，从而实现"写一次 Server，适配所有 Host"。
 
@@ -459,10 +459,10 @@ MCP 规范反复强调一个关键认知：**MCP 协议本身不能在协议层�
 
 ### 8.2 下一篇导读
 
-本文深入了 MCP 协议的技术规范，但尚未落地到工程实践——MCP Server 怎么开发？Claude Desktop/Cursor/Gemini Code Assist 如何集成 MCP Server？MCP 与 OpenAI function calling、LangChain tools 的实际选型如何决策？下一篇 [[05 MCP 生态与实践——Server 开发、集成与生产部署]] 将从协议规范走向工程落地。
+本文深入了 MCP 协议的技术规范，但尚未落地到工程实践——MCP Server 怎么开发？Claude Desktop/Cursor/Gemini Code Assist 如何集成 MCP Server？MCP 与 OpenAI function calling、LangChain tools 的实际选型如何决策？下一篇 [[LLM/Agent技术/基础范式/05 MCP 生态与实践——Server 开发、集成与生产部署]] 将从协议规范走向工程落地。
 
 > [!info] 专栏导航
-> 本文是 [[00 专栏导览|Coding Agent 运行范式专栏]] 的第 4 篇。上一篇 [[03 Tool Use 与 Function Calling——三大厂商的标准化博弈]] 揭示了 Function Calling 碎片化催生标准化协议的需求；本文深入了 MCP 协议本身的技术规范；下一篇将从规范走向实践，讨论 MCP 生态现状和工程部署。
+> 本文是 [[LLM/Agent技术/00 专栏导览|Agent 技术专栏]] 的第 4 篇。上一篇 [[LLM/Agent技术/基础范式/03 Tool Use 与 Function Calling——三大厂商的标准化博弈]] 揭示了 Function Calling 碎片化催生标准化协议的需求；本文深入了 MCP 协议本身的技术规范；下一篇将从规范走向实践，讨论 MCP 生态现状和工程部署。
 
 ---
 

@@ -232,7 +232,7 @@ MCP 让"工具"可以跨 Agent 共享——如一个 MCP Server 写一次，Clau
 三个挑战背后其实是同一个张力——**可移植性与可执行性的反比关系**。描述越抽象（"读取文件的能力"），越多 Agent 能执行，但模型自由发挥的空间越大，行为越不可预测；描述越具体（`gh pr view <PR_NUMBER>`），执行越精确，但兼容面越窄。Hermes 的务实解法是分层：Procedure 主体写具体步骤（保证在本环境的可执行性），跨 Agent 的兼容性交给"能力声明 + 降级处理"——不满足前置条件的 Agent 干脆不加载，而不是加载了半路失败。**宁可让技能挑环境，也不让环境坑技能**。
 
 > [!info] 核心概念：技能 vs MCP 的定位差异
-> 技能是"知识"——告诉 Agent "怎么做"某事——如"PR 审查的步骤是什么"。MCP 是"工具"——让 Agent "能做"新事——如"连接到 GitHub API"。一个 Agent 可以"有 PR 审查技能但没有 GitHub MCP"——它知道"怎么做 PR 审查"但"不能访问 GitHub API"——技能无法执行。反之，"有 GitHub MCP 但没有 PR 审查技能"——它能"访问 GitHub"但不知道"PR 审查的标准流程"。两者结合才完整——技能提供"知识"，MCP 提供"能力"。这与 [[LLM/Coding-Agent运行范式/04 MCP 协议深度解析——Agent 与工具的标准化连接|Coding Agent 专栏第 4 篇]]讨论的 MCP 标准形成了呼应——MCP 和 agentskills.io 是 Agent 生态的"双标准"。
+> 技能是"知识"——告诉 Agent "怎么做"某事——如"PR 审查的步骤是什么"。MCP 是"工具"——让 Agent "能做"新事——如"连接到 GitHub API"。一个 Agent 可以"有 PR 审查技能但没有 GitHub MCP"——它知道"怎么做 PR 审查"但"不能访问 GitHub API"——技能无法执行。反之，"有 GitHub MCP 但没有 PR 审查技能"——它能"访问 GitHub"但不知道"PR 审查的标准流程"。两者结合才完整——技能提供"知识"，MCP 提供"能力"。这与 [[LLM/Agent技术/基础范式/04 MCP 协议深度解析——Agent 与工具的标准化连接|Coding Agent 专栏第 4 篇]]讨论的 MCP 标准形成了呼应——MCP 和 agentskills.io 是 Agent 生态的"双标准"。
 
 ---
 

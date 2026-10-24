@@ -5,10 +5,10 @@ tags: [Agent, Cloud Agent, Composer, Cursor, Gemini Code Assist, IDE Agent, Mode
 aliases: [Cursor 与 IDE Agent, Agent Swarm, Composer 模型, IDE 类 Agent]
 ---
 
-# 10 Cursor 与 IDE 类 Agent——从补全到自主编码的跨越
+# 20 Cursor 与 IDE 类 Agent——从补全到自主编码的跨越
 
 > [!abstract] 摘要
-> 前三篇解构的 Claude Code、Devin、OpenHands/Aider 都是"独立 Agent"——它们有自己的界面（Terminal/IDE/沙箱），开发者专门为 Agent 工作打开它们。本文转向 IDE 类 Agent——Cursor 和 Gemini Code Assist——它们嵌入在开发者日常使用的 IDE 中，需要在"自主编码能力"和"不干扰开发者当前工作"之间找到平衡。文章深入 Cursor 的 Agent Swarm 架构（Planner/Worker 分层、树状递归分解、Judge 评估循环）、Composer 模型（RL 训练的 agentic coding model，4 倍速于同级模型）、Cloud Agent（隔离 VM 中的云端 Agent，支持多 repo 和 Computer Use）；然后剖析 Gemini Code Assist 的 Agent Mode（VS Code + IntelliJ 双 IDE 支持、内置工具 + MCP 集成、Plan 审批 + Checkpoint 回滚）；最后对比 IDE Agent 与 Terminal Agent 的设计差异——IDE Agent 的核心挑战是"在开发者编辑器的上下文中做 Agent，而非接管编辑器"。核心认知：Cursor 的 Agent Swarm 把任务分解为树状结构——Planner 永远不实现（上下文不填满低级细节），Worker 永远不规划（上下文全花在单一任务上）——这是 [[06 Prompt 上下文管理——Context Engineering 的艺术|Context Engineering]] 在多 Agent 协作层面的极致应用。
+> 前三篇解构的 Claude Code、Devin、OpenHands/Aider 都是"独立 Agent"——它们有自己的界面（Terminal/IDE/沙箱），开发者专门为 Agent 工作打开它们。本文转向 IDE 类 Agent——Cursor 和 Gemini Code Assist——它们嵌入在开发者日常使用的 IDE 中，需要在"自主编码能力"和"不干扰开发者当前工作"之间找到平衡。文章深入 Cursor 的 Agent Swarm 架构（Planner/Worker 分层、树状递归分解、Judge 评估循环）、Composer 模型（RL 训练的 agentic coding model，4 倍速于同级模型）、Cloud Agent（隔离 VM 中的云端 Agent，支持多 repo 和 Computer Use）；然后剖析 Gemini Code Assist 的 Agent Mode（VS Code + IntelliJ 双 IDE 支持、内置工具 + MCP 集成、Plan 审批 + Checkpoint 回滚）；最后对比 IDE Agent 与 Terminal Agent 的设计差异——IDE Agent 的核心挑战是"在开发者编辑器的上下文中做 Agent，而非接管编辑器"。核心认知：Cursor 的 Agent Swarm 把任务分解为树状结构——Planner 永远不实现（上下文不填满低级细节），Worker 永远不规划（上下文全花在单一任务上）——这是 [[LLM/Agent技术/基础范式/06 Prompt 上下文管理——Context Engineering 的艺术|Context Engineering]] 在多 Agent 协作层面的极致应用。
 
 ---
 
@@ -66,7 +66,7 @@ graph TD
 **Judge Agent**：在每个执行周期结束后，一个独立的 Judge Agent 评估"是否需要继续下一轮迭代"。这解决了"Agent 何时停止"的问题——不是靠 Agent 自己判断，而是靠独立的评估者。
 
 > [!info] 核心概念：Agent Swarm 是 Context Engineering 的多 Agent 极致
-> Cursor 的 Agent Swarm 设计是 [[06 Prompt 上下文管理——Context Engineering 的艺术|第 6 篇]]讨论的 Context Engineering 在多 Agent 协作层面的极致应用。核心洞察是：**当单个 Agent 承担完整任务时，它必须在上下文中同时维护"全局目标"和"实现细节"——这两者争夺有限的上下文空间，导致全局目标被细节淹没**。Agent Swarm 通过角色分离解决了这个问题——Planner 的上下文只有"全局目标 + 子任务列表"，Worker 的上下文只有"单一任务 + 实现细节"。每个 Agent 的上下文都是"高信号、低噪音"的——这正是 Context Engineering 追求的目标。
+> Cursor 的 Agent Swarm 设计是 [[LLM/Agent技术/基础范式/06 Prompt 上下文管理——Context Engineering 的艺术|第 6 篇]]讨论的 Context Engineering 在多 Agent 协作层面的极致应用。核心洞察是：**当单个 Agent 承担完整任务时，它必须在上下文中同时维护"全局目标"和"实现细节"——这两者争夺有限的上下文空间，导致全局目标被细节淹没**。Agent Swarm 通过角色分离解决了这个问题——Planner 的上下文只有"全局目标 + 子任务列表"，Worker 的上下文只有"单一任务 + 实现细节"。每个 Agent 的上下文都是"高信号、低噪音"的——这正是 Context Engineering 追求的目标。
 
 ### 1.3 Composer——RL 训练的 Agentic Model
 
@@ -237,7 +237,7 @@ Cursor 在长时自主任务中发现：
 - **Opus 4.5 倾向于过早停止和走捷径**——快速交还控制权
 - **不同模型擅长不同角色**——GPT-5.2 是比 GPT-5.1-Codex 更好的 Planner
 
-这些发现验证了 [[08 Devin 与 ACI 设计——为 Agent 认知而生的计算机接口|第 8 篇]]讨论的观点——不同模型有不同的"行为风格"，选择模型时不仅看"智能程度"，还要看"自主工作时的行为特征"。
+这些发现验证了 [[LLM/Agent技术/Coding-Agent解构/18 Devin 与 ACI 设计——为 Agent 认知而生的计算机接口|第 8 篇]]讨论的观点——不同模型有不同的"行为风格"，选择模型时不仅看"智能程度"，还要看"自主工作时的行为特征"。
 
 ---
 
@@ -256,10 +256,10 @@ Cursor 在长时自主任务中发现：
 
 ### 5.2 下一篇导读
 
-至此，第 7-10 篇完成了对 Claude Code、Devin、OpenHands/Aider、Cursor/Gemini Code Assist 五大 Coding Agent 的架构解构。接下来第 11-12 篇将回到通用主题——第 11 篇 [[11 Agent 与操作系统的交互接口——Bash、文件与 Git 的工程化]] 深入 Agent 与 OS 交互的工程细节（Bash 超时/输出截断/两阶段终止、文件原子写入/大文件/文件锁、Git 工作流/Agentlocks），第 12 篇 [[12 Agent 权限与审批模型——人在环路的工程实践]] 讨论权限审批的工程化（HITL 模式、OpenAI/Cloudflare/Claude Code/Agentrail 的方案对比、MCP Elicitation）。
+至此，第 7-10 篇完成了对 Claude Code、Devin、OpenHands/Aider、Cursor/Gemini Code Assist 五大 Coding Agent 的架构解构。接下来第 11-12 篇将回到通用主题——第 11 篇 [[LLM/Agent技术/Coding-Agent解构/21 Agent 与操作系统的交互接口——Bash、文件与 Git 的工程化]] 深入 Agent 与 OS 交互的工程细节（Bash 超时/输出截断/两阶段终止、文件原子写入/大文件/文件锁、Git 工作流/Agentlocks），第 12 篇 [[LLM/Agent技术/基础范式/07 Agent 权限与审批模型——人在环路的工程实践]] 讨论权限审批的工程化（HITL 模式、OpenAI/Cloudflare/Claude Code/Agentrail 的方案对比、MCP Elicitation）。
 
 > [!info] 专栏导航
-> 本文是 [[00 专栏导览|Coding Agent 运行范式专栏]] 的第 10 篇，也是 Coding Agent 架构解构系列的收官篇。前 10 篇完成了从 Agent 范式理论到 5 大 Coding Agent 实践的完整闭环。最后 2 篇将回到通用工程主题。
+> 本文是 [[LLM/Agent技术/00 专栏导览|Agent 技术专栏]] 的第 10 篇，也是 Coding Agent 架构解构系列的收官篇。前 10 篇完成了从 Agent 范式理论到 5 大 Coding Agent 实践的完整闭环。最后 2 篇将回到通用工程主题。
 
 ---
 

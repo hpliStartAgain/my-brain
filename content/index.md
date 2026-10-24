@@ -106,19 +106,18 @@ title: 汀的知识碎片
 - [[可观测/AIOps与可观测性实战/00 专栏导览|AIOps 与可观测性实战]]
 - [[SRE/CVM集群可靠性工程/00 专栏导览|CVM 集群可靠性工程 · 8 篇]]
 - [[SRE/故障排查与复盘/00 故障排查索引|故障排查与复盘索引]]
+- [[SRE/AiOps/00 专栏导览：大数据集群 SRE 的 AiOps 工程实践|AiOps 工程实践 · 大数据集群 SRE]]
 
 </div>
 
 <div class="knowledge-card">
 <h3>LLM 与 AI 工程</h3>
-<div class="card-desc">Agent 沙箱技术、运行时范式与智能运维</div>
+<div class="card-desc">大模型原理、Agent 技术、沙箱隔离与 Hermes</div>
 
+- [[LLM/Agent技术/00 专栏导览|Agent 技术 · 运行范式/应用开发/Coding Agent]]
 - [[LLM/Agent沙箱技术/00 专栏导览|Agent 沙箱技术 · 隔离与安全]]
-- [[LLM/Coding-Agent运行范式/00 专栏导览|Coding-Agent 运行范式]]
-- [[LLM/Agent开发技术/00 专栏导览|AI Agent 开发技术]]
-- [[LLM/AiOps/00 专栏导览：大数据集群 SRE 的 AiOps 工程实践|AiOps 工程实践]]
-- [[LLM/Hermes-Agent/00 专栏导览|Hermes-Agent]]
 - [[LLM/LLM原理/00 专栏导览|大模型原理与架构]]
+- [[LLM/Hermes-Agent/00 专栏导览|Hermes-Agent]]
 
 </div>
 
@@ -149,6 +148,6 @@ title: 汀的知识碎片
 - **想看底层**：从 [[Linux/进程管理/00 专栏导览|进程管理]] 入手，顺着调度器 → 内存 → 文件系统 → 网络协议栈往下走，最后用 [[Linux/系统性能工程实战/00 专栏导览|系统性能工程实战]] 把它们串起来
 - **想看分布式**：先读 [[分布式架构/分布式系统原理与协议/00 专栏导览|分布式系统原理与协议]] 打底，再进 [[分布式架构/数据密集型系统架构实战/00 专栏导览|数据密集型系统架构实战]] 看工程权衡
 - **想看 K8s**：直接从 [[云原生/Kubernetes/Kubernetes架构深度剖析/00 专栏导览|K8s 架构深度剖析]] 的第一篇开始，18 篇按从设计哲学到生产化管理的顺序铺开
-- **想看 AI 与 Agent**：从 [[LLM/Agent沙箱技术/00 专栏导览|Agent 沙箱技术]] 入手了解现代代码执行环境的隔离与安全方案，再看 [[LLM/AiOps/00 专栏导览：大数据集群 SRE 的 AiOps 工程实践|AiOps 工程实践]]
+- **想看 AI 与 Agent**：从 [[LLM/Agent沙箱技术/00 专栏导览|Agent 沙箱技术]] 入手了解现代代码执行环境的隔离与安全方案，再看 [[SRE/AiOps/00 专栏导览：大数据集群 SRE 的 AiOps 工程实践|AiOps 工程实践]]
 - **想看事故复盘**：去 [[SRE/故障排查与复盘/00 故障排查索引|故障排查索引]]，三个真实生产事故的完整复盘都在那
 - **随便逛**：顶部菜单有随机碎片入口，碰上什么看什么

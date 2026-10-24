@@ -8,7 +8,7 @@ aliases: [MCP 生态与实践, MCP Server 开发, MCP 集成部署]
 # 05 MCP 生态与实践——Server 开发、集成与生产部署
 
 > [!abstract] 摘要
-> 上一篇 [[04 MCP 协议深度解析——Agent 与工具的标准化连接|MCP 协议深度解析]] 拆解了 MCP 的协议规范。本文从规范走向工程落地——如何开发一个 MCP Server？如何把它接入 Claude Desktop、Cursor、Claude Code 等 Host？生产部署有哪些最佳实践和避坑要点？文章以一个完整的 Weather MCP Server 为贯穿案例，演示用 Python FastMCP 和 TypeScript 官方 SDK 两种方式从零构建 Server；然后系统梳理三大 Host（Claude Desktop / Cursor / Claude Code）的 MCP 集成方式与配置文件差异；接着介绍 MCP Inspector 调试工具和 MCP Server 分发模式（npm/PyPI/Docker/远程 HTTP）；最后讨论 MCP vs OpenAI Function Calling vs LangChain Tools 的实际选型决策——什么场景该用 MCP，什么场景不该用。核心认知：MCP 生态在 2024 年 11 月到 2026 年间经历了从 1200 到 9400+ 个 Server 的 7.8 倍增长，但"能用 MCP"不等于"该用 MCP"——MCP 的价值在工具复用和跨 Host 兼容，对于单 Host 单工具的简单场景，直接用 Function Calling 反而更简洁。
+> 上一篇 [[LLM/Agent技术/基础范式/04 MCP 协议深度解析——Agent 与工具的标准化连接|MCP 协议深度解析]] 拆解了 MCP 的协议规范。本文从规范走向工程落地——如何开发一个 MCP Server？如何把它接入 Claude Desktop、Cursor、Claude Code 等 Host？生产部署有哪些最佳实践和避坑要点？文章以一个完整的 Weather MCP Server 为贯穿案例，演示用 Python FastMCP 和 TypeScript 官方 SDK 两种方式从零构建 Server；然后系统梳理三大 Host（Claude Desktop / Cursor / Claude Code）的 MCP 集成方式与配置文件差异；接着介绍 MCP Inspector 调试工具和 MCP Server 分发模式（npm/PyPI/Docker/远程 HTTP）；最后讨论 MCP vs OpenAI Function Calling vs LangChain Tools 的实际选型决策——什么场景该用 MCP，什么场景不该用。核心认知：MCP 生态在 2024 年 11 月到 2026 年间经历了从 1200 到 9400+ 个 Server 的 7.8 倍增长，但"能用 MCP"不等于"该用 MCP"——MCP 的价值在工具复用和跨 Host 兼容，对于单 Host 单工具的简单场景，直接用 Function Calling 反而更简洁。
 
 ---
 
@@ -491,7 +491,7 @@ graph TD
 }
 ```
 
-**工具描述审查**：如 [[04 MCP 协议深度解析——Agent 与工具的标准化连接|第 4 篇]]所述，工具描述是 Prompt Injection 的攻击面。对于来自不受信任来源的 MCP Server，应审查其工具描述中是否包含可疑指令。
+**工具描述审查**：如 [[LLM/Agent技术/基础范式/04 MCP 协议深度解析——Agent 与工具的标准化连接|第 4 篇]]所述，工具描述是 Prompt Injection 的攻击面。对于来自不受信任来源的 MCP Server，应审查其工具描述中是否包含可疑指令。
 
 **权限最小化**：为 MCP Server 配置的 API Key 应使用最小权限——如 GitHub Token 只授予 `repo` 和 `read:org` scope，不授予 `admin` 或 `delete_repo` scope。
 
@@ -527,10 +527,10 @@ graph TD
 
 ### 8.2 下一篇导读
 
-本文完成了 MCP 协议从规范到实践的完整闭环。下一篇 [[06 Prompt 上下文管理——Context Engineering 的艺术]] 将转向 Agent 运行的另一个核心挑战——上下文管理。当 Coding Agent 连续工作数小时、执行上百步操作时，如何管理不断增长的上下文？Anthropic 的 Context Editing、Memory Tool、Factory.ai 的结构化压缩分别解决什么问题？这是长时 Agent 可靠运行的关键技术基础。
+本文完成了 MCP 协议从规范到实践的完整闭环。下一篇 [[LLM/Agent技术/基础范式/06 Prompt 上下文管理——Context Engineering 的艺术]] 将转向 Agent 运行的另一个核心挑战——上下文管理。当 Coding Agent 连续工作数小时、执行上百步操作时，如何管理不断增长的上下文？Anthropic 的 Context Editing、Memory Tool、Factory.ai 的结构化压缩分别解决什么问题？这是长时 Agent 可靠运行的关键技术基础。
 
 > [!info] 专栏导航
-> 本文是 [[00 专栏导览|Coding Agent 运行范式专栏]] 的第 5 篇，也是 MCP 主题的收官篇。从第 4 篇的协议规范到本文的工程实践，MCP 主题完整覆盖。下一篇将转向 Agent 运行的另一个维度——上下文管理。
+> 本文是 [[LLM/Agent技术/00 专栏导览|Agent 技术专栏]] 的第 5 篇，也是 MCP 主题的收官篇。从第 4 篇的协议规范到本文的工程实践，MCP 主题完整覆盖。下一篇将转向 Agent 运行的另一个维度——上下文管理。
 
 ---
 

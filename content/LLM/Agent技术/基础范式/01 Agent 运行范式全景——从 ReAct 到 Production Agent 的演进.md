@@ -8,7 +8,7 @@ aliases: [Agent 运行范式全景, ReAct 到 Production Agent, Agent 范式演�
 # 01 Agent 运行范式全景——从 ReAct 到 Production Agent 的演进
 
 > [!abstract] 摘要
-> 本文是"Coding Agent 运行范式与交互协议"专栏的开篇，目标是在读者脑中建立一张关于 AI Agent 运行范式的完整全景地图。文章从"Agent 和 Chatbot 的本质区别"切入，厘清为什么 LLM 单独不是 Agent、什么条件让一个 LLM 变成 Agent；然后以 ReAct（Reasoning + Acting）范式为锚点，系统梳理从 2022 年到 2025 年 Agent 范式的完整演进脉络：ReAct → Reflexion → Tree of Thoughts → ReWOO/Plan-and-Execute → LATS → LLMCompiler，每一种范式解决了前代的什么痛点、引入了什么新代价。最后落地到 2025 年的生产实践，剖析 LangGraph 1.0、CrewAI、AutoGPT Platform 三大主流框架各自选用了哪种范式、为什么这么选，以及 Anthropic 在"Building Effective Agents"中提出的 Workflow vs Agent 架构区分。核心认知：没有"最好的"Agent 范式，只有"最合适的"——任务的可分解性、对延迟的容忍度、token 成本约束，共同决定了你应该选用哪种范式。
+> 本文是"Agent 技术"专栏的开篇，目标是在读者脑中建立一张关于 AI Agent 运行范式的完整全景地图。文章从"Agent 和 Chatbot 的本质区别"切入，厘清为什么 LLM 单独不是 Agent、什么条件让一个 LLM 变成 Agent；然后以 ReAct（Reasoning + Acting）范式为锚点，系统梳理从 2022 年到 2025 年 Agent 范式的完整演进脉络：ReAct → Reflexion → Tree of Thoughts → ReWOO/Plan-and-Execute → LATS → LLMCompiler，每一种范式解决了前代的什么痛点、引入了什么新代价。最后落地到 2025 年的生产实践，剖析 LangGraph 1.0、CrewAI、AutoGPT Platform 三大主流框架各自选用了哪种范式、为什么这么选，以及 Anthropic 在"Building Effective Agents"中提出的 Workflow vs Agent 架构区分。核心认知：没有"最好的"Agent 范式，只有"最合适的"——任务的可分解性、对延迟的容忍度、token 成本约束，共同决定了你应该选用哪种范式。
 
 ---
 
@@ -366,7 +366,7 @@ CrewAI 的范式本质上是 **Orchestrator-Workers 的角色化包装**——�
 CrewAI 的定位很明确：**快速原型多 Agent 团队，最小化样板代码**。截至 2025 年，超过 10 万开发者通过社区课程获得 CrewAI 认证，月执行量超 1000 万次。
 
 > [!warning] 生产避坑：CrewAI 的"多 Agent"可能只是多次 LLM 调用
-> CrewAI 的角色定义（role/goal/backstory）会让每次 LLM 调用使用不同的 system prompt，给人"多个不同 Agent 在协作"的感觉。但如果所有 Agent 共用同一个 LLM 模型，它们之间的区别仅在于 prompt 不同——本质上是同一个 LLM 在扮演不同角色。这在很多场景下足够用（角色化 prompt 确实能引导 LLM 产出不同视角的内容），但不要误以为你在运行多个"独立的智能体"。真正的多 Agent 系统需要每个 Agent 有独立的工具集、独立的记忆、独立的决策边界——这正是 [[LLM/Agent开发技术/08 多 Agent 系统与 A2A 协议——协作、通信与特化|本专栏第八篇]] 讨论的主题。
+> CrewAI 的角色定义（role/goal/backstory）会让每次 LLM 调用使用不同的 system prompt，给人"多个不同 Agent 在协作"的感觉。但如果所有 Agent 共用同一个 LLM 模型，它们之间的区别仅在于 prompt 不同——本质上是同一个 LLM 在扮演不同角色。这在很多场景下足够用（角色化 prompt 确实能引导 LLM 产出不同视角的内容），但不要误以为你在运行多个"独立的智能体"。真正的多 Agent 系统需要每个 Agent 有独立的工具集、独立的记忆、独立的决策边界——这正是 [[LLM/Agent技术/应用开发/14 多 Agent 系统与 A2A 协议——协作、通信与特化|本专栏第八篇]] 讨论的主题。
 
 ### 5.3 AutoGPT Platform——从 CLI 实验到可视化平台
 
@@ -491,7 +491,7 @@ graph TD
 - **第 11-12 篇** 将讨论 Agent 与操作系统的交互接口和权限审批模型
 
 > [!info] 专栏导航
-> 本文是 [[00 专栏导览|Coding Agent 运行范式专栏]] 的第 1 篇。下一篇 [[02 ReAct 架构深度解析——Thought-Action-Observation 循环的本质]] 将深入 ReAct 的单步机制，剖析 Thought 如何引导 Action、Observation 如何反馈 Thought、循环何时终止、什么情况下会失败。理解了 ReAct 的内部细节，才能理解为什么 Claude Code、Devin 等 Coding Agent 都以 ReAct 为基础循环。
+> 本文是 [[LLM/Agent技术/00 专栏导览|Agent 技术专栏]] 的第 1 篇。下一篇 [[LLM/Agent技术/基础范式/02 ReAct 架构深度解析——Thought-Action-Observation 循环的本质]] 将深入 ReAct 的单步机制，剖析 Thought 如何引导 Action、Observation 如何反馈 Thought、循环何时终止、什么情况下会失败。理解了 ReAct 的内部细节，才能理解为什么 Claude Code、Devin 等 Coding Agent 都以 ReAct 为基础循环。
 
 ---
 

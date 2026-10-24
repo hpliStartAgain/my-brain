@@ -5,7 +5,7 @@ tags: [Agent, Aider, Architect Mode, BrowserGym, Docker Runtime, Event Stream, J
 aliases: [OpenHands 与 Aider, 开源 Coding Agent, Event Stream 架构, Repo Map]
 ---
 
-# 09 OpenHands 与 Aider——开源 Coding Agent 的两种哲学
+# 19 OpenHands 与 Aider——开源 Coding Agent 的两种哲学
 
 > [!abstract] 摘要
 > 前两篇解构了 Claude Code（Anthropic 的 CLI Agent）和 Devin（Cognition 的沙箱化 Agent）。本文转向开源世界——OpenHands（原 OpenDevin）和 Aider 两个开源 Coding Agent，它们代表了截然不同的设计哲学。OpenHands 用 Event Stream 架构和 Docker 沙箱 Runtime 实现"开源版 Devin"——完整的沙箱环境、浏览器、Jupyter，适合需要安全隔离的复杂任务。Aider 用单进程架构和 Repo Map（Tree-sitter + PageRank）实现"轻量级 Terminal Agent"——无 Docker、无 daemon、无 build step，适合本地快速迭代。文章深入 OpenHands 的 Event Stream 架构（所有 action 和 observation 按时间顺序记录在中央事件总线）、四种 Runtime 实现（Docker/Remote/Modal/Local）、AgentSkills（Jupyter IPython + BrowserGym）、多 Agent 委托机制；然后剖析 Aider 的 Repo Map 设计（Tree-sitter AST 解析 + PageRank 图排序在 token 预算内选择最重要符号）、Architect/Editor Pattern（规划与编辑分离的双模型模式）、三层模型系统（Main/Weak/Editor）、五种 Edit Format。核心认知：OpenHands 是"重量级安全隔离"路线，Aider 是"轻量级认知优化"路线——选择哪个取决于你是否需要沙箱隔离以及是否接受 Docker 的运行开销。
@@ -144,7 +144,7 @@ Aider 最独特的技术创新是 **Repo Map**——用 Tree-sitter AST 解析�
 - **动态调整**：根据聊天上下文动态调整 map 内容，确保相关性
 
 > [!info] 核心概念：Repo Map 是 Context Engineering 的代码库特化
-> Aider 的 Repo Map 是 [[06 Prompt 上下文管理——Context Engineering 的艺术|第 6 篇]]讨论的 Context Engineering 原则的一个精妙实践——"在 token 预算内提供最高信号的上下文"。不同于 Claude Code 的"按需 read_file 加载"策略（Just-in-Time），Aider 的 Repo Map 是"主动提供精炼全局视图"——在每轮对话中就附带一个代码库的"高密度摘要"，让 LLM 有全局视野而不需要主动探索。两种策略各有优势：Claude Code 的策略更节省 token（不看不用的文件），Aider 的策略更全面（LLM 知道代码库有什么，即使没主动看）。选择哪种取决于代码库大小和任务类型——大代码库适合 Just-in-Time，中小代码库适合 Repo Map。
+> Aider 的 Repo Map 是 [[LLM/Agent技术/基础范式/06 Prompt 上下文管理——Context Engineering 的艺术|第 6 篇]]讨论的 Context Engineering 原则的一个精妙实践——"在 token 预算内提供最高信号的上下文"。不同于 Claude Code 的"按需 read_file 加载"策略（Just-in-Time），Aider 的 Repo Map 是"主动提供精炼全局视图"——在每轮对话中就附带一个代码库的"高密度摘要"，让 LLM 有全局视野而不需要主动探索。两种策略各有优势：Claude Code 的策略更节省 token（不看不用的文件），Aider 的策略更全面（LLM 知道代码库有什么，即使没主动看）。选择哪种取决于代码库大小和任务类型——大代码库适合 Just-in-Time，中小代码库适合 Repo Map。
 
 ### 2.3 Architect/Editor Pattern
 
@@ -296,10 +296,10 @@ Aider 的 repo map 不是静态的——它根据当前聊天状态动态调整�
 
 ### 6.2 下一篇导读
 
-本文解构了两个开源 Coding Agent。下一篇 [[10 Cursor 与 IDE 类 Agent——从补全到自主编码的跨越]] 将转向 IDE 类 Agent——Cursor 的 Agent Swarm 架构（Planner/Worker 分层）、Composer 模型、Cloud Agent；以及 Gemini Code Assist 的 Agent Mode。IDE 类 Agent 与 Terminal Agent 有本质差异——它们嵌入在开发者的编辑器中，需要在"自主性"和"不干扰开发者当前工作"之间找到平衡。
+本文解构了两个开源 Coding Agent。下一篇 [[LLM/Agent技术/Coding-Agent解构/20 Cursor 与 IDE 类 Agent——从补全到自主编码的跨越]] 将转向 IDE 类 Agent——Cursor 的 Agent Swarm 架构（Planner/Worker 分层）、Composer 模型、Cloud Agent；以及 Gemini Code Assist 的 Agent Mode。IDE 类 Agent 与 Terminal Agent 有本质差异——它们嵌入在开发者的编辑器中，需要在"自主性"和"不干扰开发者当前工作"之间找到平衡。
 
 > [!info] 专栏导航
-> 本文是 [[00 专栏导览|Coding Agent 运行范式专栏]] 的第 9 篇。至此，第 7-9 篇完成了对 Claude Code、Devin、OpenHands/Aider 四大 Coding Agent 的架构解构。下一篇将补齐 IDE 类 Agent（Cursor/Gemini Code Assist）的视角。
+> 本文是 [[LLM/Agent技术/00 专栏导览|Agent 技术专栏]] 的第 9 篇。至此，第 7-9 篇完成了对 Claude Code、Devin、OpenHands/Aider 四大 Coding Agent 的架构解构。下一篇将补齐 IDE 类 Agent（Cursor/Gemini Code Assist）的视角。
 
 ---
 

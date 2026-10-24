@@ -5,7 +5,7 @@ tags: [Chunk, Embedding, LLM, RAG, Rerank, 向量数据库, 检索增强生成, 
 aliases: []
 ---
 
-# 02 RAG 架构——核心原理与工程实践
+# 09 RAG 架构——核心原理与工程实践
 
 **摘要：**
 
@@ -506,7 +506,7 @@ RAG 是当前 LLM 应用中最成熟、最广泛部署的架构模式，其价�
 | **生成** | 幻觉控制、来源引用 | 严格 RAG Prompt + Citation |
 | **评估** | 自动化评估 | RAGAS |
 
-下一篇 [[03 高级 RAG——查询改写、图谱检索与多跳推理]] 将深入探讨当标准 RAG 遇到复杂问题时的局限，以及 Query Rewriting、HyDE、GraphRAG、Self-RAG 等高级技术如何突破这些局限。
+下一篇 [[LLM/Agent技术/应用开发/10 高级 RAG——查询改写、图谱检索与多跳推理]] 将深入探讨当标准 RAG 遇到复杂问题时的局限，以及 Query Rewriting、HyDE、GraphRAG、Self-RAG 等高级技术如何突破这些局限。
 
 ---
 

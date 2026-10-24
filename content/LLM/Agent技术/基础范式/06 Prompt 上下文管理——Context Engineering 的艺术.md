@@ -289,7 +289,7 @@ Claude Code 不在上下文中预加载整个代码库——它通过 `read_file
 
 ### 5.3 Just-in-Time 与 Tool Search 的关系
 
-[[03 Tool Use 与 Function Calling——三大厂商的标准化博弈|第 3 篇]]讨论的 Tool Search（OpenAI）和 Tool Search Tool（Anthropic）本质上是 Just-in-Time Context 在工具层面的应用——不预加载所有工具定义，而是在需要时搜索并加载相关工具。这与文件层面的 Just-in-Time Loading 是同一个设计原则在不同层面的实例化：
+[[LLM/Agent技术/基础范式/03 Tool Use 与 Function Calling——三大厂商的标准化博弈|第 3 篇]]讨论的 Tool Search（OpenAI）和 Tool Search Tool（Anthropic）本质上是 Just-in-Time Context 在工具层面的应用——不预加载所有工具定义，而是在需要时搜索并加载相关工具。这与文件层面的 Just-in-Time Loading 是同一个设计原则在不同层面的实例化：
 
 | 层面 | 预加载策略 | Just-in-Time 策略 |
 | :--- | :--- | :--- |
@@ -413,10 +413,10 @@ Anthropic 在 Context Engineering 文章中推荐的实践，与上述策略体�
 
 ### 8.2 下一篇导读
 
-本文讨论了 Agent 上下文管理的通用技术。下一篇 [[07 Claude Code 架构解构——Anthropic 的 CLI Agent 设计哲学]] 将把这些技术落地到一个具体的 Coding Agent——深入 Claude Code 的架构：多表面设计、文件读写/Bash 执行/Git 操作的具体工具机制、Subagent 与 Dynamic Workflows、权限模型七种模式、Session 持久化、已知 bug 与生产避坑。
+本文讨论了 Agent 上下文管理的通用技术。下一篇 [[LLM/Agent技术/Coding-Agent解构/17 Claude Code 架构解构——Anthropic 的 CLI Agent 设计哲学]] 将把这些技术落地到一个具体的 Coding Agent——深入 Claude Code 的架构：多表面设计、文件读写/Bash 执行/Git 操作的具体工具机制、Subagent 与 Dynamic Workflows、权限模型七种模式、Session 持久化、已知 bug 与生产避坑。
 
 > [!info] 专栏导航
-> 本文是 [[00 专栏导览|Coding Agent 运行范式专栏]] 的第 6 篇。前 5 篇建立了 Agent 范式、ReAct 循环、Function Calling、MCP 协议的技术基础；本文讨论了贯穿所有这些机制的上下文管理挑战。接下来第 7-10 篇将逐一解构四大 Coding Agent 的架构。
+> 本文是 [[LLM/Agent技术/00 专栏导览|Agent 技术专栏]] 的第 6 篇。前 5 篇建立了 Agent 范式、ReAct 循环、Function Calling、MCP 协议的技术基础；本文讨论了贯穿所有这些机制的上下文管理挑战。接下来第 7-10 篇将逐一解构四大 Coding Agent 的架构。
 
 ---
 
