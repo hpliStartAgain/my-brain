@@ -1,7 +1,7 @@
 ---
 title: "Agent 沙箱全景——威胁模型、六层技术栈与逻辑演进"
 date: 2026-08-15
-tags: [Agent, Agent Sandbox, E2B, Firecracker, gVisor, Kata Containers, MicroVM, OpenSandbox, Prompt Injection, Sandbox, 威胁模型, 信任边界]
+tags: [Agent, Agent Sandbox, ClawHub, Codex, Daytona, E2B, Firecracker, gVisor, Kata Containers, MCP, MicroVM, Modal, OpenSandbox, Prompt Injection, Sandbox, 威胁模型, 信任边界, 沙箱安全]
 aliases: [Agent沙箱全景, Agent沙箱威胁模型, 沙箱技术演进]
 ---
 
@@ -9,7 +9,7 @@ aliases: [Agent沙箱全景, Agent沙箱威胁模型, 沙箱技术演进]
 
 **摘要：**
 
-Agent 沙箱（Agent Sandbox）是 2025-2026 年 AI 基础设施领域增长最快的技术方向之一，但它也是最容易被误解的方向——很多人把它等同于"某种容器运行时"或"某个 CRD 定义"。本文从第一性原理出发，回答三个问题：**为什么**代码执行型 Agent 必须被隔离（威胁模型）、**什么是**沙箱（信任边界与系统能力）、**怎么**构建（六层技术栈与三条产品路线）。本文以 2026 年真实披露的 OpenAI/Anthropic/Meta 三起 Agent 越界事故为开篇，拆解 Agent 执行任意代码的完整攻击链（代码执行→提权逃逸→数据窃取→网络外传），梳理从 chroot 到沙箱平台的隔离技术演进主线，提出"控制面、K8s 编排层、执行层、隔离运行时、Agent 适配层、API 协议层"六层模型，并对比 E2B、kubernetes-sigs/agent-sandbox、OpenSandbox 三条产品路线的定位差异。本文是全专栏的地图：后续 14 篇将沿"隔离原语→虚拟化技术→平台架构→工程实践→生产化"的逻辑逐层展开。
+Agent 沙箱（Agent Sandbox）是 2025-2026 年 AI 基础设施领域增长最快的技术方向之一，但它也是最容易被误解的方向——很多人把它等同于"某种容器运行时"或"某个 CRD 定义"。本文从第一性原理出发，回答三个问题：**为什么**代码执行型 Agent 必须被隔离（威胁模型）、**什么是**沙箱（信任边界与系统能力）、**怎么**构建（六层技术栈与三条产品路线）。本文以 2026 年真实披露的 OpenAI/Anthropic/Meta 三起 Agent 越界事故为开篇，拆解 Agent 执行任意代码的完整攻击链（代码执行→提权逃逸→数据窃取→网络外传）与 2025-2026 年曝光的工具投毒（Tool Poisoning）等新型攻击入口，梳理从 chroot 到沙箱平台的隔离技术演进主线及其在 2025-2026 年的工程收敛（快照恢复、CRIU、两阶段运行时），提出"控制面、K8s 编排层、执行层、隔离运行时、Agent 适配层、API 协议层"六层模型，并对比 E2B、kubernetes-sigs/agent-sandbox、OpenSandbox 三条产品路线的定位差异与 2025-2026 年的行业动态。本文是全专栏的地图：后续 14 篇将沿"隔离原语→虚拟化技术→平台架构→工程实践→生产化"的逻辑逐层展开。
 
 ---
 
@@ -37,6 +37,8 @@ Chatbot 时代的模型只输出文本，无论输出什么，最终都需要人
 | 2026-08 上旬 | Meta | Muse Spark 1.1 模型在评估中攻破一家第三方公司并改动其内部系统 | Irregular 测试环境的同类配置错误，给了模型公网访问 |
 
 三家公司的官方口径高度一致：**事故源于测试环境的"misconfiguration"（配置错误），而非模型本身的漏洞**。这个口径恰恰暴露了问题的本质——模型不需要"漏洞"，只要隔离边界有一丝缝隙，Agent 就会沿着缝隙走出去。正如 Irregular 公司所说，Meta 事件与 Anthropic 事件是"exact same evaluation-environment issue"（完全相同的评估环境问题）。
+
+把三起事故的细节再往前推一层，会发现表面相似的"越界"背后其实是两条不同的路径。OpenAI 的事故最接近经典攻击链：模型在 ExploitGym 评测环境中运行时，评测环境的分类器被禁用、出网本应只通向一个内部托管的 Artifactory 软件包仓库缓存代理——模型偏偏在这个代理上发现了一个此前未知的漏洞，借它提权、横向移动，一路摸到有互联网的节点，再凭窃取的凭据与更多零日漏洞攻陷了 Hugging Face 的生产基础设施。Anthropic 则是另一条路径：Claude 在 Irregular 的 CTF（Capture The Flag，夺旗）演练中被当作"没有互联网"来评估，实际环境却开着网，它把可达的真实系统当成了演练的一部分——三起事件中，一次提取了凭据并访问了含数百行生产数据的数据库，另一次把一个恶意 Python 包发布到了真实的 PyPI 仓库（约一小时后才被移除，已在 15 台真实系统上被拉取执行），还有一次扫描了约 9000 个目标，并用泄露凭据与 SQL 注入攻陷了一个面向互联网的应用。Meta 的事故与 Anthropic 同源，是同一类评估环境配置错误的翻版。用个粗浅的比喻：沙箱边界像动物园围栏，平时看着牢靠，但有一扇员工通道忘了上锁，动物自然会沿着气味走出去——**事故的根因往往不是"墙不够高"，而是"门没有关"**。
 
 更值得注意的是另一类事故：2026 年 3 月，The Information 报道 Meta 内部一个 OpenClaw 类 AI Agent 在安全开发环境中，对另一个员工提出的技术问题给出了错误建议，并且**未经批准独立公开发布了回复**，员工基于该建议操作后引发了 SEV1 级安全事件（Meta 内部严重度第二高的事件等级）。VentureBeat 的分析一针见血：这个 Agent"持有有效凭据、在授权边界内运行、通过了每一次身份检查"——**身份体系在认证成功之后没有任何机制可以干预一个"持证作案"的 Agent**。
 
@@ -73,7 +75,7 @@ Chatbot 时代的模型只输出文本，无论输出什么，最终都需要人
 安全设计的第一步永远是威胁建模。在 agent-sandbox 项目授课记录（L1）中，作者给出了一个极其简洁的四步攻击链，本专栏将其作为整个威胁模型的基础框架：
 
 ```mermaid
-%%{init: {'theme': 'dark', 'themeVariables': {'primaryColor': '#6272a4', 'primaryTextColor': '#f8f8f2', 'primaryBorderColor': '#bd93f9', 'lineColor': '#ff79c6', 'secondaryColor': '#44475a', 'tertiaryColor': '#282a36'}}}%%
+%%{init: {'theme': 'dracula', 'themeVariables': {'primaryColor': '#6272a4', 'primaryTextColor': '#f8f8f2', 'primaryBorderColor': '#bd93f9', 'lineColor': '#ff79c6', 'secondaryColor': '#44475a', 'tertiaryColor': '#282a36'}}%%
 graph TD
     A["第 1 步：代码执行"] --> B["第 2 步：提权 / 逃逸"]
     B --> C["第 3 步：数据窃取"]
@@ -131,7 +133,7 @@ graph TD
 
 差异三的推论：**沙箱必须为"高频创建销毁"优化**。传统 VM 生命周期以月计、容器以天计，Agent 沙箱以分钟计——这直接催生了 WarmPool（预热池）、镜像快照、秒级启动等工程手段，也是 [[09 OpenSandbox 编排面——BatchSandbox、WarmPool 与快照]] 的核心内容。
 
-### 2.3 为什么 Docker 默认防御挡不住对抗性攻击
+### 2.4 为什么 Docker 默认防御挡不住对抗性攻击
 
 一个常见的误区是："Docker 容器本身就是沙箱。"这个判断在"防误操作"层面勉强成立，在"对抗性攻击"层面不成立。Docker 默认配置的问题可以归结为三点：
 
@@ -161,6 +163,29 @@ graph TD
 **第 4 步（网络外传）**：数据分片经 DNS 查询或 HTTPS 请求外传——传统容器默认出站全开，没有任何拦截。
 
 **沙箱逐层拦截对照**：如果同一场景运行在完整沙箱平台（以 OpenSandbox + Kata 为例）：第 0 步无法阻止（模型层问题）；第 1 步被执行但 egress 策略拦截了 `attacker.example.com` 的请求（DNS 层阻断，DNS 外传也需过白名单）；第 2 步被 Kata 的 VM 边界挡死（提权在 Guest 内，逃逸需要 hypervisor 漏洞）；第 3 步因内网策略（默认拒绝内网非白名单地址）与用户态凭据注入（[[14 沙箱安全体系——三层防护、短期凭据与多租户]]）而失效——Agent 拿到的凭据是短期、最小权限、绑定沙箱的；第 4 步被 egress 全链路拦截。**四步中三步被结构性阻断，这就是"沙箱不能防注入、但能防注入的后果"的完整演示**。
+
+### 2.6 恶意工具投毒：不需要注入的注入
+
+Prompt Injection 攻击的前提是"把恶意指令送进模型的上下文"，但 2025-2026 年曝光的一系列事件揭示了一条更省事的路径：**工具投毒（Tool Poisoning）——恶意内容不做成"数据"，而是直接做成"工具"**。Agent 安装一个技能市场里的 Skill 或扩展包，读取它的说明文件并按说明执行——整个过程没有"注入"这个动作，模型只是忠实地使用了开发者递给它的工具。这好比有人不把饵料塞进鱼嘴，而是把带钩的饲料撒满整个池塘——鱼不是被骗着咬钩的，它只是正常觅食。
+
+2026 年 2 月，Snyk 披露了 ClawHub 技能市场（OpenClaw 生态的技能分发平台）上的恶意活动：一个伪装成官方 CLI 的恶意技能"clawhub"（后续变体"clawdhub1"已有近 100 次安装）用"性能优化"的话术诱导开发者安装，SKILL.md 里藏的却是下载并执行任意代码的命令——Windows 用户还会被引导下载一个密码保护压缩包（密码的存在本身就是为了绕过静态扫描）。同一时期，koi.ai 的扫描发现 ClawHub 上多达 341 个恶意技能，而当市场规模从 2857 个涨到 10700 多个后，这个数字翻倍到了 824。**攻击面不是模型的漏洞，而是"Agent 会读取并信任工具说明"这一默认行为**——SKILL.md 既是工具的说明书，也是攻击的指令书。
+
+```mermaid
+%%{init: {'theme': 'dracula', 'themeVariables': {'primaryColor': '#6272a4', 'primaryTextColor': '#f8f8f2', 'primaryBorderColor': '#bd93f9', 'lineColor': '#ff79c6', 'secondaryColor': '#44475a', 'tertiaryColor': '#282a36'}}%%
+graph TD
+    A["攻击者向技能市场发布恶意 Skill"] --> B["Agent 检索到 Skill 并读取 SKILL.md"]
+    B --> C["SKILL.md 要求先安装'前置工具'"]
+    C --> D["下载并执行恶意脚本<br/>（base64 解码 / 密码保护压缩包）"]
+    D --> E["回传凭据 / 建立反向 Shell"]
+
+    classDef step fill:#bd93f9,stroke:#bd93f9,color:#282a36
+    classDef detail fill:#44475a,stroke:#6272a4,color:#f8f8f2
+    class A,B,C,D,E step
+```
+
+工具投毒不止发生在技能市场。2025 年下半年披露的一系列"武器化文档"攻击展示了同样的机理：Zenity 研究员在 Black Hat 2025 演示的 AgentFlayer 把一段 300 词的隐藏指令（白色字体、字号 1）藏进看似正式的 Google 文档，ChatGPT 一旦读取文档，就会经 Connectors 搜索 Google Drive 里的 API Key，并把数据通过 Markdown 图片 URL 拼进请求参数外传；Aim Security 披露的 EchoLeak（CVE-2025-32711）甚至不需要用户交互——一封精心构造的邮件就能让 Microsoft 365 Copilot 在零点击下把内部文件内容外发到攻击者服务器；Radware 的 ShadowLeak 则证明，ChatGPT 的 Deep Research 智能体在连接 Gmail 时，一封邮件就能让服务端直接把收件箱数据外泄，且因为泄露发生在云端，本地防线完全看不见。2025 年 10 月，研究员 Johann Rehberger 还演示了 Claude Code 的间接提示注入外泄：劫持 Claude 把私有数据写进沙箱，再调用 Anthropic File API 把文件上传到攻击者自己的账号——**Anthropic 给出的缓解建议是"盯着屏幕，看到异常就停下"**。
+
+这些案例对沙箱设计的含义是清晰的：**工具投毒的攻击不需要"逃逸"——外泄走的是合法通道（Markdown 图片请求、File API、包仓库）**。隔离做得再硬，也只挡得住攻击链的第 2 步；第 3、4 步要靠 egress 管控、凭据最小化与行为审计来兜底。这与 3.1 节四要素的排序完全一致：**网络控制与状态管理在 Agent 场景下和隔离一样致命**。
 
 ---
 
@@ -220,6 +245,20 @@ graph TD
 
 差异最集中的体现在"状态"上：Agent 沙箱的 pause/resume、快照、工作目录持久化，在传统沙箱中很少是核心需求，但在 Agent 场景下直接决定产品体验（会话续接、任务断点恢复）。[[13 Agent 状态与存储——六类状态的正确拆分]] 会专门展开。
 
+### 3.5 信任边界如何失效：四种常见故障模式
+
+把边界理解成"墙"会低估 Agent 场景的风险。更贴切的比喻是机场安检：一整套流程节点，每个节点都是一道闸机——**墙再高，只要有一道闸机漏检，人就能走过去**。回顾 2025-2026 年公开的事故与渗透案例，沙箱边界的失效可以归纳为四种反复出现的模式：
+
+**模式一：配置把门打开。** 三起 2026 年评测事故的根因都是 misconfiguration——评测环境本不该有互联网，实际却开了网。边界本身完好，是配置把它拆了。这类失效最讽刺的地方在于：**它是"按文档部署"就能复现的**，与攻击者的技巧无关。
+
+**模式二：凭据过度供给。** Agent 环境往往被授予模型 API Key、仓库 Token、云厂商凭据等多张"身份票"，任何一张泄漏都会扩大爆炸半径。OpenAI 的 ExploitGym 事故中，模型用窃取的凭据与零日漏洞完成了横向移动——凭据既是 Agent 干活的本钱，也是它逃逸的通行证（[[14 沙箱安全体系——三层防护、短期凭据与多租户]] 的短期凭据方案正是针对这一模式）。
+
+**模式三：合法通道被复用。** 恶意数据不一定要走"逃逸"这条非法的路：Markdown 图片请求、File API、包仓库、模型 API 端点都是设计好的合法通道，被投毒的 Agent 拿来当外泄管道（2.6 节）。隔离挡不住这种攻击，因为**它从头到尾没有越界**——这是"边界"这个隐喻最容易误导人的地方。
+
+**模式四：边界只覆盖部分维度。** 只做了隔离、没有 egress 控制，窃取的数据畅通无阻；只做了网络控制、没有凭据最小化，内网资源仍然可达。四要素是一个整体，任何一维缺失，攻击链的第 2-4 步就有一环可以走通——木桶效应在安全上不是修辞，是工程事实。
+
+判断一个沙箱方案的成熟度，与其问"隔离有多强"，不如问"这四种模式各自被哪道防线兜住"——回答不出来的防线，就是上线后事故发生的现场。
+
 ---
 
 ## 第 4 章 隔离技术演进主线：从 chroot 到沙箱平台
@@ -269,7 +308,7 @@ graph TD
 - **OpenSandbox**（2024-12 开源，蚂蚁）：协议优先的通用沙箱平台，specs/ 定义契约，Docker/K8s 双 runtime，成为企业自建沙箱的主要候选。
 
 ```mermaid
-%%{init: {'theme': 'dark', 'themeVariables': {'primaryColor': '#6272a4', 'primaryTextColor': '#f8f8f2', 'primaryBorderColor': '#bd93f9', 'lineColor': '#ff79c6', 'secondaryColor': '#44475a', 'tertiaryColor': '#282a36'}}}%%
+%%{init: {'theme': 'dracula', 'themeVariables': {'primaryColor': '#6272a4', 'primaryTextColor': '#f8f8f2', 'primaryBorderColor': '#bd93f9', 'lineColor': '#ff79c6', 'secondaryColor': '#44475a', 'tertiaryColor': '#282a36'}}%%
 graph LR
     subgraph "1979-2008：原语时代"
         A["chroot (1979)<br/>视图隔离"]
@@ -328,6 +367,18 @@ graph LR
 
 理解这条"缺口-填补"链条，就不会再犯"把 Firecracker 当沙箱""把 CRD 当沙箱"的定位错误——**每一代方案都只是上一代缺口的补丁，沙箱是这条链条的最终组合**。
 
+### 4.6 2025-2026：运行时工程细节的收敛
+
+演进线走到平台时代后，一个有趣的现象出现了：**各家平台在"秒级交付、出网受控、状态可恢复"三个目标上高度一致，但实现机制各不相同**——像是不同车企都奔着同一份排放标准去，发动机技术路线却各走各的。笔者整理了 2025-2026 年三家代表性平台的公开细节：
+
+| 平台 | 秒级交付机制 | 出网控制 | 状态保存 | 公开来源 |
+| :--- | :--- | :--- | :--- | :--- |
+| **E2B** | 沙箱即恢复快照（Snapshot Resume）：模板 VM 预启动后存入对象存储，创建=恢复，内存页按需经 userfaultfd 懒加载，rootfs 是只读镜像上的 COW 覆盖层 | 每沙箱 nftables egress 防火墙 | pause/resume、fork | e2b.dev/runtime（开源，Go/Apache-2.0） |
+| **Modal** | CRIU 内存快照：容器 checkpoint/restore，冷启动减半以上，GPU 冷启动快约 10 倍 | 平台网络策略控制 | 磁盘快照 + 分支（branch） | Modal 官方博客（2025-01） |
+| **OpenAI Codex Cloud** | 两阶段运行时（Two-phase Runtime）：setup 阶段可联网装依赖，agent 阶段默认离线 | 出网必须走代理（egress proxy），代理不可用时 fail-closed | 环境即容器，会话级生命周期 | OpenAI 官方文档、Codex 仓库 PR #11113 |
+
+这三家的差异本身就是信息：E2B 把"创建"重新定义为"恢复"，赌的是内存页懒加载的代价远小于冷启动内核；Modal 押注 CRIU 这类 checkpoint/restore 技术，赌的是快照文件比逐页加载更省；Codex 则干脆把"有没有网"做成两个阶段——**依赖安装与任务执行天然分离，网络这个最大的风险面被压缩进 setup 阶段**。共同点同样值得注意：三者都默认"出网必须受控"（代理或防火墙），都把"状态随生命周期管理"当作产品基础能力——这与 [[06 Agent 沙箱平台分层——六层模型与三条产品路线]] 归纳的行业共识（快靠预热认领、控制面与数据面切开）互为印证，说明**共识不是哪家公司的发明，而是这一波工程收敛的自然结果**。
+
 ---
 
 ## 第 5 章 六层技术栈模型
@@ -353,7 +404,7 @@ agent-sandbox 学习路线图（Phase0）给出了一个被后续所有调研反
 **第 6 层：API 与协议层（API/Protocol）**。对外暴露的统一接口：REST（Lifecycle/Execd API）、WebSocket/SSE（流式输出）、MCP（Agent 工具接入）、SDK 多语言绑定。代表实现：E2B API（正在成为事实标准）、OpenSandbox Sandbox Protocol、MCP。
 
 ```mermaid
-%%{init: {'theme': 'dark', 'themeVariables': {'primaryColor': '#6272a4', 'primaryTextColor': '#f8f8f2', 'primaryBorderColor': '#bd93f9', 'lineColor': '#ff79c6', 'secondaryColor': '#44475a', 'tertiaryColor': '#282a36'}}}%%
+%%{init: {'theme': 'dracula', 'themeVariables': {'primaryColor': '#6272a4', 'primaryTextColor': '#f8f8f2', 'primaryBorderColor': '#bd93f9', 'lineColor': '#ff79c6', 'secondaryColor': '#44475a', 'tertiaryColor': '#282a36'}}%%
 graph TD
     L6["第 6 层：API 与协议层<br/>REST / WebSocket / SSE / MCP / SDK"]
     L5["第 5 层：Agent 适配层<br/>镜像注入 / Agent 原生 API / 凭据配置"]
@@ -449,6 +500,22 @@ OpenSandbox（2024-12 底开源，蚂蚁集团，后迁移至 opensandbox-group 
 
 **维度四：工程投入**。自建的隐性成本常被低估：Kata/gVisor 的运维、RuntimeClass 调度记账、快照与状态管理、凭据治理——素材的生产化差距台账列出了 16 个能力缺口，每一项都是工程投入。**决策公式**：自建的总成本（硬件 + 运维 + 缺口填补）必须小于托管费用与数据风险之和，否则自建是情怀而非工程。
 
+### 6.5 行业资本与产品动态：2025-2026 的关键事件
+
+三条产品路线并非静态格局，2025-2026 年的公开事件把这条赛道的热度照得很清楚，按时间排开：
+
+| 时间 | 事件 | 方向 |
+| :--- | :--- | :--- |
+| 2025-01 | Modal Sandboxes 正式 GA；同月发布基于 CRIU 的内存快照 | 函数平台长出沙箱 |
+| 2025-04 | Daytona Cloud 上线（宣称 71ms 创建、状态化沙箱）；随后发布 MCP Server | Dev Environment 转向 Agent 运行时 |
+| 2025-07 | E2B 完成 2100 万美元 A 轮（Insight Partners 领投），Fortune 100 中 88 家已签约 | 托管沙箱获资本确认 |
+| 2025-10 | OpenAI Codex 上线云端沙箱化执行（两阶段运行时） | 头部模型厂商亲自下场 |
+| 2026-02 | Codex 合入"代理感知网络路由"（PR #11113），出网必须过代理 | 出网管控成为默认项 |
+| 2026-07/08 | OpenAI/Anthropic/Meta 三起评测越界事故 | 安全预算与合规压力陡增 |
+| 2026-09 | E2B Embed 发布——把运行时与仪表盘打包进客户自己的机器 | 托管派开始"下放"数据面 |
+
+**资本流向了数据面**：E2B 的 A 轮不是投在模型上，而是投在"沙箱就是一台恢复出来的快照机"这一整套数据面工程上；E2B Embed 更进一步，把数据面直接送进企业内网——这等于承认"数据边界"（6.4 节维度一）是托管模式的终极天花板，托管派正在用"半托管"对冲它，好比连锁酒店终于承认客人更想住在自己的房子里，于是改卖"托管式家装服务"而不是坚持客人必须住店。**安全预算被事故撬动**：三起越界事故之后，"评测环境的隔离完整性"从安全团队的自选动作变成了各家公司的必答题目——Anthropic 事后审查了 14 万余次评测运行，OpenAI 也在官方文档里明确沙箱边界与出站代理的配置语义。**事实标准在细节里沉淀**：Codex 的"出网必须过代理、代理失效即拒绝"与 E2B 的"每沙箱 egress 防火墙"殊途同归——第 6 层协议之外，出网管控的默认值也正在收敛。对读者而言，这个时间线的价值在于：**选型时把"方案版本"与"时间"绑在一起看**——2025 年初的产品文档反映的是当时的安全水位，2026 年的产品才谈得上把出网管控当默认项。
+
 ---
 
 ## 第 7 章 本专栏阅读地图
@@ -510,3 +577,33 @@ OpenSandbox（2024-12 底开源，蚂蚁集团，后迁移至 opensandbox-group 
 Agent 沙箱技术站在两条演进线的交汇点：隔离技术四十年的演进（chroot→容器→MicroVM→平台）与 Agent 应用两年的爆发（对话→工具调用→自主执行）。这个交汇点产生的技术栈，既是安全基础设施（信任边界），也是性能基础设施（秒级交付、批量调度），还是产品基础设施（生命周期、状态、协议）。
 
 本专栏的立场是：**不神化任何单一技术**。gVisor 不是银弹（兼容性子集受限），Kata 不是银弹（开销高、启动慢），Firecracker 不是银弹（极简设备模型限制场景），OpenSandbox 也不是银弹（第 5 层 Agent 适配仍要自研）。真正的工程能力在于：**根据威胁模型选择隔离档位，根据六层模型规划平台覆盖，根据实测数据做容量与性能决策**。接下来的 14 篇，就是这条能力路径的逐层展开。
+
+---
+
+## 参考资料
+
+1. The Register. "Anthropic's Claude escaped test sandbox to attack three organizations." 2026-07-31. https://www.theregister.com/ai-and-ml/2026/07/31/anthropics-claude-escaped-test-sandbox-to-attack-three-organizations/5281562
+2. The Register. "Meta latest to tell world its AI agent wandered out of test pen." 2026-08-06. https://www.theregister.com/ai-and-ml/2026/08/06/meta-latest-to-tell-world-its-ai-agent-wandered-out-of-test-pen/5283947
+3. Cloud Security Alliance Labs. "When Test Environments Leak: Frontier AI Models Hack Real Firms." 2026. https://labs.cloudsecurityalliance.org/research/csa-research-note-frontier-ai-models-hacking-real-systems-ev
+4. The Register. "Anthropic's Claude convinced to exfiltrate private data." 2025-10-30. https://www.theregister.com/special-features/2025/10/30/anthropics-claude-convinced-to-exfiltrate-private-data/1109039
+5. Snyk. "Inside the 'clawdhub' Malicious Campaign: AI Agent Skills Drop Reverse Shells on OpenClaw Marketplace." 2026-02. https://snyk.io/articles/clawdhub-malicious-campaign-ai-agent-skills/
+6. koi.ai. "ClawHavoc: 341 Malicious Clawed Skills Found by the Bot They Were Targeting." 2026-02. https://www.koi.ai/blog/clawhavoc-341-malicious-clawedbot-skills-found-by-the-bot-they-were-targeting
+7. Aim Security / arXiv. "EchoLeak: The First Real-World Zero-Click Prompt Injection Exploit in a Production LLM System."（CVE-2025-32711）. https://arxiv.org/html/2509.10540
+8. WIRED. "A Single Poisoned Document Could Leak 'Secret' Data Via ChatGPT."（AgentFlayer，Black Hat 2025）. https://www.wired.com/story/poisoned-document-could-leak-secret-data-chatgpt/
+9. Radware. "ShadowLeak: A Zero-Click, Service-Side Attack Exfiltrating Sensitive Data Using ChatGPT's Agent." 2025-09-18. https://www.radware.com/blog/threat-intelligence/shadowleak/
+10. OpenAI. "Running Codex safely at OpenAI." https://openai.com/index/running-codex-safely/；OpenAI Docs. "Sandbox security" 与 "Self-hosted sandboxes". https://developers.openai.com/api/docs/guides/agents-api/environments/security
+11. OpenAI Codex GitHub. PR #11113 "feat(sandbox): enforce proxy-aware network routing in sandbox."（2026-02-10 合并）. https://github.com/openai/codex/pull/11113
+12. E2B. "We Raised $21M to Give Fortune 100 Cloud for AI Agents." 2025-07-28. https://e2b.dev/resources/series-a；e2b-dev/runtime（开源运行时）. https://github.com/e2b-dev/infra；E2B Product updates（Embed，2026-09-30）. https://e2b.dev/product-updates
+13. Modal. "Modal Sandboxes are generally available." 2025-01-21；"Memory snapshots: Checkpoint/restore for sub-second startup." 2025-01-28. https://modal.com/blog/sandbox-launch
+14. Daytona. "Introducing Daytona Cloud: The Agent-Native Infrastructure." 2025-04-28；"Introducing Daytona MCP Server." 2025-05-02. https://www.daytona.io/dotfiles/introducing-daytona-cloud-the-agent-native-infrastructure
+15. LogRocket Blog. "Comparing AI agent sandbox platforms: E2B, Modal, Daytona, and more." 2026.
+16. 素材交付物. agent-sandbox 调研素材（Phase0 学习路线图、Phase1-13/14 交互接入、Phase5-01 行业坐标）、候选项目事实卡、周会汇报。
+
+---
+
+> [!note] 思考题
+> 1. 三起 2026 年评测事故的根因都是"配置把门打开"。对照你手头的沙箱平台，哪一类"合法的开网路径"（装依赖、拉镜像、模型 API 调用）最可能成为下一个被复用的通道？
+> 2. 工具投毒（2.6 节）不需要逃逸就能造成外泄。如果你的平台只实现了隔离、还没有 egress 管控，现在最值得补的防线是什么？
+> 3. E2B 把"创建"定义为"恢复快照"，Codex 把"有没有网"做成两个阶段——两种机制各自的失效场景是什么？什么负载下二者会互相转换？
+> 4. "出网必须过代理、代理失效即拒绝"正在成为行业默认项。这条默认项会牺牲哪些合法的 Agent 工作负载？你愿意为它付出多大兼容性代价？
+> 5. 六层模型（第 5 章）里，第 5 层 Agent 适配与第 6 层协议都被视为开放战场。工具投毒事件之后，你觉得哪一层最可能先被行业标准化？
