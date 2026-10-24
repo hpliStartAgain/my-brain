@@ -1,7 +1,7 @@
 ---
 title: "Agent 沙箱平台分层——六层模型与三条产品路线"
 date: 2026-08-15
-tags: [Agent Sandbox, E2B, MCP, OpenSandbox, Sandbox CRD, WarmPool, agent-sandbox, 六层模型, 沙箱平台, 产品路线]
+tags: [Agent Sandbox, E2B, Firecracker, MCP, OpenSandbox, Sandbox CRD, WarmPool, agent-sandbox, sandboxd, KEP, CNCF Landscape, 六层模型, 沙箱平台, 产品路线]
 aliases: [沙箱平台分层, 六层模型, 产品路线对比, E2B兼容]
 ---
 
@@ -9,7 +9,7 @@ aliases: [沙箱平台分层, 六层模型, 产品路线对比, E2B兼容]
 
 **摘要：**
 
-前 5 篇完成了"隔离技术"主线——从威胁模型到隔离原语、四档光谱、KVM 硬件底座与 VMM 家族。本文切换视角：**从"边界画在哪"到"平台怎么建"**。首先逐层深挖六层模型（产品控制面、K8s 编排层、执行层、隔离运行时、Agent 适配层、API 协议层）——每层的职责边界、代表实现与关键设计问题，并解释"控制面与数据面切开"这一贯穿所有层级的架构原则；其次对比三条产品路线——云托管派（E2B，Firecracker + 托管控制面）、编排标准派（kubernetes-sigs/agent-sandbox，Sandbox/SandboxTemplate/SandboxClaim/SandboxWarmPool 四 CRD）、企业产品派（OpenSandbox，协议优先 + 双 runtime 可插拔）——包括 2026 年实测性能数据（E2B 创建 717ms/Daytona 742ms/Modal 2437ms）；再次总结行业共识（六层共识 + 目的建设派/企业共生派两派路线 + 建设顺序八步）；最后给出分层覆盖矩阵选型方法论与素材选型过程的完整复盘。核心认知：**Agent 沙箱平台的本质是"把隔离技术变成产品接口"——六层模型的每一层都回答一个独立问题，选型是分层覆盖矩阵问题而非单选问题；第 5 层（Agent 适配）是开源生态最大缺口，任何企业选型都必须为它预留自研预算**。
+前 5 篇完成了"隔离技术"主线——从威胁模型到隔离原语、四档光谱、KVM 硬件底座与 VMM 家族。本文切换视角：**从"边界画在哪"到"平台怎么建"**。首先逐层深挖六层模型（产品控制面、K8s 编排层、执行层、隔离运行时、Agent 适配层、API 协议层）——每层的职责边界、代表实现与关键设计问题，并解释"控制面与数据面切开"这一贯穿性架构原则；其次对比三条产品路线——云托管派（E2B，Firecracker + 托管控制面）、编排标准派（kubernetes-sigs/agent-sandbox，四 CRD）、企业产品派（OpenSandbox，协议优先 + 双 runtime 可插拔）——包括 2026 年实测性能数据（E2B 创建 717ms/Daytona 742ms/Modal 2437ms）与 2026 年下半年的格局变化（E2B 数据面开放、SIG v1beta1 稳定、OpenSandbox 1.1/1.2 补齐生产化短板）；再次总结行业共识（六层共识 + 目的建设派/企业共生派两派路线 + 建设顺序八步）；最后给出分层覆盖矩阵选型方法论与素材选型过程的完整复盘。核心认知：**Agent 沙箱平台的本质是"把隔离技术变成产品接口"——六层模型的每一层都回答一个独立问题，选型是分层覆盖矩阵问题而非单选问题；第 5 层（Agent 适配）仍是开源生态最大缺口，任何企业选型都必须为它预留自研预算**。
 
 ---
 
@@ -27,6 +27,10 @@ aliases: [沙箱平台分层, 六层模型, 产品路线对比, E2B兼容]
 
 把隔离技术 + 三个问题的答案打包成产品，就是"沙箱平台"——**平台的本质是"把隔离技术变成产品接口"**。素材交付物-01 的表述更精炼：**"Agent Sandbox 不是某一种容器运行时、MicroVM 或 Kubernetes CRD 的同义词，而是一套系统能力"**——平台层就是这套系统能力的载体。
 
+可以用一个粗浅的比喻建立直觉：前 5 篇讲的隔离技术是盖房子的材料——砖、水泥、钢筋，材料决定墙的强度；平台层是开发商与物业，负责把材料砌成可入住、可出租、坏了有人修的公寓。材料再结实，没有物业的公寓也住不长久——门锁没人管、水电没人收、垃圾没人清；物业再尽责，用不合格材料的公寓早晚会塌。**平台层的"物业"属性，恰恰是它比隔离层更难建设的原因**——材料的种类是有限的，而物业要回答的问题近乎无穷多。
+
+不妨再做一个反事实推演：假如只有隔离技术而没有平台层，前 5 篇的能力会退化成什么？沙箱只能靠工程师在单机上手工创建、手工回收；没有 TTL，一次会话留下的僵尸沙箱会慢慢吃光磁盘；没有配额，一个租户的并发请求可以把整个集群压垮；没有协议，每个 Agent 客户端都要自造一套创建与交互的轮子，平台永远无法演进。素材生产化差距台账的 16 个能力缺口全部落在平台层——这组数据本身就是"隔离技术只是起点"的统计证据：**缺的不是更结实的墙，而是让房子能长期住人的那一整套管理机制**。
+
 ### 1.2 平台的成本结构：为什么平台层比隔离层"贵"
 
 一个常被低估的事实：**平台层的工程成本远高于隔离层**。隔离层（第 4 层）可以选择现成运行时（runc/gVisor/Kata 都是开源组件），而平台层（控制面/编排/执行/适配/协议）的大部分能力需要自建或深度集成。素材生产化差距台账的 16 个能力缺口全部落在平台层：
@@ -42,6 +46,10 @@ aliases: [沙箱平台分层, 六层模型, 产品路线对比, E2B兼容]
 
 **决策含义**：选择平台（OpenSandbox 类）的本质是"用平台层的成熟度换取自建成本"——评估时把"平台能力缺口 × 自建单价"计入总成本，而不是只看平台免费与否。**素材选型"OpenSandbox 主候选"的完整理由是"覆盖 1/2/3/6 层 + 协议优先 + K8s 原生"，对应自建成本的节省是决定性的**。
 
+平台层的成本还有一个常被忽略的结构问题：**它并非均质，控制面成本与数据面成本的增长曲线完全不同**。控制面成本近似按"管理请求量"增长——每多一个租户、多一类模板、多一种配额口径，都要在状态存储与策略逻辑上付出边际成本；数据面成本则按"沙箱占用"线性滚动——每多一个并发沙箱，就是一份实打实的 CPU 与内存。前者是"一次性的规模投入"，后者是"随业务线性增长"，两者相加才是平台总账。素材选型之所以把"OpenSandbox 覆盖 1/2/3/6 层"当作决定性理由，正是因为控制面与编排层的成熟实现可以把"一次性规模投入"压到最低，让预算集中到第 5 层这个真正无法复用、每个 Agent 都要付一次钱的地方。
+
+开源平台还有一个普遍误区需要破除：**免费平台的"免费"免的是 license 费，不是工程费**。只盯着"平台是否开源"做选型，会漏掉三笔隐藏账单——自建缺口的工程费（第 5 层适配、第 2 层深度集成）、运维接缝的持续成本（平台与 K8s 的边界维护，[[15 生产化深水区——十个盲区与行业共识]] 的"共生派的生产化 = 填接缝"）、以及升级换代的迁移成本（CRD schema 演进、协议变更，2.2 节与 3.2 节的 v1beta1 迁移都是实例）。**在笔者看来，评估一个平台的成本，永远要算"平台能力缺口 × 自建单价"的总账，而不是看仓库星星数**。
+
 ### 1.3 平台层与隔离层的分工
 
 | 层 | 回答的问题 | 代表组件 | 本专栏对应篇 |
@@ -51,9 +59,13 @@ aliases: [沙箱平台分层, 六层模型, 产品路线对比, E2B兼容]
 
 **一个关键推论**：平台层与隔离层的解耦程度，决定了平台的"运行时可替换性"。OpenSandbox 能在"统一 API 下把运行时从 runc 换成 Kata"（素材 PoC 的实际操作），正是因为平台层（协议/控制面）与隔离层（RuntimeClass）通过清晰契约隔离——**这是平台架构的第一设计原则：控制面与数据面切开**（详见 2.7）。
 
+实践里这层解耦分三个粒度，逐层递进：**契约解耦**（第 6 层协议不绑定具体运行时，OpenSandbox 在统一 API 下切换 runc/Kata，素材 PoC 验证的正是这一层）；**声明解耦**（第 2 层 CRD 不直接描述运行时实现，而是通过 RuntimeClass 引用隔离档位，换引擎只改一个字段引用）；**进程解耦**（第 3 层 execd 与隔离引擎各自独立进程，数据面内部可以单独升级而不动控制面）。解耦粒度越细，运行时替换的代价越低，但接缝也越多——**每一个接缝都是一处需要自研维护的"平台与运行时边界"**，这正是"可替换性"与"接缝成本"之间的权衡。
+
 ---
 
 ## 第 2 章 六层模型逐层深挖
+
+如果把六层模型比作一家酒店：控制面是前台（谁入住、住多久、谁付账），编排层是客房管理系统（预订记录自动对账、坏了自动换房），执行层是客房里的水电网（住客能干什么），隔离运行时是每间客房的防火门（边界在哪），适配层是按客人习惯做的定制布置（每个 Agent 的个性化需求），协议层是门卡标准（所有设备按同一规范对接）。**比喻只能帮助建立直觉，不能替代设计**——酒店类比在"房间之间互相看不见"这一点上成立，在"楼层可以整体换物业"这一点上却不成立，真实的六层之间还有 2.10 节的灰色地带。
 
 ### 2.1 第 1 层：产品控制面（Lifecycle Control Plane）
 
@@ -69,6 +81,10 @@ aliases: [沙箱平台分层, 六层模型, 产品路线对比, E2B兼容]
 
 **关键设计问题**：控制面的状态存在哪？素材实测发现 OpenSandbox 0.2.x 的 Snapshot 元数据存在 Server pod-local SQLite——**双副本 Server 下查询会 404**（"共享状态≠副本数"盲区，[[15 生产化深水区——十个盲区与行业共识]]）。控制面状态的可共享性，是评估控制面架构的第一个问题。
 
+这个问题背后是三条存放路线的取舍：**pod-local 存储**（实现最简，但副本之间没有共享状态，双副本等于两份孤儿数据——OpenSandbox 0.2.x 实测的 404 就是这么来的）；**集中式数据库**（OpenSandbox 1.1.0 新增的可选 PostgreSQL 快照存储即此路线，支持多进程 HA，代价是引入一个需要运维的外部依赖）；**K8s 自身**（把状态表达为 CR，交给 etcd 与 Controller，代价是受 Reconcile 延迟约束，2.2 节）。三种选择的本质是同一个权衡：**状态的可共享性 vs 基础设施的复杂度**——单副本时 pod-local 完全够用，一旦要 HA，就必须为状态找一个"所有副本都看得见"的家。
+
+TTL 管理的实现也有两条路线：K8s 的 TTL Controller 按对象的创建/更新时间对账回收，平台定时器则通常以"最后活跃时间"为准做软到期。前者把"沙箱是否活跃"的定义交给控制器逻辑，后者要自己维护活跃心跳并承受心跳丢失时的误回收风险。**TTL 看似是个小功能，实则是"谁定义活跃"的语义决策**——素材在 WarmPool 与生命周期上同时踩到过这两条路线的边界（[[09 OpenSandbox 编排面——BatchSandbox、WarmPool 与快照]]）。
+
 ### 2.2 第 2 层：Kubernetes 编排层（Orchestration）
 
 **职责**：把沙箱表达为集群中的声明式对象，由 Controller 对账到期望状态。
@@ -81,6 +97,12 @@ aliases: [沙箱平台分层, 六层模型, 产品路线对比, E2B兼容]
 | **RuntimeClass 调度** | 按隔离档位选择节点与运行时 | K8s 原生 |
 
 **编排层的价值**：声明式（写 YAML 而非调 API）、自愈（Controller 持续对账）、可审计（CR 是事实层）。**编排层的代价**：Reconcile 有延迟（素材记录"CR reconcile 传播"是冷启动延迟的组成部分）、CRD 的 schema 版本演进复杂（素材发现 Pool CRD schema 落后于 Controller 的已知缺陷 DEF-005）。
+
+CRD schema 的演进成本，在 2026 年出现了一个行业级实例：kubernetes-sigs/agent-sandbox 在 v1.0.0（2026-08-28 发布）中移除全部 v1alpha1 API 与转换 webhook（Conversion Webhook），要求存量用户先升到 v0.5.x 做存储迁移、把 etcd 里的 storedVersions 修剪成只剩 v1beta1 才能继续升级——一次 schema 大版本演进，牵动的是升级路径、webhook 基础设施与全部存量 CR 的存储面。这与素材在 OpenSandbox 上发现的 DEF-005 是同一种负担的两面：前者是"演进时的迁移成本"，后者是"演进中的一致性维护"。**声明式 API 的 schema 版本管理，是编排层长期存在的一笔工程税**。
+
+SIG 项目还在把编排层的边界向外推：KEP-539.2 定义了一个可移植的盒内运行时守护进程 sandboxd——进程执行走 gRPC（ProcessService，:9090，stdout/stderr 作为长生命周期流式 RPC 推送），文件操作走 REST（FilesystemService，:8080，文件字节用原生 application/octet-stream 传输）——并明确说这个设计参考了 OpenSandbox 的 REST 接口与 E2B envd 的 gRPC 守护进程。**这意味着"编排层标准"正在尝试向下延伸，把"沙箱内怎么执行"也变成可移植契约**（3.2 节详述）。
+
+预热池的认领语义也在细化：SandboxClaim 的 ShutdownPolicy 分 Delete、DeleteForeground 与 Retain 三档——前者到期级联删除沙箱，中者保留 CR 让外部系统观察删除进度，后者只删底层资源、把 CR 标记为 Expired 留存。**认领（Claim）与执行（Sandbox）的生命周期解耦，是预热池设计里最容易低估的细节**——它直接决定"池子里的沙箱被认领后，由谁、在什么时机负责回收"。
 
 ### 2.3 第 3 层：执行层（Execution / Data Plane）
 
@@ -97,9 +119,13 @@ aliases: [沙箱平台分层, 六层模型, 产品路线对比, E2B兼容]
 
 **执行层的设计原则**（素材源码走读反复强调）：**执行层提供"控制通道"，不提供"业务语义"**——execd 负责命令/文件/PTY，但"对话、任务、会话"是 Agent 自己的事（第 5 层）。这个边界一旦模糊，执行层就会变成"什么都管、什么都管不好"的怪兽。
 
+边界模糊的代价可以看一个常见的反面演进：某平台为了让 Agent 更"好用"，把会话管理、任务编排甚至对话状态都塞进执行层，初期开发很快，但每适配一个新 Agent 都要改执行层，Agent 升级导致执行层跟着升级，最终长成平台化单体——这正是素材源码走读反复强调"execd 只提供控制通道"的原因。**执行层管的是"能干什么"，不是"干的事有没有意义"**；一旦后者介入，第 5 层的适配成本就会反向泄漏回第 3 层，两层同时失去可替换性。
+
 ### 2.4 第 4 层：隔离运行时（Isolation Runtime）
 
 前 5 篇的完整主题，此处只做衔接：**运行时的选择通过 RuntimeClass 表达，与平台层解耦**。关键点是"四层必须一致"（Server 配置→CR 声明→RuntimeClass→containerd 注册，[[02 Linux 隔离原语——namespace、cgroups、seccomp 与 capabilities 的安全地基]] 的七跳链路）——**运行时替换的难点不在运行时本身，而在四层一致性的维护**。
+
+需要补充的一点是：四层一致性的维护不是一次性的，而是持续的——每次新增一档运行时，都要同步更新 Server 配置、CR 声明、RuntimeClass 对象与 containerd 的运行时注册，任何一层遗漏都会产生"声明了却调度不上"或"声明了却跑错引擎"的静默偏差。素材在 PoC 里用"五层证据"（guest 内核、进程模型、namespace 等）验证档位与声明一致（[[10 Agent 沙箱部署实战——从单机 PoC 到测试集群]]），正是为了对抗这种多跳链路里的静默漂移。
 
 ### 2.5 第 5 层：Agent 适配层（Agent Adaptation）——开源最大缺口
 
@@ -116,6 +142,10 @@ aliases: [沙箱平台分层, 六层模型, 产品路线对比, E2B兼容]
 | **MCP 接入** | 让 Agent 能通过 MCP 调用平台能力（子沙箱） | opensandbox-mcp stdio 启动 |
 
 **为什么"原生 Server 接口优先于 PTY"**（素材 Phase1-13 的重要结论）：PTY 传输的是"终端字节流"——非结构化的，Agent 的消息/会话/工具调用语义在 PTY 中丢失；原生 Server API（如 OpenCode 的 `/session` + `/prompt_async` + SSE Event）是结构化的——平台可以拿到会话状态、流式输出、工具调用记录。**适配层做得好不好，直接决定平台的可观测性与可恢复性**（[[13 Agent 状态与存储——六类状态的正确拆分]] 的 Session 状态依赖这层提供结构化接口）。
+
+PTY 丢语义的机制值得再拆一层：PTY 传输的是终端字节流，回显、行编辑、转义序列、窗口尺寸这些 TTY 语义全被编码进字节流里，Agent 的消息、会话、工具调用结构在字节流里没有任何标记——平台拿到一段 PTY 输出，既不知道它是思考过程还是最终回答，也不知道它对应哪一次工具调用。原生 Server API 则相反，结构化到每个事件都有类型与归属。不过 PTY 并非没有存在价值——交互式 REPL、依赖 TTY 行为的程序、以及一切没有 Server 接口的 Agent，都必须退回 PTY 兜底，素材的实践是"Server 接口优先，PTY 兜底"双轨并行。
+
+适配层的缺口之大，行业并非没有察觉：KEP-539.2 试图把"盒内执行接口"标准化（gRPC ProcessService + REST FilesystemService），这填补的是第 3 层与第 6 层之间的接口空白；但"Agent 如何被平台托管"——启动方式、会话模型、配置格式——至今没有任何组织在推动统一，MCP 只标准化了工具接入，没有标准化托管语义。**第 5 层仍是开源生态最大缺口，这一判断在 2026 年 10 月依然成立**。
 
 ### 2.6 第 6 层：API 与协议层（API / Protocol）
 
@@ -134,6 +164,8 @@ aliases: [沙箱平台分层, 六层模型, 产品路线对比, E2B兼容]
 **问题一：E2B 兼容正在成为事实标准**。素材 Phase0 明确记录"E2B 兼容是第 6 层事实标准"——新平台以兼容 E2B API 作为降低迁移成本的手段。对企业自建，这意味着：**协议设计先参考 E2B 语义，再扩展自己的特色能力**。
 
 **问题二：协议的"权威状态"语义**。素材 Phase5-08 的调用铁律："**HTTP 码只表示'话送到了没有'，权威是 Lifecycle state + conditions**"——202 不是最终态、504 不代表资源存在（[[15 生产化深水区——十个盲区与行业共识]] 的十个盲区之首）。协议层必须把"状态语义"定义清楚，否则客户端与平台会在"成功/失败"的判断上产生系统性分歧。
+
+第 6 层的传输选型，是协议设计里容易被忽视的一处机制权衡。E2B 的 envd 走 gRPC（KEP-539.2 的调研里明确记载），进程的 stdout/stderr 作为流式 RPC 长连接推送；OpenSandbox 则全部走 REST（33 个 Lifecycle 操作、27 个 Execd 操作，基于 OpenAPI 契约），兼容性与工具链优势优先。两种选型各有道理：**譬如** REST/OpenAPI 便于契约校验与多语言 SDK 生成、对防火墙友好，gRPC 在流式输出与多路复用上有性能优势——sigs agent-sandbox 的 sandboxd 干脆做了混合：进程执行走 gRPC，文件传输走 REST（文件字节用原生 octet-stream，不做 protobuf 包装）。**协议层的"传输形态"之争，本质是"兼容性优先还是性能优先"的权衡**，素材实测的结论是：对企业自建平台，先按 E2B 语义设计状态与操作语义，再按自己的负载特征选传输形态。
 
 ### 2.7 层的组合规律：控制面与数据面切开
 
@@ -157,7 +189,7 @@ aliases: [沙箱平台分层, 六层模型, 产品路线对比, E2B兼容]
 把六层模型串成一个完整场景：**用户通过 SDK 请求"创建沙箱并执行 `python3 script.py`"**——一次请求穿过全部六层：
 
 ```mermaid
-%%{init: {'theme': 'dark', 'themeVariables': {'primaryColor': '#6272a4', 'primaryTextColor': '#f8f8f2', 'primaryBorderColor': '#bd93f9', 'lineColor': '#ff79c6', 'secondaryColor': '#44475a', 'tertiaryColor': '#282a36'}}}%%
+%%{init: {'theme': 'dracula', 'themeVariables': {'primaryColor': '#6272a4', 'primaryTextColor': '#f8f8f2', 'primaryBorderColor': '#bd93f9', 'lineColor': '#ff79c6', 'secondaryColor': '#44475a', 'tertiaryColor': '#282a36'}}%%
 sequenceDiagram
     participant SDK as "第 6 层 SDK/API"
     participant CP as "第 1 层 控制面 Server"
@@ -197,9 +229,23 @@ sequenceDiagram
 
 **打分规则**：每层"✅ 有证据 / 🔶 文档存疑 / ❌ 缺失"——**文档存疑与缺失同样危险**（文档存疑意味着你要踩坑验证，[[15 生产化深水区——十个盲区与行业共识]] 里的"202≠最终态""共享状态≠副本数"都是文档存疑的实例）。打分结果直接进入 5.1 的覆盖矩阵。
 
+### 2.10 六层模型的边界与灰色地带
+
+六层模型是"需求维度"的划分，真实实现里各层的边界并不总是干净——有三处公认的灰色地带，评估或自研时最好预先约定清楚。
+
+**执行层与隔离运行时的边界**：execd 进程到底算"沙箱内"还是"沙箱外"？OpenSandbox 的 execd 以 initContainer 注入主容器、bootstrap.sh 以 PID 1 身份拉起（[[08 OpenSandbox 数据面——execd 与 egress 的盒内世界]]），它属于"沙箱内的代言人"——这个选择让平台对沙箱的全部操作都收敛到守护进程的 API，审计点单一、权限模型清晰；反例是宿主机侧直接 setns 侵入沙箱 namespace 的路线，平台权限与沙箱隔离模型纠缠不清。**execd 放里面还是放外面，决定了"平台对沙箱的控制"以什么形态存在**。
+
+**适配层与协议层的边界**：Agent 原生 API 是第 5 层的能力，平台统一 API 是第 6 层的能力，两者之间隔着一层"协议桥"——素材的实践是父沙箱内用 opensandbox-mcp 把平台能力包成 Agent 可调用的工具，Agent 的原生 API 则通过 Endpoint 暴露给外部。边界一旦约定不清，"这个接口算平台义务还是 Agent 义务"就会变成开发中反复扯皮的区域。
+
+**控制面与编排层的边界**：谁拥有沙箱状态的"权威"？命令式入口（API Server）与声明式事实层（CR）之间存在天然张力——OpenSandbox 的"状态所有权"约定是 CR 就绪前归 API Server、就绪后归 Controller（[[07 OpenSandbox 架构深度解析——协议优先与六责任面]]），把模糊地带显式化成规则。**任何平台都必须回答"状态归谁"这个问题，不回答就等于让两个组件抢同一份状态的所有权**。
+
+那么，**为什么是六层而不是三层**？因为每一层对应一个独立的"替换单元"——控制面可以换状态存储，编排层可以换 CRD 版本，执行层可以换守护进程，隔离运行时可以换引擎，适配层逐个 Agent 定制，协议层跟着事实标准走。**分层的价值不在名字好听，而在让每一层的替换不波及其他层**——这正是六层模型作为评估框架而非实现蓝图的原因：它回答的不是"系统应该长什么样"，而是"每一层出问题时，替换的代价有多大"。
+
 ---
 
 ## 第 3 章 三条产品路线深对比
+
+三条路线可以用租房类比：E2B 是拎包入住的酒店（按天付钱、设施齐全、但房间不在你名下）；SIG 是毛坯房加一份国家建筑规范（结构标准是现成的，装修全靠自己）；OpenSandbox 是精装交付的商品房（协议与控制面开箱即用，但仍要自己买家具家电——第 5 层）。**类比的边界在于"换房成本"**：酒店退房即走，毛坯房的装修沉没成本高，商品房介于两者之间——这正好对应三条路线的定制深度与迁移成本（3.4 节总表）。
 
 ### 3.1 云托管派：E2B
 
@@ -214,13 +260,17 @@ E2B（2023 年成立）把 Agent 执行环境做成托管云服务。架构要�
 | **envd** | 沙箱内守护进程（命令/文件/代码执行） |
 | **运行时** | Firecracker MicroVM（自建数据面） |
 
-**2026 年实测数据**（LogRocket benchmark）：创建 717ms、恢复 662ms——当时对比组中最快。**价格模型**：按秒计费，$150/月 起步——适合小规模验证与原型。
+**2026 年实测数据**（LogRocket benchmark）：创建 717ms、恢复 662ms——当时对比组中最快。**价格模型**：按秒计费，$150/月 起步——适合小规模验证与原型。按秒计费的粒度也更细了，**譬如**默认 2 vCPU 的沙箱约 0.000028 美元/秒，Hobby 档免费 + 100 美元一次性额度（20 并发、单次最长 1 小时），Pro 档 150 美元/月（100-1,100 并发、单次 24 小时）。
 
-**E2B 的定位与边界**：托管服务（无自建选项）、数据在第三方云、深度定制受限。**它的行业意义是"定义了第 6 层的事实标准 API 语义"**——即使不用 E2B，参考它的 API 设计能显著降低生态接入成本。
+**2026 年的融资与规模**（web 核实的公开事实）：2025 年 7 月 E2B 完成 2100 万美元 A 轮融资（Insight Partners 领投，Decibel、Sunflower Capital、Kaya 参与，天使投资人包括 Docker 前 CEO Scott Johnston）；截至 2026 年 10 月，官网口径是 Fortune 100 中 94 家已注册、累计超过 20 亿次沙箱启动、SDK 累计下载过亿（每月约 1700 万次），runtime 采用 Apache-2.0 许可并取得 SOC 2 Type II 认证。**一家 2023 年成立的公司三年做到这个规模，说明"执行环境即服务"的需求是真实的，且仍在加速**。
+
+**2026 年最值得注意的变化是数据面开放**：E2B Embed（2026-09-30 发布）把运行时与 Dashboard 打包成可在客户环境单机部署的形态；BYOC（Bring Your Own Cloud，自带云）让沙箱跑在客户自己的 AWS/GCP/Azure 账号里；E2B Secrets（2026-10-07 发布）把凭据放在沙箱外、按配置注入 HTTPS 请求头，让"凭据不出沙箱"有了托管实现。此外，2026 年 4 月起 E2B 被 OpenAI Agents SDK 原生支持，6 月接入 Stripe Projects（Agent 可直接通过 Stripe 预配沙箱），9 月上线 V2 Sandbox Endpoints 与 CLI fork 命令，10 月推出 filesystem-only 快照与暂停模式——**"托管派"正在同时向"自建派"与"平台层"两个方向扩张**。
+
+**E2B 的定位与边界（2026-10 修订）**：它仍是"托管 + 闭源 API"的典型代表，但"无自建选项"的说法已经过时——Embed 与 BYOC 提供了数据面的自托管出口，只是控制面仍由 E2B 运营。数据位置与定制深度的权衡依旧存在，但选项从"全托管或全自建"变成了"控制面托管 + 数据面可选托管/自建"的中间态。**它的行业意义不变：定义了第 6 层的事实标准 API 语义**——即使不用 E2B，参考它的 API 设计能显著降低生态接入成本。
 
 ### 3.2 编排标准派：kubernetes-sigs/agent-sandbox
 
-K8s SIG Apps 的 agent-sandbox 项目定义了沙箱的声明式 API 标准。四 CRD 体系：
+K8s SIG Apps 的 agent-sandbox 项目（2025 年 11 月由 Google 与社区共同宣布为 SIG Apps 正式子项目）定义了沙箱的声明式 API 标准。四 CRD 体系（2026-08-28 的 v1.0.0 起全部稳定在 v1beta1）：
 
 | CRD | 职责 |
 | :--- | :--- |
@@ -231,11 +281,13 @@ K8s SIG Apps 的 agent-sandbox 项目定义了沙箱的声明式 API 标准。�
 
 **设计要点**：Sandbox 是"轻量单容器 VM 体验"的 K8s 表达——**稳定身份 + 持久存储 + 生命周期管理**是它区别于 Deployment/StatefulSet 的三个特征。安全细节：**经 SandboxTemplate 提供时，AutomountServiceAccountToken 默认 false**——安全默认原则进入 CRD 设计。
 
-**边界**：它只覆盖第 2 层（编排标准）——执行层、协议层、控制面都需要使用者自建。**它的行业意义是"编排层的事实标准锚点"**——OpenSandbox 实现了 agent-sandbox provider 以兼容它，GKE Agent Sandbox 内嵌它的 WarmPool。
+**v1.0.0 的行业意义**：这是编排层标准从 alpha 走向稳定的关键一步——四 CRD 全部只服务 v1beta1，移除 v1alpha1 与转换 webhook。移除 webhook 的动机本身很有信息量：apiserver 即使没人请求 v1alpha1，也会为了构建 informer 缓存而调用转换 webhook，占用 CPU 与延迟——**"为兼容旧版本而存在的转换基础设施"是声明式 API 演进里实打实的性能税**，这也从侧面印证了 2.2 节"schema 版本管理是工程税"的判断。
+
+**边界（2026-10 修订）**：它仍然不提供控制面与第 5 层适配，但"只覆盖第 2 层"的说法需要修正——KEP-539.2 定义的 sandboxd 运行时守护进程（gRPC ProcessService + REST FilesystemService）正在把标准延伸到第 3 层（盒内执行接口）；v1.0.0 还带来了浏览器路径路由的 sandbox-router 与 NVIDIA NeMo Gym/Gymnasium 的强化学习集成；2026 年路线图上的可移植后端（KEP #597/#747，解耦 API 与运行时）与自动挂起/恢复（Auto Suspend/Resume）若落地，将把"编排标准"进一步推向"执行标准"。**它的行业意义不变：编排层的事实标准锚点**——OpenSandbox 实现了 agent-sandbox provider 以兼容它，GKE Agent Sandbox 内嵌它的 WarmPool。
 
 ### 3.3 企业产品派：OpenSandbox
 
-OpenSandbox（蚂蚁开源，opensandbox-group 维护，CNCF Landscape 收录）的定位是"协议优先的通用沙箱平台"（第 07 篇完整展开）。此处只给出它在三条路线中的坐标：
+OpenSandbox（阿里巴巴开源，opensandbox-group 组织维护，CNCF Landscape 收录，GitHub 约 1.6 万星）的定位是"协议优先的通用沙箱平台"（第 07 篇完整展开）。此处只给出它在三条路线中的坐标：
 
 | 维度 | OpenSandbox 的位置 |
 | :--- | :--- |
@@ -245,6 +297,10 @@ OpenSandbox（蚂蚁开源，opensandbox-group 维护，CNCF Landscape 收录）
 | **覆盖层** | 第 1/2/3/6 层（控制面/编排/执行/协议） |
 | **第 5 层** | 缺失——Agent 适配需自研 |
 | **性能** | 批量交付比 sigs agent-sandbox 高一个数量级（InfoQ 数据） |
+
+**2026 年下半年的版本演进**（web 核实的公开事实）：素材 PoC 实测的 0.2.x 基线之后，项目于 2026-09-21 发布 1.1.0——第一个统一伞形发布（Umbrella Release），Server、组件镜像、Helm Chart、CLI 与全部 SDK 从同一个 commit 出包并附带签名 BOM（Bill of Materials）；1.2.0-rc.2（2026-10-21）引入 Credential Vault（OSEP-0022，egress 持有的凭据保险库，支持暂停/恢复迁移与逐主体持久化）与 NetworkRule 端口级规则。对本文主题最相关的两个变化是：**Fast Sandbox 集成了 Firecracker microVM**（带 pause/resume 与 FastPath 路由，把"逐沙箱运行时"与"内存级暂停"补进产品能力），以及**可选 PostgreSQL 快照存储**（支持多进程 HA，正面回应 2.1 节的"共享状态≠副本数"盲区）——这两点都会改变 5.1 覆盖矩阵里第 4 列与状态行的评分。
+
+**它与 SIG 的 API 对齐**：1.1.0 把 agent-sandbox provider 与 ingress informer 迁移到 agents.x-k8s.io/v1beta1——两条 K8s 路线的 CRD 口径正在对齐，"编排层标准化"的生态信号更清晰了。
 
 ### 3.4 三维对比总表
 
@@ -258,6 +314,8 @@ OpenSandbox（蚂蚁开源，opensandbox-group 维护，CNCF Landscape 收录）
 | **定制深度** | 低 | 高（自建其余层） | 中高（协议可扩展） |
 | **运维成本** | 最低 | 高（其余层自建） | 中 |
 | **适用** | 原型/小规模 | 标准先行者 | 企业生产 |
+
+**2026 年 10 月的三处动态**，让这张表的三列都在移动：E2B 通过 Embed/BYOC 补上了"自建"维度（数据面开放）；SIG 通过 v1beta1 稳定与 sandboxd 标准化把"标准"从第 2 层伸向第 3 层；OpenSandbox 通过 Firecracker Fast Sandbox 与 PostgreSQL 补上了运行时插拔与 HA 两块短板。**三条路线没有一条停在原地，选型对比表需要按季度重画**（5.1 节第四步）。
 
 ### 3.5 其他值得关注的玩家：Daytona、Modal、GKE 与 Cloudflare
 
@@ -275,6 +333,8 @@ OpenSandbox（蚂蚁开源，opensandbox-group 维护，CNCF Landscape 收录）
 1. **起点决定形态**——函数平台长出来的（Modal）与 Dev Environment 长出来的（Daytona）沙箱语义完全不同（短任务 vs 长会话）；
 2. **"暂停/恢复"能力不是默认项**——Daytona 的热快照只在 VM 档提供——**状态能力的档位化是普遍现象**（[[13 Agent 状态与存储——六类状态的正确拆分]]）；
 3. **Cloudflare 的脑手分离**是"控制面与数据面切开"的极端形态——状态（脑）与执行（手）可以不在同一节点甚至同一区域。
+
+**2026 年下半年的两个补充**（web 核实的公开事实）：Modal 于 2026-10-01 将 VM Sandboxes 转正（`runtime="vm"` 一个参数切到完整 Linux 内核，可跑 Docker-in-Sandbox、eBPF、systemd，gVisor 仍是默认运行时），并在 2026-09 上线 Sandbox Sidecars（与主沙箱同宿主隔离的容器，跨信任边界通信约快 3 倍）与出站域名白名单（outbound_domain_allowlist）——**函数平台"长出来"的沙箱，正在长出"虚拟机与可信侧车"的能力，"起点决定形态"的判断需要加上"起点可以进化"**。
 
 ### 3.6 路线选择决策树
 
@@ -316,6 +376,20 @@ OpenSandbox（蚂蚁开源，opensandbox-group 维护，CNCF Landscape 收录）
 
 **生态判断**：编排层正在标准化（SIG 锚点）、协议层正在事实标准化（E2B 锚点）、隔离层保持多元化（四档光谱）。**选型时的生态策略：协议层参考 E2B、编排层贴近 SIG、隔离层按威胁等级自由选择**——三条路线不必绑定，可以组合。
 
+**2026 年下半年的生态收敛**：三个兼容事实之外，还出现两个新动向——其一，E2B 的 Embed 与 BYOC 让"托管派"与"自建派"的分野开始模糊，"兼容 E2B 语义"的适用范围从协议层扩大到了部署形态；其二，K8s 系内部在 API 层面加速对齐（SIG v1beta1 稳定、OpenSandbox provider 同步迁移），"编排层标准化"从口号变成了 CRD 版本号。**生态判断保持不变：编排层正在标准化、协议层正在事实标准化、隔离层保持多元化**——但"标准"与"产品"之间的边界，比 2026 年中更模糊了。
+
+### 3.8 三条路线的动态演进：2026 年下半年的格局变化
+
+把三条路线各自的最新进展放到一张时间表里，可以看清 2026 年下半年的整体格局：
+
+| 路线 | 2026 年中状态 | 2026-10 新变化 | 对选型的影响 |
+| :--- | :--- | :--- | :--- |
+| **E2B（托管派）** | 纯托管、闭源 API、按秒计费 | A 轮 2100 万美元；94/100 家 Fortune 100 注册；Embed/BYOC 开放数据面；E2B Secrets 凭据外置；OpenAI Agents SDK 原生支持 | "托管 vs 自建"不再是二选一，可以控制面托管 + 数据面自建 |
+| **SIG agent-sandbox（标准派）** | 四 CRD alpha、WarmPool 语义 | v1.0.0 稳定 v1beta1；sandboxd（KEP-539.2）标准化盒内执行；sandbox-router；RL 集成 | 编排层标准开始延伸向执行层，第 3 层可移植性在提升 |
+| **OpenSandbox（企业产品派）** | 0.2.x、Docker/K8s 双 runtime | 1.1.0 统一发布（签名 BOM）；Firecracker Fast Sandbox；PostgreSQL 快照存储；1.2.0-rc.2 Credential Vault | 运行时插拔与 HA 短板补齐，覆盖矩阵第 4 列与状态行升级 |
+
+**格局变化的本质**：三条路线都在向"对方的优势区"扩张——托管派开放数据面、标准派延伸执行层、企业产品派补齐生产化短板。**这不是竞争白热化，而是生态收敛的信号**：当每一条路线都能覆盖对方的核心卖点，选型的决定因素就从"选哪条路线"退回到"哪条路线与你已有的基础设施最合拍"——数据边界、K8s 存量、第 5 层预算，这三个约束重新成为决策主轴（3.6 节决策树与 5.5 节新变量）。
+
 ---
 
 ## 第 4 章 行业共识：六层共识与两派建设思路
@@ -333,6 +407,8 @@ OpenSandbox（蚂蚁开源，opensandbox-group 维护，CNCF Landscape 收录）
 | **5. 隔离按档提供** | 不追求单一最强隔离，按威胁等级提供多档 | 四档光谱、三 Profile 方案 |
 | **6. 状态按寿命拆库** | 不同寿命的状态存不同地方（[[13 Agent 状态与存储——六类状态的正确拆分]]） | 四本账模型 |
 
+共识 4 的机制细节在 2026 年又有补强：sigs agent-sandbox 为 SandboxClaim 增加了预热候选宽限期（Warm-Candidate Grace Period，默认 2 秒，即认领等待预热候选上报 Pod IP 的最长时限，超时则回退到冷创建路径）与智能预热池匹配（Smart Warmpool Selection 路线图）——"快靠预热物认领"从"有池子"进化到"池子怎么选、认领怎么等"的精细化阶段。**预热池的工程深度，是 2026 年各家拉开交付体验差距的主要战场**。
+
 ### 4.2 目的建设派 vs 企业共生派
 
 在"怎么建数据面"上，行业分成两派：
@@ -345,9 +421,13 @@ OpenSandbox（蚂蚁开源，opensandbox-group 维护，CNCF Landscape 收录）
 | **代价** | 数据面工程量大、闭源 | 受 K8s 架构约束（Reconcile 延迟等） |
 | **适合** | 平台公司、极致性能场景 | 企业自建、K8s 原生场景 |
 
-**判断**：企业自建沙箱几乎必然走"共生派"——因为 K8s 已经在你手里（素材的 DomeOS 集群），复用控制面的边际成本最低。**"目的建设派"是平台公司的路线，不是企业的路线**——选型时不要被"E2B 性能好"带偏，先确认自己是哪一派。
+两派路线可以借用交通运输的比喻：目的建设派是自建铁路的公司——轨道、车头、调度都自己造，速度与密度最优化，但路网只为自己服务；企业共生派是在既有国家铁路网上跑车——复用铁轨与信号系统，接入成本低，但要服从路网的调度规则，K8s 的 Reconcile 延迟就是这种"调度规则"。**混合派则像是"租用铁轨 + 自购机车"**：路网复用、机车按需定制，代价是路网与机车的接缝要自己维护。
+
+**判断**：企业自建沙箱几乎必然走"共生派"——因为 K8s 已经在你手里（素材的 DomeOS 集群），复用控制面的边际成本最低。**笔者的判断是，"目的建设派"是平台公司的路线，不是企业的路线**——选型时不要被"E2B 性能好"带偏，先确认自己是哪一派。
 
 **两派之外的第三形态**：混合派——**数据面部分自建（WarmPool/执行层）、控制面复用 K8s**（OpenSandbox 的形态）——它同时获得"复用控制面"的低成本与"自建数据面"的性能优化空间，代价是"接缝处"（平台与 K8s 的边界）需要自研维护（[[15 生产化深水区——十个盲区与行业共识]] 的"共生派的生产化 = 填接缝"）。**素材选型实际上落在混合派**——"OpenSandbox 覆盖 1/2/3/6 层 + 第 5 层自研"正是混合派的典型组合。
+
+2026 年下半年还有一个值得记录的动态：E2B 的 Embed 与 BYOC 让"目的建设派"的头部玩家开始提供"企业共生派"形态的部署选项——**两派的边界，从"自建数据面还是复用 K8s"变成了"数据面在哪运行"**。但对绝大多数企业而言结论不变：K8s 已经在你手里，复用控制面的边际成本最低，共生派仍是企业自建的默认路线。
 
 ### 4.3 尚未共识的领域：三个开放战场
 
@@ -355,9 +435,9 @@ OpenSandbox（蚂蚁开源，opensandbox-group 维护，CNCF Landscape 收录）
 
 **开放战场一：Agent 适配层（第 5 层）没有标准**。每家 Agent 的启动/会话/配置格式不同，没有任何组织在推动统一（MCP 标准化了"工具接入"，但没有标准化"Agent 如何被平台托管"）。素材结论"第 5 层需自研、NemoClaw 为唯一参考"正是这个战场的写照——**谁先定义出事实标准，谁就占据下一轮生态位**。
 
-**开放战场二：状态的标准化语义**。"暂停/恢复/快照"在不同平台指不同东西（[[09 OpenSandbox 编排面——BatchSandbox、WarmPool 与快照]] 的"同一个状态名下面是不同机器"）——Daytona 的热快照是 VM 档、Modal 的 Directory Snapshot 是文件级、GKE 的 Pod Snapshot 是 rootfs 级。**跨平台的状态互操作目前不可能**。
+**开放战场二：状态的标准化语义**。"暂停/恢复/快照"在不同平台指不同东西（[[09 OpenSandbox 编排面——BatchSandbox、WarmPool 与快照]] 的"同一个状态名下面是不同机器"）——Daytona 的热快照是 VM 档、Modal 的 Directory Snapshot 是文件级、GKE 的 Pod Snapshot 是 rootfs 级。**跨平台的状态互操作目前不可能**。2026 年下半年的证据继续分化：E2B 推出 filesystem-only 快照与暂停模式，OpenSandbox 的 Firecracker Fast Sandbox 提供 FSB 级 pause/resume，GKE 仍是 rootfs 级 Pod Snapshot——"暂停/恢复/快照"的语义在更多平台里指更多不同的东西。**这一局面没有收敛，反而更丰富了，'状态外置'仍是唯一稳妥的选型策略**。
 
-**开放战场三：checkpoint/内存级快照成为竞争点**。素材事实卡记录"休眠/checkpoint 成为竞争点"——谁能做到"内存级暂停/恢复"（而非 rootfs 级），谁就能提供"会话秒续"体验。gVisor 的 runsc C/R、CRIU、GKE Pod Snapshot 都在向这个方向推进，但都未成为通用标准。
+**开放战场三：checkpoint/内存级快照成为竞争点**。素材事实卡记录"休眠/checkpoint 成为竞争点"——谁能做到"内存级暂停/恢复"（而非 rootfs 级），谁就能提供"会话秒续"体验。gVisor 的 runsc C/R、CRIU、GKE Pod Snapshot 都在向这个方向推进，但都未成为通用标准；2026 年下半年，OpenSandbox 的 Firecracker Fast Sandbox 把"逐沙箱内存级暂停"补进了产品路线，让这个战场的竞争者又添一员。
 
 **对选型的影响**：三个开放战场意味着**任何平台选型都包含"赌注"成分**——选择某个平台的协议与状态语义，就是押注它的方向。缓解策略：协议层参考 E2B（事实标准方向）、状态层做好"状态外置"（不把状态锁死在平台内部，[[13 Agent 状态与存储——六类状态的正确拆分]]）——**把赌注压在"可迁移性"上，而不是押在"某个平台的未来"上**。
 
@@ -380,6 +460,8 @@ OpenSandbox（蚂蚁开源，opensandbox-group 维护，CNCF Landscape 收录）
 
 ## 第 5 章 选型方法论：分层覆盖矩阵
 
+覆盖矩阵就像拼图：候选方案是拼图片，六层是拼图的六个位置——**选型不是挑"最好看的一片"，而是看"哪些片能拼出最完整的图，缺的那几片要花多少钱补"**。矩阵的价值恰恰在"缺"字上：✅ 多只说明覆盖广，❌ 与 🔶 才决定自研预算。
+
 ### 5.1 矩阵法操作步骤
 
 **第一步：画覆盖矩阵**。候选方案 × 六层，标记"原生覆盖/部分覆盖/缺失/可插拔"：
@@ -398,6 +480,8 @@ OpenSandbox（蚂蚁开源，opensandbox-group 维护，CNCF Landscape 收录）
 **第三步：验证契约**。缺口的相邻层契约是否清晰？（协议是否 OpenAPI？CRD 是否稳定？）**契约清晰的缺口可以自研，契约模糊的缺口是坑**——第 5 层适配之所以难，正是因为它没有契约标准。
 
 **第四步：矩阵的演进维护**。覆盖矩阵不是选型时画一次——**候选方案的版本升级、社区进展、自研进度都会改变矩阵**（如 OpenSandbox 后续版本若补上逐沙箱运行时，第 4 列的 🔌 就变 ✅）——**建议每季度更新覆盖矩阵**（与 [[12 沙箱性能工程——Runtime 基准与 WarmPool 容量管理]] 的性能基准季度回归同节奏），矩阵变化是"再评估候选"的触发信号（[[15 生产化深水区——十个盲区与行业共识]] 5.4 节）。
+
+2026 年 9 月恰好提供了两个现成的矩阵变化样例：OpenSandbox 1.1.0 的 Firecracker Fast Sandbox 让第 4 列的 🔌（可插拔运行时）实质化、PostgreSQL 快照存储让状态行的 🔶 变 ✅；SIG agent-sandbox v1.0.0 让 CRD 稳定性从 🔶 变 ✅（v1beta1 全量稳定）。**矩阵的每一格都应该能指认到"哪个版本、哪个 release 改变了它"**——不能指认的格子，就是文档存疑区。
 
 ### 5.2 案例复盘：素材选型过程
 
@@ -438,6 +522,16 @@ OpenSandbox（蚂蚁开源，opensandbox-group 维护，CNCF Landscape 收录）
 | **忽视契约** | 只看功能清单，不看 API/CRD 稳定性 | 契约审查（OpenAPI/版本演进） |
 | **跳过 PoC** | 纸面选型直接上生产 | 至少跑通"创建→执行→回收"闭环 |
 
+### 5.5 2026 年下半年的三个选型新变量
+
+3.8 节的格局变化落到选型方法论上，产生三个需要重新评估的变量：
+
+**新变量一："托管 vs 自建"的数据边界二分法失效**。E2B Embed/BYOC 让"控制面托管 + 数据面自建"成为可选组合——决策树第一步（数据边界允许第三方云托管吗）的答案不再是"是/否"，而是"哪一部分数据可以交给第三方"。需要把决策树的节点从"数据边界"细化为"控制面数据边界"与"执行数据边界"两个问题分别回答。
+
+**新变量二：标准派开始覆盖第 3 层**。sandboxd（KEP-539.2）若成为事实标准，"盒内执行接口"将从自研变可移植——这直接降低自研组合在"执行层"一格的工程成本，也可能让第 5 层适配的下层接口更统一。评估时值得追踪 KEP #597/#747（API 与运行时解耦）的落地进度，并定期重新评估"执行层自研"与"执行层跟标准"的边界。
+
+**新变量三：企业产品派的"生产化短板"正在被逐个补齐**。Firecracker Fast Sandbox、PostgreSQL 快照存储、Credential Vault——每补齐一块，OpenSandbox 在覆盖矩阵里的 🔶 就少一格，"缺口决定自研预算"的预算表就要重算。**选型不是一次性决定，而是每个季度跟着版本号重画矩阵的过程**（5.1 节第四步）——素材在 0.2.x 基线上做的评估结论，在 1.1.0 之后至少有两个格子需要重验。
+
 ---
 
 ## 第 6 章 总结与下一篇导读
@@ -451,6 +545,7 @@ OpenSandbox（蚂蚁开源，opensandbox-group 维护，CNCF Landscape 收录）
 5. **三条产品路线**：E2B（托管）、SIG（标准）、OpenSandbox（企业产品）——不是竞争关系，是互补关系，可以组合
 6. **行业六层共识 + 两派建设思路 + 建设顺序八步**——2026 年沙箱设计的基本公理
 7. **选型方法论**：覆盖矩阵 + 契约审查 + PoC 验证三段式
+8. **2026 年下半年的格局变化**：托管派开放数据面（E2B Embed/BYOC）、标准派延伸执行层（sandboxd/v1beta1）、企业产品派补齐生产化短板（Firecracker Fast Sandbox/PostgreSQL）——三条路线的边界在模糊，生态在收敛，选型的决定因素退回"与既有基础设施的契合度"
 
 ### 6.2 术语速查
 
@@ -463,6 +558,8 @@ OpenSandbox（蚂蚁开源，opensandbox-group 维护，CNCF Landscape 收录）
 | **E2B 兼容** | 以 E2B API 语义为事实标准的协议兼容策略 |
 | **SandboxClaim** | 从预热池认领沙箱的 CRD 抽象 |
 | **目的建设派 / 企业共生派** | 自建数据面 vs 复用 K8s 的两派建设路线 |
+| **sandboxd** | SIG 标准化的盒内运行时守护进程（KEP-539.2） |
+| **Fast Sandbox** | OpenSandbox 基于 Firecracker microVM 的快速沙箱（内存级暂停/恢复） |
 
 ### 6.3 思考题
 
@@ -471,6 +568,8 @@ OpenSandbox（蚂蚁开源，opensandbox-group 维护，CNCF Landscape 收录）
 2. **第 5 层的自研边界**：假设你的平台需要托管三种 Agent（Claude Code/OpenCode/自定义 LangChain 服务），适配层的最小可交付是什么？提示：参考素材的实践——镜像化、父沙箱保活、原生 Server 接口优先、MCP 接入——哪些可以复用，哪些必须每个 Agent 定制？
 
 3. **E2B 兼容的取舍**："E2B 兼容是第 6 层事实标准"——但兼容意味着被 E2B 的 API 语义约束。什么情况下你应该选择"不兼容"？提示：考虑状态语义差异（E2B 的秒级恢复 vs 你的 rootfs 快照）与能力扩展（浏览器自动化等 E2B 没有的语义）。
+
+4. **格局变化下的重新评估**：2026 年下半年的三个新变量（数据边界二分法失效、标准派覆盖第 3 层、企业产品派补齐短板）里，哪一个对你当前选型的影响最大？提示：先更新你的覆盖矩阵，再看决策树第一步的答案是否还是同一个。
 
 ### 6.4 下一篇导读
 
@@ -493,9 +592,21 @@ OpenSandbox（蚂蚁开源，opensandbox-group 维护，CNCF Landscape 收录）
 8. Daytona 官方文档. https://www.daytona.io
 9. Modal 官方文档. https://modal.com
 10. GKE Agent Sandbox 文档. https://cloud.google.com/kubernetes-engine/docs/concepts/agent-sandbox
+11. E2B 官网、About 与定价页（94/100 Fortune 100、20 亿次沙箱启动、按秒计费档位）. https://e2b.dev、https://e2b.dev/about、https://e2b.dev/pricing
+12. E2B 产品更新页（E2B Embed、E2B Secrets、V2 Endpoints、filesystem-only 快照等）. https://e2b.dev/product-updates
+13. E2B A 轮融资公告（$21M，Insight Partners 领投）. https://e2b.dev/resources/series-a
+14. agent-sandbox v1.0.0 Release Notes（v1beta1 稳定、移除 v1alpha1 与转换 webhook）. https://github.com/kubernetes-sigs/agent-sandbox/releases/tag/v1.0.0
+15. agent-sandbox Runtime API 文档（sandboxd：gRPC ProcessService + REST FilesystemService）. https://agent-sandbox.sigs.k8s.io/docs/api/runtime/
+16. KEP-539.2 运行时标准化（参考 OpenSandbox REST 与 E2B envd gRPC）. https://github.com/kubernetes-sigs/agent-sandbox/blob/main/docs/keps/539.2-runtime-standardization/README.md
+17. agent-sandbox 2026 Roadmap（KEP #597/#747 可移植后端、Auto Suspend/Resume 等）. https://github.com/kubernetes-sigs/agent-sandbox/blob/main/roadmap.md
+18. Google Open Source Blog. "Unleashing autonomous AI agents: Why Kubernetes needs a new standard for agent execution"（agent-sandbox 成为 SIG Apps 正式子项目，2025-11）. https://opensource.googleblog.com/2025/11/unleashing-autonomous-ai-agents-why-kubernetes-needs-a-new-standard-for-agent-execution.html
+19. OpenSandbox 官方文档（CNCF Landscape 收录、路线图）. https://open-sandbox.ai/overview/home
+20. OpenSandbox Releases（1.1.0 统一发布、1.2.0-rc.2 Credential Vault）. https://github.com/opensandbox-group/OpenSandbox/releases
+21. Modal Blog. "VM Sandboxes: Full computers for agents"（2026-10-01）与 Sandbox Sidecars（2026-09）. https://modal.com/blog/vm-sandboxes-agent-computers、https://modal.com/blog/product-updates-sidecars-models-dashboard
 
 ---
 
 ## 修改记录
 
 - 2026-08-15：专栏创建，本文基于 agent-sandbox 调研素材（六层模型、行业坐标、行业共识）与 2026 年公开资料整合创作
+- 2026-10-24：扩写与时效性更新——补充六层机制细节（状态存储三路线、TTL 语义、schema 演进、REST vs gRPC）、灰色地带小节（2.10）、2026 年下半年格局变化小节（3.8）与选型新变量（5.5）；E2B/SIG/OpenSandbox/Modal 事实经 web 核实（参考文献 11-21）

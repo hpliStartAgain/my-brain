@@ -50,7 +50,7 @@ Chatbot 时代的模型只输出文本，无论输出什么，最终都需要人
 
 **原因一：Agent 的工作负载天然不可信。** Agent 执行的代码可能来自模型生成（幻觉、被注入指令诱导）、来自仓库中的第三方依赖、来自用户的任意输入。与经过 Code Review 的常规服务不同，Agent 会话内的每一次代码执行都是"实时生成、实时执行"，没有人工审查窗口。按传统"可信代码运行在可信环境"的假设，这种负载根本无法上生产；沙箱把假设翻转成"**不可信代码运行在不可信环境，但环境本身被严密控制**"。
 
-**原因二：模型能力越强，runtime 越成为瓶颈。** 蚂蚁 OpenSandbox 团队在 InfoQ 分享中给出了一个犀利的观察：当模型只能输出文本时，执行环境无关紧要；当模型能力提升到可以自主规划、调用工具、持续工作时，**runtime（执行环境）成为整个系统的瓶颈**——创建环境太慢、隔离太弱、无法并发、无法回收，这些 runtime 问题反过来限制了模型能力的发挥。沙箱平台解决的不只是安全，还有"如何高效地交付、调度、回收执行环境"的工程问题。
+**原因二：模型能力越强，runtime 越成为瓶颈。** 阿里巴巴 OpenSandbox 团队在 InfoQ 分享中给出了一个犀利的观察：当模型只能输出文本时，执行环境无关紧要；当模型能力提升到可以自主规划、调用工具、持续工作时，**runtime（执行环境）成为整个系统的瓶颈**——创建环境太慢、隔离太弱、无法并发、无法回收，这些 runtime 问题反过来限制了模型能力的发挥。沙箱平台解决的不只是安全，还有"如何高效地交付、调度、回收执行环境"的工程问题。
 
 **原因三：多 Agent 与多租户必然化。** 2026 年的生产级 Agent 平台已经出现三类并发：同一用户的多个 Agent 会话并发、多个用户的 Agent 共享同一集群、Agent 创建子 Agent（父 Agent 通过 MCP 调用创建子沙箱）。没有沙箱级的隔离与配额，这三类并发任何一类都会演变成安全事故或资源事故。
 
@@ -60,7 +60,7 @@ Chatbot 时代的模型只输出文本，无论输出什么，最终都需要人
 
 **第一波（2023）：执行环境即服务**。E2B 成立并定义"Sandbox.create() 秒级环境"的产品形态；Code Interpreter 类产品（OpenAI 的 Python 沙箱）验证了"模型+执行环境"的组合价值。这一波回答的问题是"**Agent 怎么获得执行环境**"。
 
-**第二波（2024-2025）：平台化与开源化**。蚂蚁在 2024 年 12 月底开源 OpenSandbox（协议优先、双 runtime）；K8s SIG Apps 推出 agent-sandbox（Sandbox CRD 标准）；GKE Agent Sandbox 商用化（WarmPool 每集群每秒 300 个）。这一波回答的问题是"**企业怎么自建沙箱平台**"——三股力量（产品、标准、云厂商）从不同角度切入同一问题。
+**第二波（2024-2025）：平台化与开源化**。阿里巴巴在 2024 年 12 月底开源 OpenSandbox（协议优先、双 runtime）；K8s SIG Apps 推出 agent-sandbox（Sandbox CRD 标准）；GKE Agent Sandbox 商用化（WarmPool 每集群每秒 300 个）。这一波回答的问题是"**企业怎么自建沙箱平台**"——三股力量（产品、标准、云厂商）从不同角度切入同一问题。
 
 **第三波（2026）：生产化与标准化**。OpenSandbox 进入 CNCF Landscape；E2B 兼容成为第 6 层事实标准；行业开始形成共识（先定义工作负载、控制面与数据面切开、盒内守护进程、预热池、隔离按档提供、状态按寿命拆库——[[15 生产化深水区——十个盲区与行业共识]] 展开）；安全事故（OpenAI/Anthropic/Meta 三连）倒逼安全预算。这一波回答的问题是"**沙箱怎么达到生产级**"。
 
@@ -305,7 +305,7 @@ graph TD
 
 - **E2B**（2023）：Firecracker 之上封装完整 API（Sandbox.create()），主打毫秒级创建/恢复，成为云托管沙箱的事实代表；
 - **kubernetes-sigs/agent-sandbox**（2024-2025）：K8s SIG Apps 的 Sandbox CRD + WarmPool 标准，把沙箱声明式化；
-- **OpenSandbox**（2024-12 开源，蚂蚁）：协议优先的通用沙箱平台，specs/ 定义契约，Docker/K8s 双 runtime，成为企业自建沙箱的主要候选。
+- **OpenSandbox**（2024-12 开源，阿里）：协议优先的通用沙箱平台，specs/ 定义契约，Docker/K8s 双 runtime，成为企业自建沙箱的主要候选。
 
 ```mermaid
 %%{init: {'theme': 'dracula', 'themeVariables': {'primaryColor': '#6272a4', 'primaryTextColor': '#f8f8f2', 'primaryBorderColor': '#bd93f9', 'lineColor': '#ff79c6', 'secondaryColor': '#44475a', 'tertiaryColor': '#282a36'}}%%
@@ -476,7 +476,7 @@ K8s SIG Apps 主导的 agent-sandbox 项目走的是另一条路：**不提供�
 
 ### 6.3 企业产品派：OpenSandbox
 
-OpenSandbox（2024-12 底开源，蚂蚁集团，后迁移至 opensandbox-group 组织，已列入 CNCF Landscape 调度与编排分类）代表第三条路线：**协议优先的通用沙箱平台，可自托管在自有 Kubernetes 上**。其核心设计：
+OpenSandbox（2024-12 底开源，阿里巴巴，后迁移至 opensandbox-group 组织，已列入 CNCF Landscape 调度与编排分类）代表第三条路线：**协议优先的通用沙箱平台，可自托管在自有 Kubernetes 上**。其核心设计：
 
 - **协议优先**：`specs/` 目录下的 OpenAPI 契约（Lifecycle/Diagnostics/Execd/Egress）是"公共契约的事实源"，SDK、CLI、Server 都依赖契约而非彼此；
 - **双 runtime 后端**：Docker（本地/单机）与 Kubernetes（生产）两种后端，K8s 后端通过 workload provider 支持自研 BatchSandbox 与 sigs agent-sandbox 两种 CRD 体系；
