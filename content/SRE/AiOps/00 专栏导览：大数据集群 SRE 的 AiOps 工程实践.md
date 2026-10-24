@@ -29,7 +29,7 @@ aliases: [AiOps专栏, 智能运维专栏]
 ## 专栏结构（10 篇）
 
 ```mermaid
-%%{init: {'theme': 'dark', 'themeVariables': {'primaryColor': '#6366f1', 'primaryTextColor': '#f1f5f9', 'lineColor': '#94a3b8'}}}%%
+%%{init: {'theme': 'dracula', 'themeVariables': {'primaryColor': '#6366f1', 'primaryTextColor': '#f1f5f9', 'lineColor': '#94a3b8'}}%%
 graph TD
     A["认知层</br>01 AiOps 是什么"] --> B["数据地基层"]
     B --> B1["02 数据地基优先"]
