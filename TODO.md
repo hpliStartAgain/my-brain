@@ -1,3 +1,39 @@
+# 中间件/ETCD 专栏完全重写（7 文件）
+
+---
+
+status: done
+owner: devin
+updated: 2026-11-02
+tier: COMPLEX
+
+---
+
+## 1. 需求理解
+
+老板指示（2026-11-02）：遵循仓库写作规范与硬约束，完全重写 `content/中间件/ETCD` 专栏，可以覆盖原始内容重构，完成后提交并推送。执行口径取「写作规范修复计划」中第二档第 8 项（ETCD 6 篇、篇均 4093 字、缺口 66%）与 storage-engine 破坏性重写的先例：只保留课题，内容全部重写，篇幅按技术深度专栏标准 12,000-16,000 中文字 / 500+ 行。
+
+## 2. 执行结果
+
+- [x] `00 专栏导览`：专栏定位（一条账本线索）、目标读者、6 篇目录、四类阅读路径（Mermaid）、三笔成本的贯穿主线（确认成本 / 存储成本 / 可见性成本）、版本说明、关联专栏。
+- [x] `01 etcd 全局架构——从配置存储到控制面账本`：CoreOS/Fleet 出身与命名、2014 K8s 选型需求清单、抽掉 revision/多版本/持久 Watch/共识的反事实、扁平键值与 revision 四元组、gRPC→raft 循环→WAL→apply→MVCC/bbolt 分层、一次写请求的八步时序与最短延迟拆解、一次读的 ReadIndex、K8s key 布局与 `resourceVersion`、规模边界。
+- [x] `02 Raft 共识协议——选举、日志复制与安全性`：Paxos 留下的两处空白与「可理解性」目标、任期与状态清单、随机超时与投票条件、PreVote 与 CheckQuorum、日志复制与冲突回退、no-op entry 与提交规则、quorum 交集反证、etcd/raft v3 的 Ready/Advance 契约、成员变更与 Learner、跨地域与重试边界。
+- [x] `03 存储引擎——WAL、BoltDB 与 MVCC 的持久化链路`：一个 append-only 日志与一个 B+ 树文件分别服务什么、WAL 布局与 `fdatasync` 与快照截断、bbolt 桶布局与批量提交、`--unsafe-no-fsync`、MVCC 两层结构与重启重建 treeIndex、Compaction 语义与自动模式、Defragmentation、Quota 双重检查与 NOSPACE 恢复顺序、`etcdutl snapshot` 真实链路。
+- [x] `04 Watch 与 Lease——事件流与带时限的键`：一次性通知到可续订坐标、`start_revision` 三种取值、synced/unsynced 与 `ErrCompacted`、慢消费者、Lease 授予续约撤销与 Raft 提案、K8s List-Watch 映射、Node Lease 与 etcd Lease 的澄清专章、服务发现与 concurrency 包锁的「等前任」实现、fencing 边界。
+- [x] `05 etcd 与 ZooKeeper——一代协调服务的分野`：两条出身线、ZAB 与 Raft、读一致性默认值、一次性与持久通知、ZNode 与账本、会话与租约、性能模型（零未溯源 QPS）、运维对照、去 ZooKeeper 化的真实动因、选型决策表、三类误读纠正。
+- [x] `06 etcd 运维——磁盘、成员与灾备的边界`：不可逆操作与前置条件、两次刷盘与磁盘选型、跨机房与带宽、健康检查三件套与判定树、成员管理（Learner/替换/删除后不可就地重启/`--force-new-cluster`）、`etcdutl` 备份恢复与 K8s 侧补救、监控指标清单与告警规则、五类故障 SOP、升级降级。
+- [x] 全库联动：修正 4 处旧标题引用（OpenStack 02 篇 3 处、存储引擎 06 篇 1 处），更新 `content/index.md` 的 etcd 卡片标签。
+
+## 3. 验证
+
+- 篇幅：7 文件合计 111,579 中文字 / 4,046 行；正文 6 篇 15,502-21,561 字、570-897 行，全部 ≥12,000 字与 ≥500 行（4 篇超 16,000 上限，超出部分为机制论述，非灌水）。
+- 骨架：frontmatter 四字段完整；摘要 327-555 字；小结占比 1.7%-3.6%；参考资料与思考题齐全。
+- 格式：25 张 Mermaid 全 dracula 主题、围栏配平、标签无裸竖线；无 ASCII 表格；零感叹号；tag 大小写与连字符规范。
+- 链接：站内 `[[wiki]]` 死链 0；章节交叉引用全部可解析；旧标题全库零残留。
+- 事实：版本锚点核实至 2026-10-22（v3.5.35 / v3.6.16 / v3.7.3）；纠偏 ETCDCTL_API、快照工具链、`snapshot save` 语义、Node Lease 混淆、未溯源 QPS 五类问题。
+
+---
+
 # content/LLM 全面重构升级（结构重组 + 55 篇扩写达标 + 时效更新）
 
 ---
@@ -1116,7 +1152,7 @@ tier: COMPLEX
 - [ ] **中间件/Redis/Redis设计与实现**（4143 字，10 篇）
 - [ ] **中间件/Redis/Redis进阶教程**（4204 字，10 篇）
 - [ ] **中间件/Zookeeper**（3983 字，6 篇）
-- [ ] **中间件/ETCD**（4114 字，6 篇）
+- [x] **中间件/ETCD**（4114 字，6 篇）——2026-11-02 完全重写，篇均 18,295 字
 
 ### 批次 2：Java 技术栈主干
 - [ ] **Java/Netty**（4199 字，10 篇）
@@ -1614,7 +1650,7 @@ JuiceFS → Doris → Kafka → 读书笔记-Mysql内核架构 → Dubbo → Zoo
 - [x] 第一档 5/5：Dubbo（8 篇）——篇均 12013 字 / 661 行，10 张 dracula Mermaid，38 链接零死链（2026-09-26 完成）；顺带修掉 `00 专栏导览` 里 3 处既有死链
 - [x] 第二档 6/8：Zookeeper（6 篇）——篇均 12028 字 / 614 行，6 张 dracula Mermaid，30 链接零死链（2026-09-26 完成）；顺带修掉 `00 专栏导览` 里 9 处既有死链并同步目录描述
 - [ ] 第二档 7/8：Trino（6 篇）
-- [ ] 第二档 8/8：ETCD（6 篇）
+- [x] 第二档 8/8：ETCD（6 篇）——篇均 18,295 字 / 659 行，25 张 dracula Mermaid，死链 0（2026-11-02 完全重写完成）
 - [ ] 第二档 9/8：Redis/Redis设计与实现（10 篇）
 - [ ] 第二档 10/8：Redis/Redis进阶教程（10 篇）
 - [ ] 第二档 11/8：Nginx/Nginx深度解析专栏（15 篇）

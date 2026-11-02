@@ -203,9 +203,9 @@ RabbitMQ 集群由共享同一 Erlang cookie 的节点互联组成（节点发�
 
 这个方案运行了十年，但它的同步语义在分区场景下并不可靠——主从失联时谁说了算，一度是 RabbitMQ 运维的经典难题，社区给出的网络分区处理策略里，`pause_minority`（少数派自动暂停）被 OpenStack 官方文档推荐为默认选择。
 
-2019 年的 RabbitMQ 3.8 引入了仲裁队列（Quorum Queue）：队列副本之间用 Raft 协议（见 [[中间件/ETCD/02 Raft 共识协议——Leader 选举、日志复制与安全性|Raft 共识协议]]）达成多数派一致，写入需要多数节点确认，分区时少数派拒绝服务——从「主从复制」转向了「共识复制」。2021 年的 3.9 版正式把镜像队列标记为废弃，2024 年的 4.0 版彻底移除。OpenStack 侧的 oslo.messaging 也已支持仲裁队列，但存量生产环境里镜像队列仍然大量存在——**升级前先弄清自己跑的是哪一种**，两者的调优思路与故障模式并不相同。
+2019 年的 RabbitMQ 3.8 引入了仲裁队列（Quorum Queue）：队列副本之间用 Raft 协议（见 [[中间件/ETCD/02 Raft 共识协议——选举、日志复制与安全性|Raft 共识协议]]）达成多数派一致，写入需要多数节点确认，分区时少数派拒绝服务——从「主从复制」转向了「共识复制」。2021 年的 3.9 版正式把镜像队列标记为废弃，2024 年的 4.0 版彻底移除。OpenStack 侧的 oslo.messaging 也已支持仲裁队列，但存量生产环境里镜像队列仍然大量存在——**升级前先弄清自己跑的是哪一种**，两者的调优思路与故障模式并不相同。
 
-打个比方：镜像队列像「每份文件复印三份放在三个柜子，主柜丢了拿副柜」，简单直接，但复印需要时间，主柜与副柜可能短暂不一致；仲裁队列像「三个保管员开会表决，过半数同意才算存入」，一致性更硬，但每次写入都要开一次小会，延迟略高。RabbitMQ 用十年时间完成了从前者到后者的迁移，这个迁移与 [[中间件/ETCD/02 Raft 共识协议——Leader 选举、日志复制与安全性|Raft 共识协议]] 在业界基础设施中的普及是同一股潮流。
+打个比方：镜像队列像「每份文件复印三份放在三个柜子，主柜丢了拿副柜」，简单直接，但复印需要时间，主柜与副柜可能短暂不一致；仲裁队列像「三个保管员开会表决，过半数同意才算存入」，一致性更硬，但每次写入都要开一次小会，延迟略高。RabbitMQ 用十年时间完成了从前者到后者的迁移，这个迁移与 [[中间件/ETCD/02 Raft 共识协议——选举、日志复制与安全性|Raft 共识协议]] 在业界基础设施中的普及是同一股潮流。
 
 ### 3.3 连接风暴与 heartbeat
 
@@ -503,7 +503,7 @@ graph LR
 7. MariaDB 官方知识库 — Galera Cluster 系统变量：https://mariadb.com/kb/en/galera-cluster-system-variables/
 8. Galera Cluster 官方文档（Codership）：http://galeracluster.com/documentation-webpages/
 9. OpenStack 官方文档 — OpenStack Administration Guide（数据库与消息队列运维）：https://docs.openstack.org/admin-guide/
-10. 相关篇章：[[云原生/OpenStack/01 OpenStack 全景——从 NASA 与 Rackspace 的联姻到开源云操作系统|01 OpenStack 全景]] · [[中间件/Ceph/03 Monitor 与集群地图——Paxos、Quorum 与 MON 运维|Ceph MON 与集群地图]] · [[中间件/MySQL/MySQL架构与底层原理/10 Binlog 与主从复制——数据同步的底层传动链|MySQL 主从复制]] · [[中间件/Kafka/01 Kafka 全局架构——Broker、Topic、Partition 与消息流转|Kafka 全局架构]] · [[中间件/ETCD/02 Raft 共识协议——Leader 选举、日志复制与安全性|Raft 共识协议]]
+10. 相关篇章：[[云原生/OpenStack/01 OpenStack 全景——从 NASA 与 Rackspace 的联姻到开源云操作系统|01 OpenStack 全景]] · [[中间件/Ceph/03 Monitor 与集群地图——Paxos、Quorum 与 MON 运维|Ceph MON 与集群地图]] · [[中间件/MySQL/MySQL架构与底层原理/10 Binlog 与主从复制——数据同步的底层传动链|MySQL 主从复制]] · [[中间件/Kafka/01 Kafka 全局架构——Broker、Topic、Partition 与消息流转|Kafka 全局架构]] · [[中间件/ETCD/02 Raft 共识协议——选举、日志复制与安全性|Raft 共识协议]]
 
 ---
 

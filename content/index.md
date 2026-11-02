@@ -56,7 +56,7 @@ title: 汀的知识碎片
 - [[中间件/MySQL/MySQL架构与底层原理/00 专栏导览|MySQL InnoDB 与 MVCC]]
 - [[中间件/Redis/Redis设计与实现/00 专栏导览|Redis 数据结构与 Cluster]]
 - [[中间件/Kafka/00 专栏导览|Kafka 分区机制与副本协议]]
-- [[中间件/ETCD/00 专栏导览|ETCD 与 Raft 共识算法]]
+- [[中间件/ETCD/00 专栏导览|etcd 账本与控制面]]
 - [[中间件/Ceph/00 专栏导览|Ceph 分布式存储引擎]]
 - [[中间件/Clickhouse/00 专栏导览|ClickHouse 列式存储引擎]]
 - [[中间件/Elasticsearch/00 专栏导览|Elasticsearch 倒排索引与集群]]
