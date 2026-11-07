@@ -1,7 +1,8 @@
 ---
 title: "YARN 资源隔离——CGroups 与 Linux Container Executor 的工程实现"
 date: 2026-02-27
-tags: [cgroups, CPU隔离, Docker, LinuxContainerExecutor, YARN, 内存隔离, 资源隔离]
+tags: [cgroups, Docker, YARN]
+keywords: [CPU隔离, LinuxContainerExecutor, 内存隔离, 资源隔离]
 aliases: [YARN资源隔离, YARN CGroups, LinuxContainerExecutor, Container隔离]
 ---
 

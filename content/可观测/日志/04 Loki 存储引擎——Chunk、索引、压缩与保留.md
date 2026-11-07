@@ -1,7 +1,8 @@
 ---
 title: "04 Loki 存储引擎——Chunk、索引、压缩与保留"
 date: 2026-10-10
-tags: [Grafana Loki, Chunk, TSDB, 可观测性, 日志, 对象存储, 数据压缩]
+tags: [Loki, 可观测性, 日志, 对象存储]
+keywords: [Chunk, TSDB, 数据压缩]
 aliases: []
 ---
 

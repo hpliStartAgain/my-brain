@@ -1,7 +1,8 @@
 ---
 title: "内存性能分析与调优：从 free 到 perf 的工具链"
 date: 2026-02-28
-tags: [Linux, perf, vmstat, 内存管理, 工具链, 性能分析, 调优]
+tags: [Linux, perf, 内存管理, 性能优化]
+keywords: [vmstat, 工具链]
 aliases: [内存调优, 内存性能分析, Linux内存工具]
 ---
 

@@ -1,7 +1,8 @@
 ---
 title: "Task 与 Stage 的多级重试机制"
 date: 2026-02-28
-tags: [DAGScheduler, FetchFailedException, Spark, Stage重试, TaskScheduler, Task重试, 容错, 推测执行]
+tags: [Spark, 容错]
+keywords: [DAGScheduler, FetchFailedException, Stage重试, TaskScheduler, Task重试, 推测执行]
 aliases: []
 ---
 

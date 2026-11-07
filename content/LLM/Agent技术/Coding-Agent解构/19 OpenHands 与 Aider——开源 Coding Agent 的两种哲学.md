@@ -1,7 +1,8 @@
 ---
 title: "OpenHands 与 Aider——开源 Coding Agent 的两种哲学"
 date: 2026-08-01
-tags: [Agent, Aider, Architect Mode, BrowserGym, Docker Runtime, Event Stream, Jupyter, OpenHands, OpenDevin, Repo Map, Tree-sitter, ACP, Agent Canvas, Agent Control Plane, All Hands AI, Cline, Codex CLI, GitHub Actions, Software Agent SDK]
+tags: [Agent]
+keywords: [Aider, Architect Mode, BrowserGym, Docker Runtime, Event Stream, Jupyter, OpenHands, OpenDevin, Repo Map, Tree-sitter, ACP, Agent Canvas, Agent Control Plane, All Hands AI, Cline, Codex CLI, GitHub Actions, Software Agent SDK]
 aliases: [OpenHands 与 Aider, 开源 Coding Agent, Event Stream 架构, Repo Map]
 ---
 

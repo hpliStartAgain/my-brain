@@ -1,7 +1,8 @@
 ---
 title: "Mapper接口的代理实现——MapperProxy与MapperMethod"
 date: 2026-03-04
-tags: [Java, JDK动态代理, MapperMethod, MapperProxy, MapperRegistry, MethodSignature, Mybatis, 接口代理, 返回值类型]
+tags: [Java, Mybatis]
+keywords: [JDK动态代理, MapperMethod, MapperProxy, MapperRegistry, MethodSignature, 接口代理, 返回值类型]
 aliases: []
 ---
 

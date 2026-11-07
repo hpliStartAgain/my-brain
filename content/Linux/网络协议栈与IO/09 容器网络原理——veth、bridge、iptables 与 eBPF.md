@@ -1,7 +1,8 @@
 ---
 title: "容器网络原理——veth、bridge、iptables 与 eBPF"
 date: 2026-03-02
-tags: [Bridge, Cilium, CNI, Docker, eBPF, Flannel, iptables, Kubernetes, Linux, Network Namespace, veth, 容器网络]
+tags: [Cilium, CNI, Docker, eBPF, iptables, Kubernetes, Linux]
+keywords: [Bridge, Flannel, Network Namespace, veth, 容器网络]
 aliases: ["容器网络原理", "veth pair原理", "Linux bridge", "iptables容器", "CNI插件原理", "Cilium eBPF"]
 ---
 

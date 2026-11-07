@@ -1,7 +1,8 @@
 ---
 title: "05 LogQL 深度解析"
 date: 2026-10-10
-tags: [Grafana Loki, LogQL, PromQL, 可观测性, 日志, 查询语言]
+tags: [Loki, 可观测性, 日志]
+keywords: [LogQL, PromQL, 查询语言]
 aliases: []
 ---
 

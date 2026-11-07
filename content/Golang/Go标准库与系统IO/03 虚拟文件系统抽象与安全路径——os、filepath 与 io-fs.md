@@ -1,7 +1,8 @@
 ---
 title: "虚拟文件系统抽象与安全路径——os、filepath 与 io-fs"
 date: 2026-10-07
-tags: [Golang, 标准库, IO, 文件系统, 安全路径, io-fs]
+tags: [Golang, IO, 文件系统]
+keywords: [标准库, 安全路径, io-fs]
 aliases: []
 ---
 

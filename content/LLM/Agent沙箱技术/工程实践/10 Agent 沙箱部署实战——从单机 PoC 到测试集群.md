@@ -1,7 +1,8 @@
 ---
 title: "Agent 沙箱部署实战——从单机 PoC 到测试集群"
 date: 2026-08-15
-tags: [Agent Sandbox, Gate验收, Helm, Kata Containers, OpenSandbox, PoC, RuntimeClass, RHEL, containerd, gVisor, kubeadm, 部署实战, 排障]
+tags: [Agent Sandbox, Kata Containers, OpenSandbox, gVisor]
+keywords: [Gate验收, Helm, PoC, RuntimeClass, RHEL, containerd, kubeadm, 部署实战, 排障]
 aliases: [OpenSandbox部署, PoC部署手册, 测试集群建设, Gate验收]
 ---
 

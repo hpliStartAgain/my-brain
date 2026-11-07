@@ -1,7 +1,8 @@
 ---
 title: "01 OpenStack 全景——从 NASA 与 Rackspace 的联姻到开源云操作系统"
 date: 2026-09-04
-tags: [OpenStack, IaaS, 云计算, 分布式系统, 云原生]
+tags: [OpenStack, 分布式系统, 云原生]
+keywords: [IaaS, 云计算]
 aliases: []
 ---
 

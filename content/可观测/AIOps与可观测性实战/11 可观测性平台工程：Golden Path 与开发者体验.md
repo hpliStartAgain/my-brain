@@ -1,7 +1,8 @@
 ---
 title: "11 可观测性平台工程：Golden Path 与开发者体验"
 date: 2026-10-10
-tags: [平台工程, 可观测性, 开发者体验, Golden Path, 内部开发者平台, Backstage]
+tags: [可观测性]
+keywords: [平台工程, 开发者体验, Golden Path, 内部开发者平台, Backstage]
 aliases: [可观测性平台, Golden Path]
 ---
 

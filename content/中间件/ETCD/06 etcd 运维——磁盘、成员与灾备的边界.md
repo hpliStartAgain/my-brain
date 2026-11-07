@@ -1,7 +1,8 @@
 ---
 title: "06 etcd 运维——磁盘、成员与灾备的边界"
 date: 2026-11-02
-tags: [etcd, Kubernetes, SRE, 运维, 备份恢复, 监控, 故障处理, 中间件]
+tags: [etcd, Kubernetes, SRE, 运维, 监控, 中间件]
+keywords: [备份恢复, 故障处理]
 aliases: []
 ---
 

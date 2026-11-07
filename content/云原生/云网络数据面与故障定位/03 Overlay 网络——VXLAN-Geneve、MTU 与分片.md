@@ -1,7 +1,8 @@
 ---
 title: "03 Overlay 网络——VXLAN/Geneve、MTU 与分片"
 date: 2026-09-26
-tags: [VXLAN, Geneve, Overlay, MTU, 分片, 故障定位]
+tags: [故障排查]
+keywords: [VXLAN, Geneve, Overlay, MTU, 分片]
 aliases: []
 ---
 

@@ -1,7 +1,8 @@
 ---
 title: "进程的灵魂替换——exec 家族与程序加载"
 date: 2026-03-02
-tags: [ELF, exec, execve, ld-linux, Linux, 动态链接, 地址空间, 程序加载, 进程管理]
+tags: [Linux, 进程管理]
+keywords: [ELF, exec, execve, ld-linux, 动态链接, 地址空间, 程序加载]
 aliases: ["exec程序加载", "ELF加载原理", "动态链接器", "execve内核实现"]
 ---
 

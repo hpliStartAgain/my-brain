@@ -1,7 +1,8 @@
 ---
 title: "sync.Map、sync.Pool 与原子操作"
 date: 2026-03-04
-tags: [atomic, GC, Golang, read-copy-update, sync.Map, sync.Pool, 原子操作, 对象池, 并发安全, 无锁]
+tags: [GC, Golang]
+keywords: [atomic, read-copy-update, sync.Map, sync.Pool, 原子操作, 对象池, 并发安全, 无锁]
 aliases: []
 ---
 

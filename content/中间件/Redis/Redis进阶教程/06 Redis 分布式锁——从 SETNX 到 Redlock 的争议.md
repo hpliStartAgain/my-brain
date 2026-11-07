@@ -1,7 +1,8 @@
 ---
 title: "06 Redis 分布式锁——从 SETNX 到 Redlock 的争议"
 date: 2026-03-03
-tags: [etcd, Redis, Redisson, Redlock, SETNX, ZooKeeper, 中间件, 分布式锁, 可重入锁, 看门狗]
+tags: [etcd, Redis, ZooKeeper, 中间件, 分布式锁]
+keywords: [Redisson, Redlock, SETNX, 可重入锁, 看门狗]
 aliases: []
 ---
 

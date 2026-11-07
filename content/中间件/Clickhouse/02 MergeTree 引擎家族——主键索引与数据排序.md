@@ -1,7 +1,8 @@
 ---
 title: "02 MergeTree 引擎家族——主键索引与数据排序"
 date: 2026-03-05
-tags: [AggregatingMergeTree, ClickHouse, MergeTree, Primary Key, ReplacingMergeTree, 列式存储, 排序键, 稀疏索引, CollapsingMergeTree, SummingMergeTree]
+tags: [ClickHouse, 列式存储]
+keywords: [AggregatingMergeTree, MergeTree, Primary Key, ReplacingMergeTree, 排序键, 稀疏索引, CollapsingMergeTree, SummingMergeTree]
 aliases: [MergeTree 引擎家族, ClickHouse 稀疏索引, ClickHouse 排序键, ReplacingMergeTree, AggregatingMergeTree, CollapsingMergeTree, SummingMergeTree, ClickHouse Part]
 ---
 

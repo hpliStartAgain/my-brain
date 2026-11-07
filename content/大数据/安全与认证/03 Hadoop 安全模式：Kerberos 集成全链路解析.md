@@ -1,7 +1,8 @@
 ---
 title: "Hadoop 安全模式：Kerberos 集成全链路解析"
 date: 2026-03-02
-tags: [DelegationToken, Hadoop, HDFS, Kerberos, SASL, YARN, 大数据, 安全]
+tags: [Hadoop, HDFS, Kerberos, YARN, 大数据, 安全]
+keywords: [DelegationToken, SASL]
 aliases: ["Hadoop安全模式", "Delegation Token", "SASL认证"]
 ---
 

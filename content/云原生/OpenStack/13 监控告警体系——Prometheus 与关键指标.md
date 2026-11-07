@@ -1,7 +1,8 @@
 ---
 title: "13 监控告警体系——Prometheus 与关键指标"
 date: 2026-09-04
-tags: [OpenStack, Prometheus, 监控告警, 可观测性, VictoriaMetrics]
+tags: [OpenStack, Prometheus, 可观测性, VictoriaMetrics]
+keywords: [监控告警]
 aliases: []
 ---
 

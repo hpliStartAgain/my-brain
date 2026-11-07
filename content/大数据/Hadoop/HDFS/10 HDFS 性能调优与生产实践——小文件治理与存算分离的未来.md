@@ -1,7 +1,8 @@
 ---
 title: "HDFS 性能调优与生产实践——小文件治理与存算分离的未来"
 date: 2026-02-27
-tags: [HAR, HDFS, SequenceFile, 存算分离, 对象存储, 小文件, 性能调优, 生产实践]
+tags: [HDFS, 对象存储, 性能优化]
+keywords: [HAR, SequenceFile, 存算分离, 小文件, 生产实践]
 aliases: [HDFS调优, 小文件问题, HDFS存算分离]
 ---
 

@@ -1,7 +1,8 @@
 ---
 title: 13 perf
 date: 2026-05-10
-tags: [perf, Profiling, SRE, SystemsPerformance]
+tags: [perf, SRE, 性能优化]
+keywords: [Profiling]
 aliases:
   - perf
 ---

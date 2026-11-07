@@ -1,7 +1,8 @@
 ---
 title: "JVM 层性能观测：JFR、JMX 与 async-profiler"
 date: 2026-07-16
-tags: [JVM, JFR, JMX, async-profiler, 性能观测, Java, NMT]
+tags: [JVM, Java]
+keywords: [JFR, JMX, async-profiler, 性能观测, NMT]
 aliases: [JVM 性能观测, JFR 实战, async-profiler, JVM 观测工具]
 ---
 

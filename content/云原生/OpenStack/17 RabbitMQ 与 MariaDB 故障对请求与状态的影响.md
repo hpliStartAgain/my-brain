@@ -1,7 +1,8 @@
 ---
 title: "17 RabbitMQ 与 MariaDB 故障对请求与状态的影响"
 date: 2026-09-26
-tags: [OpenStack, RabbitMQ, MariaDB, 控制面, 故障定位]
+tags: [OpenStack, 故障排查]
+keywords: [RabbitMQ, MariaDB, 控制面]
 aliases: []
 ---
 

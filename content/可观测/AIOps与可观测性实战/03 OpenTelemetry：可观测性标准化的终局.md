@@ -1,7 +1,8 @@
 ---
 title: "03 OpenTelemetry：可观测性标准化的终局"
 date: 2026-10-10
-tags: [OpenTelemetry, OTel, OTLP, 分布式追踪, 可观测性]
+tags: [OpenTelemetry, 可观测性]
+keywords: [OTel, OTLP, 分布式追踪]
 aliases: [OTel 标准化, OpenTelemetry 架构]
 ---
 

@@ -1,3 +1,9 @@
+---
+title: "NUMA架构对Hadoop NameNode大堆内存及GC性能的影响分析"
+date: 2026-07-26
+tags: [SRE]
+aliases: []
+---
 
 ## 一、背景与现象
 

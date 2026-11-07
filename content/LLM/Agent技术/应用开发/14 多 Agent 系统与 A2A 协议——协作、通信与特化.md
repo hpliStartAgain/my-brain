@@ -1,7 +1,8 @@
 ---
 title: "多 Agent 系统与 A2A 协议——协作、通信与特化"
 date: 2026-03-04
-tags: [A2A, ADK, AGNTCY, Agent, Google, Linux Foundation, LLM, OpenAI Agents SDK, Orchestrator, Sub-Agent, 协作, 多Agent, 特化, 通信协议]
+tags: [Agent, LLM]
+keywords: [A2A, ADK, AGNTCY, Google, Linux Foundation, OpenAI Agents SDK, Orchestrator, Sub-Agent, 协作, 多Agent, 特化, 通信协议]
 aliases: [多 Agent 系统, A2A 协议, Agent-to-Agent, 多智能体协作]
 ---
 

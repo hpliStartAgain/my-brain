@@ -1,7 +1,8 @@
 ---
 title: "08 推测执行（Speculative Execution）：分布式环境下长尾任务的自动修复机制"
 date: 2026-02-27
-tags: [Spark, TaskSetManager, 推测执行, 调度系统, 长尾任务]
+tags: [Spark, 调度]
+keywords: [TaskSetManager, 推测执行, 长尾任务]
 aliases: [Speculative Execution]
 ---
 

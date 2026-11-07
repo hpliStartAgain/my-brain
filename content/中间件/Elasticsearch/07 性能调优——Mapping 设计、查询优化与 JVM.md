@@ -1,7 +1,8 @@
 ---
 title: "07 性能调优——Mapping 设计、查询优化与 JVM"
 date: 2026-03-04
-tags: [Doc Values, Elasticsearch, Filter Cache, ILM, JVM, Mapping, 性能调优, 查询优化]
+tags: [Elasticsearch, JVM, 性能优化, 查询优化]
+keywords: [Doc Values, Filter Cache, ILM, Mapping]
 aliases: []
 ---
 

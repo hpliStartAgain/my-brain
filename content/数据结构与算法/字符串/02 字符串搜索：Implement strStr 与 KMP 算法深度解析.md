@@ -1,7 +1,8 @@
 ---
 title: "字符串搜索：Implement strStr 与 KMP 算法深度解析"
 date: 2026-10-11
-tags: [KMP, LeetCode, 28, 459, 字符串, 字符串匹配, 算法, 面试]
+tags: [LeetCode, 字符串, 算法, 面试]
+keywords: [KMP, 28, 459, 字符串匹配]
 aliases: [KMP算法, 字符串搜索, strStr, next数组]
 ---
 

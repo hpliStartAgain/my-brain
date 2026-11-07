@@ -1,7 +1,8 @@
 ---
 title: "04 VictoriaMetrics 存储引擎深度解析"
 date: 2026-10-10
-tags: [Prometheus, TSDB, VictoriaMetrics, 可观测性, 指标, 存储引擎]
+tags: [Prometheus, VictoriaMetrics, 可观测性, 指标, 存储引擎]
+keywords: [TSDB]
 aliases: []
 ---
 

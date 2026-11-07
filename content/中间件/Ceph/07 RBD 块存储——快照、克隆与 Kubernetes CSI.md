@@ -1,7 +1,8 @@
 ---
 title: "07 RBD 块存储——快照、克隆与 Kubernetes CSI"
 date: 2026-09-04
-tags: [Ceph, RBD, 块存储, Kubernetes, CSI]
+tags: [Ceph, RBD, Kubernetes]
+keywords: [块存储, CSI]
 aliases: []
 ---
 

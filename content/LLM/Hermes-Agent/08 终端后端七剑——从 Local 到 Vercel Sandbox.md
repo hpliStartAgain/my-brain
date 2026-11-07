@@ -1,7 +1,8 @@
 ---
 title: "终端后端七剑——从 Local 到 Vercel Sandbox"
 date: 2026-08-01
-tags: [Hermes Agent, Terminal Backends, Local, Docker, SSH, Modal, Daytona, Singularity, Vercel Sandbox, Sandboxing]
+tags: [Hermes Agent, Docker]
+keywords: [Terminal Backends, Local, SSH, Modal, Daytona, Singularity, Vercel Sandbox, Sandboxing]
 aliases: [Hermes 终端后端, Local Docker SSH Modal Daytona Singularity Vercel, 沙箱隔离机制, Serverless 持久化]
 ---
 

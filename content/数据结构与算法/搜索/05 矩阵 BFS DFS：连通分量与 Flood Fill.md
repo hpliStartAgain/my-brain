@@ -1,7 +1,8 @@
 ---
 title: "矩阵 BFS/DFS：连通分量与 Flood Fill"
 date: 2026-10-11
-tags: [BFS, DFS, LeetCode, 200, 130, 695, 733, 连通分量, FloodFill, 算法, 面试]
+tags: [BFS, DFS, LeetCode, 算法, 面试]
+keywords: [200, 130, 695, 733, 连通分量, FloodFill]
 aliases: [岛屿数量, 连通分量, FloodFill, LeetCode 200]
 ---
 

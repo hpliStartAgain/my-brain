@@ -1,6 +1,8 @@
 ---
+title: "风险分析：DataNode 坏盘残留导致写穿 rootfs——fstab nofail 与 HDFS 配置漂移的致命组合"
 date: 2026-05-20
-tags: [Ambari, DataNode, fstab, HDFS, nofail, rootfs, SOP, 坏盘, 风险分析]
+tags: [HDFS]
+keywords: [Ambari, DataNode, fstab, nofail, rootfs, SOP, 坏盘, 风险分析]
 category: 风险分析 & SOP
 severity: P1-潜在
 ---

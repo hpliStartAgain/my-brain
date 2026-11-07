@@ -1,7 +1,8 @@
 ---
 title: "Go 网络编程——netpoller 与 Goroutine-per-Connection"
 date: 2026-03-04
-tags: [epoll, Golang, Goroutine-per-Connection, kqueue, net/http, netpoller, TCP, 同步编程模型, 异步IO, 网络编程]
+tags: [epoll, Golang]
+keywords: [Goroutine-per-Connection, kqueue, net/http, netpoller, TCP, 同步编程模型, 异步IO, 网络编程]
 aliases: []
 ---
 

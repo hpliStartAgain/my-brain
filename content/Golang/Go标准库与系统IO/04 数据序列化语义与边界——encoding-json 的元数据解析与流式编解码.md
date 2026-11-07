@@ -1,7 +1,8 @@
 ---
 title: "数据序列化语义与边界——encoding/json 的元数据解析与流式编解码"
 date: 2026-10-07
-tags: [Golang, 标准库, JSON, 序列化, 反射, 流式处理]
+tags: [Golang, 序列化]
+keywords: [标准库, JSON, 反射, 流式处理]
 aliases: []
 ---
 

@@ -1,7 +1,8 @@
 ---
 title: "02 OVS 的接口、端口、流表与 datapath"
 date: 2026-09-26
-tags: [OVS, OpenFlow, datapath, megaflow, conntrack, 故障定位]
+tags: [故障排查]
+keywords: [OVS, OpenFlow, datapath, megaflow, conntrack]
 aliases: []
 ---
 

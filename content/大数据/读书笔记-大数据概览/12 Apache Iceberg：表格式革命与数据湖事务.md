@@ -1,3 +1,9 @@
+---
+title: "12 Apache Iceberg：表格式革命与数据湖事务"
+date: 2026-07-26
+tags: [大数据]
+aliases: []
+---
 
 > [!info] 摘要  
 > Iceberg 并非“另一种文件格式”，而是一套**将表语义（Schema、分区、快照）从计算引擎解耦至存储层的开放表格式**。它的革命性在于：首次让数据湖（对象存储 + 不可变文件）拥有了**数据库级别的 ACID 事务、快照隔离与模式演化**。本文从“如何在不可变的 Parquet 文件上实现行级更新”这一核心矛盾切入，深度解析 Iceberg 的**三层元数据架构**（Catalog → Metadata → Manifest → DataFile）、**快照机制**（Metadata 文件指针切换）与**隐藏分区设计**。通过源码级拆解 Iceberg 的元数据文件 JSON 结构、Manifest 列表的合并策略、以及 Spark 查询时的分区剪枝流程，还原一次 INSERT/UPDATE/Time Travel 操作的完整生命周期。结合生产案例，提供元数据膨胀控制、快照过期清理、Spark 与 Flink 并发写入冲突等典型问题排查方案。最后，在 2026 年 Iceberg 已成为湖仓一体事实标准的背景下，讨论其与 Paimon 的竞争关系及**表格式作为云原生存储层协议**的终极形态。

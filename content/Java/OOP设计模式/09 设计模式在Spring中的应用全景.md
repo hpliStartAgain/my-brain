@@ -1,7 +1,8 @@
 ---
 title: "设计模式在Spring中的应用全景"
 date: 2026-03-04
-tags: [AOP, IoC, Java, OOP, Spring, Spring源码, 代理模式, 单例, 工厂模式, 模板方法, 观察者, 设计模式, 责任链]
+tags: [Java, OOP, Spring, 设计模式]
+keywords: [AOP, IoC, Spring源码, 代理模式, 单例, 工厂模式, 模板方法, 观察者, 责任链]
 aliases: []
 ---
 

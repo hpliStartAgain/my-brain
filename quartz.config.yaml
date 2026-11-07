@@ -4,10 +4,10 @@ configuration:
   pageTitleSuffix: ""
   enableSPA: true
   enablePopovers: true
-  analytics:
-    provider: plausible
-  locale: en-US
-  baseUrl: quartz.jzhao.xyz
+  # 未接入统计：原 plausible 为上游默认值且未注册站点，脚本空跑；需要时可改为
+  # analytics: { provider: umami, websiteId: ..., host: ... }
+  locale: zh-CN
+  baseUrl: ting.is-a.dev
   ignorePatterns:
     - private
     - templates
@@ -17,8 +17,11 @@ configuration:
   theme:
     fontOrigin: googleFonts
     cdnCaching: true
+    # 这里的字体名供 og-image 生成分享卡片时使用；页面实际字体栈见下方 quartz-fonts 插件
     typography:
-      header: Noto Serif SC
+      header:
+        name: Noto Serif SC
+        weights: [600, 700]
       body: Noto Sans SC
       code: JetBrains Mono
     colors:
@@ -61,6 +64,13 @@ plugins:
         dark: github-dark
       keepBackground: false
     order: 20
+  # 构建期内容整理：去掉与 title 重复的正文首个 H1；从「摘要」生成中文 meta description。
+  # 必须在 obsidian-flavored-markdown(30) 与 table-of-contents(50) 之前。
+  - source: ./plugins/content-polish
+    enabled: true
+    options:
+      descriptionLength: 140
+    order: 25
   # mermaid 自定义配色 fork — 替换官方 obsidian-flavored-markdown
   - source: ./plugins/obsidian-flavored-markdown-fork
     enabled: true
@@ -105,11 +115,17 @@ plugins:
     order: 92
   # quartz-fonts 用自己的默认值硬编码 h1-h6 字体（默认 Schibsted Grotesk），
   # 必须显式配置 header，否则 theme.typography 不生效
+  # fontOrigin: local —— 本插件只负责写 CSS 变量（完整回退栈），不再注入阻塞渲染的
+  # Google Fonts <link>；Noto Serif SC / JetBrains Mono 由 Head.tsx 异步加载，
+  # 大陆访问 Google 失败时直接落到系统字体，不会白屏。
   - source: "@quartz-community/quartz-fonts"
     enabled: true
     options:
-      header: Noto Serif SC
-      title: Noto Serif SC
+      fontOrigin: local
+      header: '"Noto Serif SC", "Source Han Serif SC", "Noto Serif CJK SC", "Songti SC", "STSong", "Microsoft YaHei", serif'
+      title: '"Noto Serif SC", "Source Han Serif SC", "Noto Serif CJK SC", "Songti SC", "STSong", "Microsoft YaHei", serif'
+      body: '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "HarmonyOS Sans SC", "Noto Sans CJK SC", "Noto Sans SC", "Source Han Sans SC", sans-serif'
+      code: '"JetBrains Mono", "Cascadia Code", "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace'
   - source: "@quartz-themes/core"
     enabled: false
     options:
@@ -121,7 +137,8 @@ plugins:
     enabled: false
   - source: "@quartz-community/alias-redirects"
     enabled: true
-  - source: "@quartz-community/content-index"
+  # fork：主索引不再内嵌全文（原 47MB/页），全文拆到 static/searchContent.json 按需加载
+  - source: ./plugins/content-index
     enabled: true
     options:
       enableSiteMap: true
@@ -136,11 +153,13 @@ plugins:
     enabled: true
   - source: "@quartz-community/content-page"
     enabled: true
-  - source: "@quartz-community/folder-page"
+  # fork：专栏目录页按文件名序号排序（原版按日期 + 标题，章节顺序会乱）
+  - source: ./plugins/folder-page
     enabled: true
   - source: "@quartz-community/tag-page"
     enabled: true
-  - source: "@quartz-community/explorer"
+  # fork：修复当前文章 scrollIntoView 连带滚动整个窗口（打开文章后标题被滚出视口）
+  - source: ./plugins/explorer
     enabled: true
     options:
       title: 文章导航
@@ -158,7 +177,8 @@ plugins:
     layout:
       position: right
       priority: 10
-  - source: "@quartz-community/search"
+  # fork：首次打开搜索时才拉全文并建索引，页面加载不再全量建 FlexSearch 索引
+  - source: ./plugins/search
     enabled: true
     layout:
       position: left
@@ -201,26 +221,29 @@ plugins:
       position: beforeBody
       priority: 40
       condition: not-index
-  # 首页文章轮播 — 仅首页显示
+  # 首页文章轮播 — 仅首页显示。放在正文（关于我 + 专栏地图）之后：
+  # 首屏先交代"我是谁、这里有什么"，随机推荐作为逛完之后的彩蛋
   - source: ./plugins/article-carousel
     enabled: true
     options:
       title: 随机碎片
       showCount: 4
     layout:
-      position: beforeBody
-      priority: 5
+      position: afterBody
+      priority: 30
       condition: index-only
   # 首页标签筛选 pill 栏 — 模仿 claude blog 顶部分类筛选
   - source: ./plugins/tag-pills
     enabled: true
     options:
       title: 按标签逛逛
-      maxTags: 14
+      maxTags: 16
       showAllLink: true
+      # 用途 / 结构类标签不适合当作"领域入口"
+      excludeTags: [面试, 专栏导览, 译书]
     layout:
-      position: beforeBody
-      priority: 6
+      position: afterBody
+      priority: 40
       condition: index-only
   # 滚动渐显 — 首页卡片 / 列表行 fade-in-up
   - source: ./plugins/scroll-reveal
@@ -248,6 +271,10 @@ plugins:
       group: toolbar
   - source: "@quartz-community/breadcrumbs"
     enabled: true
+    options:
+      rootName: 首页
+      # 当前页标题紧接着就是大标题，面包屑里再出现一次是重复信息
+      showCurrentPage: false
     layout:
       position: beforeBody
       priority: 5
@@ -260,12 +287,28 @@ plugins:
     layout:
       position: afterBody
       priority: 10
-  - source: "@quartz-community/footer"
+  # fork：页脚改为「© 年份 作者 · 基于 Quartz 构建」，样式改为分隔线 + 灰字
+  - source: ./plugins/footer
     enabled: true
     options:
-      links: {}
+      author: 李浩鹏（汀）
+      links:
+        GitHub: https://github.com/hpliStartAgain
+        RSS 订阅: /index.xml
+        站点源码: https://github.com/hpliStartAgain/my-brain
+  # 首页「最近更新」：持续更新本身就是一个知识库最有说服力的信号
   - source: "@quartz-community/recent-notes"
-    enabled: false
+    enabled: true
+    options:
+      title: 最近更新
+      limit: 8
+      showTags: false
+      hideTagPages: true
+      hideFolderPages: true
+    layout:
+      position: afterBody
+      priority: 20
+      condition: index-only
   - source: "@quartz-community/spacer"
     enabled: true
     options: {}

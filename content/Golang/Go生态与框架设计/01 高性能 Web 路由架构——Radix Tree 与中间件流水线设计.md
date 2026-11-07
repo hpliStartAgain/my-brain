@@ -1,7 +1,8 @@
 ---
 title: "高性能 Web 路由架构——Radix Tree 与中间件流水线设计"
 date: 2026-10-07
-tags: [Golang, HTTP, 路由, RadixTree, 中间件, Gin, Chi, ServeMux, httprouter]
+tags: [Golang, HTTP, 中间件]
+keywords: [路由, RadixTree, Gin, Chi, ServeMux, httprouter]
 aliases: []
 ---
 

@@ -1,7 +1,8 @@
 ---
 title: "现代集合处理与文本度量——slices、maps、cmp 与正则引擎"
 date: 2026-10-07
-tags: [Golang, 标准库, slices, maps, cmp, regexp, RE2, strconv, 泛型, pdqsort]
+tags: [Golang]
+keywords: [标准库, slices, maps, cmp, regexp, RE2, strconv, 泛型, pdqsort]
 aliases: []
 ---
 

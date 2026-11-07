@@ -1,7 +1,8 @@
 ---
 title: "02 数据地基优先：为什么垃圾进垃圾出是 AiOps 最大的坑"
 date: 2026-04-13
-tags: [AiOps, Drain3, Loki, Prometheus, VictoriaMetrics, Grafana Alloy, SCMDB, 可观测性, 大数据, 数据质量, 变更管理]
+tags: [AIOps, Loki, Prometheus, VictoriaMetrics, 可观测性, 大数据]
+keywords: [Drain3, Grafana Alloy, SCMDB, 数据质量, 变更管理]
 aliases: [AiOps数据地基, 可观测三支柱]
 ---
 

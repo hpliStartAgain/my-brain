@@ -1,3 +1,10 @@
+---
+title: "实战中使用Kubernetes Resources"
+date: 2026-07-26
+tags: [译书]
+aliases: []
+---
+
 # 实战中使用Kubernetes Resources
 
 > 在本章结束时，你将清晰地了解 Kubernetes 有多么令人印象深刻，以及如何将其用作极其复杂系统的基础。

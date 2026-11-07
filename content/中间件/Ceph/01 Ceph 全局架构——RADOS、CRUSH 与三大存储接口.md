@@ -1,7 +1,8 @@
 ---
 title: "01 Ceph 全局架构——RADOS、CRUSH 与三大存储接口"
 date: 2026-03-05
-tags: [Ceph, CephFS, CRUSH, Monitor, OSD, RADOS, RBD, RGW, 分布式存储]
+tags: [Ceph, RBD, 分布式存储]
+keywords: [CephFS, CRUSH, Monitor, OSD, RADOS, RGW]
 aliases: [Ceph 全局架构, Ceph 架构总览, RADOS 与 CRUSH, Ceph 统一存储]
 ---
 

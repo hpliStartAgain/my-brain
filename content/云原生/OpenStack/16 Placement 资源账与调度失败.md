@@ -1,7 +1,8 @@
 ---
 title: "16 Placement 资源账与调度失败"
 date: 2026-09-26
-tags: [OpenStack, Placement, 调度, 资源账, 故障定位]
+tags: [OpenStack, 调度, 故障排查]
+keywords: [Placement, 资源账]
 aliases: []
 ---
 

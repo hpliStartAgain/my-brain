@@ -1,7 +1,8 @@
 ---
 title: 9 云计算与其他Apache项目入门
 date: 2026-05-17
-tags: [Apache, AWS, Azure, GCP, Hadoop, 云计算, 大数据]
+tags: [Hadoop, 大数据]
+keywords: [Apache, AWS, Azure, GCP, 云计算]
 ---
 
 # 9 云计算与其他Apache项目入门

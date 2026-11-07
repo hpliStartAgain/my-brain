@@ -1,7 +1,8 @@
 ---
 title: "ORC 与 Parquet：列式存储格式的内部结构与选型"
 date: 2026-02-28
-tags: [Hive, ORC, Parquet, Row Group, Stripe, 列式存储, 压缩, 文件格式, 编码, 谓词下推]
+tags: [Hive, 列式存储, 谓词下推]
+keywords: [ORC, Parquet, Row Group, Stripe, 压缩, 文件格式, 编码]
 aliases: []
 ---
 

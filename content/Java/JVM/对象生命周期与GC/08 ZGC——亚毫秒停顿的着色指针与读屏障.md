@@ -1,7 +1,8 @@
 ---
 title: "ZGC——亚毫秒停顿的着色指针与读屏障"
 date: 2026-03-05
-tags: [Colored Pointer, GC, Java, JDK21, JVM, Load Barrier, ZGC, 亚毫秒, 分代ZGC, 并发转移, 着色指针, 读屏障, 自愈屏障, 多重映射, NUMA]
+tags: [GC, Java, JVM, NUMA]
+keywords: [Colored Pointer, JDK21, Load Barrier, ZGC, 亚毫秒, 分代ZGC, 并发转移, 着色指针, 读屏障, 自愈屏障, 多重映射]
 aliases: []
 ---
 

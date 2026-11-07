@@ -1,7 +1,8 @@
 ---
 title: "快慢指针精讲：链表成环检测与 Floyd 判圈算法"
 date: 2026-10-11
-tags: [LeetCode, 141, 142, 202, 快慢指针, Floyd, 判圈, 链表, 算法, 面试]
+tags: [LeetCode, 快慢指针, 链表, 算法, 面试]
+keywords: [141, 142, 202, Floyd, 判圈]
 aliases: [Floyd判圈, 环检测, Linked List Cycle, Happy Number]
 ---
 

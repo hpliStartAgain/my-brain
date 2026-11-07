@@ -1,7 +1,8 @@
 ---
 title: "动态SQL——OGNL表达式与SqlNode解析树"
 date: 2026-03-04
-tags: [choose, DynamicSqlSource, foreach, if, Java, Mybatis, OGNL, SqlNode, SQL注入, trim, 动态SQL]
+tags: [Java, Mybatis]
+keywords: [choose, DynamicSqlSource, foreach, if, OGNL, SqlNode, SQL注入, trim, 动态SQL]
 aliases: []
 ---
 

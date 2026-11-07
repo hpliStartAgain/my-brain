@@ -1,7 +1,8 @@
 ---
 title: "06 API Server 性能调优与高可用"
 date: 2026-03-04
-tags: [APF, API Server, Kubernetes, SLI, SLO, Watch Cache, 云原生, 性能调优, 负载均衡, 高可用]
+tags: [API Server, Kubernetes, 云原生, 性能优化, 负载均衡, 高可用]
+keywords: [APF, SLI, SLO, Watch Cache]
 aliases: []
 ---
 

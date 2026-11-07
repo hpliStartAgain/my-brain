@@ -1,7 +1,8 @@
 ---
 title: "MySQL 与缓存的协作模式——Cache Aside 到数据一致性"
 date: 2026-03-02
-tags: [Cache Aside, MySQL, Redis, 双删策略, 数据一致性, 缓存]
+tags: [MySQL, Redis, 缓存]
+keywords: [Cache Aside, 双删策略, 数据一致性]
 aliases: [Cache Aside, 缓存一致性, MySQL缓存]
 ---
 

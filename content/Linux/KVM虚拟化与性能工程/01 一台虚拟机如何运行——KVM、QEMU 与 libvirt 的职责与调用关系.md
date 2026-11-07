@@ -1,7 +1,8 @@
 ---
 title: "01 一台虚拟机如何运行——KVM、QEMU 与 libvirt 的职责与调用关系"
 date: 2026-09-26
-tags: [KVM, QEMU, libvirt, 虚拟化, 性能工程, Linux]
+tags: [KVM, 虚拟化, 性能优化, Linux]
+keywords: [QEMU, libvirt]
 aliases: []
 ---
 

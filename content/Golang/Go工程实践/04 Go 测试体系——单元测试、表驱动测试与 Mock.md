@@ -1,7 +1,8 @@
 ---
 title: "Go 测试体系——单元测试、表驱动测试与 Mock"
 date: 2026-03-04
-tags: [go test, Golang, gomock, Mock, testify, 单元测试, 测试, 测试覆盖率, 表驱动测试, 集成测试]
+tags: [Golang]
+keywords: [go test, gomock, Mock, testify, 单元测试, 测试, 测试覆盖率, 表驱动测试, 集成测试]
 aliases: []
 ---
 

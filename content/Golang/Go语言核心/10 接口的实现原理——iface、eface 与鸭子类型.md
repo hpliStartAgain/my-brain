@@ -1,7 +1,8 @@
 ---
 title: "接口的实现原理——iface、eface 与鸭子类型"
 date: 2026-03-04
-tags: [eface, Golang, iface, interface, itab, nil接口, 反射, 接口, 空接口, 类型断言, 鸭子类型]
+tags: [Golang]
+keywords: [eface, iface, interface, itab, nil接口, 反射, 接口, 空接口, 类型断言, 鸭子类型]
 aliases: []
 ---
 

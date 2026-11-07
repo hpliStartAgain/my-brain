@@ -1,3 +1,9 @@
+---
+title: "06 Hive ACID 与 Compaction：事务机制与小文件治理"
+date: 2026-07-26
+tags: [大数据]
+aliases: []
+---
 
 > [!info] 摘要  
 > Hive ACID 是**在不可变文件系统（HDFS）之上实现可变数据语义**的经典妥协工程。它不修改底层存储，而是通过**增量文件叠加（Base + Delta）**与**事务状态日志**，在 ORC 文件层面构建出 ACID 幻觉。本文从“如何在只读文件系统上实现 UPDATE/DELETE”这一根本矛盾切入，深度解析 Hive ACID 表的文件布局、事务 ID 分配机制、Compaction 的三大策略（Minor/Major/Cumulative）。通过源码级拆解 Delta 文件合并、Compactor 调度、清理器生命周期，还原一次 ACID 表写入→查询→压缩的全流程。结合生产案例，提供 Compaction 积压死锁、小文件雪崩、事务 ID 耗尽等典型问题排查方案。最后，在 2026 年 Iceberg 已成湖仓一体事实标准的背景下，讨论 Hive ACID 的**存量兼容价值**与**不可移植包袱**。

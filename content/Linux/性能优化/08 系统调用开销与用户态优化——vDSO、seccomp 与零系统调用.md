@@ -1,7 +1,8 @@
 ---
 title: "系统调用开销与用户态优化——vDSO、seccomp 与零系统调用"
 date: 2026-03-02
-tags: [Linux, Seccomp, strace, syscall overhead, vDSO, VVAR, 性能优化, 性能调优, 用户态优化, 系统调用, 零系统调用, KPTI, DPDK, SPDK, io_uring, SQPOLL]
+tags: [Linux, 性能优化, 系统调用, io_uring]
+keywords: [Seccomp, strace, syscall overhead, vDSO, VVAR, 用户态优化, 零系统调用, KPTI, DPDK, SPDK, SQPOLL]
 aliases: ["系统调用性能", "vDSO原理", "seccomp性能代价", "零系统调用优化", "syscall开销分析", "KPTI开销", "用户态网络栈"]
 ---
 

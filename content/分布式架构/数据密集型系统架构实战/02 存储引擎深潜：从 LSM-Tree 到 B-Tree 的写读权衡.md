@@ -1,7 +1,8 @@
 ---
 title: "存储引擎深潜：从 LSM-Tree 到 B-Tree 的写读权衡"
 date: 2026-07-17
-tags: [存储引擎, LSM-Tree, B-Tree, SSTable, 列式存储, OLAP, 数据库内核, DDIA]
+tags: [存储引擎, LSM-Tree, 列式存储, OLAP, DDIA]
+keywords: [B-Tree, SSTable, 数据库内核]
 aliases: [LSM-Tree vs B-Tree, 存储引擎, SSTable, 列式存储, 向量索引]
 ---
 

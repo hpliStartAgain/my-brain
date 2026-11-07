@@ -1,7 +1,8 @@
 ---
 title: "棋盘型回溯：N-Queens 与数独求解"
 date: 2026-10-11
-tags: [回溯, LeetCode, 51, 52, 37, N皇后, 数独, 位运算, 算法, 面试]
+tags: [回溯, LeetCode, 算法, 面试]
+keywords: [51, 52, 37, N皇后, 数独, 位运算]
 aliases: [N皇后, 数独求解, 棋盘回溯, LeetCode 51, LeetCode 37]
 ---
 

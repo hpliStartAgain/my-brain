@@ -1,7 +1,8 @@
 ---
 title: "06 ClickHouse 性能调优——表设计、查询优化与资源管理"
 date: 2026-03-05
-tags: [ClickHouse, 主键设计, 性能调优, 查询优化, 物化视图, 资源管理, 跳数索引, LowCardinality, Workload Groups, 压缩编码]
+tags: [ClickHouse, 性能优化, 查询优化]
+keywords: [主键设计, 物化视图, 资源管理, 跳数索引, LowCardinality, Workload Groups, 压缩编码]
 aliases: [ClickHouse 性能调优, ClickHouse 表设计, ClickHouse 查询优化, ClickHouse 资源管理, ClickHouse 物化视图, ClickHouse 跳数索引, ClickHouse LowCardinality, ClickHouse Workload Groups]
 ---
 

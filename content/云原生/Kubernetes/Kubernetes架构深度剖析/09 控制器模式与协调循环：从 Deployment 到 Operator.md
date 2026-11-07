@@ -1,7 +1,8 @@
 ---
 title: "控制器模式与协调循环：从 Deployment 到 Operator"
 date: 2026-07-17
-tags: [Kubernetes, 控制器模式, 协调循环, Deployment, ReplicaSet, 级联控制, 最终一致性, Operator, controller-runtime]
+tags: [Kubernetes, 控制器模式, 最终一致性]
+keywords: [协调循环, Deployment, ReplicaSet, 级联控制, Operator, controller-runtime]
 aliases: [控制器模式, 协调循环, Reconcile Loop, Deployment 控制器, 级联控制, K8s 控制器, controller-runtime]
 ---
 

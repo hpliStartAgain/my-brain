@@ -1,7 +1,8 @@
 ---
 title: "HBase Region 分裂与负载均衡——水平扩展的工程底层"
 date: 2026-02-27
-tags: [HBase, LoadBalancer, Region分裂, Split, StochasticLoadBalancer, 水平扩展, 热点, 负载均衡, 预分区]
+tags: [HBase, 负载均衡]
+keywords: [LoadBalancer, Region分裂, Split, StochasticLoadBalancer, 水平扩展, 热点, 预分区]
 aliases: [HBase Region分裂, HBase负载均衡, HBase水平扩展]
 ---
 

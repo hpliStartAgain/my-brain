@@ -1,7 +1,8 @@
 ---
 title: "启动流程——从main方法到ApplicationContext就绪"
 date: 2026-03-04
-tags: [ApplicationContext, Java, run方法, SpringApplication, SpringBoot, 启动流程]
+tags: [Java, SpringBoot]
+keywords: [ApplicationContext, run方法, SpringApplication, 启动流程]
 aliases: []
 ---
 

@@ -1,7 +1,8 @@
 ---
 title: "04 组件依赖拓扑：SCMDB 是大数据集群 AiOps 的骨架"
 date: 2026-04-13
-tags: [AiOps, CMDB, SCMDB, 大数据, 拓扑, 服务依赖, 根因分析, HDFS, YARN, Kafka, 图数据库]
+tags: [AIOps, 大数据, HDFS, YARN, Kafka]
+keywords: [CMDB, SCMDB, 拓扑, 服务依赖, 根因分析, 图数据库]
 aliases: [SCMDB, 大数据拓扑, 组件依赖图]
 ---
 

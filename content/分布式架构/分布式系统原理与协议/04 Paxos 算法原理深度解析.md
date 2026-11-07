@@ -1,7 +1,8 @@
 ---
 title: "04 Paxos 算法原理深度解析"
 date: 2026-10-10
-tags: [Multi-Paxos, Paxos, 共识算法, 分布式一致性, 分布式系统]
+tags: [Paxos, 共识算法, 分布式系统]
+keywords: [Multi-Paxos, 分布式一致性]
 aliases: []
 ---
 

@@ -1,7 +1,8 @@
 ---
 title: "Driver 与 Executor Pod 的生命周期管理"
 date: 2026-02-28
-tags: [DRA, Driver, Executor, Kubernetes, Pod, PriorityClass, Spark, 动态资源分配, 心跳, 生命周期]
+tags: [Executor, Kubernetes, Pod, Spark]
+keywords: [DRA, Driver, PriorityClass, 动态资源分配, 心跳, 生命周期]
 aliases: []
 ---
 

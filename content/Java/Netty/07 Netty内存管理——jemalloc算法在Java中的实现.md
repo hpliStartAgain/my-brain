@@ -1,7 +1,8 @@
 ---
 title: "Netty内存管理——jemalloc算法在Java中的实现"
 date: 2026-09-07
-tags: [Java, jemalloc, Netty, PoolArena, PoolChunk, PooledByteBufAllocator, PoolSubpage, 内存碎片, 内存管理, 堆外内存]
+tags: [Java, Netty, 内存管理, 堆外内存]
+keywords: [jemalloc, PoolArena, PoolChunk, PooledByteBufAllocator, PoolSubpage, 内存碎片]
 aliases: [Netty内存管理, jemalloc, PoolChunk, PoolArena, PoolSubpage, 伙伴算法]
 ---
 

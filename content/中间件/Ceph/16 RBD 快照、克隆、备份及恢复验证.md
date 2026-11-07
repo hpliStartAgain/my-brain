@@ -1,7 +1,8 @@
 ---
 title: "16 RBD 快照、克隆、备份及恢复验证"
 date: 2026-09-26
-tags: [Ceph, RBD, 快照, 克隆, 备份恢复]
+tags: [Ceph, RBD, 快照]
+keywords: [克隆, 备份恢复]
 aliases: []
 ---
 

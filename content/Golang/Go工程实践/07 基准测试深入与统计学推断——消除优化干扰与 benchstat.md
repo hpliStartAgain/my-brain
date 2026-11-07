@@ -1,7 +1,8 @@
 ---
 title: "基准测试深入与统计学推断——消除优化干扰与 benchstat"
 date: 2026-10-07
-tags: [Benchmark, DCE, Golang, Mann-Whitney, benchstat, 基准测试, 性能测量, 统计学推断, 编译器优化]
+tags: [Golang]
+keywords: [Benchmark, DCE, Mann-Whitney, benchstat, 基准测试, 性能测量, 统计学推断, 编译器优化]
 aliases: []
 ---
 

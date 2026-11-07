@@ -1,7 +1,8 @@
 ---
 title: "10 Swift 对象存储——环状数据结构与 Ceph RGW 对比"
 date: 2026-09-04
-tags: [OpenStack, Swift, 对象存储, 分布式存储, Ceph]
+tags: [OpenStack, 对象存储, 分布式存储, Ceph]
+keywords: [Swift]
 aliases: []
 ---
 

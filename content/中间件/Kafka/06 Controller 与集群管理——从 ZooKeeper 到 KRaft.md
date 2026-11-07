@@ -1,7 +1,8 @@
 ---
 title: "06 Controller 与集群管理——从 ZooKeeper 到 KRaft"
 date: 2026-03-04
-tags: [Kafka, Controller, KRaft, ZooKeeper, Raft, 元数据, 集群管理, Leader选举]
+tags: [Kafka, 控制器模式, ZooKeeper, Raft, 元数据, 集群管理, Leader选举]
+keywords: [KRaft]
 aliases: []
 ---
 

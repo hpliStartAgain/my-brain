@@ -1,7 +1,8 @@
 ---
 title: "配置体系——application.yml、Profile与配置优先级"
 date: 2026-03-04
-tags: [application.yml, ConfigData, Java, Profile, PropertySource, SpringBoot, 优先级, 配置]
+tags: [Java, SpringBoot]
+keywords: [application.yml, ConfigData, Profile, PropertySource, 优先级, 配置]
 aliases: []
 ---
 

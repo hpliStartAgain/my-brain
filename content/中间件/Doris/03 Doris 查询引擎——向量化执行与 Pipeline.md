@@ -1,7 +1,8 @@
 ---
 title: "03 Doris 查询引擎——向量化执行与 Pipeline"
 date: 2026-03-05
-tags: [Doris, 查询引擎, CBO, Nereids, Pipeline, 向量化执行, Runtime Filter, 执行计划]
+tags: [Doris, CBO, Pipeline, 向量化执行, 执行计划]
+keywords: [查询引擎, Nereids, Runtime Filter]
 aliases: []
 ---
 

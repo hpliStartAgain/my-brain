@@ -1,7 +1,8 @@
 ---
 title: "Service 与 kube-proxy：iptables/IPVS/eBPF 数据面演进"
 date: 2026-07-17
-tags: [Kubernetes, Service, kube-proxy, iptables, IPVS, eBPF, Cilium, 负载均衡, Endpoints]
+tags: [Kubernetes, kube-proxy, iptables, eBPF, Cilium, 负载均衡]
+keywords: [Service, IPVS, Endpoints]
 aliases: [Service, kube-proxy, iptables 模式, IPVS 模式, eBPF 数据面, K8s 负载均衡, Endpoints]
 ---
 

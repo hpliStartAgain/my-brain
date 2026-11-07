@@ -1,7 +1,8 @@
 ---
 title: "流-流 Join：两条流如何在时间维度上对齐"
 date: 2026-02-28
-tags: [Join Buffer, Spark, State Store, Stream-Stream Join, Structured Streaming, Watermark, 时间对齐, 流-流Join]
+tags: [Spark, State Store, Structured Streaming, Watermark]
+keywords: [Join Buffer, Stream-Stream Join, 时间对齐, 流-流Join]
 aliases: []
 ---
 

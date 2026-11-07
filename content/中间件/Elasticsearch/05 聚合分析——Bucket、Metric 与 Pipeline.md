@@ -1,7 +1,8 @@
 ---
 title: "05 聚合分析——Bucket、Metric 与 Pipeline"
 date: 2026-03-04
-tags: [Bucket, Cardinality, Doc Values, Elasticsearch, HyperLogLog, Metric, Pipeline, Terms, 聚合]
+tags: [Elasticsearch, Pipeline]
+keywords: [Bucket, Cardinality, Doc Values, HyperLogLog, Metric, Terms, 聚合]
 aliases: []
 ---
 

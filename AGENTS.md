@@ -9,7 +9,8 @@
 - **篇幅**：技术深度专栏单篇 12000-16000 中文字 / 500+ 行；数据结构与算法专栏单独标准（不追求万字，补"为什么"说理）。范文标杆：`content/分布式架构/数据密集型系统架构实战/11 数据拆分之困.md`
 - **论述逻辑**：是什么 → 为什么出现 → 不这样会怎样 → 如何落地 → 边界与反例
 - **格式**：禁止 ASCII 表格（用 Markdown 表格）；Mermaid 统一 `%%{init: {'theme': 'dracula'}}%%` 配色；Callout 用 Obsidian 语法（`> [!note]` / `> [!info]`）；双向链接 `[[wiki]]` 必须先核实目标文件真实存在
-- **frontmatter**：`title / date / tags / aliases`，tags 用 inline 数组且遵循全局映射（`Go→Golang`、`K8s→Kubernetes`、大小写统一），不得破坏结构
+- **frontmatter**：`title / date / tags / aliases`（可选 `keywords`），tags 用 inline 数组且遵循全局映射（`Go→Golang`、`K8s→Kubernetes`、大小写统一），不得破坏结构
+- **标签受控词表**：tags 只用于"可浏览的分类"，每篇 3-5 个，优先使用已有标签（词表与同义合并规则见 `scripts/tag_vocabulary.py`）；只属于本文的细分概念（如 `PreVote`、`成员变更`）写进 `keywords`，不生成标签页。新增/批量改文章后运行 `python3 scripts/converge_tags.py` 预览，`--apply` 自动收敛
 - **骨架**：`**摘要：**` 段 + `## 第 N 章` 编号 + 文末参考资料 + 思考题 callout（沿用各系列既有惯例）
 
 ### 反模式：禁止灌水凑字数（明令禁止）

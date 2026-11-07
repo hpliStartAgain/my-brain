@@ -1,6 +1,8 @@
 ---
+title: "Keepalived 认证失败 - VRID 冲突导致脑裂"
 date: 2026-03-31
-tags: [keepalived, vrrp, 故障排查, 高可用]
+tags: [故障排查, 高可用]
+keywords: [keepalived, vrrp]
 category: 网络故障
 severity: P1
 ---

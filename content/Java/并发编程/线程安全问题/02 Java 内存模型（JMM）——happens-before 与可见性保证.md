@@ -1,7 +1,8 @@
 ---
 title: "Java 内存模型（JMM）——happens-before 与可见性保证"
 date: 2026-03-05
-tags: [happens-before, Java, JMM, JSR-133, 内存屏障, 可见性, 并发编程, 重排序]
+tags: [Java, 并发编程]
+keywords: [happens-before, JMM, JSR-133, 内存屏障, 可见性, 重排序]
 aliases: []
 ---
 

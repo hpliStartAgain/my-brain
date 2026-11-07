@@ -1,7 +1,8 @@
 ---
 title: "HTTP 中间件模型与请求防御边界"
 date: 2026-10-07
-tags: [Golang, HTTP, Middleware, Security, Context]
+tags: [Golang, HTTP]
+keywords: [Middleware, Security, Context]
 aliases: []
 ---
 

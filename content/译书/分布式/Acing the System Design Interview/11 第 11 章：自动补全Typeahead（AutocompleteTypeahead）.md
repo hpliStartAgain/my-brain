@@ -1,7 +1,8 @@
 ---
 title: "11 第 11 章：自动补全/Typeahead（Autocomplete/Typeahead）"
 date: 2026-05-16
-tags: [分布式架构, 系统设计, 自动补全, 译书, 面试]
+tags: [分布式系统, 系统设计, 译书, 面试]
+keywords: [自动补全]
 aliases: ["Autocomplete/typeahead", "AutocompleteTypeahead", "Autocomplete/Typeahead", "自动补全Typeahead", "自动补全/Typeahead"]
 ---
 

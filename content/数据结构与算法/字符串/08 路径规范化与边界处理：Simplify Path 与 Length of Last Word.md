@@ -1,7 +1,8 @@
 ---
 title: "路径规范化与边界处理：Simplify Path 与 Length of Last Word"
 date: 2026-10-11
-tags: [LeetCode, 71, 58, 字符串, 栈, 路径规范化, 算法, 面试]
+tags: [LeetCode, 字符串, 栈, 算法, 面试]
+keywords: [71, 58, 路径规范化]
 aliases: [Simplify Path, Length of Last Word, 路径规范化, LeetCode 71, LeetCode 58]
 ---
 

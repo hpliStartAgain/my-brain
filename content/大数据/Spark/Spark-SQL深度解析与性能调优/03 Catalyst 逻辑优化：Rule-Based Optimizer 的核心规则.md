@@ -1,7 +1,8 @@
 ---
 title: "Catalyst 逻辑优化：Rule-Based Optimizer 的核心规则"
 date: 2026-02-28
-tags: [Catalyst, LogicalPlan, Optimizer, RBO, Spark, SparkSQL, 列裁剪, 子查询优化, 常量折叠, 谓词下推]
+tags: [Spark, SparkSQL, 谓词下推]
+keywords: [Catalyst, LogicalPlan, Optimizer, RBO, 列裁剪, 子查询优化, 常量折叠]
 aliases: []
 ---
 

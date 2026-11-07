@@ -1,7 +1,8 @@
 ---
 title: "Kubernetes 上的无服务器计算"
 date: 2026-05-13
-tags: [Knative, Kubernetes, Serverless]
+tags: [Kubernetes]
+keywords: [Knative, Serverless]
 aliases: [Serverless Computing on Kubernetes]
 ---
 

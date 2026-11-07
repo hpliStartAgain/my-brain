@@ -1,7 +1,8 @@
 ---
 title: HBase 的诞生——为什么 HDFS 不够用，列族存储的设计哲学
 date: 2026-02-27
-tags: [BigTable, HBase, HDFS, NoSQL, 分布式数据库, 列族存储]
+tags: [HBase, HDFS]
+keywords: [BigTable, NoSQL, 分布式数据库, 列族存储]
 aliases:
   - HBase诞生
   - BigTable开源实现

@@ -1,7 +1,8 @@
 ---
 title: "全栈性能诊断——BPF 工具链与 OFF-CPU 分析"
 date: 2026-03-02
-tags: [BCC, BPF, bpftrace, eBPF, Linux, OFF-CPU分析, offcputime, wakeuptime, 性能优化, 性能诊断, 性能调优, 锁竞争, biolatency, biosnoop, CO-RE, BTF]
+tags: [eBPF, Linux, 性能优化]
+keywords: [BCC, bpftrace, OFF-CPU分析, offcputime, wakeuptime, 性能诊断, 锁竞争, biolatency, biosnoop, CO-RE, BTF]
 aliases: ["BPF性能诊断", "OFF-CPU分析", "eBPF工具链", "bpftrace性能排查", "锁竞争分析", "全栈时间分析"]
 ---
 

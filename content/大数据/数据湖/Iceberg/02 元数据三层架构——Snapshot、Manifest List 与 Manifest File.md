@@ -1,7 +1,8 @@
 ---
 title: "元数据三层架构——Snapshot、Manifest List 与 Manifest File"
 date: 2026-03-02
-tags: [Data Skipping, Iceberg, Manifest, Snapshot, 元数据架构, 列统计, 快照隔离, 文件列表]
+tags: [Iceberg]
+keywords: [Data Skipping, Manifest, Snapshot, 元数据架构, 列统计, 快照隔离, 文件列表]
 aliases: ["Iceberg元数据", "Snapshot快照", "Manifest File", "Manifest List", "Iceberg三层架构"]
 ---
 

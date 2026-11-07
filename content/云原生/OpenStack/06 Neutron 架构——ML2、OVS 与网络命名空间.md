@@ -1,7 +1,8 @@
 ---
 title: "06 Neutron 架构——ML2、OVS 与网络命名空间"
 date: 2026-09-04
-tags: [OpenStack, Neutron, OVS, ML2, 网络虚拟化]
+tags: [OpenStack]
+keywords: [Neutron, OVS, ML2, 网络虚拟化]
 aliases: []
 ---
 

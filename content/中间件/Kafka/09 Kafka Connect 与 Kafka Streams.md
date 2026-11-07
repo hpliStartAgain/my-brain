@@ -1,7 +1,8 @@
 ---
 title: "09 Kafka Connect 与 Kafka Streams"
 date: 2026-03-04
-tags: [Kafka, KafkaConnect, KafkaStreams, Connector, KStream, KTable, RocksDB, 流处理]
+tags: [Kafka, RocksDB, 流处理]
+keywords: [KafkaConnect, KafkaStreams, Connector, KStream, KTable]
 aliases: []
 ---
 

@@ -1,7 +1,8 @@
 ---
 title: "Agent 状态与存储——六类状态的正确拆分"
 date: 2026-08-15
-tags: [Agent Sandbox, Agent Session, Ceph, RWO, RWX, Workspace, 对象存储, 快照, 状态管理, 状态拆分, PostgreSQL, SQLite, CRIU, E2B, Modal, Letta, LangGraph, 一致性]
+tags: [Agent Sandbox, Ceph, 对象存储, 快照, 一致性]
+keywords: [Agent Session, RWO, RWX, Workspace, 状态管理, 状态拆分, PostgreSQL, SQLite, CRIU, E2B, Modal, Letta, LangGraph]
 aliases: [Agent状态管理, 状态四本账, 六类状态, 存储选型]
 ---
 

@@ -1,7 +1,8 @@
 ---
 title: "JDK 21 虚拟线程——Project Loom 的协程实现与平台线程的边界"
 date: 2026-03-05
-tags: [CarrierThread, Continuation, Java, JDK21, ProjectLoom, VirtualThread, 协程, 并发编程, 结构化并发, 虚拟线程]
+tags: [Java, 并发编程]
+keywords: [CarrierThread, Continuation, JDK21, ProjectLoom, VirtualThread, 协程, 结构化并发, 虚拟线程]
 aliases: []
 ---
 

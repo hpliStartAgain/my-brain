@@ -1,7 +1,8 @@
 ---
 title: "05 血缘（Lineage）与容错：以计算重构换取存储可靠性的权衡艺术"
 date: 2026-02-27
-tags: [Checkpoint, RDD, Spark, 容错机制, 血缘]
+tags: [Checkpoint, RDD, Spark]
+keywords: [容错机制, 血缘]
 aliases: [RDD Lineage and Fault Tolerance]
 ---
 

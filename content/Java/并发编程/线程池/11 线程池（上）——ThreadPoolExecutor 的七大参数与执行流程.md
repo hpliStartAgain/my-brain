@@ -1,7 +1,8 @@
 ---
 title: "线程池（上）——ThreadPoolExecutor 的七大参数与执行流程"
 date: 2026-03-05
-tags: [ctl, Java, ThreadPoolExecutor, Worker, 七大参数, 工作队列, 并发编程, 拒绝策略, 生命周期, 线程池]
+tags: [Java, 并发编程]
+keywords: [ctl, ThreadPoolExecutor, Worker, 七大参数, 工作队列, 拒绝策略, 生命周期, 线程池]
 aliases: []
 ---
 

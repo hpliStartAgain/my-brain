@@ -1,3 +1,9 @@
+---
+title: "04 Apache Tez：DAG 引擎与性能优化"
+date: 2026-07-26
+tags: [大数据]
+aliases: []
+---
 
 > [!info] 摘要  
 > Tez 并非 MapReduce 的“升级版”，而是**将 MapReduce 的固定二阶段模型重构为任意 DAG 拓扑的数据流执行引擎**。本文从消除 MapReduce **写屏障**的设计意图切入，深度解析 Tez 的核心抽象——**Vertex-Edge-DAG** 如何实现算子级流水线与容器复用。通过源码级拆解 Tez AM 的 DAG 切分、Input/Output 插件化、动态并发调整三大机制，还原一次 Hive ON Tez 查询的完整编译执行链路。结合生产案例，提供容器复用预热、Shuffle 倾斜规避、大 DAG 拆分策略等实战方案。最后，在 2026 年 Spark 全面向量化执行的背景下，讨论 Tez 在**大吞吐 ETL**与**Hive 兼容性**领域的稳固阵地。

@@ -1,0 +1,92 @@
+{
+  "name": "@my-brain/content-index-fork",
+  "version": "0.1.0",
+  "description": "[my-brain fork] Content index emitter plugin for Quartz. Generates sitemap, RSS feed, and content index JSON.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Quartz Community",
+  "homepage": "https://quartz.jzhao.xyz",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/quartz-community/content-index"
+  },
+  "keywords": [
+    "quartz",
+    "quartz-plugin",
+    "content-index",
+    "emitter",
+    "sitemap",
+    "rss"
+  ],
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "peerDependencies": {
+    "vfile": "^6.0.3"
+  },
+  "peerDependenciesMeta": {
+    "vfile": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "@quartz-community/types": "^0.2.1",
+    "@quartz-community/utils": "^0.1.0"
+  },
+  "quartz": {
+    "name": "content-index",
+    "displayName": "Content Index",
+    "category": "emitter",
+    "version": "1.0.0",
+    "quartzVersion": ">=5.0.0",
+    "dependencies": [],
+    "defaultOrder": 50,
+    "defaultEnabled": true,
+    "defaultOptions": {
+      "enableSiteMap": true,
+      "enableRSS": true,
+      "rssLimit": 10,
+      "rssFullHtml": false,
+      "rssSlug": "index",
+      "includeEmptyFiles": true,
+      "splitSearchContent": true
+    },
+    "optionSchema": {
+      "enableSiteMap": {
+        "type": "boolean"
+      },
+      "enableRSS": {
+        "type": "boolean"
+      },
+      "rssLimit": {
+        "type": "number"
+      },
+      "rssFullHtml": {
+        "type": "boolean"
+      },
+      "rssSlug": {
+        "type": "string"
+      },
+      "includeEmptyFiles": {
+        "type": "boolean"
+      },
+      "splitSearchContent": {
+        "type": "boolean"
+      }
+    }
+  },
+  "engines": {
+    "node": ">=22",
+    "npm": ">=10.9.2"
+  }
+}

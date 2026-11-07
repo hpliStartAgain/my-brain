@@ -1,7 +1,8 @@
 ---
 title: "Apache Knox 网关深度解析：统一入口、Provider 链与 SSO 体系"
 date: 2026-03-02
-tags: [Kerberos, Knox, LDAP, Provider, SSO, Topology, 大数据, 安全, 网关]
+tags: [Kerberos, 大数据, 安全]
+keywords: [Knox, LDAP, Provider, SSO, Topology, 网关]
 aliases: ["Apache Knox", "Knox", "Knox网关", "Hadoop API Gateway"]
 ---
 

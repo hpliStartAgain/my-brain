@@ -1,7 +1,8 @@
 ---
 title: "Spark UI 访问：Ingress、NodePort 与 History Server 部署"
 date: 2026-02-28
-tags: [EventLog, History Server, Ingress, Kubernetes, NodePort, Spark, Spark UI, 可观测性, 网络]
+tags: [Kubernetes, Spark, 可观测性, 网络]
+keywords: [EventLog, History Server, Ingress, NodePort, Spark UI]
 aliases: []
 ---
 

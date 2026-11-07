@@ -6,6 +6,8 @@ export interface TagPillsOptions {
     maxTags: number;
     /** 是否显示「全部标签」入口 */
     showAllLink: boolean;
+    /** 不在首页展示的标签（如「面试」这类用途标签、「专栏导览」这类结构标签），不区分大小写 */
+    excludeTags: string[];
 }
 /**
  * 标签筛选 pill 栏 — 模仿 claude.com/blog 顶部分类筛选

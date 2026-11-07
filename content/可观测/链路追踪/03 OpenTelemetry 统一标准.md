@@ -1,7 +1,8 @@
 ---
 title: "03 OpenTelemetry 统一标准"
 date: 2026-10-10
-tags: [CNCF, OpenTelemetry, OTel Collector, OTLP, 可观测性, 链路追踪]
+tags: [OpenTelemetry, 可观测性, 链路追踪]
+keywords: [CNCF, OTel Collector, OTLP]
 aliases: [OTel 统一标准, OpenTelemetry 三层架构]
 ---
 

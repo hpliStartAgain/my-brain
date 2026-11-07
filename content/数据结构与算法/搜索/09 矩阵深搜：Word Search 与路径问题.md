@@ -1,7 +1,8 @@
 ---
 title: "矩阵深搜：Word Search 与路径问题"
 date: 2026-10-11
-tags: [DFS, LeetCode, 79, 212, 62, WordSearch, Trie, 矩阵, 算法, 面试]
+tags: [DFS, LeetCode, 算法, 面试]
+keywords: [79, 212, 62, WordSearch, Trie, 矩阵]
 aliases: [单词搜索, Word Search, 路径问题, LeetCode 79, LeetCode 212]
 ---
 

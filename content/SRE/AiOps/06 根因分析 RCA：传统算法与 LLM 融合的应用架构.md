@@ -1,7 +1,8 @@
 ---
 title: "06 根因分析 RCA：传统算法与 LLM 融合的应用架构"
 date: 2026-04-13
-tags: [AiOps, Chain-of-Thought, Isolation Forest, LLM, RAG, RCA, RCSF, 大数据, 变点检测, 根因分析, 因果推断]
+tags: [AIOps, LLM, RAG, 大数据]
+keywords: [Chain-of-Thought, Isolation Forest, RCA, RCSF, 变点检测, 根因分析, 因果推断]
 aliases: [根因分析, RCA算法, 故障定位]
 ---
 

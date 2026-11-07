@@ -1,7 +1,8 @@
 ---
 title: "08 运维工程化——巡检、维护预检、SLO 与故障取证自动化"
 date: 2026-09-26
-tags: [CVM, SRE, 运维工程化, SLO, 巡检, 自动化]
+tags: [CVM, SRE]
+keywords: [运维工程化, SLO, 巡检, 自动化]
 aliases: []
 ---
 

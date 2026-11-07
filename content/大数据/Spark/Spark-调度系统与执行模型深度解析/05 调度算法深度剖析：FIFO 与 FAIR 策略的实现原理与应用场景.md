@@ -1,7 +1,8 @@
 ---
 title: "05 调度算法深度剖析：FIFO 与 FAIR 策略的实现原理与应用场景"
 date: 2026-02-27
-tags: [FAIR, FIFO, Spark, 源码分析, 调度算法]
+tags: [Spark]
+keywords: [FAIR, FIFO, 源码分析, 调度算法]
 aliases: [Spark Scheduling Algorithms]
 ---
 

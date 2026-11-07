@@ -1,7 +1,8 @@
 ---
 title: "GPT 架构——Decoder-Only 的自回归语言模型"
 date: 2026-03-04
-tags: [BPE, Causal Mask, Decoder-Only, Embedding, GQA, GPT, LLM, MLA, MoE, RoPE, Tokenizer, 自回归]
+tags: [Embedding, LLM]
+keywords: [BPE, Causal Mask, Decoder-Only, GQA, GPT, MLA, MoE, RoPE, Tokenizer, 自回归]
 aliases: []
 ---
 

@@ -1,7 +1,8 @@
 ---
 title: "03 TaskScheduler 架构解析：任务编排与调度后端的协作机制"
 date: 2026-02-27
-tags: [Spark, TaskScheduler, TaskSetManager, 源码分析, 调度系统]
+tags: [Spark, 调度]
+keywords: [TaskScheduler, TaskSetManager, 源码分析]
 aliases: [Task Scheduling Architecture]
 ---
 

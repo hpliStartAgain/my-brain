@@ -1,7 +1,8 @@
 ---
 title: "JIT 编译与稳态性能：HotSpot 的预热代价"
 date: 2026-07-16
-tags: [JIT, HotSpot, C1, C2, 分层编译, 预热, deoptimization, JVM]
+tags: [JVM]
+keywords: [JIT, HotSpot, C1, C2, 分层编译, 预热, deoptimization]
 aliases: [JIT 编译, 稳态性能, 预热代价, 分层编译]
 ---
 

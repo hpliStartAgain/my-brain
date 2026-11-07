@@ -1,7 +1,8 @@
 ---
 title: "04 Label Selector 与松耦合设计"
 date: 2026-03-04
-tags: [Annotation, Kubernetes, Label, OwnerReference, Selector, 云原生, 垃圾回收, 松耦合]
+tags: [Kubernetes, 云原生, GC]
+keywords: [Annotation, Label, OwnerReference, Selector, 松耦合]
 aliases: []
 ---
 

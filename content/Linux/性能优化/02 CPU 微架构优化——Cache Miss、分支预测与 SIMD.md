@@ -1,7 +1,8 @@
 ---
 title: "CPU 微架构优化——Cache Miss、分支预测与 SIMD"
 date: 2026-03-02
-tags: [Cache Miss, CPU微架构, Linux, PMU, SIMD, TLB, 内存访问模式, 分支预测, 性能优化, 性能调优, 数据局部性, AVX2, AVX-512, False Sharing]
+tags: [Linux, 性能优化]
+keywords: [Cache Miss, CPU微架构, PMU, SIMD, TLB, 内存访问模式, 分支预测, 数据局部性, AVX2, AVX-512, False Sharing]
 aliases: ["CPU微架构优化", "Cache Miss优化", "分支预测优化", "SIMD向量化", "CPU Pipeline优化", "AoS vs SoA", "无分支编程", "自动向量化"]
 ---
 

@@ -1,7 +1,8 @@
 ---
 title: "04 virtio 与 vhost——虚拟磁盘、网卡的 IO 路径和队列"
 date: 2026-09-26
-tags: [KVM, virtio, vhost, IO虚拟化, 性能工程, 队列]
+tags: [KVM, 性能优化, 队列]
+keywords: [virtio, vhost, IO虚拟化]
 aliases: []
 ---
 

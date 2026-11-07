@@ -1,7 +1,8 @@
 ---
 title: "传输层网络协议设计——TCP 字节流无边界性与 Framing 协议"
 date: 2026-10-07
-tags: [Framing, Golang, TCP, TLV, netpoller, 粘包, 拆包, 协议设计, 超时控制]
+tags: [Golang]
+keywords: [Framing, TCP, TLV, netpoller, 粘包, 拆包, 协议设计, 超时控制]
 aliases: []
 ---
 

@@ -1,7 +1,8 @@
 ---
 title: "操作系统时间模型——单调时钟、NTP 偏差与运行时定时器演进"
 date: 2026-10-07
-tags: [Golang, 操作系统, 时间模型, 单调时钟, NTP, 定时器]
+tags: [Golang]
+keywords: [操作系统, 时间模型, 单调时钟, NTP, 定时器]
 aliases: []
 ---
 

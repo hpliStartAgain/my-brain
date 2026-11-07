@@ -1,7 +1,8 @@
 ---
 title: "Actuator——健康检查、指标暴露与自定义端点"
 date: 2026-03-04
-tags: [Actuator, Endpoint, HealthIndicator, Java, Micrometer, SpringBoot, 可观测性, 监控]
+tags: [Java, SpringBoot, 可观测性, 监控]
+keywords: [Actuator, Endpoint, HealthIndicator, Micrometer]
 aliases: []
 ---
 

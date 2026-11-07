@@ -47,7 +47,8 @@
     "defaultOptions": {
       "title": "按标签逛逛",
       "maxTags": 14,
-      "showAllLink": true
+      "showAllLink": true,
+      "excludeTags": []
     },
     "components": {
       "TagPills": {
@@ -65,6 +66,12 @@
       },
       "showAllLink": {
         "type": "boolean"
+      },
+      "excludeTags": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
       }
     }
   }

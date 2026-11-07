@@ -1,3 +1,10 @@
+---
+title: "3 Hadoop与YARN MapReduce与Tez"
+date: 2026-07-26
+tags: [译书]
+aliases: []
+---
+
 # 3 Hadoop与YARN MapReduce与Tez
 
 ## 引言

@@ -1,7 +1,8 @@
 ---
 title: "并发容器（上）——ConcurrentHashMap 从 JDK7 到 JDK8 的重构"
 date: 2026-03-05
-tags: [CAS, ConcurrentHashMap, CounterCell, Java, Segment, 分段锁, 并发容器, 并发编程, 扩容, 红黑树]
+tags: [CAS, Java, 并发编程]
+keywords: [ConcurrentHashMap, CounterCell, Segment, 分段锁, 并发容器, 扩容, 红黑树]
 aliases: []
 ---
 

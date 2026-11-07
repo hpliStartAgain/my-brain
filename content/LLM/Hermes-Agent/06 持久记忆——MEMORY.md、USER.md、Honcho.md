@@ -1,7 +1,8 @@
 ---
 title: "持久记忆——MEMORY.md/USER.md/Honcho"
 date: 2026-08-01
-tags: [Hermes Agent, Persistent Memory, MEMORY.md, USER.md, Honcho, Memory Provider, Snapshot, Prefix Cache, User Modeling]
+tags: [Hermes Agent]
+keywords: [Persistent Memory, MEMORY.md, USER.md, Honcho, Memory Provider, Snapshot, Prefix Cache, User Modeling]
 aliases: [Hermes 持久记忆, MEMORY.md, USER.md, Honcho 用户建模, Memory Provider 插件, 记忆快照]
 ---
 

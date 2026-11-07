@@ -1,7 +1,8 @@
 ---
 title: "05 SkyWalking Java Agent 字节码增强原理"
 date: 2026-10-10
-tags: [Byte Buddy, Instrumentation API, Java Agent, SkyWalking, 可观测性, 字节码增强]
+tags: [SkyWalking, 可观测性]
+keywords: [Byte Buddy, Instrumentation API, Java Agent, 字节码增强]
 aliases: [SkyWalking Agent 原理, 字节码增强埋点]
 ---
 

@@ -1,7 +1,8 @@
 ---
 title: "07 OVN——NB/SB 数据库、逻辑流到实际转发"
 date: 2026-09-26
-tags: [OVN, OVS, 逻辑流, 控制面, 故障定位]
+tags: [故障排查]
+keywords: [OVN, OVS, 逻辑流, 控制面]
 aliases: []
 ---
 

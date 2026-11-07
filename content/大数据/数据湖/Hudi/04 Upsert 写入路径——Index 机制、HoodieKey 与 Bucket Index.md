@@ -1,7 +1,8 @@
 ---
 title: "Upsert 写入路径——Index 机制、HoodieKey 与 Bucket Index"
 date: 2026-03-02
-tags: [BloomFilter, Bucket Index, HoodieKey, Hudi, Index, Record-Level Index, UPSERT, 写入路径]
+tags: [布隆过滤器, Hudi]
+keywords: [Bucket Index, HoodieKey, Index, Record-Level Index, UPSERT, 写入路径]
 aliases: ["Hudi Index", "Hudi Upsert原理", "HoodieKey路由", "Bloom Filter索引", "Bucket Index"]
 ---
 

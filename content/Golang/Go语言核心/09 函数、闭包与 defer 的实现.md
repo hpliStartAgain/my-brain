@@ -1,7 +1,8 @@
 ---
 title: "函数、闭包与 defer 的实现"
 date: 2026-03-04
-tags: [defer, Golang, panic, recover, 函数, 函数值, 栈帧, 逃逸分析, 闭包, 高阶函数]
+tags: [Golang, 逃逸分析]
+keywords: [defer, panic, recover, 函数, 函数值, 栈帧, 闭包, 高阶函数]
 aliases: []
 ---
 

@@ -1,7 +1,8 @@
 ---
 title: "epoll 深度解析——事件驱动 IO 的内核实现"
 date: 2026-03-02
-tags: [C10K, epoll, epoll_wait, ET, Linux, LT, poll, select, 事件驱动IO, 就绪链表, 红黑树, 高并发]
+tags: [epoll, Linux]
+keywords: [C10K, epoll_wait, ET, LT, poll, select, 事件驱动IO, 就绪链表, 红黑树, 高并发]
 aliases: ["epoll内核实现", "epoll红黑树", "LT与ET区别", "C10K问题", "事件驱动IO原理"]
 ---
 

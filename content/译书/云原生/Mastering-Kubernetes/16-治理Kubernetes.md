@@ -1,7 +1,8 @@
 ---
 title: "治理 Kubernetes"
 date: 2026-05-13
-tags: [Kubernetes, 治理, 策略]
+tags: [Kubernetes]
+keywords: [治理, 策略]
 aliases: [Governing Kubernetes]
 ---
 

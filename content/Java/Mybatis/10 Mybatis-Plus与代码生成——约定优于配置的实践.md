@@ -1,7 +1,8 @@
 ---
 title: "Mybatis-Plus与代码生成——约定优于配置的实践"
 date: 2026-03-04
-tags: [AutoFill, BaseMapper, IService, Java, LambdaQueryWrapper, Mybatis, MybatisPlus, 乐观锁, 代码生成, 逻辑删除]
+tags: [Java, Mybatis]
+keywords: [AutoFill, BaseMapper, IService, LambdaQueryWrapper, MybatisPlus, 乐观锁, 代码生成, 逻辑删除]
 aliases: []
 ---
 

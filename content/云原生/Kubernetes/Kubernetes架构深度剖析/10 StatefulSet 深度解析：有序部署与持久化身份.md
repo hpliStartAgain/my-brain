@@ -1,7 +1,8 @@
 ---
 title: "StatefulSet 深度解析：有序部署与持久化身份"
 date: 2026-07-17
-tags: [Kubernetes, StatefulSet, 有序部署, 持久化身份, Headless Service, PV绑定, 滚动更新, 状态化应用]
+tags: [Kubernetes]
+keywords: [StatefulSet, 有序部署, 持久化身份, Headless Service, PV绑定, 滚动更新, 状态化应用]
 aliases: [StatefulSet, 有序部署, 持久化身份, Headless Service, 状态化应用, K8s 状态管理]
 ---
 

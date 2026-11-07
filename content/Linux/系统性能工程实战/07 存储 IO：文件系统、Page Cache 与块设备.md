@@ -1,7 +1,8 @@
 ---
 title: "存储 IO：文件系统、Page Cache 与块设备"
 date: 2026-07-17
-tags: [存储, IO, 文件系统, Page Cache, 块设备, SSD, NVMe, fsync, 性能分析]
+tags: [IO, 文件系统, Page Cache, NVMe, 性能优化]
+keywords: [存储, 块设备, SSD, fsync]
 aliases: [存储 IO 性能分析, 文件系统与 Page Cache, 块设备与磁盘延迟模型]
 ---
 

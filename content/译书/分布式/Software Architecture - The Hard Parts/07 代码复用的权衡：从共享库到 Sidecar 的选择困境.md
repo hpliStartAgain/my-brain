@@ -1,7 +1,8 @@
 ---
 title: "07 代码复用的权衡：从共享库到 Sidecar 的选择困境"
 date: 2026-05-26
-tags: [软件架构, 代码复用, 共享库, Sidecar, 服务网格, 微服务]
+tags: [软件架构, 服务网格, 微服务]
+keywords: [代码复用, 共享库, Sidecar]
 aliases: [代码复用模式, Sidecar模式, 共享库耦合]
 ---
 

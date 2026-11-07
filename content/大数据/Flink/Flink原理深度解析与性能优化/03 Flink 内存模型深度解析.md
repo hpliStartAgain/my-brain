@@ -1,7 +1,8 @@
 ---
 title: "Flink 内存模型深度解析"
 date: 2026-03-02
-tags: [Flink, MemorySegment, NetworkBuffer, OOM, TaskManager, 内存模型, 堆外内存, 调优]
+tags: [Flink, OOM, 内存模型, 堆外内存, 性能优化]
+keywords: [MemorySegment, NetworkBuffer, TaskManager]
 aliases: ["Flink内存模型", "TaskManager内存", "Flink内存调优", "MemorySegment"]
 ---
 

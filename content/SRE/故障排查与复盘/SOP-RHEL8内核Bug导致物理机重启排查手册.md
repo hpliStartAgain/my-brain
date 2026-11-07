@@ -1,6 +1,8 @@
 ---
+title: "SOP: RHEL8 内核 Bug 导致物理机重启排查手册"
 date: 2026-04-21
-tags: [crash, kernel, RHEL8, SOP, 故障排查]
+tags: [故障排查]
+keywords: [crash, kernel, RHEL8, SOP]
 category: 运维规范
 severity: P0
 ---

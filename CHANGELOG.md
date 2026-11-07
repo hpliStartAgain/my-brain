@@ -2,6 +2,63 @@
 
 本文件记录 my-brain 数字花园的重大内容变更。
 
+## 2026-11-07
+
+### 站点底座优化：配置纠错、性能、导航、SEO、首页与标签体系（基建 + 1217 篇 frontmatter）
+
+对站点底座做一次全面体检后的集中整改。所有数据均为本地全量构建（1235 篇）实测。
+
+#### 一、配置纠错
+
+- `baseUrl` 从上游默认的 `quartz.jzhao.xyz` 改为 `ting.is-a.dev`：sitemap、RSS、og:url、CNAME、分享卡片左上角的域名此前全部指向 Quartz 作者的站点。
+- `locale` 从 `en-US` 改为 `zh-CN`：`<html lang>`、目录 / 搜索 / 面包屑 / 日期 / 阅读时长等界面文字恢复中文（如 "Jul 17, 2026 · 43 min read" → "2026年7月17日，43分钟阅读"）。
+- 去掉未注册站点的 plausible 统计（上游默认值，脚本空跑）。
+- 页脚改为「© 年份 李浩鹏（汀） · 基于 Quartz 构建」，加 GitHub / RSS / 站点源码链接；面包屑根节点改为「首页」并不再重复当前页标题。
+
+#### 二、性能
+
+| 指标 | 整改前 | 整改后 |
+|---|---:|---:|
+| 每页必下载的 `contentIndex.json` | 47.7 MB（gzip 17 MB） | 815 KB（gzip 99 KB） |
+| 页面加载后 JS 堆 | 712 MB | 10 MB |
+| 首页 HTML | 432 KB | 47 KB |
+| 首次搜索出结果 | 约 7.5 s（且每页加载都在后台全量建索引） | 约 0.3 s |
+| 全量构建 | 16 分钟，默认堆内存 OOM | 6 分钟，默认内存通过 |
+| 产物文件数 | 15,884 | 8,352 |
+
+- `plugins/content-index`（fork）：主索引不再内嵌全文，全文拆到 `static/searchContent.json`。
+- `plugins/search`（fork）：渐进式索引——打开搜索即用标题 / 标签建索引，全文后台拉取后按同一 id 增量补入并刷新结果。
+- `plugins/article-carousel`：「换一批」改为从已加载的元数据索引抽取，不再把 1234 篇文章序列化进首页；卡片显示所属专栏。
+- 字体：Google Fonts 改为 preload + onload 异步挂载（不再阻塞首屏），只请求标题衬线与代码等宽两族；正文改用各平台系统中文字体栈，Google 不可达时整站直接落到系统字体。
+- KaTeX 样式表与 copy-tex 脚本自托管（`quartz/static/katex/`），不再每页阻塞请求 jsDelivr；Mermaid 增加 cdnjs → npmmirror → jsDelivr 的回退链。
+- 正文图片统一 `loading="lazy" decoding="async"`（content-polish 的 HTML 阶段）；站点图标 454px / 139 KB → 192px / 16.5 KB。
+- `vercel.json`：带内容哈希的静态资源（`/static/resource-*`、`/static/scripts/*`、`/component-*.css`）与 KaTeX 资源加一年 immutable 缓存。
+
+#### 三、导航与阅读体验
+
+- `plugins/explorer`（fork）：左侧导航改按文件名（含序号）自然排序——717 篇文章的标题不带序号，原版按标题排序使几乎所有专栏章节顺序错乱；修复打开文章后 `scrollIntoView` 连带滚动整个窗口、把标题滚出视口 333-472px 的问题；去掉 12 处调试 console 输出。
+- `plugins/folder-page`（fork）：专栏目录页同样按文件名序号排序（原版按日期 + 标题）。
+- `plugins/content-polish`（新增）：构建期去掉与 title 重复的正文首个 H1（双 H1 页面 1080 → 31，剩余为正文标题与 title 措辞不同的页面）；从 `**摘要：**` / `## 摘要` / `[!abstract]` 生成中文 meta description（「无描述」页面 158 → 0）。
+- 样式：修复 `article blockquote { font-style: italic }` 泄漏到全部 Callout（摘要、思考题整段伪斜体）；Callout 配色改为与象牙 + 陶土基调同温度的低饱和色板（含深色模式）；导航改为中性色、多行对齐；目录去掉逐级色块并提高对比度；标题去负字距；桌面端中文两端对齐；标题上方标签最多 4 个；打印样式与 reduced-motion 适配。
+- 首页：首屏改为姓名 + 定位 + GitHub / RSS / 标签入口，随后是专栏地图；新增「最近更新」，随机碎片与标签入口移到页面底部，标签入口排除「面试 / 专栏导览 / 译书」这类非领域标签；滚动渐显只作用于首页区块，避免卡片网格先闪出灰底。
+
+#### 四、SEO
+
+- `Head.tsx`：新增 canonical、`og:type=article`、`article:published_time / modified_time / tag`、`og:locale`、作者、RSS 自动发现、深浅色 `theme-color`、JSON-LD（文章页 TechArticle、首页 WebSite + Person）；文件夹 / 标签页给出有意义的兜底描述。
+- `searchContent.json` 加 noindex 头与 robots Disallow。
+
+#### 五、内容层（只改 frontmatter 与 4 处正文字符）
+
+- **标签收敛**：3,988 个标签（2,827 个只用过一次，生成了 4,002 个标签页与同等数量的 og 图）→ 213 个受控标签，平均每篇 8.1 → 3.2 个；长尾标签迁入新字段 `keywords`（进入 meta keywords 与 JSON-LD，不生成标签页）。同义合并规则与词表见 `scripts/tag_vocabulary.py`，执行脚本 `scripts/converge_tags.py`（幂等，只改 `tags` / `keywords` 两行）。AGENTS.md 增补标签受控词表规范。
+- **补齐 frontmatter**：149 篇无 frontmatter 的文件补 `title`（取正文 H1）/ `date`（git 首次提交日期）/ `tags`（所属领域标签）/ `aliases`；另补 4 篇缺 title、3 篇缺 date/tags 的文件。脚本 `scripts/add_missing_frontmatter.py`。
+- **渲染错误**：3 篇文章中的美元金额与 `L1I$`/`L1D$` 被 KaTeX 当作公式（转义为 `\$`）；`JVM-Performance-Engineering/02` 中残留的 NUL 字符改为 `` `\u0000`–`\uffff` ``。
+- README 由上游 Quartz 说明改为本仓库说明。
+
+#### 六、验证
+
+- 全量构建通过（默认内存，6 分钟）；1235 篇 frontmatter 全部可被 YAML 解析，tags / keywords / aliases 均为数组；正文除上述 4 处字符外无改动，Mermaid 与 `[[链接]]` 不受影响。
+- 浏览器回归（桌面 1440 / 手机 390，浅色 / 深色）：文章页 scrollY=0、单 H1、Callout 正体；导航与目录页章节顺序 00→14；搜索 0.3 s 出首批结果、全文补入后结果更新；换一批链接可达；手机无横向溢出；无页面脚本错误（沙箱内 Mermaid 三个 CDN 均不可达，属环境限制）。
+
 ## 2026-11-02
 
 ### 重写：中间件/ETCD 专栏完全重写（7 文件，旧稿破坏性替换）

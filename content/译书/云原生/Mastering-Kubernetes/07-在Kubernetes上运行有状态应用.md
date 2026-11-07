@@ -1,7 +1,8 @@
 ---
 title: 在 Kubernetes 上运行有状态应用
 date: 2026-05-13
-tags: [Kubernetes, StatefulSet]
+tags: [Kubernetes]
+keywords: [StatefulSet]
 aliases:
   - Running Stateful Applications with Kubernetes
 ---

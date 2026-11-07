@@ -1,7 +1,8 @@
 ---
 title: "VMM 解剖——Firecracker、Cloud Hypervisor 与 Kata 的虚拟机监视器家族"
 date: 2026-08-15
-tags: [Agent Sandbox, Cloud Hypervisor, Confidential Containers, Dragonball, Firecracker, Jailer, Kata Containers, MicroVM, QEMU, VMM, rust-vmm, virtio, 虚拟机监视器]
+tags: [Agent Sandbox, Firecracker, Kata Containers]
+keywords: [Cloud Hypervisor, Confidential Containers, Dragonball, Jailer, MicroVM, QEMU, VMM, rust-vmm, virtio, 虚拟机监视器]
 aliases: [VMM解剖, Firecracker架构, CloudHypervisor, rust-vmm, CubeHypervisor]
 ---
 

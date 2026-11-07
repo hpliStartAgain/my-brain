@@ -1,7 +1,8 @@
 ---
 title: "06 RDD 迭代器模型：流水线计算（Pipeline）与内存迭代器的实现深度分析"
 date: 2026-02-27
-tags: [JVM GC, RDD, Spark, 流水线计算, 迭代器]
+tags: [RDD, Spark]
+keywords: [JVM GC, 流水线计算, 迭代器]
 aliases: [RDD Iterator and Pipelining]
 ---
 

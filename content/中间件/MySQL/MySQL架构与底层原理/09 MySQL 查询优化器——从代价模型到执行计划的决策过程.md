@@ -1,7 +1,8 @@
 ---
 title: "MySQL 查询优化器——从代价模型到执行计划的决策过程"
 date: 2026-03-02
-tags: [MySQL, Optimizer, 代价模型, 执行计划, 查询优化器, 统计信息]
+tags: [MySQL, 执行计划]
+keywords: [Optimizer, 代价模型, 查询优化器, 统计信息]
 aliases: [查询优化器, 代价模型, 执行计划]
 ---
 

@@ -1,7 +1,8 @@
 ---
 title: "沙箱性能工程——Runtime 基准与 WarmPool 容量管理"
 date: 2026-08-15
-tags: [Agent Sandbox, Firecracker, Kata Containers, Pod Overhead, PSS, RuntimeClass, WarmPool, gVisor, runc, 冷启动, 基准测试, 容量规划, 性能工程]
+tags: [Agent Sandbox, Firecracker, Kata Containers, gVisor, 容量规划, 性能优化]
+keywords: [Pod Overhead, PSS, RuntimeClass, WarmPool, runc, 冷启动, 基准测试]
 aliases: [沙箱性能工程, Runtime基准, WarmPool容量, Pod Overhead]
 ---
 

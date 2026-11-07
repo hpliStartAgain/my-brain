@@ -1,7 +1,8 @@
 ---
 title: "OpenSandbox 数据面——execd 与 egress 的盒内世界"
 date: 2026-08-15
-tags: [Agent Sandbox, CredentialVault, Egress, Endpoint, FastSandbox, Firecracker, Gin, LifecycleHooks, OpenSandbox, SSE, execd, nftables, 数据面, 沙箱内执行]
+tags: [Agent Sandbox, Firecracker, OpenSandbox]
+keywords: [CredentialVault, Egress, Endpoint, FastSandbox, Gin, LifecycleHooks, SSE, execd, nftables, 数据面, 沙箱内执行]
 aliases: [OpenSandbox数据面, execd详解, egress详解, 沙箱内守护进程]
 ---
 

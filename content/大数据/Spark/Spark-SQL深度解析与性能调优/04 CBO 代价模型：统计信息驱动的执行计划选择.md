@@ -1,7 +1,8 @@
 ---
 title: "CBO 代价模型：统计信息驱动的执行计划选择"
 date: 2026-02-28
-tags: [ANALYZE TABLE, CBO, Join Reordering, Spark, SparkSQL, 代价模型, 基数估算, 直方图, 统计信息]
+tags: [CBO, Spark, SparkSQL]
+keywords: [ANALYZE TABLE, Join Reordering, 代价模型, 基数估算, 直方图, 统计信息]
 aliases: []
 ---
 

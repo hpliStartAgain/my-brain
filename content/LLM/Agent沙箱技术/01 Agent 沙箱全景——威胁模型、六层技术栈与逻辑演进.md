@@ -1,7 +1,8 @@
 ---
 title: "Agent 沙箱全景——威胁模型、六层技术栈与逻辑演进"
 date: 2026-08-15
-tags: [Agent, Agent Sandbox, ClawHub, Codex, Daytona, E2B, Firecracker, gVisor, Kata Containers, MCP, MicroVM, Modal, OpenSandbox, Prompt Injection, Sandbox, 威胁模型, 信任边界, 沙箱安全]
+tags: [Agent, Agent Sandbox, Firecracker, gVisor, Kata Containers, MCP, OpenSandbox]
+keywords: [ClawHub, Codex, Daytona, E2B, MicroVM, Modal, Prompt Injection, Sandbox, 威胁模型, 信任边界, 沙箱安全]
 aliases: [Agent沙箱全景, Agent沙箱威胁模型, 沙箱技术演进]
 ---
 

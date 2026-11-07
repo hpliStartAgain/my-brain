@@ -1,7 +1,7 @@
 ---
 title: "06 Loki 运维与性能调优"
 date: 2026-10-10
-tags: [Grafana Loki, SRE, 可观测性, 日志, 性能调优, 容量规划]
+tags: [Loki, SRE, 可观测性, 日志, 性能优化, 容量规划]
 aliases: []
 ---
 

@@ -1,7 +1,8 @@
 ---
 title: "01 CVM 服务地图——用户操作、控制面与数据面依赖"
 date: 2026-09-26
-tags: [CVM, OpenStack, SRE, 可靠性工程, 虚拟化, 服务地图]
+tags: [CVM, OpenStack, SRE, 虚拟化]
+keywords: [可靠性工程, 服务地图]
 aliases: []
 ---
 

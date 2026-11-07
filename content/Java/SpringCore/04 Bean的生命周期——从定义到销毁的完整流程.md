@@ -1,7 +1,8 @@
 ---
 title: "Bean的生命周期——从定义到销毁的完整流程"
 date: 2026-03-04
-tags: [Aware, BeanPostProcessor, Bean生命周期, InitializingBean, Java, PostConstruct, Spring]
+tags: [Java, Spring]
+keywords: [Aware, BeanPostProcessor, Bean生命周期, InitializingBean, PostConstruct]
 aliases: []
 ---
 

@@ -1,7 +1,8 @@
 ---
 title: "Prompt 工程——三层 Prompt 与上下文压缩"
 date: 2026-08-01
-tags: [Hermes Agent, Prompt Engineering, Three-Layer Prompt, Prefix Cache, Context Compression, Session Lineage, Stable Context Volatile]
+tags: [Hermes Agent]
+keywords: [Prompt Engineering, Three-Layer Prompt, Prefix Cache, Context Compression, Session Lineage, Stable Context Volatile]
 aliases: [Hermes Prompt 工程, 三层 Prompt, stable context volatile, 上下文压缩, 会话谱系, prefix caching]
 ---
 

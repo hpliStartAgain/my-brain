@@ -1,7 +1,8 @@
 ---
 title: "分布式事务工程化：Saga 模式与一致性方案的选择框架"
 date: 2026-07-17
-tags: [软件架构, 分布式事务, Saga, 2PC, TCC, Outbox, 最终一致性, 补偿事务]
+tags: [软件架构, 分布式事务, Saga, 最终一致性]
+keywords: [2PC, TCC, Outbox, 补偿事务]
 aliases: [分布式事务工程化, Saga模式, Epic Saga, Fairy Tale Saga, Outbox模式, TCC, 补偿事务]
 ---
 

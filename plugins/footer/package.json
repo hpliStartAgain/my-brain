@@ -1,0 +1,80 @@
+{
+  "name": "@my-brain/footer-fork",
+  "version": "0.1.0",
+  "description": "[my-brain fork] Footer component for Quartz - displays site footer with links and version",
+  "type": "module",
+  "license": "MIT",
+  "author": "Quartz Community",
+  "homepage": "https://github.com/quartz-community/footer",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/quartz-community/footer"
+  },
+  "keywords": [
+    "quartz",
+    "quartz-plugin",
+    "footer",
+    "component"
+  ],
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./components": {
+      "types": "./dist/components/index.d.ts",
+      "import": "./dist/components/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "peerDependencies": {
+    "preact": "^10.0.0"
+  },
+  "peerDependenciesMeta": {
+    "preact": {
+      "optional": false
+    }
+  },
+  "dependencies": {
+    "@quartz-community/types": "^0.2.1",
+    "@quartz-community/utils": "^0.1.0"
+  },
+  "engines": {
+    "node": ">=22",
+    "npm": ">=10.9.2"
+  },
+  "quartz": {
+    "name": "footer",
+    "displayName": "Footer",
+    "category": "component",
+    "version": "1.0.0",
+    "quartzVersion": ">=5.0.0",
+    "dependencies": [],
+    "defaultOrder": 50,
+    "defaultEnabled": true,
+    "defaultOptions": {
+      "links": {}
+    },
+    "components": {
+      "Footer": {
+        "displayName": "Footer",
+        "defaultPosition": "footer",
+        "defaultPriority": 50
+      }
+    },
+    "optionSchema": {
+      "links": {
+        "type": "object"
+      },
+      "author": {
+        "type": "string"
+      }
+    }
+  }
+}

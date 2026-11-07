@@ -1,7 +1,8 @@
 ---
 title: "现代二进制通信协议——Protobuf 紧凑编码与 gRPC 多路复用机制"
 date: 2026-10-07
-tags: [Golang, Protobuf, gRPC, HTTP2, 序列化, RPC]
+tags: [Golang, 序列化]
+keywords: [Protobuf, gRPC, HTTP2, RPC]
 aliases: []
 ---
 

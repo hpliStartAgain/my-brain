@@ -1,7 +1,8 @@
 ---
 title: "Page Cache：Linux 为什么要用内存来缓存磁盘"
 date: 2026-02-28
-tags: [Linux, Page Cache, writeback, 内存管理, 脏页, 零拷贝]
+tags: [Linux, Page Cache, 内存管理, 零拷贝]
+keywords: [writeback, 脏页]
 aliases: [页面缓存, 文件缓存]
 ---
 

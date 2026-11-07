@@ -1,7 +1,8 @@
 ---
 title: "07 Redis 消息队列——从 PubSub 到 Stream"
 date: 2026-03-03
-tags: [List, PubSub, Redis, Stream, XADD, XREADGROUP, 中间件, 死信队列, 消息队列, 消费者组]
+tags: [Redis, 中间件, 消息队列]
+keywords: [List, PubSub, Stream, XADD, XREADGROUP, 死信队列, 消费者组]
 aliases: []
 ---
 

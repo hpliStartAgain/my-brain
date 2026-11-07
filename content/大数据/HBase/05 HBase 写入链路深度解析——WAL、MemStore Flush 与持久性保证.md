@@ -1,7 +1,8 @@
 ---
 title: "HBase 写入链路深度解析——WAL、MemStore Flush 与持久性保证"
 date: 2026-02-27
-tags: [Durability, Flush, HBase, HLog, MemStore, MVCC, WAL, 写入链路, 持久性]
+tags: [HBase, MVCC, WAL]
+keywords: [Durability, Flush, HLog, MemStore, 写入链路, 持久性]
 aliases: [HBase写入流程, HBase WAL原理, HBase持久性]
 ---
 

@@ -1,3 +1,10 @@
+---
+title: "High Performance SRE Automation 术语表"
+date: 2026-07-26
+tags: [译书]
+aliases: []
+---
+
 | 英文                                 | 中文       | 说明                                      |
 | ---------------------------------- | -------- | --------------------------------------- |
 | Site Reliability Engineering (SRE) | 站点可靠性工程  | 通过软件工程方法解决运维问题的实践                       |

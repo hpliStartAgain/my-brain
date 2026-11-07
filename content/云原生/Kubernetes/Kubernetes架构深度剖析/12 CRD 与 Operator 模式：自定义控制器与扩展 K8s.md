@@ -1,7 +1,8 @@
 ---
 title: "CRD 与 Operator 模式：自定义控制器与扩展 K8s"
 date: 2026-07-17
-tags: [Kubernetes, CRD, Operator, controller-runtime, Custom Resource, 自定义控制器, Helm vs Operator]
+tags: [Kubernetes]
+keywords: [CRD, Operator, controller-runtime, Custom Resource, 自定义控制器, Helm vs Operator]
 aliases: [CRD, Operator 模式, Custom Resource Definition, controller-runtime, K8s 扩展, Operator SDK]
 ---
 

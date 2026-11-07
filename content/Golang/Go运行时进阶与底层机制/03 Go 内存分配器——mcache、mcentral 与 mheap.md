@@ -1,7 +1,8 @@
 ---
 title: "Go 内存分配器——mcache、mcentral 与 mheap"
 date: 2026-03-04
-tags: [Golang, mcache, mcentral, mheap, size class, Span, TCMalloc, 内存分配器, 堆分配, 栈分配, 逃逸分析]
+tags: [Golang, 逃逸分析]
+keywords: [mcache, mcentral, mheap, size class, Span, TCMalloc, 内存分配器, 堆分配, 栈分配]
 aliases: []
 ---
 

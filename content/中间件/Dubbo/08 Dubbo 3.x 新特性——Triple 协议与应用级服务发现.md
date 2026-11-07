@@ -1,7 +1,8 @@
 ---
 title: "08 Dubbo 3.x 新特性——Triple 协议与应用级服务发现"
 date: 2026-03-04
-tags: [Dubbo, Triple协议, 应用级服务发现, 云原生, 服务网格]
+tags: [Dubbo, 云原生, 服务网格]
+keywords: [Triple协议, 应用级服务发现]
 aliases: []
 ---
 

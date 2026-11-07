@@ -1,7 +1,8 @@
 ---
 title: "YARN ATS 与 AHS 作业历史日志服务全解析"
 date: 2026-03-02
-tags: [AHS, ATS, HBase, Spark History Server, Timeline Server, YARN, 作业历史, 大数据, 日志聚合]
+tags: [HBase, YARN, 大数据]
+keywords: [AHS, ATS, Spark History Server, Timeline Server, 作业历史, 日志聚合]
 aliases: ["ATS", "AHS", "YARN Timeline Server", "Application History Server", "日志聚合"]
 ---
 

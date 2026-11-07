@@ -1,7 +1,8 @@
 ---
 title: "矩阵数组专题：Rotate Image、Set Matrix Zeroes、Valid Sudoku"
 date: 2026-10-11
-tags: [LeetCode, 48, 73, 36, 数组, 矩阵, 算法, 面试]
+tags: [LeetCode, 数组, 算法, 面试]
+keywords: [48, 73, 36, 矩阵]
 aliases: [旋转矩阵, 矩阵置零, 数独验证]
 ---
 

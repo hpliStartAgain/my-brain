@@ -1,7 +1,8 @@
 ---
 title: "声明式 API 与面向终态协调：K8s 的核心范式"
 date: 2026-07-17
-tags: [Kubernetes, 声明式API, RESTful, Spec/Status, 控制器协调, 面向终态, 乐观并发, YAML]
+tags: [Kubernetes]
+keywords: [声明式API, RESTful, Spec/Status, 控制器协调, 面向终态, 乐观并发, YAML]
 aliases: [声明式 API, 面向终态协调, Spec/Status, K8s RESTful API, K8s 核心范式]
 ---
 

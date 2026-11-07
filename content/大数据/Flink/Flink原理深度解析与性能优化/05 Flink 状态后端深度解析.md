@@ -1,7 +1,8 @@
 ---
 title: "Flink 状态后端深度解析"
 date: 2026-03-02
-tags: [Checkpoint, Flink, HashMapStateBackend, MapState, RocksDB, StateBackend, ValueState, 状态后端, 状态类型, 调优]
+tags: [Checkpoint, Flink, RocksDB, 性能优化]
+keywords: [HashMapStateBackend, MapState, StateBackend, ValueState, 状态后端, 状态类型]
 aliases: ["Flink状态后端", "RocksDB状态后端", "HashMapStateBackend", "Flink状态管理"]
 ---
 

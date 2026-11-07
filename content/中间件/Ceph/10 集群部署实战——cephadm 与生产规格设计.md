@@ -1,7 +1,8 @@
 ---
 title: "10 集群部署实战——cephadm 与生产规格设计"
 date: 2026-09-04
-tags: [Ceph, cephadm, 部署, 集群规划, 分布式存储]
+tags: [Ceph, 分布式存储]
+keywords: [cephadm, 部署, 集群规划]
 aliases: []
 ---
 

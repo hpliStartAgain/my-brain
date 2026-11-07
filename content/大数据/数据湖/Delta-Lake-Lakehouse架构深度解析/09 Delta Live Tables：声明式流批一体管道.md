@@ -1,7 +1,8 @@
 ---
 title: "Delta Live Tables：声明式流批一体管道"
 date: 2026-02-28
-tags: [Delta Lake, Delta Live Tables, DLT, Expectations, 声明式管道, 数据血缘, 数据质量, 流式表, 物化视图]
+tags: [Delta Lake]
+keywords: [Delta Live Tables, DLT, Expectations, 声明式管道, 数据血缘, 数据质量, 流式表, 物化视图]
 aliases: []
 ---
 

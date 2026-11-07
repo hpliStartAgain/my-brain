@@ -1,7 +1,8 @@
 ---
 title: "08 AOF 持久化与混合持久化"
 date: 2026-03-03
-tags: [AOF, AOF重写, fsync, Redis, RESP, 中间件, 命令追加, 持久化, 数据安全, 混合持久化]
+tags: [Redis, 中间件]
+keywords: [AOF, AOF重写, fsync, RESP, 命令追加, 持久化, 数据安全, 混合持久化]
 aliases: []
 ---
 

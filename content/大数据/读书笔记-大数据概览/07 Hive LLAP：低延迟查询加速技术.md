@@ -1,3 +1,9 @@
+---
+title: "07 Hive LLAP：低延迟查询加速技术"
+date: 2026-07-26
+tags: [大数据]
+aliases: []
+---
 
 > [!info] 摘要  
 > Hive LLAP（Low Latency Analytical Processing）不是简单缓存，而是一套**将 Tez DAG 执行与常驻进程内存池深度耦合**的混合执行架构。它通过**预加载数据分片、压缩列存格式、片段级流水线**，在保持 Hive 高吞吐批处理能力的同时，将查询延迟压缩至秒级。本文从“如何让 Hive 像 Presto 一样快但保留 ACID 语义”这一矛盾切入，深度解析 LLAP Daemon 的**双端口设计**（I/O 端口 + 执行端口）、缓存淘汰策略、谓词下推下移机制。通过源码级拆解 LLAP 的 InputFormat 重写、RowBatch 流水线、容器内复用池，还原一次 LLAP 查询如何绕过 YARN 调度直接命中内存数据。结合生产案例，提供 LLAP Daemon OOM、缓存命中率骤降、YARN 队列抢占死锁等典型问题排查方案。最后，在 2026 年 Presto/Trino 已成交互查询事实标准的背景下，讨论 Hive LLAP 的**混合负载价值**与**运维复杂度过高**的根本矛盾。

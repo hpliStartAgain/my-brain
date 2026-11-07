@@ -1,7 +1,8 @@
 ---
 title: 11 - 在多集群上运行 Kubernetes
 date: 2026-05-13
-tags: [Kubernetes, 多集群]
+tags: [Kubernetes]
+keywords: [多集群]
 aliases: [Running Kubernetes on Multiple Clusters, Multi-cluster Kubernetes]
 ---
 

@@ -1,7 +1,8 @@
 ---
 title: "02 ZAB 协议——Leader 选举、崩溃恢复与消息广播"
 date: 2026-03-04
-tags: [ZAB, ZooKeeper, 共识协议, Leader选举, 崩溃恢复]
+tags: [ZooKeeper, Leader选举, 崩溃恢复]
+keywords: [ZAB, 共识协议]
 aliases: []
 ---
 

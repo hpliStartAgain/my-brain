@@ -1,7 +1,8 @@
 ---
 title: "KVM 与硬件虚拟化——MicroVM 隔离的硬件基石"
 date: 2026-08-15
-tags: [Agent Sandbox, APICv, EPT, KVM, MicroVM, SEV-SNP, TDX, VMX, 嵌套虚拟化, 机密计算, 硬件虚拟化, 虚拟化]
+tags: [Agent Sandbox, KVM, 虚拟化]
+keywords: [APICv, EPT, MicroVM, SEV-SNP, TDX, VMX, 嵌套虚拟化, 机密计算, 硬件虚拟化]
 aliases: [KVM基础, 硬件虚拟化原理, 嵌套虚拟化, EPT内存隔离]
 ---
 

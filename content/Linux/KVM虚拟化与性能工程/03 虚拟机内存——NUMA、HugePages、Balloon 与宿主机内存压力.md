@@ -1,7 +1,8 @@
 ---
 title: "03 虚拟机内存——NUMA、HugePages、Balloon 与宿主机内存压力"
 date: 2026-09-26
-tags: [KVM, 内存虚拟化, NUMA, HugePage, Balloon, 性能工程]
+tags: [KVM, NUMA, 性能优化]
+keywords: [内存虚拟化, HugePage, Balloon]
 aliases: []
 ---
 

@@ -1,7 +1,8 @@
 ---
 title: "链表基础与哑节点技巧：Remove Duplicates、Partition List"
 date: 2026-10-11
-tags: [LeetCode, 83, 82, 86, 哑节点, 链表, 算法, 面试]
+tags: [LeetCode, 链表, 算法, 面试]
+keywords: [83, 82, 86, 哑节点]
 aliases: [链表入门, 哑节点, 链表去重, 链表分区]
 ---
 

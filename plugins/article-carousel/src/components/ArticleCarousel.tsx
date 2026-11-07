@@ -1,13 +1,9 @@
 import type {
-  GlobalConfiguration,
   QuartzComponent,
   QuartzComponentConstructor,
   QuartzComponentProps,
   QuartzPluginData,
-  ValidDateType,
 } from "@quartz-community/types";
-import { formatDate } from "@quartz-community/utils/date";
-import { getDate } from "@quartz-community/utils/sort";
 import { resolveRelative } from "@quartz-community/utils/path";
 import { classNames } from "../util/lang";
 import style from "./styles/articleCarousel.scss";
@@ -35,6 +31,13 @@ function isTagPageSlug(slug: string | undefined): boolean {
   return slug === "tags" || slug === "tags/index" || slug.startsWith("tags/");
 }
 
+/** 文章所属专栏 = 所在目录名（如 "中间件/ETCD/02 xx.md" → "ETCD"），根目录文章返回空 */
+function seriesOf(relativePath: string | undefined): string {
+  if (!relativePath) return "";
+  const parts = relativePath.split("/");
+  return parts.length >= 2 ? parts[parts.length - 2] : "";
+}
+
 const defaultOptions = (): ArticleCarouselOptions => ({
   title: "随机碎片",
   showCount: 4,
@@ -48,36 +51,9 @@ const defaultOptions = (): ArticleCarouselOptions => ({
 });
 
 /**
- * Resolve the defaultDateType for a given page, preferring the per-file value
- * set by the CreatedModifiedDate transformer, falling back to the global config.
- */
-function resolveDefaultDateType(
-  data: ArticleCarouselPluginData,
-  cfg: GlobalConfiguration,
-): ValidDateType | undefined {
-  return (
-    (data.defaultDateType as ValidDateType | undefined) ??
-    ((cfg as Record<string, unknown>).defaultDateType as ValidDateType | undefined)
-  );
-}
-
-/**
- * Return a copy of the page data with the resolved defaultDateType applied,
- * so that getDate() from @quartz-community/utils/sort can read it.
- */
-function withResolvedDateType(
-  data: ArticleCarouselPluginData,
-  cfg: GlobalConfiguration,
-): QuartzPluginData {
-  const resolved = resolveDefaultDateType(data, cfg);
-  if (!resolved) return data as QuartzPluginData;
-  return { ...data, defaultDateType: resolved };
-}
-
-/**
  * 随机文章推荐组件
  * 显示 N 篇随机文章，点击刷新按钮随机切换
- * 所有文章数据构建时注入，运行时由 JS 随机选取
+ * 首屏卡片构建时随机选取，「换一批」运行时从全局 fetchData 元数据索引抽取
  */
 const ArticleCarousel: QuartzComponentConstructor<Partial<ArticleCarouselOptions>> = (
   userOpts?: Partial<ArticleCarouselOptions>,
@@ -93,26 +69,19 @@ const ArticleCarousel: QuartzComponentConstructor<Partial<ArticleCarouselOptions
     const pages = allFiles.filter(opts.filter);
     if (pages.length === 0) return null;
 
-    // 构建时将所有候选文章序列化为 JSON，运行时 JS 从中随机选取
-    const allArticles = pages.map((page) => {
-      const resolved = withResolvedDateType(page as ArticleCarouselPluginData, cfg);
-      const date = getDate(resolved);
-      return {
-        title: (page.frontmatter?.title as string) ?? "Untitled",
-        href: resolveRelative(fileData.slug as never, page.slug as never),
-        date: date ? formatDate(date, cfg.locale) : "",
-      };
-    });
-
-    // 构建时先选 showCount 篇作为初始显示
-    const shuffled = [...allArticles].sort(() => Math.random() - 0.5);
-    const initial = shuffled.slice(0, opts.showCount);
+    // 构建时随机选 showCount 篇作为首屏内容；「换一批」在浏览器端从全局 fetchData
+    // （每页都会加载的轻量元数据索引）里抽取，不再把全站文章列表序列化进首页 HTML。
+    const shuffled = [...pages].sort(() => Math.random() - 0.5).slice(0, opts.showCount);
+    const initial = shuffled.map((page) => ({
+      title: (page.frontmatter?.title as string) ?? "Untitled",
+      href: resolveRelative(fileData.slug as never, page.slug as never),
+      series: seriesOf((page as Record<string, unknown>).relativePath as string | undefined),
+    }));
 
     return (
       <div
         class={classNames(displayClass, "random-articles")}
         data-random-articles
-        data-all-articles={JSON.stringify(allArticles)}
         data-show-count={String(opts.showCount)}
       >
         <div class="random-articles-header">
@@ -127,6 +96,7 @@ const ArticleCarousel: QuartzComponentConstructor<Partial<ArticleCarouselOptions
               stroke-width="1.5"
               stroke-linecap="round"
               stroke-linejoin="round"
+              aria-hidden="true"
             >
               <path d="M1 4v4h4" />
               <path d="M3.51 10a5.5 5.5 0 1 0 .49-5.5L1 8" />
@@ -134,11 +104,11 @@ const ArticleCarousel: QuartzComponentConstructor<Partial<ArticleCarouselOptions
             <span>换一批</span>
           </button>
         </div>
-        <div class="random-articles-grid" data-articles-grid>
+        <div class="random-articles-grid" data-articles-grid aria-live="polite">
           {initial.map((article) => (
             <a href={article.href} class="random-article-card internal">
+              {article.series && <span class="random-article-series">{article.series}</span>}
               <span class="random-article-title">{article.title}</span>
-              {article.date && <span class="random-article-date">{article.date}</span>}
             </a>
           ))}
         </div>
@@ -148,45 +118,73 @@ const ArticleCarousel: QuartzComponentConstructor<Partial<ArticleCarouselOptions
 
   ArticleCarouselComponent.css = style;
   ArticleCarouselComponent.afterDOMLoaded = `
+    let carouselPool = null;
+
+    function seriesOf(filePath) {
+      if (!filePath) return "";
+      const parts = String(filePath).split("/");
+      return parts.length >= 2 ? parts[parts.length - 2] : "";
+    }
+
+    async function loadPool() {
+      if (carouselPool) return carouselPool;
+      const data = typeof fetchData !== "undefined" ? await fetchData : null;
+      const index = data && typeof data === "object" ? data : {};
+      carouselPool = Object.entries(index)
+        .filter(([slug, v]) => {
+          if (!v || typeof v !== "object" || !v.title) return false;
+          if (slug === "tags" || slug.startsWith("tags/")) return false;
+          if (slug === "index" || slug.endsWith("/index")) return false;
+          return typeof v.filePath === "string" && v.filePath.endsWith(".md");
+        })
+        .map(([slug, v]) => ({ title: v.title, slug, series: seriesOf(v.filePath) }));
+      return carouselPool;
+    }
+
+    function hrefFor(slug) {
+      // 组件只在首页渲染，首页位于站点根目录，相对 slug 即可
+      const base = document.body.dataset.basepath || "";
+      return base + "/" + slug.split("/").map(encodeURIComponent).join("/");
+    }
+
+    function shuffle(arr) {
+      const a = [...arr];
+      for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]];
+      }
+      return a;
+    }
+
     function setupRandomArticles() {
       document.querySelectorAll("[data-random-articles]").forEach((container) => {
         // 防止重复绑定
         if (container.dataset.bound === "true") return;
         container.dataset.bound = "true";
 
-        const allArticles = JSON.parse(container.dataset.allArticles || "[]");
         const showCount = parseInt(container.dataset.showCount || "4", 10);
         const grid = container.querySelector("[data-articles-grid]");
         const btn = container.querySelector("[data-refresh-btn]");
-        if (!grid || !btn || allArticles.length === 0) return;
-
-        function shuffle(arr) {
-          const a = [...arr];
-          for (let i = a.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [a[i], a[j]] = [a[j], a[i]];
-          }
-          return a;
-        }
+        if (!grid || !btn) return;
 
         function renderCards(articles) {
           grid.innerHTML = "";
           articles.forEach((article) => {
             const a = document.createElement("a");
-            a.href = article.href;
+            a.href = hrefFor(article.slug);
             a.className = "random-article-card internal";
+
+            if (article.series) {
+              const seriesSpan = document.createElement("span");
+              seriesSpan.className = "random-article-series";
+              seriesSpan.textContent = article.series;
+              a.appendChild(seriesSpan);
+            }
 
             const titleSpan = document.createElement("span");
             titleSpan.className = "random-article-title";
             titleSpan.textContent = article.title;
             a.appendChild(titleSpan);
-
-            if (article.date) {
-              const dateSpan = document.createElement("span");
-              dateSpan.className = "random-article-date";
-              dateSpan.textContent = article.date;
-              a.appendChild(dateSpan);
-            }
 
             grid.appendChild(a);
           });
@@ -196,11 +194,12 @@ const ArticleCarousel: QuartzComponentConstructor<Partial<ArticleCarouselOptions
           grid.classList.add("fade-in");
         }
 
-        btn.addEventListener("click", function(e) {
+        btn.addEventListener("click", async function(e) {
           e.preventDefault();
           e.stopPropagation();
-          const selected = shuffle(allArticles).slice(0, showCount);
-          renderCards(selected);
+          const pool = await loadPool();
+          if (pool.length === 0) return;
+          renderCards(shuffle(pool).slice(0, showCount));
 
           const svg = btn.querySelector("svg");
           if (svg) {

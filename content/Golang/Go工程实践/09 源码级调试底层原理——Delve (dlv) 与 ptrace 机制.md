@@ -1,7 +1,8 @@
 ---
 title: "源码级调试底层原理——Delve (dlv) 与 ptrace 机制"
 date: 2026-10-07
-tags: [Delve, DWARF, Golang, gdb, ptrace, 源码调试, 调试器, 软中断]
+tags: [Golang]
+keywords: [Delve, DWARF, gdb, ptrace, 源码调试, 调试器, 软中断]
 aliases: []
 ---
 

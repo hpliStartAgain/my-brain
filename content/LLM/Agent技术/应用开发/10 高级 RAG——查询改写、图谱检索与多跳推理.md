@@ -1,7 +1,8 @@
 ---
 title: "高级 RAG——查询改写、图谱检索与多跳推理"
 date: 2026-03-04
-tags: [Agentic RAG, GraphRAG, HyDE, LazyGraphRAG, LightRAG, LLM, RAG, Self-RAG, 多跳推理, 查询改写, 知识图谱, 高级RAG]
+tags: [LLM, RAG]
+keywords: [Agentic RAG, GraphRAG, HyDE, LazyGraphRAG, LightRAG, Self-RAG, 多跳推理, 查询改写, 知识图谱, 高级RAG]
 aliases: []
 ---
 

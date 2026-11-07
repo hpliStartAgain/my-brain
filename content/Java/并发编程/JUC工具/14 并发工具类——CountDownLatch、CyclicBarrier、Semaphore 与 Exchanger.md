@@ -1,7 +1,8 @@
 ---
 title: "并发工具类——CountDownLatch、CyclicBarrier、Semaphore 与 Exchanger"
 date: 2026-03-05
-tags: [AQS, CountDownLatch, CyclicBarrier, Exchanger, Java, Semaphore, 倒计时门闩, 并发协调, 并发编程, 循环屏障]
+tags: [Java, 并发编程]
+keywords: [AQS, CountDownLatch, CyclicBarrier, Exchanger, Semaphore, 倒计时门闩, 并发协调, 循环屏障]
 aliases: []
 ---
 

@@ -1,7 +1,8 @@
 ---
 title: "文件系统的安全边界——权限、ACL 与 Capabilities"
 date: 2026-03-02
-tags: [ACL, Capabilities, DAC, inode, Linux, MAC, SELinux, setuid, umask, 安全, 文件权限]
+tags: [Linux, 安全]
+keywords: [ACL, Capabilities, DAC, inode, MAC, SELinux, setuid, umask, 文件权限]
 aliases: ["Linux文件权限", "POSIX ACL", "Linux Capabilities", "setuid安全", "DAC权限模型"]
 ---
 

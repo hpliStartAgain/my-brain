@@ -1,7 +1,8 @@
 ---
 title: "LevelDB 全局架构——LSM-Tree 的写优化设计"
 date: 2026-03-05
-tags: [LevelDB, LSM-Tree, MemTable, SSTable, WAL, 中间件, 写优化, 存储引擎]
+tags: [LevelDB, LSM-Tree, WAL, 中间件, 存储引擎]
+keywords: [MemTable, SSTable, 写优化]
 aliases: []
 ---
 

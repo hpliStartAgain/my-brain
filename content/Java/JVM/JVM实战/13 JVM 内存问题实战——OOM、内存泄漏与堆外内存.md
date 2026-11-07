@@ -1,7 +1,8 @@
 ---
 title: "JVM 内存问题实战——OOM、内存泄漏与堆外内存"
 date: 2026-03-05
-tags: [Arthas, async-profiler, Direct Memory, Java, jmap, jstack, jstat, JVM, MAT, Metaspace, NMT, OOM, 内存泄漏, 堆外内存, 生产调优]
+tags: [Java, JVM, OOM, 堆外内存]
+keywords: [Arthas, async-profiler, Direct Memory, jmap, jstack, jstat, MAT, Metaspace, NMT, 内存泄漏, 生产调优]
 aliases: []
 ---
 

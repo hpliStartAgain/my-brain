@@ -1,7 +1,8 @@
 ---
 title: "HBase 存储引擎深度解析——LSM-Tree、MemStore 与 HFile 的设计奥秘"
 date: 2026-02-27
-tags: [BloomFilter, HBase, HFile, LSM-Tree, MemStore, 写放大, 存储引擎, 读放大, 跳表]
+tags: [布隆过滤器, HBase, LSM-Tree, 存储引擎]
+keywords: [HFile, MemStore, 写放大, 读放大, 跳表]
 aliases: [HBase存储引擎, LSM-Tree原理, HFile格式]
 ---
 

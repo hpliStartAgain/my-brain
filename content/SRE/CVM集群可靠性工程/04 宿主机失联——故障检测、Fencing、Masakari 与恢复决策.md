@@ -1,7 +1,8 @@
 ---
 title: "04 宿主机失联——故障检测、Fencing、Masakari 与恢复决策"
 date: 2026-09-26
-tags: [CVM, OpenStack, Masakari, 高可用, 故障检测, 恢复, SRE]
+tags: [CVM, OpenStack, 高可用, SRE]
+keywords: [Masakari, 故障检测, 恢复]
 aliases: []
 ---
 

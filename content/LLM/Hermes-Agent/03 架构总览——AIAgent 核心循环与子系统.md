@@ -1,7 +1,8 @@
 ---
 title: "架构总览——AIAgent 核心循环与子系统"
 date: 2026-08-01
-tags: [Hermes Agent, Architecture, AIAgent, Agent Loop, Provider Resolution, Tool Registry, Session Storage, Gateway, Plugin System, Cron]
+tags: [Hermes Agent]
+keywords: [Architecture, AIAgent, Agent Loop, Provider Resolution, Tool Registry, Session Storage, Gateway, Plugin System, Cron]
 aliases: [Hermes 架构总览, AIAgent 核心循环, Hermes 子系统, Hermes 目录结构, Hermes 数据流]
 ---
 

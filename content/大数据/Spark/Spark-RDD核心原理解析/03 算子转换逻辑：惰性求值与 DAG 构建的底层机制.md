@@ -1,7 +1,8 @@
 ---
 title: "03 算子转换逻辑：惰性求值与 DAG 构建的底层机制"
 date: 2026-02-27
-tags: [DAG, RDD, Spark, 惰性求值, 算子]
+tags: [RDD, Spark]
+keywords: [DAG, 惰性求值, 算子]
 aliases: [RDD Operators and Lazy Evaluation]
 ---
 

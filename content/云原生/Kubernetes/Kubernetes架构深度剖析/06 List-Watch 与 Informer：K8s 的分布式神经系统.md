@@ -1,7 +1,8 @@
 ---
 title: "List-Watch 与 Informer：K8s 的分布式神经系统"
 date: 2026-07-17
-tags: [Kubernetes, List-Watch, Informer, Reflector, DeltaFIFO, Indexer, SharedInformer, client-go, WorkQueue]
+tags: [Kubernetes]
+keywords: [List-Watch, Informer, Reflector, DeltaFIFO, Indexer, SharedInformer, client-go, WorkQueue]
 aliases: [List-Watch, Informer, Reflector, DeltaFIFO, SharedInformer, K8s 神经系统, client-go Informer]
 ---
 

@@ -1,7 +1,8 @@
 ---
 title: "01 什么是 RDD：从数据流到工作集，分布式计算的代际变革与抽象本质"
 date: 2026-02-27
-tags: [RDD, Spark, 分布式计算, 架构设计, 源码分析]
+tags: [RDD, Spark, 软件架构]
+keywords: [分布式计算, 源码分析]
 aliases: [Resilient Distributed Dataset]
 ---
 

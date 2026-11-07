@@ -1,7 +1,8 @@
 ---
 title: "Agent 权限与审批模型——人在环路的工程实践"
 date: 2026-08-01
-tags: [Agent, Agentrail, Claude Code, Cloudflare Agents, HITL, Human-in-the-Loop, MCP Elicitation, OAuth, OpenAI Agents SDK, Permission Policy, waitForApproval]
+tags: [Agent, Claude Code]
+keywords: [Agentrail, Cloudflare Agents, HITL, Human-in-the-Loop, MCP Elicitation, OAuth, OpenAI Agents SDK, Permission Policy, waitForApproval]
 aliases: [Agent 权限与审批模型, 人在环路, HITL, Human Approval, 权限传播]
 ---
 

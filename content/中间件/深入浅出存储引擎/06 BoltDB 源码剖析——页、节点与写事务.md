@@ -1,7 +1,8 @@
 ---
 title: "06 BoltDB 源码剖析——页、节点与写事务"
 date: 2026-10-24
-tags: [BoltDB, B+树, 存储引擎, Golang, 写时复制, mmap]
+tags: [B+树, 存储引擎, Golang]
+keywords: [BoltDB, 写时复制, mmap]
 aliases: []
 ---
 

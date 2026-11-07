@@ -1,7 +1,8 @@
 ---
 title: "MLOps 与研究——批量轨迹生成与 RL 训练"
 date: 2026-08-01
-tags: [Hermes Agent, MLOps, Trajectory Generation, RL Training, Psyche, Forge, Axolotl, Self-Improving, Research Tool]
+tags: [Hermes Agent]
+keywords: [MLOps, Trajectory Generation, RL Training, Psyche, Forge, Axolotl, Self-Improving, Research Tool]
 aliases: [Hermes MLOps, 批量轨迹生成, RL 训练, Hermes 研究工具, Psyche, Forge Reasoning API, Axolotl, 吃自己的狗粮]
 ---
 

@@ -1,7 +1,8 @@
 ---
 title: "Agent 与操作系统的交互接口——Bash、文件与 Git 的工程化"
 date: 2026-08-01
-tags: [Agent, Agentlocks, Atomic Writes, Bash Tool, Claude Code, Codex CLI, File Locking, Git Worktree, OpenHands, Output Truncation, PTY, Two-Phase Kill, 原子写入, 文件锁]
+tags: [Agent, Claude Code]
+keywords: [Agentlocks, Atomic Writes, Bash Tool, Codex CLI, File Locking, Git Worktree, OpenHands, Output Truncation, PTY, Two-Phase Kill, 原子写入, 文件锁]
 aliases: [Agent 与 OS 交互接口, Bash 工具工程化, Agentlocks, Agent Git 工作流]
 ---
 

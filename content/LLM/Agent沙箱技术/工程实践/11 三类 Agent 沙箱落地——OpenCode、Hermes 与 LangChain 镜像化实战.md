@@ -1,7 +1,8 @@
 ---
 title: "三类 Agent 沙箱落地——OpenCode、Hermes 与 LangChain 镜像化实战"
 date: 2026-08-15
-tags: [Agent Sandbox, Dockerfile, Distroless, Hermes, LangChain, MCP, OpenCode, SSE, 镜像化, 子沙箱, 沙箱需求差异, Agent适配]
+tags: [Agent Sandbox, MCP]
+keywords: [Dockerfile, Distroless, Hermes, LangChain, OpenCode, SSE, 镜像化, 子沙箱, 沙箱需求差异, Agent适配]
 aliases: [Agent镜像化, OpenCode沙箱, Hermes沙箱, MCP子沙箱]
 ---
 

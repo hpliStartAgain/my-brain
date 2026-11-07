@@ -1,7 +1,8 @@
 ---
 title: "Socket 内核深度解析——struct sock、接收缓冲区与发送缓冲区"
 date: 2026-03-02
-tags: [autotuning, Linux, SO_RCVBUF, SO_SNDBUF, socket, struct sock, 发送缓冲区, 接收缓冲区, 阻塞IO, 非阻塞IO]
+tags: [Linux]
+keywords: [autotuning, SO_RCVBUF, SO_SNDBUF, socket, struct sock, 发送缓冲区, 接收缓冲区, 阻塞IO, 非阻塞IO]
 aliases: ["struct sock解析", "socket缓冲区原理", "SO_SNDBUF", "SO_RCVBUF", "Linux socket内核实现"]
 ---
 

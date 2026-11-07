@@ -1,7 +1,8 @@
 ---
 title: "AQE：运行时自适应查询优化"
 date: 2026-02-28
-tags: [AdaptiveQueryExecution, AQE, QueryStage, Skew Join, Spark, Spark3.0, SparkSQL, 动态Join策略, 动态分区合并]
+tags: [Spark, SparkSQL]
+keywords: [AdaptiveQueryExecution, AQE, QueryStage, Skew Join, Spark3.0, 动态Join策略, 动态分区合并]
 aliases: []
 ---
 

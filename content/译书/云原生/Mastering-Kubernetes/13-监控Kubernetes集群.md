@@ -1,7 +1,8 @@
 ---
 title: 13 - 监控Kubernetes集群
 date: 2026-05-13
-tags: [Kubernetes, Mastering-Kubernetes, 监控]
+tags: [Kubernetes, 监控]
+keywords: [Mastering-Kubernetes]
 aliases:
   - 监控Kubernetes集群
   - Chapter 13 - Monitoring Kubernetes Clusters

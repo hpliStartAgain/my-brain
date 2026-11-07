@@ -1,7 +1,8 @@
 ---
 title: "02 创建一台虚机——跨 Nova、Placement、Neutron、Cinder 的故障定位"
 date: 2026-09-26
-tags: [CVM, OpenStack, Nova, Placement, Neutron, Cinder, 故障定位, SRE]
+tags: [CVM, OpenStack, 故障排查, SRE]
+keywords: [Nova, Placement, Neutron, Cinder]
 aliases: []
 ---
 

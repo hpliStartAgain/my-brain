@@ -1,7 +1,8 @@
 ---
 title: "API Server 请求链路：从 HTTP 请求到 etcd 写入"
 date: 2026-07-17
-tags: [Kubernetes, API Server, Handler Chain, Scheme, Codec, RESTStorage, etcd, 请求链路, 源码解析]
+tags: [Kubernetes, API Server, etcd]
+keywords: [Handler Chain, Scheme, Codec, RESTStorage, 请求链路, 源码解析]
 aliases: [API Server 请求链路, Handler Chain, Scheme, RESTStorage, K8s 请求处理]
 ---
 

@@ -1,7 +1,8 @@
 ---
 title: "02 日志采集架构——Grafana Alloy、Promtail 与 Vector"
 date: 2026-10-10
-tags: [Grafana Alloy, Filebeat, Fluent Bit, Promtail, Vector, 可观测性, 日志, 日志采集]
+tags: [可观测性, 日志]
+keywords: [Grafana Alloy, Filebeat, Fluent Bit, Promtail, Vector, 日志采集]
 aliases: []
 ---
 

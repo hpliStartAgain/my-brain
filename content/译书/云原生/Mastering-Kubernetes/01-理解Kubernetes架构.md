@@ -1,7 +1,7 @@
 ---
 title: "理解 Kubernetes 架构"
 date: 2026-05-13
-tags: [Kubernetes, 云原生, 架构]
+tags: [Kubernetes, 云原生, 软件架构]
 aliases: [Understanding Kubernetes Architecture]
 ---
 

@@ -1,7 +1,8 @@
 ---
 title: "Spring扩展点全景——BeanPostProcessor、BeanFactoryPostProcessor与Aware接口"
 date: 2026-03-04
-tags: [Aware, BeanFactoryPostProcessor, BeanPostProcessor, InstantiationAwareBeanPostProcessor, Java, Spring, 扩展点]
+tags: [Java, Spring]
+keywords: [Aware, BeanFactoryPostProcessor, BeanPostProcessor, InstantiationAwareBeanPostProcessor, 扩展点]
 aliases: []
 ---
 

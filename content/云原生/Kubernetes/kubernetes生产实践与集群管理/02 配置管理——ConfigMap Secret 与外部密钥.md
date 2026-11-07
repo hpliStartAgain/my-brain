@@ -1,7 +1,8 @@
 ---
 title: "02 配置管理——ConfigMap Secret 与外部密钥"
 date: 2026-03-04
-tags: [ConfigMap, External Secrets, KMS, Kubernetes, Sealed Secrets, Secret, Vault, 云原生, 配置管理]
+tags: [Kubernetes, 云原生]
+keywords: [ConfigMap, External Secrets, KMS, Sealed Secrets, Secret, Vault, 配置管理]
 aliases: []
 ---
 

@@ -1,7 +1,8 @@
 ---
 title: "03 文档写入与 Lucene 段合并"
 date: 2026-03-04
-tags: [Elasticsearch, Flush, Lucene, Refresh, Segment, Translog, WAL, 段合并, 近实时搜索]
+tags: [Elasticsearch, WAL]
+keywords: [Flush, Lucene, Refresh, Segment, Translog, 段合并, 近实时搜索]
 aliases: []
 ---
 

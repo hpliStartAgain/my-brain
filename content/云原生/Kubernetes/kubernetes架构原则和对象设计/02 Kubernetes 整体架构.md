@@ -1,7 +1,8 @@
 ---
 title: "02 Kubernetes 整体架构"
 date: 2026-03-04
-tags: [API Server, Controller Manager, CRI, ETCD, kube-proxy, kubelet, Kubernetes, Scheduler, 云原生, 架构]
+tags: [API Server, etcd, kube-proxy, Kubernetes, 调度, 云原生, 软件架构]
+keywords: [Controller Manager, CRI, kubelet]
 aliases: []
 ---
 

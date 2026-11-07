@@ -1,7 +1,8 @@
 ---
 title: "服务网格概述——从微服务治理痛点到Sidecar模式"
 date: 2026-03-05
-tags: [Envoy, Istio, mTLS, ServiceMesh, Sidecar, 云原生, 微服务, 服务网格, 流量治理]
+tags: [Istio, 云原生, 微服务, 服务网格]
+keywords: [Envoy, mTLS, ServiceMesh, Sidecar, 流量治理]
 aliases: []
 ---
 

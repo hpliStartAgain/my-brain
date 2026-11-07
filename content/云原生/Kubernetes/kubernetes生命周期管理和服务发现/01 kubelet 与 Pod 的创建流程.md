@@ -1,7 +1,8 @@
 ---
 title: "01 kubelet 与 Pod 的创建流程"
 date: 2026-03-04
-tags: [containerd, CRI, kubelet, Kubernetes, pause容器, PLEG, Pod, PodWorker, SyncPod, 云原生]
+tags: [Kubernetes, Pod, 云原生]
+keywords: [containerd, CRI, kubelet, pause容器, PLEG, PodWorker, SyncPod]
 aliases: []
 ---
 

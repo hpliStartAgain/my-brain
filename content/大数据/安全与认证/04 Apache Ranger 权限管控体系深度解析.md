@@ -1,7 +1,8 @@
 ---
 title: "Apache Ranger 权限管控体系深度解析"
 date: 2026-03-02
-tags: [ABAC, Ranger, RBAC, 大数据, 安全, 审计, 数据脱敏, 权限管控, 行级过滤]
+tags: [RBAC, 大数据, 安全]
+keywords: [ABAC, Ranger, 审计, 数据脱敏, 权限管控, 行级过滤]
 aliases: ["Apache Ranger", "Ranger", "RangerPlugin", "权限管控"]
 ---
 

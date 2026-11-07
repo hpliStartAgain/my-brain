@@ -1,7 +1,8 @@
 ---
 title: "01 Kafka 全局架构——Broker、Topic、Partition 与消息流转"
 date: 2026-03-04
-tags: [Kafka, Broker, Topic, Partition, Consumer, Producer, 消息队列, 分布式]
+tags: [Kafka, 消息队列, 分布式系统]
+keywords: [Broker, Topic, Partition, Consumer, Producer]
 aliases: []
 ---
 

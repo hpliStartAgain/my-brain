@@ -1,7 +1,8 @@
 ---
 title: "子序列 DP：最长递增子序列与 O(n log n) 优化"
 date: 2026-10-17
-tags: [LeetCode, LIS, 动态规划, 子序列, 最长递增子序列, 算法, 面试, Golang]
+tags: [LeetCode, 动态规划, 算法, 面试, Golang]
+keywords: [LIS, 子序列, 最长递增子序列]
 aliases: [LIS, 最长递增子序列, Longest Increasing Subsequence, patience sorting]
 ---
 

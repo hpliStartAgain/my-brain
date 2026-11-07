@@ -1,7 +1,8 @@
 ---
 title: "05 VictoriaMetrics 集群版与长期存储"
 date: 2026-10-10
-tags: [Thanos, VictoriaMetrics, 可观测性, 指标, 高可用, 长期存储]
+tags: [VictoriaMetrics, 可观测性, 指标, 高可用]
+keywords: [Thanos, 长期存储]
 aliases: []
 ---
 

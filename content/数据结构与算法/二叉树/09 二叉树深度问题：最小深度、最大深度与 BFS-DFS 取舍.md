@@ -1,7 +1,8 @@
 ---
 title: "二叉树深度问题：最小深度、最大深度与 BFS-DFS 取舍"
 date: 2026-10-11
-tags: [LeetCode, 104, 111, 543, 二叉树, 深度, BFS, DFS, 算法]
+tags: [LeetCode, 二叉树, BFS, DFS, 算法]
+keywords: [104, 111, 543, 深度]
 aliases: [最大深度, 最小深度, 树的直径, LC104, LC111]
 ---
 

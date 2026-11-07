@@ -1,7 +1,8 @@
 ---
 title: "基准测试方法论：JMH 与系统级 benchmark 的陷阱"
 date: 2026-07-17
-tags: [JMH, 基准测试, 微基准, 性能测试, benchmark, Dead Code Elimination, Blackhole]
+tags: []
+keywords: [JMH, 基准测试, 微基准, 性能测试, benchmark, Dead Code Elimination, Blackhole]
 aliases: [JMH, 基准测试方法论, 微基准测试, benchmark 陷阱]
 ---
 

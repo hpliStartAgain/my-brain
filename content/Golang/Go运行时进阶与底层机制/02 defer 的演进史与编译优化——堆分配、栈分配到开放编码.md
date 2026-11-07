@@ -1,7 +1,8 @@
 ---
 title: "defer 的演进史与编译优化——堆分配、栈分配到开放编码"
 date: 2026-10-07
-tags: [Golang, defer, 编译优化, 逃逸分析, 性能优化, 运行时]
+tags: [Golang, 逃逸分析, 性能优化]
+keywords: [defer, 编译优化, 运行时]
 aliases: []
 ---
 

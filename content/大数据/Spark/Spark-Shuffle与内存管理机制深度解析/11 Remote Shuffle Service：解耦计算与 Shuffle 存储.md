@@ -1,7 +1,8 @@
 ---
 title: "Remote Shuffle Service：解耦计算与 Shuffle 存储"
 date: 2026-02-28
-tags: [Apache Celeborn, Linkedin Magnet, Push-based Shuffle, Remote Shuffle Service, RSS, Spark, Uber RSS, 云原生]
+tags: [Spark, 云原生]
+keywords: [Apache Celeborn, Linkedin Magnet, Push-based Shuffle, Remote Shuffle Service, RSS, Uber RSS]
 aliases: []
 ---
 

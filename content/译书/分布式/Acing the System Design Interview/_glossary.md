@@ -1,3 +1,10 @@
+---
+title: "Acing the System Design Interview 术语表"
+date: 2026-07-26
+tags: [译书]
+aliases: []
+---
+
 | English | 中文 | Notes |
 |---|---|---|
 | system design interview | 系统设计面试 | 讨论分布式系统、容量规划、权衡与沟通能力的工程面试环节 |

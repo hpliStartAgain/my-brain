@@ -1,7 +1,8 @@
 ---
 title: "从单体到模块化Java：回顾与持续演进"
 date: 2026-05-12
-tags: [Java, JVM, 性能工程, 模块化]
+tags: [Java, JVM, 性能优化]
+keywords: [模块化]
 aliases: [From Monolithic to Modular Java: A Retrospective and Ongoing Evolution]
 ---
 

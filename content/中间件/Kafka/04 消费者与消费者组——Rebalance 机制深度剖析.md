@@ -1,7 +1,8 @@
 ---
 title: "04 消费者与消费者组——Rebalance 机制深度剖析"
 date: 2026-03-04
-tags: [Kafka, Consumer, ConsumerGroup, Rebalance, 分区分配, 静态成员, GroupCoordinator]
+tags: [Kafka]
+keywords: [Consumer, ConsumerGroup, Rebalance, 分区分配, 静态成员, GroupCoordinator]
 aliases: []
 ---
 

@@ -1,3 +1,10 @@
+---
+title: "1 初识 Kafka"
+date: 2026-07-26
+tags: [译书]
+aliases: []
+---
+
 # 1 初识 Kafka
 
 > **Early Release 读者请注意**

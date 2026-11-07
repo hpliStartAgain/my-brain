@@ -1,7 +1,8 @@
 ---
 title: "08 Redis Pipeline 与客户端性能优化"
 date: 2026-03-03
-tags: [Jedis, Lettuce, Pipeline, Redis, Redisson, RTT, 中间件, 性能优化, 慢查询, 连接池]
+tags: [Pipeline, Redis, 中间件, 性能优化, 慢查询, 连接池]
+keywords: [Jedis, Lettuce, Redisson, RTT]
 aliases: []
 ---
 

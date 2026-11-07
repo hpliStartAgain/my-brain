@@ -1,7 +1,8 @@
 ---
 title: "HDFS Federation——打破单 NameNode 的内存天花板"
 date: 2026-02-27
-tags: [BlockPool, Federation, HDFS, Namespace, ViewFs, 元数据扩展性, 水平扩展]
+tags: [HDFS]
+keywords: [BlockPool, Federation, Namespace, ViewFs, 元数据扩展性, 水平扩展]
 aliases: [HDFS联邦, HDFS Federation, Namespace水平扩展]
 ---
 

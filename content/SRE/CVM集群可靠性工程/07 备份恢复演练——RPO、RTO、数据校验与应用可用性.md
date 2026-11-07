@@ -1,7 +1,8 @@
 ---
 title: "07 备份恢复演练——RPO、RTO、数据校验与应用可用性"
 date: 2026-09-26
-tags: [CVM, SRE, 备份, 恢复, RPO, RTO, 演练]
+tags: [CVM, SRE]
+keywords: [备份, 恢复, RPO, RTO, 演练]
 aliases: []
 ---
 

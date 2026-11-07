@@ -1,7 +1,8 @@
 ---
 title: "Spark SQL 全局架构：从 SQL 文本到 RDD 执行的完整旅程"
 date: 2026-02-28
-tags: [Catalyst, DataFrame, Dataset, LogicalPlan, PhysicalPlan, RDD, Spark, SparkSQL, 架构]
+tags: [RDD, Spark, SparkSQL, 软件架构]
+keywords: [Catalyst, DataFrame, Dataset, LogicalPlan, PhysicalPlan]
 aliases: []
 ---
 

@@ -1,7 +1,8 @@
 ---
 title: "15 自动化与开发——CLI、SDK 与脚本化运维"
 date: 2026-09-04
-tags: [OpenStack, 自动化, OpenStackSDK, Ansible, CLI]
+tags: [OpenStack]
+keywords: [自动化, OpenStackSDK, Ansible, CLI]
 aliases: []
 ---
 

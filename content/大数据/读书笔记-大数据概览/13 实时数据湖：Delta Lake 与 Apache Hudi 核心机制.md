@@ -1,3 +1,9 @@
+---
+title: "13 实时数据湖：Delta Lake 与 Apache Hudi 核心机制"
+date: 2026-07-26
+tags: [大数据]
+aliases: []
+---
 
 > [!info] 摘要  
 > Delta Lake 与 Apache Hudi 是**为“流批一体”和“增量处理”而生的数据湖表格式**。它们与 Iceberg 共享“文件级元数据”的基本哲学，但在**写入路径的实时性**和**更新语义的灵活性**上走出不同道路：Delta 强调**事务日志 + Spark 深度集成**，Hudi 则内置**索引 + 增量查询**以支撑高吞吐更新。本文从“如何在不可变文件上实现高效 UPSERT”这一核心矛盾切入，深度解析 Delta Lake 的**事务日志（DeltaLog）** 与 Hudi 的**索引机制（Bloom Index/HBase Index）**。通过源码级拆解 Delta 的 `ACID` 提交协议、Hudi 的 `HoodieKey` 分区策略以及两者的 Compaction 实现差异，还原一次 CDC 数据入湖并实时查询的完整生命周期。结合生产案例，提供 Delta 小文件合并优化、Hudi 索引选型陷阱、Mor/Cor 表性能对比等典型问题排查方案。最后，在 2026 年 Iceberg 主导批式湖仓、Paimon 占领流式湖仓的格局下，讨论 Delta Lake 与 Hudi 在 Databricks/Cloudera 商业生态中的**护城河定位**。

@@ -1,7 +1,8 @@
 ---
 title: "12 监控告警体系——Prometheus exporter 与关键指标"
 date: 2026-09-04
-tags: [Ceph, Prometheus, 监控告警, 可观测性, VictoriaMetrics]
+tags: [Ceph, Prometheus, 可观测性, VictoriaMetrics]
+keywords: [监控告警]
 aliases: []
 ---
 

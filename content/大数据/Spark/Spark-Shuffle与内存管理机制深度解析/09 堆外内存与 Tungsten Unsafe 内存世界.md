@@ -1,7 +1,8 @@
 ---
 title: "堆外内存与 Tungsten Unsafe 内存世界"
 date: 2026-02-27
-tags: [GC优化, MemoryBlock, Spark, sun.misc.Unsafe, Tungsten, UnsafeRow, 二进制格式, 堆外内存]
+tags: [Spark, 堆外内存]
+keywords: [GC优化, MemoryBlock, sun.misc.Unsafe, Tungsten, UnsafeRow, 二进制格式]
 aliases: []
 ---
 

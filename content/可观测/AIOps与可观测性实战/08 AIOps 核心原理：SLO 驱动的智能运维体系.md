@@ -1,7 +1,8 @@
 ---
 title: "08 AIOps 核心原理：SLO 驱动的智能运维体系"
 date: 2026-10-10
-tags: [AIOps, SLO, SLI, 错误预算, 智能运维, 可观测性]
+tags: [AIOps, 可观测性]
+keywords: [SLO, SLI, 错误预算, 智能运维]
 aliases: [SLO 驱动运维, 错误预算]
 ---
 

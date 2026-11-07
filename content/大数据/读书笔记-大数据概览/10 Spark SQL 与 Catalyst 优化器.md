@@ -1,3 +1,9 @@
+---
+title: "10 Spark SQL 与 Catalyst 优化器"
+date: 2026-07-26
+tags: [大数据]
+aliases: []
+---
 
 > [!info] 摘要  
 > Catalyst 并非“Spark 的 SQL 优化器”，而是一套**将高级语言（SQL/DataFrame）不断降级为物理执行计划的规则应用框架**。它的革命性不在于优化规则本身，而在于**将优化器编写范式从“硬编码逻辑”转变为“规则集合 + 模式匹配”**。本文从“如何让 Spark 同时支持 SQL 与 DataFrame 且共享同一优化流程”这一架构挑战切入，深度解析 Catalyst 的**四阶段管线**（分析→逻辑优化→物理计划→代码生成）以及**树结构变换规则**的核心抽象。通过源码级拆解 `TreeNode` 的 `transform` 方法、`Analyzer` 的元数据解析、`JoinReorder` 的代价估算、`Tungsten` 全阶段代码生成，还原一次 TPCH Q6 查询从 SQL 文本到 Java 字节码的完整编译路径。结合生产案例，提供谓词下推失效、统计信息缺失导致 Join 策略误判、AQE 动态分区合并等典型问题排查方案。最后，在 2026 年 Substrait 中间表示逐渐普及的背景下，讨论 Catalyst 从“前端编译器”向“多引擎统一 IR 生成器”转型的可能。

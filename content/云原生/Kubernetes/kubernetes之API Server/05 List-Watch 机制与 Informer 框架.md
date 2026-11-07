@@ -1,7 +1,8 @@
 ---
 title: "05 List-Watch 机制与 Informer 框架"
 date: 2026-03-04
-tags: [API Server, client-go, Informer, Kubernetes, List-Watch, Reflector, SharedInformer, WorkQueue, 云原生]
+tags: [API Server, Kubernetes, 云原生]
+keywords: [client-go, Informer, List-Watch, Reflector, SharedInformer, WorkQueue]
 aliases: []
 ---
 

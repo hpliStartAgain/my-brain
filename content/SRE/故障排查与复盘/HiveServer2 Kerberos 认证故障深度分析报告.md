@@ -1,3 +1,10 @@
+---
+title: "HiveServer2 Kerberos 认证故障深度分析报告"
+date: 2026-07-26
+tags: [SRE]
+aliases: []
+---
+
 ## 1. 摘要
 
 近期 HiveServer2 (HS2) 发生大规模 SASL 认证失败，导致集群服务不可用。经深度排查，确认该事故由环境配置隐患与代码变更两个核心因素叠加导致：

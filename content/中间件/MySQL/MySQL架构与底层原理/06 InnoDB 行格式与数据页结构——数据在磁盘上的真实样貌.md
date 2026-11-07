@@ -1,7 +1,8 @@
 ---
 title: "InnoDB 行格式与数据页结构——数据在磁盘上的真实样貌"
 date: 2026-03-02
-tags: [COMPACT, DYNAMIC, InnoDB, MySQL, 数据页, 溢出页, 行格式]
+tags: [InnoDB, MySQL]
+keywords: [COMPACT, DYNAMIC, 数据页, 溢出页, 行格式]
 aliases: [行格式, COMPACT格式, 数据页结构]
 ---
 

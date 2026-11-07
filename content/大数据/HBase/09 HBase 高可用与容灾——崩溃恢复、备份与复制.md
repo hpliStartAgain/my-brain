@@ -1,7 +1,8 @@
 ---
 title: "HBase 高可用与容灾——崩溃恢复、备份与复制"
 date: 2026-02-27
-tags: [HBase, HMaster HA, RegionServer宕机, Replication复制, Snapshot备份, WAL恢复, 容灾, 灾备, 高可用]
+tags: [HBase, 高可用]
+keywords: [HMaster HA, RegionServer宕机, Replication复制, Snapshot备份, WAL恢复, 容灾, 灾备]
 aliases: [HBase高可用, HBase容灾, HBase故障恢复, HBase Replication]
 ---
 

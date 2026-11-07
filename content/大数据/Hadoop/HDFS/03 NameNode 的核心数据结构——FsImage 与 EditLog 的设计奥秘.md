@@ -1,7 +1,8 @@
 ---
 title: "NameNode 的核心数据结构——FsImage 与 EditLog 的设计奥秘"
 date: 2026-02-27
-tags: [Checkpoint, EditLog, FsImage, HDFS, NameNode, 元数据持久化]
+tags: [Checkpoint, HDFS]
+keywords: [EditLog, FsImage, NameNode, 元数据持久化]
 aliases: [HDFS元数据持久化, FsImage与EditLog]
 ---
 

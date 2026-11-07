@@ -1,0 +1,91 @@
+{
+  "name": "@my-brain/search-fork",
+  "version": "0.1.0",
+  "description": "[my-brain fork] Search component for Quartz - full-text search with FlexSearch.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Quartz Community",
+  "homepage": "https://github.com/quartz-community/search",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/quartz-community/search"
+  },
+  "keywords": [
+    "quartz",
+    "quartz-plugin",
+    "search",
+    "flexsearch",
+    "full-text-search",
+    "component"
+  ],
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./types": {
+      "types": "./dist/types.d.ts",
+      "import": "./dist/types.js"
+    },
+    "./components": {
+      "types": "./dist/components/index.d.ts",
+      "import": "./dist/components/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "peerDependencies": {
+    "preact": "^10.0.0"
+  },
+  "peerDependenciesMeta": {
+    "preact": {
+      "optional": false
+    }
+  },
+  "dependencies": {
+    "@quartz-community/types": "^0.2.1",
+    "@quartz-community/utils": "^0.1.0"
+  },
+  "engines": {
+    "node": ">=22",
+    "npm": ">=10.9.2"
+  },
+  "quartz": {
+    "name": "search",
+    "displayName": "Search",
+    "category": "component",
+    "version": "1.0.0",
+    "quartzVersion": ">=5.0.0",
+    "dependencies": [],
+    "defaultOrder": 50,
+    "defaultEnabled": true,
+    "defaultOptions": {
+      "enablePreview": true,
+      "fieldPriority": [
+        "title",
+        "content",
+        "tags"
+      ]
+    },
+    "components": {
+      "Search": {
+        "displayName": "Search",
+        "defaultPosition": "left",
+        "defaultPriority": 20
+      }
+    },
+    "optionSchema": {
+      "enablePreview": {
+        "type": "boolean"
+      },
+      "fieldPriority": {
+        "type": "array"
+      }
+    }
+  }
+}

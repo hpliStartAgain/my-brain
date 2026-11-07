@@ -1,7 +1,8 @@
 ---
 title: "03 Monitor 与集群地图——Paxos、Quorum 与 MON 运维"
 date: 2026-09-04
-tags: [Ceph, Monitor, Paxos, RADOS, 分布式存储]
+tags: [Ceph, Paxos, 分布式存储]
+keywords: [Monitor, RADOS]
 aliases: []
 ---
 

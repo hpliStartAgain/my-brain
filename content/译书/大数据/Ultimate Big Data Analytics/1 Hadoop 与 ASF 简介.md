@@ -1,3 +1,10 @@
+---
+title: "1 Hadoop 与 ASF 简介"
+date: 2026-07-26
+tags: [译书]
+aliases: []
+---
+
 # 1 Hadoop 与 ASF 简介
 
 ## 引言

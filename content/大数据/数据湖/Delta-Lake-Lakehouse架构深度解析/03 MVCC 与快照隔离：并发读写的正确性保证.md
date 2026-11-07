@@ -1,7 +1,8 @@
 ---
 title: "MVCC 与快照隔离：并发读写的正确性保证"
 date: 2026-02-28
-tags: [Delta Lake, MVCC, OCC, 乐观并发控制, 事务, 冲突检测, 并发写入, 快照隔离]
+tags: [Delta Lake, MVCC, 事务]
+keywords: [OCC, 乐观并发控制, 冲突检测, 并发写入, 快照隔离]
 aliases: []
 ---
 

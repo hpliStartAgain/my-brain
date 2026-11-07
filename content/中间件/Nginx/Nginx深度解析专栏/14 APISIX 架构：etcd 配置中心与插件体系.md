@@ -1,7 +1,8 @@
 ---
 title: "APISIX 架构：etcd 配置中心与插件体系"
 date: 2026-02-28
-tags: [APISIX, API网关, etcd, radixtree, Watch机制, 云原生, 动态配置, 插件体系, 路由引擎]
+tags: [etcd, 云原生]
+keywords: [APISIX, API网关, radixtree, Watch机制, 动态配置, 插件体系, 路由引擎]
 aliases: []
 ---
 

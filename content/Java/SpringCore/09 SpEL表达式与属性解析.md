@@ -1,7 +1,8 @@
 ---
 title: "SpEL表达式与属性解析"
 date: 2026-03-04
-tags: [Environment, Expression, Java, PropertySource, SpEL, Spring, Value, 属性解析]
+tags: [Java, Spring]
+keywords: [Environment, Expression, PropertySource, SpEL, Value, 属性解析]
 aliases: []
 ---
 

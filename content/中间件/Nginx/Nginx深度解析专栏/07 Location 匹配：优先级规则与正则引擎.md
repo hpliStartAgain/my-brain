@@ -1,7 +1,8 @@
 ---
 title: "Location 匹配：优先级规则与正则引擎"
 date: 2026-02-28
-tags: [location, named-location, Nginx, PCRE, try_files, 优先级, 内部跳转, 匹配规则, 正则]
+tags: [Nginx]
+keywords: [location, named-location, PCRE, try_files, 优先级, 内部跳转, 匹配规则, 正则]
 aliases: []
 ---
 

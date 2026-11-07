@@ -1,7 +1,8 @@
 ---
 title: "多指针夹逼：3Sum、3Sum Closest、4Sum 系列"
 date: 2026-10-11
-tags: [LeetCode, 15, 16, 18, 双指针, 排序, 数组, 算法, 面试]
+tags: [LeetCode, 双指针, 排序, 数组, 算法, 面试]
+keywords: [15, 16, 18]
 aliases: [3Sum, 三数之和, kSum, 多数之和]
 ---
 

@@ -1,7 +1,8 @@
 ---
 title: "二叉搜索树的数量与生成：Unique BST I-II"
 date: 2026-10-11
-tags: [LeetCode, 96, 95, 卡特兰数, 二叉搜索树, 动态规划, 分治, 算法]
+tags: [LeetCode, 动态规划, 分治, 算法]
+keywords: [96, 95, 卡特兰数, 二叉搜索树]
 aliases: [Unique BST, 不同的二叉搜索树, LC96, LC95, Catalan]
 ---
 

@@ -1,7 +1,8 @@
 ---
 title: "故障排查手册：从 Pod 状态到性能瓶颈的诊断链路"
 date: 2026-02-28
-tags: [Executor丢失, ImagePullBackOff, Kubernetes, OOMKilled, Spark, 性能, 故障排查, 诊断, 调试]
+tags: [Kubernetes, Spark, 故障排查]
+keywords: [Executor丢失, ImagePullBackOff, OOMKilled, 性能, 诊断, 调试]
 aliases: []
 ---
 

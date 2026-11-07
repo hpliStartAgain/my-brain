@@ -12,12 +12,15 @@ export interface TagPillsOptions {
   maxTags: number
   /** 是否显示「全部标签」入口 */
   showAllLink: boolean
+  /** 不在首页展示的标签（如「面试」这类用途标签、「专栏导览」这类结构标签），不区分大小写 */
+  excludeTags: string[]
 }
 
 const defaultOptions: TagPillsOptions = {
   title: "按标签逛逛",
   maxTags: 14,
   showAllLink: true,
+  excludeTags: [],
 }
 
 const style = `
@@ -90,12 +93,14 @@ const TagPills: QuartzComponentConstructor<Partial<TagPillsOptions>> = (userOpts
     fileData,
     displayClass,
   }: QuartzComponentProps) => {
+    const excluded = new Set(opts.excludeTags.map((t) => t.toLowerCase()))
     const counts = new Map<string, number>()
     for (const f of allFiles) {
       const slug = (f.slug as string) ?? ""
       if (slug === "tags" || slug.startsWith("tags/")) continue
       const tags = (f.frontmatter?.tags ?? []) as string[]
       for (const t of tags) {
+        if (excluded.has(t.toLowerCase())) continue
         counts.set(t, (counts.get(t) ?? 0) + 1)
       }
     }

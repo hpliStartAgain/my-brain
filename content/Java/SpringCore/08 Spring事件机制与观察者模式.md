@@ -1,7 +1,8 @@
 ---
 title: "Spring事件机制与观察者模式"
 date: 2026-03-04
-tags: [ApplicationEvent, ApplicationListener, EventListener, Java, Spring, 事件机制, 观察者模式]
+tags: [Java, Spring]
+keywords: [ApplicationEvent, ApplicationListener, EventListener, 事件机制, 观察者模式]
 aliases: []
 ---
 

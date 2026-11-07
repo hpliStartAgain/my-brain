@@ -1,7 +1,8 @@
 ---
 title: "现代化配置与日志选型——Viper 拓扑加载与 Zap 零分配架构"
 date: 2026-10-07
-tags: [Golang, Viper, Zap, 配置管理, 结构化日志, slog, 零分配]
+tags: [Golang]
+keywords: [Viper, Zap, 配置管理, 结构化日志, slog, 零分配]
 aliases: []
 ---
 

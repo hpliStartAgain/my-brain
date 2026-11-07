@@ -1,7 +1,8 @@
 ---
 title: "DataNode 存储引擎——FsDataset 与磁盘 IO 管理机制"
 date: 2026-02-27
-tags: [Block管理, DataNode, FsDataset, HDFS, Page Cache, 存储引擎, 磁盘IO]
+tags: [HDFS, Page Cache, 存储引擎]
+keywords: [Block管理, DataNode, FsDataset, 磁盘IO]
 aliases: [DataNode存储引擎, FsDataset, HDFS磁盘管理]
 ---
 

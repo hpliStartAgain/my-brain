@@ -1,7 +1,8 @@
 ---
 title: "11 事务性 Saga 模式：分布式事务的六种现代解法"
 date: 2026-05-26
-tags: [软件架构, Saga, 分布式事务, 最终一致性, 补偿事务, 微服务]
+tags: [软件架构, Saga, 分布式事务, 最终一致性, 微服务]
+keywords: [补偿事务]
 aliases: [Saga模式, Epic Saga, 分布式长事务]
 ---
 

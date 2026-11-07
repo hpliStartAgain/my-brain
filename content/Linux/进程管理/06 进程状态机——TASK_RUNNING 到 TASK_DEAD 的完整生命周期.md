@@ -1,7 +1,8 @@
 ---
 title: "进程状态机——TASK_RUNNING 到 TASK_DEAD 的完整生命周期"
 date: 2026-03-02
-tags: [/proc, D状态, Linux, TASK_INTERRUPTIBLE, TASK_RUNNING, 僵尸进程, 状态机, 进程状态, 进程管理]
+tags: [Linux, 状态机, 进程管理]
+keywords: [/proc, D状态, TASK_INTERRUPTIBLE, TASK_RUNNING, 僵尸进程, 进程状态]
 aliases: ["Linux进程状态", "D状态进程", "TASK_UNINTERRUPTIBLE", "进程状态转换"]
 ---
 

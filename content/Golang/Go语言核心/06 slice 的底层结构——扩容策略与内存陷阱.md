@@ -1,7 +1,8 @@
 ---
 title: "slice 的底层结构——扩容策略与内存陷阱"
 date: 2026-03-04
-tags: [Append, copy, Golang, slice, 共享底层数组, 内存, 切片, 底层结构, 扩容, 陷阱]
+tags: [Golang, 内存管理]
+keywords: [Append, copy, slice, 共享底层数组, 切片, 底层结构, 扩容, 陷阱]
 aliases: []
 ---
 

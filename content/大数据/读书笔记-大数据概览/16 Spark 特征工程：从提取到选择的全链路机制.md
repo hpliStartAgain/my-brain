@@ -1,3 +1,9 @@
+---
+title: "16 Spark 特征工程：从提取到选择的全链路机制"
+date: 2026-07-26
+tags: [大数据]
+aliases: []
+---
 
 > [!info] 摘要  
 > 特征工程在 Spark MLlib 中并非零散的“数据处理步骤”，而是一套**以 Transformer 为核心、可嵌入 Pipeline 的标准化组件体系**。它将特征处理分为三个层次：**提取**（从原始数据构造特征）、**变换**（对特征进行缩放/编码）、**选择**（筛选有效特征）。本文从“如何将非结构化文本/时间戳高效转换为数值向量”这一核心问题切入，深度解析 Spark 内置的 `Tokenizer`、`VectorAssembler`、`StandardScaler` 等组件的实现原理，以及 **PCA**、**ChiSqSelector** 等选择算法的分布式计算策略。通过源码级拆解 `StringIndexer` 的频次统计、`HashingTF` 的哈希碰撞处理、以及 `ChiSqSelector` 的卡方统计量计算，还原一次完整的特征工程 Pipeline 执行路径。结合生产案例，提供高基数列编码陷阱、PCA 内存溢出、Pipeline 持久化版本兼容等典型问题排查方案。最后，在 2026 年特征存储（Feast）与在线特征服务普及的背景下，讨论 Spark 特征工程从“批处理”向“批流一体”演进的方向。

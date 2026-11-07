@@ -1,7 +1,8 @@
 ---
 title: "06 Scrub 与数据校验——静默错误的防线"
 date: 2026-09-04
-tags: [Ceph, Scrub, 数据一致性, RADOS, 数据完整性]
+tags: [Ceph]
+keywords: [Scrub, 数据一致性, RADOS, 数据完整性]
 aliases: []
 ---
 

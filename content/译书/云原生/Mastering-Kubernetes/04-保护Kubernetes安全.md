@@ -1,5 +1,7 @@
 ---
-title: 保护 Kubernetes 安全
+title: "保护 Kubernetes 安全"
+date: 2026-07-26
+tags: [译书, Kubernetes]
 ---
 
 # 保护 Kubernetes 安全

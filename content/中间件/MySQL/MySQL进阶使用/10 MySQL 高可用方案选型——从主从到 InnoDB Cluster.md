@@ -1,7 +1,8 @@
 ---
 title: "MySQL 高可用方案选型——从主从到 InnoDB Cluster"
 date: 2026-03-02
-tags: [InnoDB Cluster, MGR, MHA, MySQL, ProxySQL, 主从复制, 高可用]
+tags: [MySQL, 高可用]
+keywords: [InnoDB Cluster, MGR, MHA, ProxySQL, 主从复制]
 aliases: [MySQL高可用, MHA, InnoDB Cluster, MGR]
 ---
 

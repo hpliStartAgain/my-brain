@@ -12,7 +12,7 @@ interface ArticleCarouselOptions {
 /**
  * 随机文章推荐组件
  * 显示 N 篇随机文章，点击刷新按钮随机切换
- * 所有文章数据构建时注入，运行时由 JS 随机选取
+ * 首屏卡片构建时随机选取，「换一批」运行时从全局 fetchData 元数据索引抽取
  */
 declare const ArticleCarousel: QuartzComponentConstructor<Partial<ArticleCarouselOptions>>;
 

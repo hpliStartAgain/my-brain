@@ -1,7 +1,8 @@
 ---
 title: "01 Dubbo 全局架构——服务注册、发现与调用链路"
 date: 2026-03-04
-tags: [Dubbo, RPC, 服务发现, 服务注册, 调用链路]
+tags: [Dubbo, 服务发现]
+keywords: [RPC, 服务注册, 调用链路]
 aliases: []
 ---
 

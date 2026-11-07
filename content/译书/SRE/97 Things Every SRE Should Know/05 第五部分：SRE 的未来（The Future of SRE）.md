@@ -1,3 +1,10 @@
+---
+title: "05 第五部分：SRE 的未来（The Future of SRE）"
+date: 2026-07-26
+tags: [译书]
+aliases: []
+---
+
 # 05 第五部分：SRE 的未来（The Future of SRE）
 
 这一部分讨论 SRE 可能走向哪里：从 toil 与安全关键系统，到 静态分析、形式化规范、社会技术系统、事故学习，以及 SRE 的下一代形态。

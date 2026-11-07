@@ -1,7 +1,8 @@
 ---
 title: "Go 错误处理哲学——从 error 到 errors.Is 与 errors.As"
 date: 2026-03-04
-tags: [error, errors, errors.As, errors.Is, fmt.Errorf, Golang, panic, recover, 工程实践, 错误包装, 错误处理]
+tags: [Golang]
+keywords: [error, errors, errors.As, errors.Is, fmt.Errorf, panic, recover, 工程实践, 错误包装, 错误处理]
 aliases: []
 ---
 

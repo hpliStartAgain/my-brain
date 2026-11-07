@@ -1,7 +1,8 @@
 ---
 title: "Execution 与 Storage 的动态边界"
 date: 2026-02-27
-tags: [Execution Memory, RDD Cache, Spark, Storage Memory, UnifiedMemoryManager, 内存管理, 动态借用]
+tags: [Spark, 内存管理]
+keywords: [Execution Memory, RDD Cache, Storage Memory, UnifiedMemoryManager, 动态借用]
 aliases: []
 ---
 
