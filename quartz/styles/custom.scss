@@ -29,12 +29,19 @@
   // 边框
   --border-soft: 1px solid var(--lightgray);
 
-  // ── 字体 fallback 链 ──────────────────────────────────────────
-  // 标题：Noto Serif SC 衬线（claude.com 的 serif display DNA）
-  // 正文：微软雅黑；代码：JetBrains Mono
-  --bodyFont: "Microsoft YaHei", "微软雅黑", Arial, sans-serif;
-  --headerFont: "Noto Serif SC", "Songti SC", "SimSun", serif;
-  --codeFont: "JetBrains Mono", "Cascadia Code", ui-monospace, monospace;
+  // ── 字体回退栈（与 quartz.config.yaml 中 quartz-fonts 插件保持一致）──────
+  // 正文：各平台的系统中文无衬线（苹方 / 微软雅黑 / 鸿蒙 / 思源），不依赖外网
+  // 标题：Noto Serif SC 由 Head.tsx 异步加载；不可达时落到宋体系，Windows 落到雅黑
+  //       （Windows 自带宋体在粗体大字号下发虚，宁可用无衬线）
+  // 代码：JetBrains Mono 异步加载，回退到各平台等宽字体
+  --bodyFont: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB",
+    "Microsoft YaHei", "HarmonyOS Sans SC", "Noto Sans CJK SC", "Noto Sans SC", "Source Han Sans SC",
+    sans-serif;
+  --headerFont: "Noto Serif SC", "Source Han Serif SC", "Noto Serif CJK SC", "Songti SC", "STSong",
+    "Microsoft YaHei", serif;
+  --titleFont: var(--headerFont);
+  --codeFont: "JetBrains Mono", "Cascadia Code", "SFMono-Regular", Menlo, Consolas,
+    "Liberation Mono", monospace;
 }
 
 [saved-theme="dark"] {
@@ -142,14 +149,40 @@ article {
     line-height: 1.75;
   }
 
-  blockquote {
+  // 只作用于普通引用块：Callout 在 DOM 上也是 blockquote，
+  // 之前这里的 italic / 左边框会泄漏进所有 Callout（摘要、思考题整段伪斜体）。
+  // 中文没有真斜体，引用块也不再用 italic，改用弱化颜色区分。
+  blockquote:not(.callout) {
     margin: 2rem 0;
     padding: 1rem 1.4rem;
     border-left: 3px solid var(--secondary);
     background: color-mix(in srgb, var(--secondary) 4%, transparent);
     border-radius: 0 var(--radius-md) var(--radius-md) 0;
-    color: var(--darkgray);
-    font-style: italic;
+    color: color-mix(in srgb, var(--darkgray) 85%, var(--gray));
+
+    & > p:last-child {
+      margin-bottom: 0;
+    }
+  }
+
+  // Callout：沿用各类型自身的语义色，只统一圆角与留白，和整站圆角体系对齐
+  .callout {
+    margin: 2rem 0;
+    border-radius: var(--radius-lg);
+    padding: 0 1.2rem;
+
+    .callout-title {
+      padding: 0.9rem 0 0.5rem;
+    }
+
+    // 上面 article p 的 1.5rem 段后距会作用到标题里的 <p>，导致标题下方空出一大块
+    .callout-title-inner > p {
+      margin: 0;
+    }
+
+    .callout-content > p:last-child {
+      margin-bottom: 1rem;
+    }
   }
 
   img {
@@ -178,7 +211,7 @@ h5,
 h6 {
   font-family: var(--headerFont);
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
   color: var(--dark);
 }
 
@@ -187,7 +220,7 @@ h1 {
   margin-top: 3rem;
   margin-bottom: 1rem;
   font-weight: 700;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
   line-height: 1.2;
 }
 
@@ -312,7 +345,7 @@ button.search-button {
   font-family: var(--headerFont);
   font-size: 1.3rem;
   font-weight: 700;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
 
   a {
     color: var(--dark);
@@ -330,15 +363,24 @@ button.search-button {
   }
 }
 
+// 导航只承担"定位"职能：普通项用中性色，只有当前文章用陶土色强调，
+// 避免整列都是彩色粗体衬线、和正文抢注意力
 .explorer-content {
+  font-family: var(--bodyFont);
+
   ul li>a {
+    // block：多行标题换行后与首行对齐（inline 时只有首行带内边距，看起来像首行缩进）
+    display: block;
     font-size: 0.88rem;
+    font-weight: 400;
+    line-height: 1.5;
+    color: var(--darkgray);
     padding: 0.3rem 0.6rem;
     border-radius: var(--radius-md);
     transition: all 0.2s ease;
     border-bottom: none;
     text-decoration: none;
-    opacity: 0.8;
+    opacity: 0.85;
 
     &:hover {
       opacity: 1;
@@ -358,8 +400,14 @@ button.search-button {
 
     div>button span,
     div>a {
+      font-family: var(--bodyFont);
       font-size: 0.9rem;
       font-weight: 600;
+      color: var(--dark);
+    }
+
+    svg {
+      color: var(--gray);
     }
   }
 }
@@ -384,7 +432,8 @@ button.search-button {
 ul.toc-content.overflow>li>a {
   font-size: 0.85rem;
   padding: 0.2rem 0.5rem;
-  color: var(--gray);
+  // 纯 --gray 在象牙底 / 深色底上对比度都不足 4.5:1，向正文色靠一些
+  color: color-mix(in srgb, var(--darkgray) 55%, var(--gray));
   border-radius: var(--radius-sm);
   transition: all 0.2s ease;
 
@@ -393,10 +442,11 @@ ul.toc-content.overflow>li>a {
     background: color-mix(in srgb, var(--lightgray) 40%, transparent);
   }
 
+  // 当前可视的标题：只变色 + 左侧细条，不再给每一级都铺色块
   &.in-view {
     color: var(--secondary);
-    font-weight: 600;
-    background: color-mix(in srgb, var(--secondary) 6%, transparent);
+    font-weight: 500;
+    background: transparent;
     position: relative;
 
     &::before {
@@ -455,7 +505,7 @@ ul.toc-content.overflow>li>a {
     margin-bottom: 0.8rem;
     font-weight: 700;
     color: var(--dark);
-    letter-spacing: -0.02em;
+    letter-spacing: 0;
     line-height: 1.15;
   }
 
@@ -465,6 +515,111 @@ ul.toc-content.overflow>li>a {
     line-height: 1.6;
     max-width: 600px;
     margin-bottom: 0;
+  }
+}
+
+// 首页联系方式 / 入口链接：一行小号胶囊链接，紧跟个人简介
+.homepage-header ul.homepage-links {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0;
+  margin: 1.1rem 0 0;
+
+  li {
+    margin: 0;
+  }
+
+  a {
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.82rem;
+    padding: 0.25rem 0.8rem;
+    border: 1px solid var(--lightgray);
+    border-radius: var(--radius-pill);
+    color: var(--darkgray);
+    text-decoration: none;
+    transition: all 0.2s ease;
+
+    &:hover {
+      color: var(--secondary);
+      border-color: var(--secondary);
+      background: color-mix(in srgb, var(--secondary) 6%, transparent);
+    }
+  }
+}
+
+// 首页「最近更新」：沿用列表行风格，和随机碎片、标签入口上下留出呼吸
+.recent-notes {
+  margin: 2.5rem 0 2rem;
+
+  & > h3 {
+    font-family: var(--bodyFont);
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    color: var(--gray);
+    margin: 0 0 0.8rem;
+  }
+
+  ul.recent-ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+
+    & > li {
+      border-top: 1px solid var(--lightgray);
+      padding: 0.7rem 0.2rem;
+      margin: 0;
+
+      &:last-child {
+        border-bottom: 1px solid var(--lightgray);
+      }
+    }
+
+    // 标题在左、日期在右（DOM 中标题在前）
+    .section {
+      display: flex;
+      flex-direction: row;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 1rem;
+    }
+
+    .meta {
+      flex-shrink: 0;
+      font-size: 0.8rem;
+      color: var(--gray);
+      margin: 0;
+    }
+
+    h3 {
+      margin: 0;
+      font-size: 0.98rem;
+      font-weight: 500;
+      border: none;
+      padding: 0;
+
+      a.internal {
+        color: var(--dark);
+        text-decoration: none;
+
+        &:hover {
+          color: var(--secondary);
+        }
+      }
+    }
+  }
+}
+
+.random-articles {
+  margin-top: 1rem;
+
+  // 同上：恢复卡片内边距与圆角（插件样式在 layer 里，优先级低于全局 a.internal）
+  a.random-article-card {
+    padding: 0.95rem 1.1rem 0.85rem;
+    border-radius: var(--radius-lg);
   }
 }
 
@@ -607,7 +762,7 @@ ul.toc-content.overflow>li>a {
   h1.article-title {
     font-size: 2.4rem;
     line-height: 1.15;
-    letter-spacing: -0.02em;
+    letter-spacing: 0;
     margin: 0.2rem 0 0.6rem;
   }
 
@@ -689,6 +844,9 @@ li.section-li {
   color: var(--darkgray);
   text-decoration: none;
   background: transparent;
+  // 上面全局 a.internal 的 padding:0 / border-radius:0 会压掉插件里的胶囊形状
+  padding: 0.32rem 0.9rem;
+  border-radius: var(--radius-pill);
 
   &:hover {
     color: var(--secondary);
@@ -722,5 +880,145 @@ li.section-li {
     z-index: 90;
     background: var(--light);
     border-bottom: 1px solid var(--lightgray);
+  }
+}
+
+// ----------------------------------------------------------
+// 文章头部标签：标题上方最多展示 4 个，避免手机上两三行标签把标题压到首屏以下
+// ----------------------------------------------------------
+.page-header ul.tags li:nth-child(n + 5) {
+  display: none;
+}
+
+// ----------------------------------------------------------
+// 右侧目录 / 反向链接标题：去掉衬线大字，降为小号标签式标题
+// ----------------------------------------------------------
+.toc > .toc-header h3,
+.toc > button h3,
+.backlinks > h3 {
+  font-family: var(--bodyFont);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--gray);
+  margin: 0 0 0.6rem;
+}
+
+.backlinks ul.overflow > li > a {
+  font-size: 0.85rem;
+  text-decoration: none;
+  color: var(--darkgray);
+
+  &:hover {
+    color: var(--secondary);
+  }
+}
+
+// ----------------------------------------------------------
+// 中文排版细节
+// ----------------------------------------------------------
+article {
+  // 中文段落两端对齐，长段落右边缘更整齐；窄屏每行字数少，两端对齐会把中英混排
+  // 拉出大空隙，因此只在桌面宽度启用
+  @media (min-width: 800px) {
+    p,
+    li {
+      text-align: justify;
+      text-justify: inter-ideograph;
+    }
+  }
+
+  // 表格在窄屏横向滚动，不撑破版心
+  .table-container {
+    overflow-x: auto;
+  }
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  // 负字距只适合拉丁字母，中文标题会显得拥挤
+  letter-spacing: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+// 打印：去掉侧栏与工具，只保留正文
+@media print {
+  .sidebar,
+  .article-tools,
+  .reading-progress,
+  .breadcrumb-container,
+  footer,
+  .backlinks {
+    display: none !important;
+  }
+
+  .callout,
+  pre {
+    break-inside: avoid;
+  }
+}
+
+// ----------------------------------------------------------
+// Callout 配色：Obsidian 默认的高饱和蓝 / 青 / 紫与象牙 + 陶土的暖色基调冲突，
+// 统一换成低饱和的同温度色板；语义（提示 / 警告 / 危险）仍可一眼区分
+// ----------------------------------------------------------
+$callout-palette-light: (
+  "note": #5b7896,
+  "info": #5b7896,
+  "todo": #5b7896,
+  "abstract": #c96442,
+  "tip": #5a8a63,
+  "success": #5a8a63,
+  "question": #a8792d,
+  "warning": #c27a2c,
+  "failure": #b2493c,
+  "danger": #b2493c,
+  "bug": #b2493c,
+  "example": #7d6aa3,
+  "quote": #87867f,
+);
+
+$callout-palette-dark: (
+  "note": #8fa9c4,
+  "info": #8fa9c4,
+  "todo": #8fa9c4,
+  "abstract": #d97757,
+  "tip": #86b28e,
+  "success": #86b28e,
+  "question": #d1a35a,
+  "warning": #dd9a52,
+  "failure": #d77a6d,
+  "danger": #d77a6d,
+  "bug": #d77a6d,
+  "example": #a897c9,
+  "quote": #a3a29b,
+);
+
+@each $type, $color in $callout-palette-light {
+  .callout[data-callout="#{$type}"] {
+    --color: #{$color};
+    --border: #{rgba($color, 0.28)};
+    --bg: #{rgba($color, 0.06)};
+  }
+}
+
+@each $type, $color in $callout-palette-dark {
+  [saved-theme="dark"] .callout[data-callout="#{$type}"] {
+    --color: #{$color};
+    --border: #{rgba($color, 0.3)};
+    --bg: #{rgba($color, 0.08)};
   }
 }

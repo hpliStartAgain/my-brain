@@ -13,10 +13,17 @@ const style = `
     transform: none;
   }
 }
+
+@media print {
+  .reveal {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
 `;
 /**
  * 滚动渐显组件 — 不渲染可见内容，仅注入 CSS + IntersectionObserver
- * 对首页卡片 / 列表行等元素做 fade-in-up，尊重 prefers-reduced-motion
+ * 对首页区块（专栏地图、最近更新、随机碎片、标签入口）做 fade-in-up，尊重 prefers-reduced-motion
  */
 const ScrollReveal = () => {
     const ScrollRevealComponent = ({ displayClass }) => {
@@ -28,15 +35,12 @@ const ScrollReveal = () => {
       if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
       if (!("IntersectionObserver" in window)) return;
 
+      // 以区块为单位渐显：不再单独隐藏 .knowledge-card —— 卡片网格靠 1px 间隙露出底色
+      // 画分隔线，卡片单独透明时会先闪出一整块灰底
       var targets = document.querySelectorAll(
-        ".knowledge-card, .knowledge-section, .homepage-header, .random-articles, li.section-li, .tag-pills-section"
+        ".knowledge-section, .random-articles, .tag-pills-section, .recent-notes"
       );
       if (targets.length === 0) return;
-
-      // knowledge-grid 内卡片加交错延迟
-      document.querySelectorAll(".knowledge-grid .knowledge-card").forEach(function(el, i) {
-        el.style.transitionDelay = (i % 8) * 40 + "ms";
-      });
 
       targets.forEach(function(el) {
         if (!el.classList.contains("revealed")) el.classList.add("reveal");
@@ -49,7 +53,7 @@ const ScrollReveal = () => {
             io.unobserve(entry.target);
           }
         });
-      }, { threshold: 0.08 });
+      }, { threshold: 0, rootMargin: "0px 0px -6% 0px" });
 
       targets.forEach(function(el) { io.observe(el); });
     }

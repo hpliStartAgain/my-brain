@@ -4,6 +4,7 @@ const defaultOptions = {
     title: "按标签逛逛",
     maxTags: 14,
     showAllLink: true,
+    excludeTags: [],
 };
 const style = `
 .tag-pills-section {
@@ -69,6 +70,7 @@ const style = `
 const TagPills = (userOpts) => {
     const opts = { ...defaultOptions, ...userOpts };
     const TagPillsComponent = ({ allFiles, fileData, displayClass, }) => {
+        const excluded = new Set(opts.excludeTags.map((t) => t.toLowerCase()));
         const counts = new Map();
         for (const f of allFiles) {
             const slug = f.slug ?? "";
@@ -76,6 +78,8 @@ const TagPills = (userOpts) => {
                 continue;
             const tags = (f.frontmatter?.tags ?? []);
             for (const t of tags) {
+                if (excluded.has(t.toLowerCase()))
+                    continue;
                 counts.set(t, (counts.get(t) ?? 0) + 1);
             }
         }

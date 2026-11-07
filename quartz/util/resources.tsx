@@ -23,13 +23,33 @@ export type CSSResource = {
   spaPreserve?: boolean
 }
 
+/**
+ * 第三方 CDN 资源本地化：KaTeX 样式表在每个页面都以阻塞方式加载，
+ * 原地址 cdn.jsdelivr.net 在中国大陆访问不稳定，会拖住首屏。
+ * 这里把已知资源改写为站内自托管副本（quartz/static/katex，版本须与插件一致）。
+ */
+const LOCALIZED_RESOURCES: Record<string, string> = {
+  "https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css": "/static/katex/katex.min.css",
+  "https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/copy-tex.min.js":
+    "/static/katex/contrib/copy-tex.min.js",
+}
+
+export function localizeResourceUrl(url: string): string {
+  return LOCALIZED_RESOURCES[url] ?? url
+}
+
 export function JSResourceToScriptElement(resource: JSResource, preserve?: boolean): JSX.Element {
   const scriptType = resource.moduleType ?? "application/javascript"
   const spaPreserve = preserve ?? resource.spaPreserve
 
   if (resource.contentType === "external") {
     return (
-      <script key={resource.src} src={resource.src} type={scriptType} data-persist={spaPreserve} />
+      <script
+        key={resource.src}
+        src={localizeResourceUrl(resource.src)}
+        type={scriptType}
+        data-persist={spaPreserve}
+      />
     )
   } else {
     const content = resource.script
@@ -52,7 +72,7 @@ export function CSSResourceToStyleElement(resource: CSSResource, preserve?: bool
     return (
       <link
         key={resource.content}
-        href={resource.content}
+        href={localizeResourceUrl(resource.content)}
         rel="stylesheet"
         type="text/css"
         data-persist={spaPreserve}

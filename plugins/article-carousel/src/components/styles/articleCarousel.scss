@@ -135,6 +135,17 @@
     transition: color 0.2s ease;
   }
 
+  .random-article-series {
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: var(--secondary);
+    opacity: 0.85;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
   .random-article-date {
     font-size: 0.7rem;
     letter-spacing: 0.03em;

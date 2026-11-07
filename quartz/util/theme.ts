@@ -94,6 +94,18 @@ export function googleFontHref(theme: Theme) {
   return `https://fonts.googleapis.com/css2?family=${headerFont}&family=${bodyFont}&family=${codeFont}&display=swap`
 }
 
+/**
+ * 只包含标题与代码字体的 Google Fonts 链接：正文走系统字体栈，
+ * 不再下载体积巨大的 CJK 无衬线字体。供 Head.tsx 异步加载使用。
+ */
+export function googleFontHeadingCodeHref(theme: Theme) {
+  const { header, code } = theme.typography
+  const headerFont = formatFontSpecification("header", header)
+  const codeFont = formatFontSpecification("code", code)
+
+  return `https://fonts.googleapis.com/css2?family=${headerFont}&family=${codeFont}&display=swap`
+}
+
 export function googleFontSubsetHref(theme: Theme, text: string) {
   const title = theme.typography.title || theme.typography.header
   const titleFont = formatFontSpecification("title", title)

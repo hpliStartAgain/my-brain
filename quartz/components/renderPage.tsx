@@ -72,7 +72,15 @@ export function pageResources(
   })
 
   const contentIndexPath = joinSegments(baseDir, "static/contentIndex.json")
-  const contentIndexScript = `const fetchData = fetch("${contentIndexPath}").then(data => data.json())`
+  const searchContentPath = joinSegments(baseDir, "static/searchContent.json")
+  // fetchData：轻量元数据索引，每页加载。fetchSearchContent：全文，仅在首次打开搜索时拉取。
+  // 全文 URL 在首屏脚本执行时就解析为绝对地址，避免 SPA 跳转后相对路径失效。
+  const contentIndexScript = [
+    `const fetchData = fetch("${contentIndexPath}").then(data => data.json())`,
+    `const searchContentUrl = new URL("${searchContentPath}", location.href).href`,
+    `let searchContentPromise = null`,
+    `const fetchSearchContent = () => searchContentPromise ??= fetch(searchContentUrl).then(r => r.ok ? r.json() : {}).catch(() => { searchContentPromise = null; return {} })`,
+  ].join("\n")
 
   const resources: StaticResources = {
     css: [
@@ -335,7 +343,7 @@ export function renderPage(
   const Body = BodyConstructor()
   const frame = resolveFrame(frameName)
 
-  const lang = componentData.fileData.frontmatter?.lang ?? cfg.locale?.split("-")[0] ?? "en"
+  const lang = componentData.fileData.frontmatter?.lang ?? cfg.locale ?? "en"
   const direction = i18n(cfg.locale).direction ?? "ltr"
   // During local dev (--serve), the dev server serves from root without the
   // baseUrl subpath, so basePath must be empty to avoid broken links.

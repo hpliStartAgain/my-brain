@@ -1,0 +1,62 @@
+{
+  "name": "@my-brain/content-polish",
+  "version": "0.1.0",
+  "description": "Build-time content polish for Quartz: drop body H1 duplicating the title, derive Chinese meta descriptions from 摘要; lazy-load images",
+  "type": "module",
+  "license": "MIT",
+  "author": "my-brain",
+  "keywords": [
+    "quartz",
+    "quartz-plugin",
+    "transformer"
+  ],
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@quartz-community/types": "^0.2.1"
+  },
+  "quartz": {
+    "name": "content-polish",
+    "displayName": "Content Polish",
+    "category": "transformer",
+    "version": "1.0.0",
+    "quartzVersion": ">=5.0.0",
+    "dependencies": [],
+    "defaultOrder": 25,
+    "defaultEnabled": false,
+    "defaultOptions": {
+      "dedupeTitleHeading": true,
+      "generateDescription": true,
+      "descriptionLength": 140,
+      "lazyImages": true
+    },
+    "optionSchema": {
+      "dedupeTitleHeading": {
+        "type": "boolean"
+      },
+      "generateDescription": {
+        "type": "boolean"
+      },
+      "descriptionLength": {
+        "type": "number"
+      },
+      "lazyImages": {
+        "type": "boolean"
+      }
+    }
+  }
+}

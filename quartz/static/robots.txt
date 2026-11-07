@@ -4,6 +4,7 @@ Disallow: /tags
 Disallow: /tags/
 Disallow: /static/navigationIndex.json
 Disallow: /static/searchIndex.json
+Disallow: /static/searchContent.json
 Disallow: /index.xml
 
 User-agent: GPTBot

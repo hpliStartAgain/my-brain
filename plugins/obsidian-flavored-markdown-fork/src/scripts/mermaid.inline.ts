@@ -397,16 +397,33 @@ function unifyMermaidColors(node: HTMLElement) {
   svg.appendChild(style)
 }
 
+// [my-brain] Mermaid 依次尝试多个 CDN：任一源在当前网络不可达（大陆访问 cdnjs / jsDelivr
+// 时常不稳定）时自动换下一个，npmmirror 为国内镜像。只在首个源失败时才会请求后续源。
+const MERMAID_SOURCES = [
+  "https://cdnjs.cloudflare.com/ajax/libs/mermaid/11.4.0/mermaid.esm.min.mjs",
+  "https://registry.npmmirror.com/mermaid/11.4.0/files/dist/mermaid.esm.min.mjs",
+  "https://cdn.jsdelivr.net/npm/mermaid@11.4.0/dist/mermaid.esm.min.mjs",
+]
+
+async function importMermaid() {
+  let lastError: unknown
+  for (const src of MERMAID_SOURCES) {
+    try {
+      return await import(/* @vite-ignore */ src)
+    } catch (err) {
+      lastError = err
+    }
+  }
+  throw lastError
+}
+
 let mermaidImport = undefined
 async function renderMermaidDiagrams() {
   const center = document.querySelector(".center") as HTMLElement
   const nodes = center.querySelectorAll("code.mermaid") as NodeListOf<HTMLElement>
   if (nodes.length === 0) return
 
-  mermaidImport ||= await import(
-    // @ts-ignore
-    "https://cdnjs.cloudflare.com/ajax/libs/mermaid/11.4.0/mermaid.esm.min.mjs"
-  )
+  mermaidImport ||= await importMermaid()
   const mermaid = mermaidImport.default
 
   const textMapping: WeakMap<HTMLElement, string> = new WeakMap()

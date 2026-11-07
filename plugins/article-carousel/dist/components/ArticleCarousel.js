@@ -1,21 +1,4 @@
-// node_modules/@quartz-community/utils/dist/date.js
-function formatDate(d2, locale = "en-US") {
-  return d2.toLocaleDateString(locale, {
-    year: "numeric",
-    month: "short",
-    day: "2-digit"
-  });
-}
-
-// node_modules/@quartz-community/utils/dist/sort.js
-function getDate(data) {
-  const defaultDateType = data.defaultDateType;
-  if (!defaultDateType) {
-    return void 0;
-  }
-  const dates = data.dates;
-  return dates?.[defaultDateType];
-}
+// ../../node_modules/github-slugger/index.js
 
 // node_modules/@quartz-community/utils/dist/path.js
 function simplifySlug(fp) {
@@ -73,7 +56,7 @@ function classNames(...classes) {
 }
 
 // src/components/styles/articleCarousel.scss
-var articleCarousel_default = '.random-articles {\n  margin: 0 0 1.5rem;\n  border-bottom: 1px solid var(--lightgray);\n  padding-bottom: 1.5rem;\n}\n.random-articles .random-articles-header {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  margin-bottom: 1rem;\n}\n.random-articles .random-articles-title {\n  display: inline-flex;\n  align-items: center;\n  gap: 0.45rem;\n  font-size: 0.75rem;\n  font-weight: 600;\n  text-transform: uppercase;\n  letter-spacing: 0.06em;\n  color: var(--gray);\n  font-family: var(--bodyFont);\n}\n.random-articles .random-articles-title::before {\n  content: "";\n  width: 6px;\n  height: 6px;\n  border-radius: 1.5px;\n  background: var(--secondary);\n  opacity: 0.85;\n}\n.random-articles .random-articles-refresh {\n  display: flex;\n  align-items: center;\n  gap: 0.35rem;\n  padding: 0.3rem 0.7rem;\n  border: 1px solid var(--lightgray);\n  border-radius: 9999px;\n  background: transparent;\n  color: var(--gray);\n  font-size: 0.75rem;\n  font-family: var(--bodyFont);\n  cursor: pointer;\n  transition: all 0.2s ease;\n}\n.random-articles .random-articles-refresh:hover {\n  color: var(--secondary);\n  border-color: var(--secondary);\n  background: color-mix(in srgb, var(--secondary) 5%, transparent);\n}\n.random-articles .random-articles-refresh:active {\n  transform: scale(0.97);\n}\n.random-articles .random-articles-refresh svg {\n  flex-shrink: 0;\n}\n.random-articles .random-articles-grid {\n  display: grid;\n  grid-template-columns: repeat(4, 1fr);\n  gap: 0.75rem;\n}\n.random-articles .random-articles-grid.fade-in {\n  animation: randomFadeIn 0.3s ease;\n}\n@media (max-width: 800px) {\n  .random-articles .random-articles-grid {\n    grid-template-columns: repeat(2, 1fr);\n  }\n}\n.random-articles .random-article-card {\n  position: relative;\n  background: transparent;\n  border: 1px solid var(--lightgray);\n  border-radius: 0.65rem;\n  padding: 0.95rem 1.1rem 0.85rem;\n  display: flex;\n  flex-direction: column;\n  gap: 0.5rem;\n  text-decoration: none !important;\n  transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;\n}\n.random-articles .random-article-card::before {\n  content: "";\n  position: absolute;\n  left: -1px;\n  top: 0.9rem;\n  bottom: 0.9rem;\n  width: 3px;\n  border-radius: 3px;\n  background: var(--secondary);\n  opacity: 0;\n  transition: opacity 0.2s ease;\n}\n.random-articles .random-article-card:hover {\n  border-color: color-mix(in srgb, var(--secondary) 45%, var(--lightgray));\n  transform: translateY(-2px);\n  box-shadow: var(--shadow-float, 0 6px 16px rgba(20, 20, 19, 0.07));\n}\n.random-articles .random-article-card:hover::before {\n  opacity: 1;\n}\n.random-articles .random-article-card:hover .random-article-title {\n  color: var(--secondary);\n}\n.random-articles .random-article-title {\n  font-family: var(--bodyFont);\n  font-size: 0.9rem;\n  font-weight: 550;\n  color: var(--darkgray);\n  line-height: 1.45;\n  display: -webkit-box;\n  -webkit-line-clamp: 2;\n  -webkit-box-orient: vertical;\n  overflow: hidden;\n  transition: color 0.2s ease;\n}\n.random-articles .random-article-date {\n  font-size: 0.7rem;\n  letter-spacing: 0.03em;\n  color: var(--gray);\n  margin-top: auto;\n}\n\n@keyframes randomFadeIn {\n  from {\n    opacity: 0.3;\n    transform: translateY(4px);\n  }\n  to {\n    opacity: 1;\n    transform: translateY(0);\n  }\n}';
+var articleCarousel_default = '.random-articles {\n  margin: 0 0 1.5rem;\n  border-bottom: 1px solid var(--lightgray);\n  padding-bottom: 1.5rem;\n}\n.random-articles .random-articles-header {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  margin-bottom: 1rem;\n}\n.random-articles .random-articles-title {\n  display: inline-flex;\n  align-items: center;\n  gap: 0.45rem;\n  font-size: 0.75rem;\n  font-weight: 600;\n  text-transform: uppercase;\n  letter-spacing: 0.06em;\n  color: var(--gray);\n  font-family: var(--bodyFont);\n}\n.random-articles .random-articles-title::before {\n  content: "";\n  width: 6px;\n  height: 6px;\n  border-radius: 1.5px;\n  background: var(--secondary);\n  opacity: 0.85;\n}\n.random-articles .random-articles-refresh {\n  display: flex;\n  align-items: center;\n  gap: 0.35rem;\n  padding: 0.3rem 0.7rem;\n  border: 1px solid var(--lightgray);\n  border-radius: 9999px;\n  background: transparent;\n  color: var(--gray);\n  font-size: 0.75rem;\n  font-family: var(--bodyFont);\n  cursor: pointer;\n  transition: all 0.2s ease;\n}\n.random-articles .random-articles-refresh:hover {\n  color: var(--secondary);\n  border-color: var(--secondary);\n  background: color-mix(in srgb, var(--secondary) 5%, transparent);\n}\n.random-articles .random-articles-refresh:active {\n  transform: scale(0.97);\n}\n.random-articles .random-articles-refresh svg {\n  flex-shrink: 0;\n}\n.random-articles .random-articles-grid {\n  display: grid;\n  grid-template-columns: repeat(4, 1fr);\n  gap: 0.75rem;\n}\n.random-articles .random-articles-grid.fade-in {\n  animation: randomFadeIn 0.3s ease;\n}\n@media (max-width: 800px) {\n  .random-articles .random-articles-grid {\n    grid-template-columns: repeat(2, 1fr);\n  }\n}\n.random-articles .random-article-card {\n  position: relative;\n  background: transparent;\n  border: 1px solid var(--lightgray);\n  border-radius: 0.65rem;\n  padding: 0.95rem 1.1rem 0.85rem;\n  display: flex;\n  flex-direction: column;\n  gap: 0.5rem;\n  text-decoration: none !important;\n  transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;\n}\n.random-articles .random-article-card::before {\n  content: "";\n  position: absolute;\n  left: -1px;\n  top: 0.9rem;\n  bottom: 0.9rem;\n  width: 3px;\n  border-radius: 3px;\n  background: var(--secondary);\n  opacity: 0;\n  transition: opacity 0.2s ease;\n}\n.random-articles .random-article-card:hover {\n  border-color: color-mix(in srgb, var(--secondary) 45%, var(--lightgray));\n  transform: translateY(-2px);\n  box-shadow: var(--shadow-float, 0 6px 16px rgba(20, 20, 19, 0.07));\n}\n.random-articles .random-article-card:hover::before {\n  opacity: 1;\n}\n.random-articles .random-article-card:hover .random-article-title {\n  color: var(--secondary);\n}\n.random-articles .random-article-title {\n  font-family: var(--bodyFont);\n  font-size: 0.9rem;\n  font-weight: 550;\n  color: var(--darkgray);\n  line-height: 1.45;\n  display: -webkit-box;\n  -webkit-line-clamp: 2;\n  -webkit-box-orient: vertical;\n  overflow: hidden;\n  transition: color 0.2s ease;\n}\n.random-articles .random-article-series {\n  font-size: 0.7rem;\n  font-weight: 600;\n  letter-spacing: 0.04em;\n  color: var(--secondary);\n  opacity: 0.85;\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n}\n.random-articles .random-article-date {\n  font-size: 0.7rem;\n  letter-spacing: 0.03em;\n  color: var(--gray);\n  margin-top: auto;\n}\n\n@keyframes randomFadeIn {\n  from {\n    opacity: 0.3;\n    transform: translateY(4px);\n  }\n  to {\n    opacity: 1;\n    transform: translateY(0);\n  }\n}';
 var l;
 l = { __e: function(n2, l2, u3, t2) {
   for (var i2, r2, o2; l2 = l2.__; ) if ((i2 = l2.__c) && !i2.__) try {
@@ -100,6 +83,11 @@ function isTagPageSlug(slug2) {
   if (!slug2) return false;
   return slug2 === "tags" || slug2 === "tags/index" || slug2.startsWith("tags/");
 }
+function seriesOf(relativePath) {
+  if (!relativePath) return "";
+  const parts = relativePath.split("/");
+  return parts.length >= 2 ? parts[parts.length - 2] : "";
+}
 var defaultOptions = () => ({
   title: "\u968F\u673A\u788E\u7247",
   showCount: 4,
@@ -111,14 +99,6 @@ var defaultOptions = () => ({
     return !!f3.frontmatter?.title;
   }
 });
-function resolveDefaultDateType(data, cfg) {
-  return data.defaultDateType ?? cfg.defaultDateType;
-}
-function withResolvedDateType(data, cfg) {
-  const resolved = resolveDefaultDateType(data, cfg);
-  if (!resolved) return data;
-  return { ...data, defaultDateType: resolved };
-}
 var ArticleCarousel = (userOpts) => {
   const ArticleCarouselComponent = ({
     allFiles,
@@ -129,23 +109,17 @@ var ArticleCarousel = (userOpts) => {
     const opts = { ...defaultOptions(), ...userOpts };
     const pages = allFiles.filter(opts.filter);
     if (pages.length === 0) return null;
-    const allArticles = pages.map((page) => {
-      const resolved = withResolvedDateType(page, cfg);
-      const date = getDate(resolved);
-      return {
-        title: page.frontmatter?.title ?? "Untitled",
-        href: resolveRelative(fileData.slug, page.slug),
-        date: date ? formatDate(date, cfg.locale) : ""
-      };
-    });
-    const shuffled = [...allArticles].sort(() => Math.random() - 0.5);
-    const initial = shuffled.slice(0, opts.showCount);
+    const shuffled = [...pages].sort(() => Math.random() - 0.5).slice(0, opts.showCount);
+    const initial = shuffled.map((page) => ({
+      title: page.frontmatter?.title ?? "Untitled",
+      href: resolveRelative(fileData.slug, page.slug),
+      series: seriesOf(page.relativePath)
+    }));
     return /* @__PURE__ */ u2(
       "div",
       {
         class: classNames(displayClass, "random-articles"),
         "data-random-articles": true,
-        "data-all-articles": JSON.stringify(allArticles),
         "data-show-count": String(opts.showCount),
         children: [
           /* @__PURE__ */ u2("div", { class: "random-articles-header", children: [
@@ -162,6 +136,7 @@ var ArticleCarousel = (userOpts) => {
                   "stroke-width": "1.5",
                   "stroke-linecap": "round",
                   "stroke-linejoin": "round",
+                  "aria-hidden": "true",
                   children: [
                     /* @__PURE__ */ u2("path", { d: "M1 4v4h4" }),
                     /* @__PURE__ */ u2("path", { d: "M3.51 10a5.5 5.5 0 1 0 .49-5.5L1 8" })
@@ -171,9 +146,9 @@ var ArticleCarousel = (userOpts) => {
               /* @__PURE__ */ u2("span", { children: "\u6362\u4E00\u6279" })
             ] })
           ] }),
-          /* @__PURE__ */ u2("div", { class: "random-articles-grid", "data-articles-grid": true, children: initial.map((article) => /* @__PURE__ */ u2("a", { href: article.href, class: "random-article-card internal", children: [
-            /* @__PURE__ */ u2("span", { class: "random-article-title", children: article.title }),
-            article.date && /* @__PURE__ */ u2("span", { class: "random-article-date", children: article.date })
+          /* @__PURE__ */ u2("div", { class: "random-articles-grid", "data-articles-grid": true, "aria-live": "polite", children: initial.map((article) => /* @__PURE__ */ u2("a", { href: article.href, class: "random-article-card internal", children: [
+            article.series && /* @__PURE__ */ u2("span", { class: "random-article-series", children: article.series }),
+            /* @__PURE__ */ u2("span", { class: "random-article-title", children: article.title })
           ] })) })
         ]
       }
@@ -181,45 +156,73 @@ var ArticleCarousel = (userOpts) => {
   };
   ArticleCarouselComponent.css = articleCarousel_default;
   ArticleCarouselComponent.afterDOMLoaded = `
+    let carouselPool = null;
+
+    function seriesOf(filePath) {
+      if (!filePath) return "";
+      const parts = String(filePath).split("/");
+      return parts.length >= 2 ? parts[parts.length - 2] : "";
+    }
+
+    async function loadPool() {
+      if (carouselPool) return carouselPool;
+      const data = typeof fetchData !== "undefined" ? await fetchData : null;
+      const index = data && typeof data === "object" ? data : {};
+      carouselPool = Object.entries(index)
+        .filter(([slug, v]) => {
+          if (!v || typeof v !== "object" || !v.title) return false;
+          if (slug === "tags" || slug.startsWith("tags/")) return false;
+          if (slug === "index" || slug.endsWith("/index")) return false;
+          return typeof v.filePath === "string" && v.filePath.endsWith(".md");
+        })
+        .map(([slug, v]) => ({ title: v.title, slug, series: seriesOf(v.filePath) }));
+      return carouselPool;
+    }
+
+    function hrefFor(slug) {
+      // \u7EC4\u4EF6\u53EA\u5728\u9996\u9875\u6E32\u67D3\uFF0C\u9996\u9875\u4F4D\u4E8E\u7AD9\u70B9\u6839\u76EE\u5F55\uFF0C\u76F8\u5BF9 slug \u5373\u53EF
+      const base = document.body.dataset.basepath || "";
+      return base + "/" + slug.split("/").map(encodeURIComponent).join("/");
+    }
+
+    function shuffle(arr) {
+      const a = [...arr];
+      for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]];
+      }
+      return a;
+    }
+
     function setupRandomArticles() {
       document.querySelectorAll("[data-random-articles]").forEach((container) => {
         // \u9632\u6B62\u91CD\u590D\u7ED1\u5B9A
         if (container.dataset.bound === "true") return;
         container.dataset.bound = "true";
 
-        const allArticles = JSON.parse(container.dataset.allArticles || "[]");
         const showCount = parseInt(container.dataset.showCount || "4", 10);
         const grid = container.querySelector("[data-articles-grid]");
         const btn = container.querySelector("[data-refresh-btn]");
-        if (!grid || !btn || allArticles.length === 0) return;
-
-        function shuffle(arr) {
-          const a = [...arr];
-          for (let i = a.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [a[i], a[j]] = [a[j], a[i]];
-          }
-          return a;
-        }
+        if (!grid || !btn) return;
 
         function renderCards(articles) {
           grid.innerHTML = "";
           articles.forEach((article) => {
             const a = document.createElement("a");
-            a.href = article.href;
+            a.href = hrefFor(article.slug);
             a.className = "random-article-card internal";
+
+            if (article.series) {
+              const seriesSpan = document.createElement("span");
+              seriesSpan.className = "random-article-series";
+              seriesSpan.textContent = article.series;
+              a.appendChild(seriesSpan);
+            }
 
             const titleSpan = document.createElement("span");
             titleSpan.className = "random-article-title";
             titleSpan.textContent = article.title;
             a.appendChild(titleSpan);
-
-            if (article.date) {
-              const dateSpan = document.createElement("span");
-              dateSpan.className = "random-article-date";
-              dateSpan.textContent = article.date;
-              a.appendChild(dateSpan);
-            }
 
             grid.appendChild(a);
           });
@@ -229,11 +232,12 @@ var ArticleCarousel = (userOpts) => {
           grid.classList.add("fade-in");
         }
 
-        btn.addEventListener("click", function(e) {
+        btn.addEventListener("click", async function(e) {
           e.preventDefault();
           e.stopPropagation();
-          const selected = shuffle(allArticles).slice(0, showCount);
-          renderCards(selected);
+          const pool = await loadPool();
+          if (pool.length === 0) return;
+          renderCards(shuffle(pool).slice(0, showCount));
 
           const svg = btn.querySelector("svg");
           if (svg) {
