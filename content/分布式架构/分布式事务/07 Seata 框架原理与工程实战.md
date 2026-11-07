@@ -1,7 +1,8 @@
 ---
 title: "07 Seata 框架原理与工程实战"
 date: 2026-10-10
-tags: [AT模式, Saga, Seata, TCC, Undo Log, XA, 全局锁, 分布式事务]
+tags: [Saga, 分布式事务]
+keywords: [AT模式, Seata, TCC, Undo Log, XA, 全局锁]
 aliases: []
 ---
 

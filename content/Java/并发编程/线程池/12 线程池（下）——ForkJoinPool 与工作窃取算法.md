@@ -1,7 +1,8 @@
 ---
 title: "线程池（下）——ForkJoinPool 与工作窃取算法"
 date: 2026-03-05
-tags: [CompletableFuture, ForkJoinPool, ForkJoinTask, Java, parallelStream, RecursiveAction, RecursiveTask, Work-Stealing, 分治, 工作窃取, 并发编程]
+tags: [Java, 分治, 并发编程]
+keywords: [CompletableFuture, ForkJoinPool, ForkJoinTask, parallelStream, RecursiveAction, RecursiveTask, Work-Stealing, 工作窃取]
 aliases: []
 ---
 

@@ -1,7 +1,8 @@
 ---
 title: "03 Loki 架构与设计哲学——只索引标签"
 date: 2026-10-10
-tags: [Grafana Loki, Prometheus, 可观测性, 日志, 标签模型, 对象存储]
+tags: [Loki, Prometheus, 可观测性, 日志, 对象存储]
+keywords: [标签模型]
 aliases: []
 ---
 

@@ -1,7 +1,8 @@
 ---
 title: "Agent 框架选型——LangChain、LlamaIndex 与 LangGraph"
 date: 2026-03-04
-tags: [Agent, AutoGen, Claude Agent SDK, CrewAI, Gemini ADK, LangChain, LangGraph, LCEL, LlamaIndex, LLM, Microsoft Agent Framework, OpenAI Agents SDK, 框架选型, 状态图]
+tags: [Agent, LLM]
+keywords: [AutoGen, Claude Agent SDK, CrewAI, Gemini ADK, LangChain, LangGraph, LCEL, LlamaIndex, Microsoft Agent Framework, OpenAI Agents SDK, 框架选型, 状态图]
 aliases: []
 ---
 

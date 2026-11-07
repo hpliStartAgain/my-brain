@@ -1,7 +1,8 @@
 ---
 title: "Claude Code 架构解构——Anthropic 的 CLI Agent 设计哲学"
 date: 2026-08-01
-tags: [Agent, Agent Skills, Checkpointing, Claude Code, CLI Agent, Cloud Sessions, Dynamic Workflows, Git 操作, Hooks, MCP, Permission Modes, Plugins, Session 持久化, Subagent, Terminal Agent]
+tags: [Agent, Claude Code, MCP]
+keywords: [Agent Skills, Checkpointing, CLI Agent, Cloud Sessions, Dynamic Workflows, Git 操作, Hooks, Permission Modes, Plugins, Session 持久化, Subagent, Terminal Agent]
 aliases: [Claude Code 架构解构, Claude Code 设计哲学, Claude Code Subagent]
 ---
 

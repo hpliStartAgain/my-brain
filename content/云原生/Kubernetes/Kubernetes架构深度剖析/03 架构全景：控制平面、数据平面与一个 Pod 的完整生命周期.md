@@ -1,7 +1,8 @@
 ---
 title: "架构全景：控制平面、数据平面与一个 Pod 的完整生命周期"
 date: 2026-07-17
-tags: [Kubernetes, 架构全景, 控制平面, 数据平面, Pod生命周期, kubelet, API Server, etcd, Scheduler]
+tags: [Kubernetes, API Server, etcd, 调度]
+keywords: [架构全景, 控制平面, 数据平面, Pod生命周期, kubelet]
 aliases: [K8s 架构全景, 控制平面, 数据平面, Pod 生命周期, K8s 组件交互]
 ---
 

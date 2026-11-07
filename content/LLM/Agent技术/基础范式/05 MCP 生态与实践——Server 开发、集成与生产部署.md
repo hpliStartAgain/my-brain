@@ -1,7 +1,8 @@
 ---
 title: "MCP 生态与实践——Server 开发、集成与生产部署"
 date: 2026-08-01
-tags: [Agent, Claude Code, Claude Desktop, Cursor, FastMCP, MCP, MCP Inspector, MCP Registry, MCP SDK, OAuth, Server 开发, Streamable HTTP, stdio]
+tags: [Agent, Claude Code, MCP]
+keywords: [Claude Desktop, Cursor, FastMCP, MCP Inspector, MCP Registry, MCP SDK, OAuth, Server 开发, Streamable HTTP, stdio]
 aliases: [MCP 生态与实践, MCP Server 开发, MCP 集成部署]
 ---
 

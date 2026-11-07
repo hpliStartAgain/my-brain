@@ -1,7 +1,8 @@
 ---
 title: "IO 调度器——CFQ、Deadline 与 mq-deadline 的演进"
 date: 2026-03-02
-tags: [BFQ, CFQ, Deadline, HDD, IO优先级, IO调度器, Linux, mq-deadline, none, noop, NVMe, SSD, 饥饿]
+tags: [Linux, NVMe]
+keywords: [BFQ, CFQ, Deadline, HDD, IO优先级, IO调度器, mq-deadline, none, noop, SSD, 饥饿]
 aliases: ["Linux IO调度器原理", "CFQ调度器", "mq-deadline", "BFQ调度器", "IO调度器选型"]
 ---
 

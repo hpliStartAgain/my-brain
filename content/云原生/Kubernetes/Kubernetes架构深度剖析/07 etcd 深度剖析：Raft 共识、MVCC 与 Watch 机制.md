@@ -1,7 +1,8 @@
 ---
 title: "etcd 深度剖析：Raft 共识、MVCC 与 Watch 机制"
 date: 2026-07-17
-tags: [Kubernetes, etcd, Raft, MVCC, Watch, 共识算法, Leader选举, 日志复制, WAL, Snapshot, compact]
+tags: [Kubernetes, etcd, Raft, MVCC, Watch, 共识算法, Leader选举, WAL]
+keywords: [日志复制, Snapshot, compact]
 aliases: [etcd 深度剖析, Raft 共识, etcd MVCC, etcd Watch, etcd 运维, K8s 状态存储]
 ---
 

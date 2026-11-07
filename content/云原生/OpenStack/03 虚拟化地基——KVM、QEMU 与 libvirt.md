@@ -1,7 +1,8 @@
 ---
 title: "03 虚拟化地基——KVM、QEMU 与 libvirt"
 date: 2026-09-04
-tags: [OpenStack, KVM, QEMU, libvirt, 虚拟化]
+tags: [OpenStack, KVM, 虚拟化]
+keywords: [QEMU, libvirt]
 aliases: []
 ---
 

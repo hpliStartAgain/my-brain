@@ -1,7 +1,8 @@
 ---
 title: "监控与可观测性：StreamingQueryListener 与生产指标体系"
 date: 2026-02-28
-tags: [Metrics, Prometheus, Spark, Spark UI, StreamingQueryListener, Structured Streaming, Watermark, 可观测性, 告警, 监控]
+tags: [Prometheus, Spark, Structured Streaming, Watermark, 可观测性, 告警, 监控]
+keywords: [Metrics, Spark UI, StreamingQueryListener]
 aliases: []
 ---
 

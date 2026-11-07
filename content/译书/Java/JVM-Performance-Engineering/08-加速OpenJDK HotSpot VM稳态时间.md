@@ -1,7 +1,8 @@
 ---
 title: "加速OpenJDK HotSpot VM稳态时间"
 date: 2026-05-12
-tags: [HotSpot, Java, JVM, Steady State, Warm-up, 启动优化, 性能工程]
+tags: [Java, JVM, 性能优化]
+keywords: [HotSpot, Steady State, Warm-up, 启动优化]
 aliases: [Accelerating Time to Steady State with OpenJDK HotSpot VM]
 ---
 

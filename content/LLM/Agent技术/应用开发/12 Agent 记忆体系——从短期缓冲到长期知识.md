@@ -1,7 +1,8 @@
 ---
 title: "Agent 记忆体系——从短期缓冲到长期知识"
 date: 2026-03-04
-tags: [Agent, LLM, 上下文管理, 向量记忆, 对话历史, 情节记忆, 知识图谱记忆, 程序记忆, 记忆, 语义记忆, MemGPT, Letta, Mem0, 长期记忆, 遗忘机制, 记忆评估]
+tags: [Agent, LLM]
+keywords: [上下文管理, 向量记忆, 对话历史, 情节记忆, 知识图谱记忆, 程序记忆, 记忆, 语义记忆, MemGPT, Letta, Mem0, 长期记忆, 遗忘机制, 记忆评估]
 aliases: [Agent 记忆, 记忆体系, Agent 长期记忆, MemGPT]
 ---
 

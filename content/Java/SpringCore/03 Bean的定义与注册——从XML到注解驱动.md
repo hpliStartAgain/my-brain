@@ -1,7 +1,8 @@
 ---
 title: "Bean的定义与注册——从XML到注解驱动"
 date: 2026-03-04
-tags: [BeanDefinition, CGLIB, ComponentScan, Configuration, Java, Spring, 注解驱动]
+tags: [Java, Spring]
+keywords: [BeanDefinition, CGLIB, ComponentScan, Configuration, 注解驱动]
 aliases: []
 ---
 

@@ -1,7 +1,8 @@
 ---
 title: "OpenResty 架构：LuaJIT、cosocket 与协程调度"
 date: 2026-02-28
-tags: [cosocket, LuaJIT, Nginx扩展, ngx_lua, OpenResty, Phase Hook, 事件驱动, 协程, 非阻塞IO]
+tags: []
+keywords: [cosocket, LuaJIT, Nginx扩展, ngx_lua, OpenResty, Phase Hook, 事件驱动, 协程, 非阻塞IO]
 aliases: []
 ---
 

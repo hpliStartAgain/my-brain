@@ -1,7 +1,8 @@
 ---
 title: "事务：从 ACID 到分布式事务的隔离级别"
 date: 2026-07-17
-tags: [事务, ACID, 隔离级别, 可串行化, MVCC, 两阶段锁定, SSI, 分布式事务, DDIA]
+tags: [事务, MVCC, 分布式事务, DDIA]
+keywords: [隔离级别, 可串行化, 两阶段锁定, SSI]
 aliases: [数据库事务, ACID, 隔离级别, 可串行化, 快照隔离, 写偏差, 幻读, 2PL, SSI]
 ---
 

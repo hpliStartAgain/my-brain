@@ -1,7 +1,8 @@
 ---
 title: "04 基于 ZooKeeper 的分布式锁原理深度解析"
 date: 2026-10-10
-tags: [Curator, Watch机制, ZAB协议, ZooKeeper, 临时节点, 分布式锁]
+tags: [ZooKeeper, 分布式锁]
+keywords: [Curator, Watch机制, ZAB协议, 临时节点]
 aliases: []
 ---
 

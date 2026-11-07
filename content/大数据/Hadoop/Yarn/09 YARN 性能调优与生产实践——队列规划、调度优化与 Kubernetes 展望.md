@@ -1,7 +1,8 @@
 ---
 title: "YARN 性能调优与生产实践——队列规划、调度优化与 Kubernetes 展望"
 date: 2026-02-27
-tags: [Kubernetes, YARN, 延迟调度, 性能调优, 生产实践, 调优, 资源配置, 队列规划]
+tags: [Kubernetes, YARN, 性能优化]
+keywords: [延迟调度, 生产实践, 资源配置, 队列规划]
 aliases: [YARN调优, YARN生产实践, YARN性能优化, YARN与Kubernetes]
 ---
 

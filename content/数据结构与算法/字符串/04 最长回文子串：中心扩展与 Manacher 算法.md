@@ -1,7 +1,8 @@
 ---
 title: "最长回文子串：中心扩展与 Manacher 算法"
 date: 2026-10-11
-tags: [LeetCode, 5, Manacher, 动态规划, 回文, 字符串, 算法, 面试]
+tags: [LeetCode, 动态规划, 字符串, 算法, 面试]
+keywords: [5, Manacher, 回文]
 aliases: [最长回文子串, 中心扩展法, Manacher算法, LeetCode 5]
 ---
 

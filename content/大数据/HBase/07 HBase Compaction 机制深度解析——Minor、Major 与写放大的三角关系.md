@@ -1,7 +1,8 @@
 ---
 title: "HBase Compaction 机制深度解析——Minor、Major 与写放大的三角关系"
 date: 2026-02-27
-tags: [Compaction, Compaction策略, HBase, HFile合并, LSM-Tree, Major Compaction, Minor Compaction, 写放大, 读放大]
+tags: [Compaction, HBase, LSM-Tree]
+keywords: [Compaction策略, HFile合并, Major Compaction, Minor Compaction, 写放大, 读放大]
 aliases: [HBase Compaction原理, HBase合并机制, HBase写放大]
 ---
 

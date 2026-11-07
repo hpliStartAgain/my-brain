@@ -1,7 +1,8 @@
 ---
 title: "编解码器——LengthFieldBasedFrameDecoder与自定义协议"
 date: 2026-09-07
-tags: [ByteToMessageDecoder, Java, LengthFieldBasedFrameDecoder, MessageToByteEncoder, Netty, TCP流协议, 粘包拆包, 编解码器, 自定义协议]
+tags: [Java, Netty]
+keywords: [ByteToMessageDecoder, LengthFieldBasedFrameDecoder, MessageToByteEncoder, TCP流协议, 粘包拆包, 编解码器, 自定义协议]
 aliases: [Netty编解码器, LengthFieldBasedFrameDecoder, Netty自定义协议, TCP粘包拆包, FrameDecoder]
 ---
 

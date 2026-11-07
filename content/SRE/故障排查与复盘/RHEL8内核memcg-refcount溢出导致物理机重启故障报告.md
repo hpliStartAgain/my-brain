@@ -1,6 +1,8 @@
 ---
+title: "RHEL8 内核 memcg refcount 溢出导致物理机重启"
 date: 2026-04-21
-tags: [crash, kernel, kswapd, memcg, refcount, RHEL8]
+tags: []
+keywords: [crash, kernel, kswapd, memcg, refcount, RHEL8]
 category: 系统故障
 severity: P1
 ---

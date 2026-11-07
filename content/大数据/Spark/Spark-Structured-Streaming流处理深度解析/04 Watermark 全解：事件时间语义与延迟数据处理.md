@@ -1,7 +1,8 @@
 ---
 title: "Watermark 全解：事件时间语义与延迟数据处理"
 date: 2026-02-28
-tags: [Spark, State清理, Structured Streaming, Watermark, 乱序数据, 事件时间, 延迟数据, 水位线, 窗口]
+tags: [Spark, Structured Streaming, Watermark]
+keywords: [State清理, 乱序数据, 事件时间, 延迟数据, 水位线, 窗口]
 aliases: []
 ---
 

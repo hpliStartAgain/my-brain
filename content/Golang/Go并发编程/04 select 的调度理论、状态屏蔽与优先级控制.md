@@ -1,7 +1,8 @@
 ---
 title: "select 的调度理论、状态屏蔽与优先级控制"
 date: 2026-10-07
-tags: [Golang, Goroutine, Channel, select, 多路复用, 调度, 并发, 伪随机, 优先级]
+tags: [Golang, 调度, 并发编程]
+keywords: [Goroutine, Channel, select, 多路复用, 伪随机, 优先级]
 aliases: []
 ---
 

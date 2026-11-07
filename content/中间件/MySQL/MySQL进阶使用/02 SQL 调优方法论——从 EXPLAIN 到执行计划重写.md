@@ -1,7 +1,8 @@
 ---
 title: "SQL 调优方法论——从 EXPLAIN 到执行计划重写"
 date: 2026-03-02
-tags: [EXPLAIN, MySQL, SQL调优, 性能优化, 执行计划]
+tags: [MySQL, 性能优化, 执行计划]
+keywords: [EXPLAIN, SQL调优]
 aliases: [MySQL SQL调优, EXPLAIN详解]
 ---
 

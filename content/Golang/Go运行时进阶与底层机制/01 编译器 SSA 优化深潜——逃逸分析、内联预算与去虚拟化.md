@@ -1,7 +1,8 @@
 ---
 title: "编译器 SSA 优化深潜——逃逸分析、内联预算与去虚拟化"
 date: 2026-10-07
-tags: [Golang, SSA, 编译器, 逃逸分析, 函数内联, 去虚拟化, IR, 中间表示, GC, 性能优化]
+tags: [Golang, 逃逸分析, GC, 性能优化]
+keywords: [SSA, 编译器, 函数内联, 去虚拟化, IR, 中间表示]
 aliases: []
 ---
 

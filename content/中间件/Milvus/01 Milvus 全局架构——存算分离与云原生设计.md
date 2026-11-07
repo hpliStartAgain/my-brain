@@ -1,7 +1,8 @@
 ---
 title: "Milvus 全局架构——存算分离与云原生设计"
 date: 2026-03-05
-tags: [ANN, Embedding, Milvus, RAG, 中间件, 云原生, 向量数据库, 存算分离]
+tags: [Embedding, Milvus, RAG, 中间件, 云原生, 向量数据库]
+keywords: [ANN, 存算分离]
 aliases: []
 ---
 

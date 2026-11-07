@@ -1,7 +1,8 @@
 ---
 title: "快速选择与 TopK 问题：期望 O(n) 的奇妙算法"
 date: 2026-10-17
-tags: [LeetCode, TopK, 优先队列, 快速选择, 排序, 算法, 面试, Golang]
+tags: [LeetCode, 排序, 算法, 面试, Golang]
+keywords: [TopK, 优先队列, 快速选择]
 aliases: [快速选择, QuickSelect, TopK问题, Kth Largest Element]
 ---
 

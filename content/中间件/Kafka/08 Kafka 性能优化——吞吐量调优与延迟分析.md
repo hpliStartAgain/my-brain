@@ -1,7 +1,8 @@
 ---
 title: "08 Kafka 性能优化——吞吐量调优与延迟分析"
 date: 2026-03-04
-tags: [Kafka, 性能优化, 吞吐量, 延迟, 批量化, 压缩, Page Cache, JVM]
+tags: [Kafka, 性能优化, 延迟, Page Cache, JVM]
+keywords: [吞吐量, 批量化, 压缩]
 aliases: []
 ---
 

@@ -1,7 +1,8 @@
 ---
 title: "Shenandoah——与 ZGC 殊途同归的并发压缩"
 date: 2026-03-05
-tags: [Brooks Pointer, GC, Java, JDK12, JDK13, JDK14, JVM, RedHat, Shenandoah, 低延迟, 写屏障, 并发疏散, 读屏障, Load Reference Barrier, 分代Shenandoah, 转发指针]
+tags: [GC, Java, JVM]
+keywords: [Brooks Pointer, JDK12, JDK13, JDK14, RedHat, Shenandoah, 低延迟, 写屏障, 并发疏散, 读屏障, Load Reference Barrier, 分代Shenandoah, 转发指针]
 aliases: [Shenandoah GC, Brooks Pointer, LRB, Load Reference Barrier]
 ---
 

@@ -1,7 +1,8 @@
 ---
 title: "02 控制面三件套——MariaDB、RabbitMQ 与 Keystone"
 date: 2026-09-04
-tags: [OpenStack, Keystone, RabbitMQ, MariaDB, 控制面]
+tags: [OpenStack]
+keywords: [Keystone, RabbitMQ, MariaDB, 控制面]
 aliases: []
 ---
 

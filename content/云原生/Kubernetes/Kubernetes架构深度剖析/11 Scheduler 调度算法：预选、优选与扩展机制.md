@@ -1,7 +1,8 @@
 ---
 title: "Scheduler 调度算法：预选、优选与扩展机制"
 date: 2026-07-17
-tags: [Kubernetes, Scheduler, 调度算法, Filter, Score, 节点亲和性, Taint/Toleration, Scheduler Framework, 多调度器]
+tags: [Kubernetes, 调度]
+keywords: [调度算法, Filter, Score, 节点亲和性, Taint/Toleration, Scheduler Framework, 多调度器]
 aliases: [K8s 调度器, Scheduler 算法, 预选优选, 节点亲和性, 反亲和性, Taint Toleration, Scheduler Framework]
 ---
 

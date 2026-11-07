@@ -1,7 +1,8 @@
 ---
 title: "网络 IO 的本质——从 socket() 到网卡 DMA"
 date: 2026-03-02
-tags: [DMA, Linux, socket, TCP/IP, 内核网络栈, 协议栈分层, 文件描述符, 系统调用, 网络IO]
+tags: [Linux, 系统调用]
+keywords: [DMA, socket, TCP/IP, 内核网络栈, 协议栈分层, 文件描述符, 网络IO]
 aliases: ["Linux网络IO原理", "socket系统调用", "网络IO路径", "网卡DMA原理"]
 ---
 

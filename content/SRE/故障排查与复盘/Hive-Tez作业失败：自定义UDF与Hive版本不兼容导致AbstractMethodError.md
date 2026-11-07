@@ -1,3 +1,10 @@
+---
+title: "Hive-Tez作业失败：自定义UDF与Hive版本不兼容导致AbstractMethodError"
+date: 2026-07-26
+tags: [SRE]
+aliases: []
+---
+
 **报告日期**: 2026年3月20日
 **故障时间**: 2026年3月20日 07:39
 **影响范围**: 生产环境 Hive on Tez 作业失败，业务数据产出中断

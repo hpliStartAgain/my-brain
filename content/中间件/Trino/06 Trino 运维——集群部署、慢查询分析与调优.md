@@ -1,7 +1,8 @@
 ---
 title: "Trino 运维——集群部署、慢查询分析与调优"
 date: 2026-03-05
-tags: [Kubernetes, Trino, 中间件, 性能, 慢查询, 监控, 调优, 运维, 部署]
+tags: [Kubernetes, Trino, 中间件, 慢查询, 监控, 性能优化, 运维]
+keywords: [性能, 部署]
 aliases: []
 ---
 

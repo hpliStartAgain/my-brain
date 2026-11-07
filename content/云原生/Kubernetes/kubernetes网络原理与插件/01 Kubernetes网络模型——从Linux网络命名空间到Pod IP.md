@@ -1,7 +1,8 @@
 ---
 title: "Kubernetes网络模型——从Linux网络命名空间到Pod IP"
 date: 2026-03-05
-tags: [CNI, Kubernetes, Linux-Bridge, Network-Namespace, Pod-IP, veth-pair, 云原生, 网络]
+tags: [CNI, Kubernetes, 云原生, 网络]
+keywords: [Linux-Bridge, Network-Namespace, Pod-IP, veth-pair]
 aliases: [Kubernetes网络模型, 从Linux网络命名空间到Pod IP]
 ---
 

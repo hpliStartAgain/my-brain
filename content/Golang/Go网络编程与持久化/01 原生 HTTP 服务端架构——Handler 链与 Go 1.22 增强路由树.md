@@ -1,7 +1,8 @@
 ---
 title: "原生 HTTP 服务端架构——Handler 链与 Go 1.22 增强路由树"
 date: 2026-10-07
-tags: [Golang, HTTP, net/http, 路由, ServeMux, ResponseWriter, Chunked]
+tags: [Golang, HTTP]
+keywords: [net/http, 路由, ServeMux, ResponseWriter, Chunked]
 aliases: []
 ---
 

@@ -1,3 +1,10 @@
+---
+title: "15 Spark MLlib：分布式机器学习算法实现"
+date: 2026-07-26
+tags: [大数据]
+aliases: []
+---
+
 # 15 Spark MLlib：分布式机器学习算法实现
 
 > [!info] 摘要  

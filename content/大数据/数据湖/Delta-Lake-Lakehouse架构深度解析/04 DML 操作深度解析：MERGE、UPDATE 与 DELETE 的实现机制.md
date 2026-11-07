@@ -1,7 +1,8 @@
 ---
 title: "DML 操作深度解析：MERGE、UPDATE 与 DELETE 的实现机制"
 date: 2026-02-28
-tags: [CDC, Copy-on-Write, DELETE, Deletion Vector, Delta Lake, DML, MERGE, Merge-on-Read, UPDATE, UPSERT]
+tags: [CDC, Delta Lake]
+keywords: [Copy-on-Write, DELETE, Deletion Vector, DML, MERGE, Merge-on-Read, UPDATE, UPSERT]
 aliases: []
 ---
 

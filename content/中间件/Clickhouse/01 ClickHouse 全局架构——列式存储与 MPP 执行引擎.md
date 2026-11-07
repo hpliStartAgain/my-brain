@@ -1,7 +1,8 @@
 ---
 title: "01 ClickHouse 全局架构——列式存储与 MPP 执行引擎"
 date: 2026-03-05
-tags: [ClickHouse, MPP, OLAP, SIMD, 列式存储, 向量化执行, 行存, Yandex]
+tags: [ClickHouse, MPP, OLAP, 列式存储, 向量化执行]
+keywords: [SIMD, 行存, Yandex]
 aliases: [ClickHouse 全局架构, ClickHouse 列存原理, ClickHouse MPP, ClickHouse 向量化执行]
 ---
 

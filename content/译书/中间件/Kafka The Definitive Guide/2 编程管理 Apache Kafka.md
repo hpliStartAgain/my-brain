@@ -1,3 +1,10 @@
+---
+title: "2 编程管理 Apache Kafka"
+date: 2026-07-26
+tags: [译书]
+aliases: []
+---
+
 # 2 编程管理 Apache Kafka
 
 > **Early Release 读者请注意**

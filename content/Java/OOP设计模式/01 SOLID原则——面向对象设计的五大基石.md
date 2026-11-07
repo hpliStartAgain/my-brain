@@ -1,7 +1,8 @@
 ---
 title: "SOLID原则——面向对象设计的五大基石"
 date: 2026-03-04
-tags: [Java, OOP, SOLID, 依赖倒置, 单一职责, 开闭原则, 接口隔离, 设计原则, 里氏替换, 重构]
+tags: [Java, OOP]
+keywords: [SOLID, 依赖倒置, 单一职责, 开闭原则, 接口隔离, 设计原则, 里氏替换, 重构]
 aliases: []
 ---
 

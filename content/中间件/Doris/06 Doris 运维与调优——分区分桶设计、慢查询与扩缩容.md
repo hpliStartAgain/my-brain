@@ -1,7 +1,8 @@
 ---
 title: "06 Doris 运维与调优——分区分桶设计、慢查询与扩缩容"
 date: 2026-03-05
-tags: [Doris, 运维, 分区设计, 分桶设计, 慢查询, 扩缩容, 监控, Colocate]
+tags: [Doris, 运维, 慢查询, 监控]
+keywords: [分区设计, 分桶设计, 扩缩容, Colocate]
 aliases: []
 ---
 

@@ -1,7 +1,8 @@
 ---
 title: "Agent 运行范式全景——从 ReAct 到 Production Agent 的演进"
 date: 2026-08-01
-tags: [A2A, Agent, AutoGPT, Claude Agent SDK, CrewAI, Deep Research, Gemini ADK, LangGraph, LATS, LLMCompiler, MCP, OpenAI Agents SDK, Plan-and-Execute, ReAct, Reflexion, Tree of Thoughts, Workflow, 范式演进]
+tags: [Agent, MCP]
+keywords: [A2A, AutoGPT, Claude Agent SDK, CrewAI, Deep Research, Gemini ADK, LangGraph, LATS, LLMCompiler, OpenAI Agents SDK, Plan-and-Execute, ReAct, Reflexion, Tree of Thoughts, Workflow, 范式演进]
 aliases: [Agent 运行范式全景, ReAct 到 Production Agent, Agent 范式演进]
 ---
 

@@ -1,7 +1,8 @@
 ---
 title: "Hidden Partitioning——告别分区列陷阱"
 date: 2026-03-02
-tags: [Hidden Partitioning, Iceberg, Partition Evolution, 分区变换, 分区演进, 分区陷阱, 查询优化]
+tags: [Iceberg, 查询优化]
+keywords: [Hidden Partitioning, Partition Evolution, 分区变换, 分区演进, 分区陷阱]
 aliases: ["Iceberg隐藏分区", "Hidden Partition", "分区列陷阱", "Partition Evolution", "分区演进"]
 ---
 

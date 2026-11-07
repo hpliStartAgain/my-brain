@@ -1,7 +1,8 @@
 ---
 title: "条件装配——@Conditional家族的实现机制"
 date: 2026-03-04
-tags: [Conditional, ConditionalOnBean, ConditionalOnClass, ConditionalOnProperty, Java, SpringBoot, 条件装配]
+tags: [Java, SpringBoot]
+keywords: [Conditional, ConditionalOnBean, ConditionalOnClass, ConditionalOnProperty, 条件装配]
 aliases: []
 ---
 

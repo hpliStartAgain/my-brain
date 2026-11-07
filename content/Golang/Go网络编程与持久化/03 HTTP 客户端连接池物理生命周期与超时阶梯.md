@@ -1,7 +1,8 @@
 ---
 title: "HTTP 客户端连接池物理生命周期与超时阶梯"
 date: 2026-10-07
-tags: [Golang, HTTP, TCP, 连接池, Keep-Alive, TIME_WAIT, 超时, Transport, 负载均衡]
+tags: [Golang, HTTP, 连接池, 负载均衡]
+keywords: [TCP, Keep-Alive, TIME_WAIT, 超时, Transport]
 aliases: []
 ---
 

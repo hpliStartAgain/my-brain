@@ -1,7 +1,8 @@
 ---
 title: "嵌入式Web容器——Tomcat、Jetty、Undertow的启动与配置"
 date: 2026-03-04
-tags: [Java, Jetty, ServletWebServerFactory, SpringBoot, Tomcat, Undertow, WebServer, 嵌入式容器]
+tags: [Java, SpringBoot]
+keywords: [Jetty, ServletWebServerFactory, Tomcat, Undertow, WebServer, 嵌入式容器]
 aliases: []
 ---
 

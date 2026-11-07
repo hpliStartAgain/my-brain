@@ -1,7 +1,8 @@
 ---
 title: "树形 DP 与状态压缩 DP：树上决策与位运算加速"
 date: 2026-10-17
-tags: [bitmask, LeetCode, 位运算, 动态规划, 树形DP, 状态压缩DP, 算法, 面试, Golang]
+tags: [LeetCode, 动态规划, 算法, 面试, Golang]
+keywords: [bitmask, 位运算, 树形DP, 状态压缩DP]
 aliases: [树形DP, 状态压缩DP, Tree DP, Bitmask DP]
 ---
 

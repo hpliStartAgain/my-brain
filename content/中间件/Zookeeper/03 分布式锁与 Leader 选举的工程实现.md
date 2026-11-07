@@ -1,7 +1,8 @@
 ---
 title: "03 分布式锁与 Leader 选举的工程实现"
 date: 2026-03-04
-tags: [ZooKeeper, 分布式锁, Leader选举, 服务发现, Curator]
+tags: [ZooKeeper, 分布式锁, Leader选举, 服务发现]
+keywords: [Curator]
 aliases: []
 ---
 

@@ -1,7 +1,8 @@
 ---
 title: "03 JuiceFS 数据存储——分块、压缩与缓存"
 date: 2026-03-05
-tags: [JuiceFS, 数据分块, Block Cache, 压缩, 预读, 对象存储, 性能优化, 缓存]
+tags: [JuiceFS, 对象存储, 性能优化, 缓存]
+keywords: [数据分块, Block Cache, 压缩, 预读]
 aliases: []
 ---
 

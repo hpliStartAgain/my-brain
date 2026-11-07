@@ -1,7 +1,8 @@
 ---
 title: "NameNode 高可用——QJM 协议与 Active-Standby 切换机制"
 date: 2026-02-27
-tags: [Active-Standby, Fencing, HA, HDFS, JournalNode, QJM, ZooKeeper, 脑裂]
+tags: [HDFS, ZooKeeper]
+keywords: [Active-Standby, Fencing, HA, JournalNode, QJM, 脑裂]
 aliases: [HDFS HA, QJM高可用, NameNode高可用]
 ---
 

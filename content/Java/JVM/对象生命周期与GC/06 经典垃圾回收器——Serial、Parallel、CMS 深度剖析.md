@@ -1,7 +1,8 @@
 ---
 title: "经典垃圾回收器——Serial、Parallel、CMS 深度剖析"
 date: 2026-03-05
-tags: [CMS, GC, Java, JVM, Parallel Scavenge, ParNew, Serial, Stop-The-World, 三色标记, 吞吐量, 垃圾回收器, 并发标记, 延迟, Concurrent Mode Failure, Promotion Failed, GC Ergonomics, 内存碎片化]
+tags: [GC, Java, JVM, 延迟]
+keywords: [CMS, Parallel Scavenge, ParNew, Serial, Stop-The-World, 三色标记, 吞吐量, 垃圾回收器, 并发标记, Concurrent Mode Failure, Promotion Failed, GC Ergonomics, 内存碎片化]
 aliases: []
 ---
 

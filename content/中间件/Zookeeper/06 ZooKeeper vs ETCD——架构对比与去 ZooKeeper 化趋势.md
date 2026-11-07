@@ -1,7 +1,8 @@
 ---
 title: "06 ZooKeeper vs ETCD——架构对比与去 ZooKeeper 化趋势"
 date: 2026-03-04
-tags: [ZooKeeper, ETCD, 共识协议, 云原生, 技术选型]
+tags: [ZooKeeper, etcd, 云原生]
+keywords: [共识协议, 技术选型]
 aliases: []
 ---
 

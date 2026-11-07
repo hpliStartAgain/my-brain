@@ -1,7 +1,8 @@
 ---
 title: "全排列与字典序：Next Permutation、Permutation Sequence、Gray Code"
 date: 2026-10-11
-tags: [LeetCode, 31, 60, 89, 字典序, 排列, 数组, 算法, 面试]
+tags: [LeetCode, 数组, 算法, 面试]
+keywords: [31, 60, 89, 字典序, 排列]
 aliases: [全排列, 字典序, 下一个排列, 康托展开]
 ---
 

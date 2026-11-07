@@ -1,7 +1,8 @@
 ---
 title: "Spring全局架构——模块划分与核心设计理念"
 date: 2026-03-04
-tags: [AOP, IoC, Java, Spring, 依赖注入, 控制反转, 模块架构, 设计哲学]
+tags: [Java, Spring, 依赖注入]
+keywords: [AOP, IoC, 控制反转, 模块架构, 设计哲学]
 aliases: []
 ---
 

@@ -1,7 +1,8 @@
 ---
 title: "日志体系——SLF4J、Logback与日志桥接"
 date: 2026-03-04
-tags: [Java, Log4j2, Logback, MDC, SLF4J, SpringBoot, 日志桥接, 结构化日志]
+tags: [Java, SpringBoot]
+keywords: [Log4j2, Logback, MDC, SLF4J, 日志桥接, 结构化日志]
 aliases: []
 ---
 

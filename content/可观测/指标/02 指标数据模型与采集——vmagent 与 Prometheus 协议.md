@@ -1,7 +1,8 @@
 ---
 title: "02 指标数据模型与采集——vmagent 与 Prometheus 协议"
 date: 2026-10-10
-tags: [Prometheus, vmagent, VictoriaMetrics, 可观测性, 指标, 采集]
+tags: [Prometheus, VictoriaMetrics, 可观测性, 指标]
+keywords: [vmagent, 采集]
 aliases: []
 ---
 

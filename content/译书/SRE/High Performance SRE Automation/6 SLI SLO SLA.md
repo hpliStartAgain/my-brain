@@ -1,3 +1,10 @@
+---
+title: "6 SLI/SLO/SLA"
+date: 2026-07-26
+tags: [译书]
+aliases: []
+---
+
 # 6 SLI/SLO/SLA
 
 ## 引言

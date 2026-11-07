@@ -1,7 +1,8 @@
 ---
 title: "存储类型深度解析——CoW vs MoR 的设计权衡与适用场景"
 date: 2026-03-02
-tags: [Compaction, Copy-on-Write, Hudi, Merge-on-Read, MoR, 存储类型, 性能权衡]
+tags: [Compaction, Hudi]
+keywords: [Copy-on-Write, Merge-on-Read, MoR, 存储类型, 性能权衡]
 aliases: ["Hudi CoW", "Hudi MoR", "Copy-on-Write vs Merge-on-Read"]
 ---
 

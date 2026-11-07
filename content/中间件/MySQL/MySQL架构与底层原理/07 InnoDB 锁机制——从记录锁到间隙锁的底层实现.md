@@ -1,7 +1,8 @@
 ---
 title: "InnoDB 锁机制——从记录锁到间隙锁的底层实现"
 date: 2026-03-02
-tags: [InnoDB, MySQL, 临键锁, 意向锁, 记录锁, 锁机制, 间隙锁]
+tags: [InnoDB, MySQL]
+keywords: [临键锁, 意向锁, 记录锁, 锁机制, 间隙锁]
 aliases: [InnoDB锁, 间隙锁, 临键锁, Next-Key Lock]
 ---
 

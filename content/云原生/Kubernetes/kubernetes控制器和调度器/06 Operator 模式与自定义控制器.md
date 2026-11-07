@@ -1,7 +1,8 @@
 ---
 title: "06 Operator 模式与自定义控制器"
 date: 2026-03-04
-tags: [controller-runtime, CRD, Finalizer, Kubebuilder, Kubernetes, Operator, Reconciler, 云原生, 自定义控制器]
+tags: [Kubernetes, 云原生]
+keywords: [controller-runtime, CRD, Finalizer, Kubebuilder, Operator, Reconciler, 自定义控制器]
 aliases: []
 ---
 

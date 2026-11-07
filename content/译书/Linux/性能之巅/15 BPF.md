@@ -1,7 +1,8 @@
 ---
 title: 15 BPF
 date: 2026-05-10
-tags: [BCC, BPF, bpftrace, SRE, SystemsPerformance]
+tags: [eBPF, SRE, 性能优化]
+keywords: [BCC, bpftrace]
 aliases:
   - BPF
 ---

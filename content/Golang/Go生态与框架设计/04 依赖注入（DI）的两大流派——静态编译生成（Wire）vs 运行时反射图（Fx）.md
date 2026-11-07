@@ -1,7 +1,8 @@
 ---
 title: "依赖注入（DI）的两大流派——静态编译生成（Wire）vs 运行时反射图（Fx）"
 date: 2026-10-07
-tags: [Golang, 依赖注入, Wire, Fx, 控制反转, 代码生成, 反射, 生命周期管理]
+tags: [Golang, 依赖注入]
+keywords: [Wire, Fx, 控制反转, 代码生成, 反射, 生命周期管理]
 aliases: []
 ---
 

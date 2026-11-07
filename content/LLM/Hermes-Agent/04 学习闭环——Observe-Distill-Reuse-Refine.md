@@ -1,7 +1,8 @@
 ---
 title: "学习闭环——Observe-Distill-Reuse-Refine"
 date: 2026-08-01
-tags: [Hermes Agent, Learning Loop, Self-Improving, skill_manage, Nudge Engine, Episodic Memory, Pitfalls, Skill Creation]
+tags: [Hermes Agent]
+keywords: [Learning Loop, Self-Improving, skill_manage, Nudge Engine, Episodic Memory, Pitfalls, Skill Creation]
 aliases: [Hermes 学习闭环, Observe-Distill-Reuse-Refine, skill_manage, Nudge Engine, Hermes 自改进机制]
 ---
 

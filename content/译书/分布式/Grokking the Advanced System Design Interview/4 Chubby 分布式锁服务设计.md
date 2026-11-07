@@ -1,3 +1,10 @@
+---
+title: "4 Chubby：如何设计分布式锁服务"
+date: 2026-07-26
+tags: [译书]
+aliases: []
+---
+
 # 4 Chubby：如何设计分布式锁服务
 
 ## Chubby 简介

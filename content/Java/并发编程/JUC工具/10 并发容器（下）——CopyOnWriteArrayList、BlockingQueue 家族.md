@@ -1,7 +1,8 @@
 ---
 title: "并发容器（下）——CopyOnWriteArrayList、BlockingQueue 家族"
 date: 2026-03-05
-tags: [ArrayBlockingQueue, BlockingQueue, CopyOnWriteArrayList, DelayQueue, Java, LinkedBlockingQueue, PriorityBlockingQueue, SynchronousQueue, 写时复制, 并发编程, 生产者消费者]
+tags: [Java, 并发编程]
+keywords: [ArrayBlockingQueue, BlockingQueue, CopyOnWriteArrayList, DelayQueue, LinkedBlockingQueue, PriorityBlockingQueue, SynchronousQueue, 写时复制, 生产者消费者]
 aliases: []
 ---
 

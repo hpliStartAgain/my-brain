@@ -1,7 +1,8 @@
 ---
 title: "03 Redlock 算法正确性争议"
 date: 2026-10-10
-tags: [Martin Kleppmann, Redis, Redlock, 分布式系统, 分布式锁, 时钟漂移]
+tags: [Redis, 分布式系统, 分布式锁]
+keywords: [Martin Kleppmann, Redlock, 时钟漂移]
 aliases: []
 ---
 

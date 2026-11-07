@@ -1,7 +1,8 @@
 ---
 title: "隔离边界的光谱——从共享内核到 MicroVM 的四档技术路线"
 date: 2026-08-15
-tags: [Agent Sandbox, Firecracker, Landlock, bubblewrap, gVisor, Kata Containers, MicroVM, runc, seccomp, 隔离边界, 用户态内核]
+tags: [Agent Sandbox, Firecracker, gVisor, Kata Containers]
+keywords: [Landlock, bubblewrap, MicroVM, runc, seccomp, 隔离边界, 用户态内核]
 aliases: [隔离边界光谱, 隔离强度对比, 沙箱技术路线, gVisor vs Kata vs Firecracker]
 ---
 

@@ -1,7 +1,8 @@
 ---
 title: "系统底层黑魔法——unsafe 内存布局与 cgo 互操作边界"
 date: 2026-10-07
-tags: [Golang, unsafe, cgo, GC, 内存对齐]
+tags: [Golang, GC]
+keywords: [unsafe, cgo, 内存对齐]
 aliases: []
 ---
 

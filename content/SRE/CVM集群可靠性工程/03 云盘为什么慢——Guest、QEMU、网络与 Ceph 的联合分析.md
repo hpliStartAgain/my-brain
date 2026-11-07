@@ -1,7 +1,8 @@
 ---
 title: "03 云盘为什么慢——Guest、QEMU、网络与 Ceph 的联合分析"
 date: 2026-09-26
-tags: [CVM, Ceph, RBD, QEMU, 存储性能, 故障定位, SRE]
+tags: [CVM, Ceph, RBD, 故障排查, SRE]
+keywords: [QEMU, 存储性能]
 aliases: []
 ---
 

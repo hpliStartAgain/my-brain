@@ -1,7 +1,8 @@
 ---
 title: "Flink 大规模生产实践"
 date: 2026-03-02
-tags: [Flink, Kappa架构, Lambda架构, TB级状态, 万级TPS, 云原生, 多租户, 大规模生产, 实时数仓, 高并发]
+tags: [Flink, 云原生, 多租户]
+keywords: [Kappa架构, Lambda架构, TB级状态, 万级TPS, 大规模生产, 实时数仓, 高并发]
 aliases: ["Flink大规模实践", "Flink实时数仓", "Flink云原生", "Flink多租户"]
 ---
 

@@ -1,7 +1,8 @@
 ---
 title: "驾驭异构硬件：JVM性能工程的未来"
 date: 2026-05-12
-tags: [Java, JVM, Panama, TornadoVM, 异构硬件, 性能工程]
+tags: [Java, JVM, 性能优化]
+keywords: [Panama, TornadoVM, 异构硬件]
 aliases: ["Harnessing Exotic Hardware: The Future of JVM Performance Engineering"]
 ---
 

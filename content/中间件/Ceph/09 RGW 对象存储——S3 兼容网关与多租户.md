@@ -1,7 +1,8 @@
 ---
 title: "09 RGW 对象存储——S3 兼容网关与多租户"
 date: 2026-09-04
-tags: [Ceph, RGW, 对象存储, S3, 分布式存储]
+tags: [Ceph, 对象存储, 分布式存储]
+keywords: [RGW, S3]
 aliases: []
 ---
 

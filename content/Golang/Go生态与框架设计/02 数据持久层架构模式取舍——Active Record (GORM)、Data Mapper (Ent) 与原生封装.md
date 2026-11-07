@@ -1,7 +1,8 @@
 ---
 title: "数据持久层架构模式取舍——Active Record (GORM)、Data Mapper (Ent) 与原生封装"
 date: 2026-10-07
-tags: [Golang, ORM, GORM, Ent, Active Record, Data Mapper, sqlc, 数据持久化, 代码生成]
+tags: [Golang]
+keywords: [ORM, GORM, Ent, Active Record, Data Mapper, sqlc, 数据持久化, 代码生成]
 aliases: []
 ---
 

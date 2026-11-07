@@ -1,7 +1,8 @@
 ---
 title: "kubelet 深度剖析：Pod 生命周期与容器运行时接口"
 date: 2026-07-17
-tags: [Kubernetes, kubelet, CRI, Pod生命周期, PLEG, 健康检查, 垃圾回收, 容器运行时, containerd]
+tags: [Kubernetes, GC]
+keywords: [kubelet, CRI, Pod生命周期, PLEG, 健康检查, 容器运行时, containerd]
 aliases: [kubelet, CRI 接口, Pod 生命周期, PLEG, SyncPod, 容器运行时接口, kubelet 垃圾回收]
 ---
 

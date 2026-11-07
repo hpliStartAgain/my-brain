@@ -1,7 +1,8 @@
 ---
 title: "Netty全局架构——从BossGroup到ChannelPipeline"
 date: 2026-09-07
-tags: [Bootstrap, BossGroup, ChannelPipeline, EventLoopGroup, Java, Netty, Reactor, WorkerGroup]
+tags: [Java, Netty]
+keywords: [Bootstrap, BossGroup, ChannelPipeline, EventLoopGroup, Reactor, WorkerGroup]
 aliases: [Netty全局架构, BossGroup WorkerGroup, Netty架构总览]
 ---
 

@@ -1,7 +1,8 @@
 ---
 title: "eBPF 与动态追踪：性能观测的革命"
 date: 2026-07-16
-tags: [eBPF, BPF, 动态追踪, bpftrace, BCC, 可观测性, Linux]
+tags: [eBPF, 可观测性, Linux]
+keywords: [动态追踪, bpftrace, BCC]
 aliases: [eBPF 性能观测, eBPF 革命, bpftrace 实战]
 ---
 

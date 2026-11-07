@@ -1,7 +1,8 @@
 ---
 title: "预训练——数据、算力与 Scaling Law"
 date: 2026-03-04
-tags: [DeepSeek, Flash Attention, LLM, MoE, Scaling Law, ZeRO, 合成数据, 分布式训练, 数据并行, 数据工程, 流水线并行, 混合精度, 训练稳定性, 张量并行, 预训练]
+tags: [LLM]
+keywords: [DeepSeek, Flash Attention, MoE, Scaling Law, ZeRO, 合成数据, 分布式训练, 数据并行, 数据工程, 流水线并行, 混合精度, 训练稳定性, 张量并行, 预训练]
 aliases: []
 ---
 

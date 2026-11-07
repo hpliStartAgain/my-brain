@@ -1,7 +1,8 @@
 ---
 title: "创建 Kubernetes 集群"
 date: 2026-05-13
-tags: [k3d, KinD, kubectl, Kubernetes, Minikube, 集群]
+tags: [Kubernetes]
+keywords: [k3d, KinD, kubectl, Minikube, 集群]
 ---
 
 # 第 2 章 创建 Kubernetes 集群

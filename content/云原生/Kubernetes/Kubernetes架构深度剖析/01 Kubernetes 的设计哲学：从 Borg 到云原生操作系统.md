@@ -1,7 +1,8 @@
 ---
 title: "Kubernetes 的设计哲学：从 Borg 到云原生操作系统"
 date: 2026-07-17
-tags: [Kubernetes, 云原生, Borg, Omega, 声明式API, 控制器模式, 设计哲学, 架构原则]
+tags: [Kubernetes, 云原生, 控制器模式]
+keywords: [Borg, Omega, 声明式API, 设计哲学, 架构原则]
 aliases: [K8s 设计哲学, Borg 到 K8s, 声明式 API, Level-triggered, 面向终态]
 ---
 

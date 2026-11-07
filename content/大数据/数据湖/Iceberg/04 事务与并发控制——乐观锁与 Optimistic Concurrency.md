@@ -1,7 +1,8 @@
 ---
 title: "事务与并发控制——乐观锁与 Optimistic Concurrency"
 date: 2026-03-02
-tags: [ACID, Catalog, Iceberg, OCC, Snapshot隔离, 乐观锁, 事务, 多写冲突, 并发控制]
+tags: [事务, Iceberg]
+keywords: [Catalog, OCC, Snapshot隔离, 乐观锁, 多写冲突, 并发控制]
 aliases: ["Iceberg事务", "Iceberg并发控制", "乐观并发控制", "Snapshot隔离", "OCC"]
 ---
 

@@ -1,7 +1,8 @@
 ---
 title: "弹性伸缩与多集群：HPA/VPA/Cluster Autoscaler 与 KubeFed"
 date: 2026-07-17
-tags: [Kubernetes, HPA, VPA, Cluster Autoscaler, KEDA, 多集群, KubeFed, Cluster API, Karmada, 弹性伸缩]
+tags: [Kubernetes]
+keywords: [HPA, VPA, Cluster Autoscaler, KEDA, 多集群, KubeFed, Cluster API, Karmada, 弹性伸缩]
 aliases: [HPA, VPA, Cluster Autoscaler, KEDA, KubeFed, Cluster API, Karmada, K8s 弹性伸缩, 多集群管理]
 ---
 

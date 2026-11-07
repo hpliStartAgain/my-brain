@@ -1,7 +1,8 @@
 ---
 title: "01 API Server 的角色与整体架构"
 date: 2026-03-04
-tags: [Aggregation, API Server, Handler Chain, Kubernetes, OpenAPI, REST, 云原生]
+tags: [API Server, Kubernetes, 云原生]
+keywords: [Aggregation, Handler Chain, OpenAPI, REST]
 aliases: []
 ---
 

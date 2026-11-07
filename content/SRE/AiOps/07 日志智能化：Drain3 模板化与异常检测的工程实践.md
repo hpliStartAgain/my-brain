@@ -1,7 +1,8 @@
 ---
 title: "07 日志智能化：Drain3 模板化与异常检测的工程实践"
 date: 2026-04-13
-tags: [AiOps, Drain3, Foxeye, Loki, 异常检测, 日志, 日志模板化, 大数据]
+tags: [AIOps, Loki, 日志, 大数据]
+keywords: [Drain3, Foxeye, 异常检测, 日志模板化]
 aliases: [日志智能化, 日志异常检测, Drain3实践]
 ---
 

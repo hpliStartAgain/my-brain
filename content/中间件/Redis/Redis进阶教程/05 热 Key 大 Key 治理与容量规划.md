@@ -1,7 +1,8 @@
 ---
 title: "05 热 Key 大 Key 治理与容量规划"
 date: 2026-03-03
-tags: [Redis, 中间件, 内存优化, 大Key, 容量规划, 性能优化, 热Key, 碎片治理]
+tags: [Redis, 中间件, 容量规划, 性能优化]
+keywords: [内存优化, 大Key, 热Key, 碎片治理]
 aliases: []
 ---
 

@@ -1,7 +1,8 @@
 ---
 title: "Flink on YARN 与 Kubernetes 生产部署"
 date: 2026-03-02
-tags: [Application Mode, Flink, HA, Kubernetes, Session Mode, YARN, 生产部署, 部署模式, 高可用]
+tags: [Flink, Kubernetes, YARN, 高可用]
+keywords: [Application Mode, HA, Session Mode, 生产部署, 部署模式]
 aliases: ["Flink on YARN", "Flink on Kubernetes", "Flink Application Mode", "Flink生产部署"]
 ---
 

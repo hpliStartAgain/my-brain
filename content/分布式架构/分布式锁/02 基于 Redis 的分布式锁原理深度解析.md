@@ -1,7 +1,8 @@
 ---
 title: "02 基于 Redis 的分布式锁原理深度解析"
 date: 2026-10-10
-tags: [Lua脚本, Redis, Redisson, SETNX, 分布式锁, 看门狗]
+tags: [Redis, 分布式锁]
+keywords: [Lua脚本, Redisson, SETNX, 看门狗]
 aliases: []
 ---
 

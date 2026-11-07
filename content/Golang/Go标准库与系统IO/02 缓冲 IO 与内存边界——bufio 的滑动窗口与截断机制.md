@@ -1,7 +1,8 @@
 ---
 title: "缓冲 I/O 与内存边界——bufio 的滑动窗口与截断机制"
 date: 2026-10-07
-tags: [Golang, 标准库, IO, bufio, 缓冲区, Page Cache, 系统调用, Scanner]
+tags: [Golang, IO, Page Cache, 系统调用]
+keywords: [标准库, bufio, 缓冲区, Scanner]
 aliases: []
 ---
 

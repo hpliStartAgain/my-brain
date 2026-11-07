@@ -1,7 +1,8 @@
 ---
 title: "05 DHCP、Metadata 与 cloud-init"
 date: 2026-09-26
-tags: [DHCP, Metadata, cloud-init, 启动依赖, 故障定位]
+tags: [故障排查]
+keywords: [DHCP, Metadata, cloud-init, 启动依赖]
 aliases: []
 ---
 

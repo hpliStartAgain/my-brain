@@ -1,7 +1,8 @@
 ---
 title: "Whole-Stage CodeGen：JVM 字节码级别的性能飞跃"
 date: 2026-02-28
-tags: [CodeGen, JVM, Spark, SparkSQL, Tungsten, Volcano模型, Whole-Stage CodeGen, 字节码, 性能优化]
+tags: [JVM, Spark, SparkSQL, 性能优化]
+keywords: [CodeGen, Tungsten, Volcano模型, Whole-Stage CodeGen, 字节码]
 aliases: []
 ---
 

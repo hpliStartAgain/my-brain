@@ -1,7 +1,8 @@
 ---
 title: "EventLoop与线程模型——Reactor模式的落地实现"
 date: 2026-09-07
-tags: [ChannelFuture, EventLoop, Java, Netty, NioEventLoop, Promise, Reactor, 无锁化, 线程模型]
+tags: [Java, Netty]
+keywords: [ChannelFuture, EventLoop, NioEventLoop, Promise, Reactor, 无锁化, 线程模型]
 aliases: [EventLoop线程模型, Netty线程模型, Thread Confinement, NioEventLoop]
 ---
 

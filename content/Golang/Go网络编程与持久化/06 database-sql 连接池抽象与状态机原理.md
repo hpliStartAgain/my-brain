@@ -1,7 +1,8 @@
 ---
 title: "database-sql 连接池抽象与状态机原理"
 date: 2026-10-07
-tags: [Golang, database/sql, 连接池, 驱动抽象, 状态机, NULL, SQL]
+tags: [Golang, 连接池, 状态机]
+keywords: [database/sql, 驱动抽象, NULL, SQL]
 aliases: []
 ---
 

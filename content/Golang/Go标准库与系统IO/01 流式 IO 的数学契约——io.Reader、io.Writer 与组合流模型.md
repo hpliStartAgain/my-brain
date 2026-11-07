@@ -1,7 +1,8 @@
 ---
 title: "流式 I/O 的数学契约——io.Reader、io.Writer 与组合流模型"
 date: 2026-10-07
-tags: [EOF, Golang, IO, ReaderFrom, TeeReader, WriterTo, io, io.Copy, io.Pipe, io.Reader, io.Writer, 短读, 组合子, 部分写, 流式契约, 装饰器模式]
+tags: [Golang, IO]
+keywords: [EOF, ReaderFrom, TeeReader, WriterTo, io.Copy, io.Pipe, io.Reader, io.Writer, 短读, 组合子, 部分写, 流式契约, 装饰器模式]
 aliases: []
 ---
 

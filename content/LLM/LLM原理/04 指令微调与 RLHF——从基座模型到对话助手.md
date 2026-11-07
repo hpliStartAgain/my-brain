@@ -1,7 +1,8 @@
 ---
 title: "指令微调与 RLHF——从基座模型到对话助手"
 date: 2026-03-04
-tags: [Constitutional AI, DeepSeek, DPO, GRPO, LLM, PPO, Reasoning Model, Reward Model, RLAIF, RLHF, SFT, 人类反馈, 对齐, 指令微调]
+tags: [LLM]
+keywords: [Constitutional AI, DeepSeek, DPO, GRPO, PPO, Reasoning Model, Reward Model, RLAIF, RLHF, SFT, 人类反馈, 对齐, 指令微调]
 aliases: []
 ---
 

@@ -1,7 +1,8 @@
 ---
 title: "Agent 评估与可靠性工程"
 date: 2026-03-04
-tags: [Agent, Benchmark, Grounding, Guardrails, LLM, LLM-as-Judge, OpenTelemetry, 可观测性, 可靠性, 回归测试, 测试, 红队测试, 评估, 幻觉, 幂等]
+tags: [Agent, LLM, OpenTelemetry, 可观测性]
+keywords: [Benchmark, Grounding, Guardrails, LLM-as-Judge, 可靠性, 回归测试, 测试, 红队测试, 评估, 幻觉, 幂等]
 aliases: []
 ---
 

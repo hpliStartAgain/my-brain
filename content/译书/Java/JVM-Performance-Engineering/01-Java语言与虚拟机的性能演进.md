@@ -1,7 +1,7 @@
 ---
 title: "Java语言与虚拟机的性能演进"
 date: 2026-05-12
-tags: [Java, JVM, 性能工程]
+tags: [Java, JVM, 性能优化]
 aliases: [The Performance Evolution of Java: The Language and the Virtual Machine]
 ---
 

@@ -1,7 +1,8 @@
 ---
 title: "04 分布式追踪的深层原理：从 Span 到跨服务故障定位"
 date: 2026-10-10
-tags: [分布式追踪, Jaeger, Span, 上下文传播, 可观测性, 故障定位]
+tags: [可观测性, 故障排查]
+keywords: [分布式追踪, Jaeger, Span, 上下文传播]
 aliases: [追踪原理, Trace 根因分析]
 ---
 

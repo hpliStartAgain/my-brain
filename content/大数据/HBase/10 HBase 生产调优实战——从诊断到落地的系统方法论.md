@@ -1,7 +1,8 @@
 ---
 title: "HBase 生产调优实战——从诊断到落地的系统方法论"
 date: 2026-02-27
-tags: [Block Cache, Compaction, HBase, JVM GC, MemStore, RowKey设计, 写入优化, 热点, 生产实践, 读取优化, 调优]
+tags: [Compaction, HBase, 性能优化]
+keywords: [Block Cache, JVM GC, MemStore, RowKey设计, 写入优化, 热点, 生产实践, 读取优化]
 aliases: [HBase调优, HBase性能优化, HBase生产实践]
 ---
 

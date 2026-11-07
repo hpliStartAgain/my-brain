@@ -1,7 +1,8 @@
 ---
 title: "Source 与 Sink：DataSource V2 的流式读写接口"
 date: 2026-02-28
-tags: [DataSource V2, Exactly-once, Kafka, Offset管理, Sink, Source, Spark, Structured Streaming]
+tags: [Exactly-once, Kafka, Spark, Structured Streaming]
+keywords: [DataSource V2, Offset管理, Sink, Source]
 aliases: []
 ---
 

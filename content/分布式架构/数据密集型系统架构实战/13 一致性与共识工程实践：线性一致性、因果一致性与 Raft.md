@@ -1,7 +1,8 @@
 ---
 title: "一致性与共识工程实践：线性一致性、因果一致性与 Raft"
 date: 2026-07-17
-tags: [分布式系统, 一致性, 线性一致性, 因果一致性, 共识算法, Raft, Paxos, CAP定理, Fencing Token]
+tags: [分布式系统, 一致性, 共识算法, Raft, Paxos]
+keywords: [线性一致性, 因果一致性, CAP定理, Fencing Token]
 aliases: [线性一致性, 因果一致性, 共识算法, Raft, Paxos, Fencing Token, 分布式锁]
 ---
 

@@ -1,7 +1,8 @@
 ---
 title: "HDFS 数据读写流程——Pipeline 写入与机架感知读取的底层路径"
 date: 2026-02-27
-tags: [ACK, DataStreamer, HDFS, Packet, Pipeline, 机架感知, 读写流程]
+tags: [HDFS, Pipeline]
+keywords: [ACK, DataStreamer, Packet, 机架感知, 读写流程]
 aliases: [HDFS读写流程, HDFS Pipeline写入]
 ---
 

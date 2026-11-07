@@ -1,7 +1,8 @@
 ---
 title: "SSTable 的文件格式与 Block 结构"
 date: 2026-03-05
-tags: [Block, BloomFilter, LevelDB, SSTable, 中间件, 前缀压缩, 存储引擎, 索引]
+tags: [布隆过滤器, LevelDB, 中间件, 存储引擎, 索引]
+keywords: [Block, SSTable, 前缀压缩]
 aliases: []
 ---
 

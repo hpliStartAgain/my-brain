@@ -1,7 +1,8 @@
 ---
 title: "08 缓存与持久化：StorageLevel 策略、BlockManager 协作与堆外内存实践"
 date: 2026-02-27
-tags: [BlockManager, RDD, Spark, 堆外内存, 持久化, 缓存]
+tags: [RDD, Spark, 堆外内存, 缓存]
+keywords: [BlockManager, 持久化]
 aliases: [RDD Caching and Persistence]
 ---
 

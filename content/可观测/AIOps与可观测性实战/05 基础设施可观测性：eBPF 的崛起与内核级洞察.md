@@ -1,7 +1,8 @@
 ---
 title: "05 基础设施可观测性：eBPF 的崛起与内核级洞察"
 date: 2026-10-10
-tags: [eBPF, Cilium, Hubble, 基础设施, 内核, 可观测性]
+tags: [eBPF, Cilium, 内核, 可观测性]
+keywords: [Hubble, 基础设施]
 aliases: [eBPF 可观测性, 内核级观测]
 ---
 

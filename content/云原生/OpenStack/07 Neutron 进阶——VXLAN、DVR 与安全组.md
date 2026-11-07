@@ -1,7 +1,8 @@
 ---
 title: "07 Neutron 进阶——VXLAN、DVR 与安全组"
 date: 2026-09-04
-tags: [OpenStack, Neutron, VXLAN, DVR, 安全组]
+tags: [OpenStack]
+keywords: [Neutron, VXLAN, DVR, 安全组]
 aliases: []
 ---
 

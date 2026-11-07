@@ -1,3 +1,10 @@
+---
+title: "1 Dynamo：如何设计键值存储"
+date: 2026-07-26
+tags: [译书]
+aliases: []
+---
+
 # 1 Dynamo：如何设计键值存储
 
 ## Dynamo 简介

@@ -1,7 +1,8 @@
 ---
 title: "Go 项目结构——从 Standard Layout 到 Clean Architecture"
 date: 2026-03-04
-tags: [Clean Architecture, Golang, Standard Layout, 依赖倒置, 包设计, 单体, 工程实践, 微服务, 项目结构]
+tags: [Golang, 微服务]
+keywords: [Clean Architecture, Standard Layout, 依赖倒置, 包设计, 单体, 工程实践, 项目结构]
 aliases: []
 ---
 

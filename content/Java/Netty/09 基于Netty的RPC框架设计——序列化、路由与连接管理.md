@@ -1,7 +1,8 @@
 ---
 title: "基于Netty的RPC框架设计——序列化、路由与连接管理"
 date: 2026-09-07
-tags: [Java, Netty, RPC, 序列化, 心跳, 服务发现, 框架设计, 负载均衡, 超时重试, 连接池]
+tags: [Java, Netty, 序列化, 服务发现, 负载均衡, 连接池]
+keywords: [RPC, 心跳, 框架设计, 超时重试]
 aliases: [RPC框架设计, Netty RPC, 序列化, 服务路由, 连接管理, 双工通信]
 ---
 

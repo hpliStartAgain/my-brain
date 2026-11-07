@@ -1,7 +1,8 @@
 ---
 title: "03 数据写入与 Part 合并"
 date: 2026-03-05
-tags: [ClickHouse, MergeTree, Mutation, Part, TTL, 写入流程, 后台合并, Storage Policy, Too many parts]
+tags: [ClickHouse]
+keywords: [MergeTree, Mutation, Part, TTL, 写入流程, 后台合并, Storage Policy, Too many parts]
 aliases: [ClickHouse 写入流程, ClickHouse Part 合并, ClickHouse Mutation, ClickHouse TTL, Too many parts, ClickHouse 分层存储]
 ---
 

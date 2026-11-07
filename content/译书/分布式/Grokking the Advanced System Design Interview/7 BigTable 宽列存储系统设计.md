@@ -1,3 +1,10 @@
+---
+title: "7 BigTable：如何设计宽列存储系统"
+date: 2026-07-26
+tags: [译书]
+aliases: []
+---
+
 # 7 BigTable：如何设计宽列存储系统
 
 ## BigTable 简介

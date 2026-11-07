@@ -1,7 +1,8 @@
 ---
 title: "Compaction——分层合并与版本管理"
 date: 2026-03-05
-tags: [Compaction, LevelDB, LSM-Tree, MVCC, Version, VersionEdit, VersionSet, 中间件, 存储引擎]
+tags: [Compaction, LevelDB, LSM-Tree, MVCC, 中间件, 存储引擎]
+keywords: [Version, VersionEdit, VersionSet]
 aliases: []
 ---
 

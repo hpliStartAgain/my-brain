@@ -1,7 +1,8 @@
 ---
 title: "09 本地化调度（Locality-Aware Scheduling）：移动计算而非移动数据的实现细节"
 date: 2026-02-27
-tags: [Spark, TaskScheduler, 性能优化, 数据本地性, 本地化调度]
+tags: [Spark, 性能优化]
+keywords: [TaskScheduler, 数据本地性, 本地化调度]
 aliases: [Locality-Aware Scheduling]
 ---
 

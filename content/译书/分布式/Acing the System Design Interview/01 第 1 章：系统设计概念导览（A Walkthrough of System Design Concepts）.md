@@ -1,7 +1,8 @@
 ---
 title: "01 第 1 章：系统设计概念导览（A Walkthrough of System Design Concepts）"
 date: 2026-05-16
-tags: [分布式架构, 可扩展性, 系统设计, 译书, 面试]
+tags: [分布式系统, 系统设计, 译书, 面试]
+keywords: [可扩展性]
 aliases: ["A Walkthrough of System Design Concepts", "系统设计概念导览"]
 ---
 

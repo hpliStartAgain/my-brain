@@ -1,7 +1,8 @@
 ---
 title: "Paimon vs Delta Lake vs Iceberg vs Hudi——流存储视角的架构总结"
 date: 2026-03-02
-tags: [Delta Lake, Hudi, Iceberg, LSM-Tree, Paimon, 实时数仓, 数据湖对比, 流存储, 流批一体, 选型]
+tags: [Delta Lake, Hudi, Iceberg, LSM-Tree, Paimon, 流批一体]
+keywords: [实时数仓, 数据湖对比, 流存储, 选型]
 aliases: ["四大数据湖对比", "Paimon vs Iceberg", "Paimon vs Hudi", "流存储选型", "实时数仓架构"]
 ---
 

@@ -1,7 +1,8 @@
 ---
 title: "14 面向 CVM 的 RBD 读写链路与延迟分析"
 date: 2026-09-26
-tags: [Ceph, RBD, 延迟分析, CVM, 故障定位]
+tags: [Ceph, RBD, CVM, 故障排查]
+keywords: [延迟分析]
 aliases: []
 ---
 

@@ -1,7 +1,8 @@
 ---
 title: "服务网格的性能开销与Ambient Mesh"
 date: 2026-03-05
-tags: [Ambient Mesh, HBONE, Istio, Sidecar, Waypoint, ztunnel, 云原生, 性能, 服务网格, 零信任]
+tags: [Istio, 云原生, 服务网格]
+keywords: [Ambient Mesh, HBONE, Sidecar, Waypoint, ztunnel, 性能, 零信任]
 aliases: []
 ---
 

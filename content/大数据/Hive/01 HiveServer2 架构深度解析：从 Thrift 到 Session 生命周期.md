@@ -1,7 +1,8 @@
 ---
 title: "HiveServer2 架构深度解析：从 Thrift 到 Session 生命周期"
 date: 2026-02-28
-tags: [HA, Hive, HiveServer2, Operation, Session, Thrift, ZooKeeper, 并发, 生产运维]
+tags: [Hive, ZooKeeper, 并发编程, 运维]
+keywords: [HA, HiveServer2, Operation, Session, Thrift]
 aliases: []
 ---
 

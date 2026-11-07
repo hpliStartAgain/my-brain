@@ -1,7 +1,8 @@
 ---
 title: "03 存储引擎——WAL、BoltDB 与 MVCC 的持久化链路"
 date: 2026-11-02
-tags: [etcd, WAL, BoltDB, MVCC, B+Tree, Compaction, 快照, 存储引擎, 中间件]
+tags: [etcd, WAL, MVCC, B+树, Compaction, 快照, 存储引擎, 中间件]
+keywords: [BoltDB]
 aliases: []
 ---
 

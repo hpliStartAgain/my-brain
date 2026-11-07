@@ -1,7 +1,8 @@
 ---
 title: "应用级 IO 优化——Direct IO、mmap 与 io_uring 选型"
 date: 2026-03-02
-tags: [bufferedIO, Direct I/O, io_uring, IO模式, Linux, mmap, Page Cache, 性能优化, 性能调优, 系统调用, 零拷贝, libaio, sendfile, SQPOLL]
+tags: [io_uring, Linux, Page Cache, 性能优化, 系统调用, 零拷贝]
+keywords: [bufferedIO, Direct I/O, IO模式, mmap, libaio, sendfile, SQPOLL]
 aliases: ["IO模式选型", "DirectIO vs mmap", "io_uring性能", "应用IO优化", "Page Cache绕过", "零拷贝", "sendfile"]
 ---
 

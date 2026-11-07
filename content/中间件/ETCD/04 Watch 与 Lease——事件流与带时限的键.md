@@ -1,7 +1,8 @@
 ---
 title: "04 Watch 与 Lease——事件流与带时限的键"
 date: 2026-11-02
-tags: [etcd, Watch, Lease, Kubernetes, MVCC, 服务发现, 分布式锁, gRPC, 中间件]
+tags: [etcd, Watch, Kubernetes, MVCC, 服务发现, 分布式锁, 中间件]
+keywords: [Lease, gRPC]
 aliases: []
 ---
 

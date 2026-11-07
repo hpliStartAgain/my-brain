@@ -1,7 +1,8 @@
 ---
 title: "编码与演化：Schema 演进与数据兼容性的工程实践"
 date: 2026-07-17
-tags: [编码, 演化, Schema, Avro, Protobuf, JSON, 兼容性, RPC, REST, DDIA]
+tags: [DDIA]
+keywords: [编码, 演化, Schema, Avro, Protobuf, JSON, 兼容性, RPC, REST]
 aliases: [数据编码与演化, 向前兼容, 向后兼容, Schema 演进, Avro vs Protobuf]
 ---
 

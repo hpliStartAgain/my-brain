@@ -1,7 +1,8 @@
 ---
 title: "08 CephFS——MDS、多活元数据与实践边界"
 date: 2026-03-05
-tags: [Ceph, CephFS, JuiceFS, MDS, POSIX, 元数据, 分布式文件系统, 动态子树分区, 快照, 容灾]
+tags: [Ceph, JuiceFS, 元数据, 快照]
+keywords: [CephFS, MDS, POSIX, 分布式文件系统, 动态子树分区, 容灾]
 aliases: [CephFS, MDS, 多活元数据, 分布式文件系统, Ceph 文件系统]
 ---
 

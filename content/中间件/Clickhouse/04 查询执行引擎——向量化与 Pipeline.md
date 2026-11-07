@@ -1,7 +1,8 @@
 ---
 title: "04 查询执行引擎——向量化与 Pipeline"
 date: 2026-03-05
-tags: [ClickHouse, Pipeline, Prewhere, SIMD, 向量化, 执行计划, 查询优化, 查询执行, JIT, Volcano]
+tags: [ClickHouse, Pipeline, 执行计划, 查询优化]
+keywords: [Prewhere, SIMD, 向量化, 查询执行, JIT, Volcano]
 aliases: [ClickHouse 查询执行, ClickHouse Pipeline, ClickHouse Prewhere, ClickHouse 向量化执行, ClickHouse 查询优化, ClickHouse JIT]
 ---
 

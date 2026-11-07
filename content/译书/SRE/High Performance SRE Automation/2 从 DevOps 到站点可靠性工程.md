@@ -1,3 +1,10 @@
+---
+title: "2 从 DevOps 到站点可靠性工程"
+date: 2026-07-26
+tags: [译书]
+aliases: []
+---
+
 # 2 从 DevOps 到站点可靠性工程
 
 ## 引言

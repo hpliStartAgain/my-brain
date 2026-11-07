@@ -1,7 +1,8 @@
 ---
 title: "03 MetricsQL 深度解析"
 date: 2026-10-10
-tags: [MetricsQL, PromQL, VictoriaMetrics, 可观测性, 指标, 查询语言]
+tags: [VictoriaMetrics, 可观测性, 指标]
+keywords: [MetricsQL, PromQL, 查询语言]
 aliases: []
 ---
 

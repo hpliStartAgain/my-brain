@@ -1,7 +1,8 @@
 ---
 title: "动态规划与位运算：Climbing Stairs、Plus One、Single Number 系列"
 date: 2026-10-11
-tags: [LeetCode, 70, 66, 136, 137, 位运算, 动态规划, 数组, 算法, 面试]
+tags: [LeetCode, 动态规划, 数组, 算法, 面试]
+keywords: [70, 66, 136, 137, 位运算]
 aliases: [爬楼梯, 位运算, Single Number, 动态规划入门]
 ---
 

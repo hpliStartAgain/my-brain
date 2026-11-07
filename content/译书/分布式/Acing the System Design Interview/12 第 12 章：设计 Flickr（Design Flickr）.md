@@ -1,7 +1,8 @@
 ---
 title: "12 第 12 章：设计 Flickr（Design Flickr）"
 date: 2026-05-16
-tags: [分布式架构, 图片分享, 系统设计, 译书, 面试]
+tags: [分布式系统, 系统设计, 译书, 面试]
+keywords: [图片分享]
 aliases: ["Design Flickr", "设计 Flickr"]
 ---
 

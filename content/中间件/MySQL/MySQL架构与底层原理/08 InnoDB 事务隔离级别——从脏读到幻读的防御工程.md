@@ -1,7 +1,8 @@
 ---
 title: "InnoDB 事务隔离级别——从脏读到幻读的防御工程"
 date: 2026-03-02
-tags: [InnoDB, MVCC, MySQL, ReadView, 事务隔离, 幻读, 间隙锁]
+tags: [InnoDB, MVCC, MySQL]
+keywords: [ReadView, 事务隔离, 幻读, 间隙锁]
 aliases: [事务隔离级别, 幻读防御, MVCC隔离]
 ---
 

@@ -1,7 +1,8 @@
 ---
 title: "04 OSD 与 BlueStore——存储引擎深度解析"
 date: 2026-03-05
-tags: [BlueStore, Ceph, FileStore, OSD, RocksDB, 写时复制, 存储引擎, 校验和]
+tags: [Ceph, RocksDB, 存储引擎]
+keywords: [BlueStore, FileStore, OSD, 写时复制, 校验和]
 aliases: [BlueStore, FileStore, OSD 存储引擎, BlueRocksDB]
 ---
 

@@ -1,7 +1,8 @@
 ---
 title: "Agent 沙箱平台分层——六层模型与三条产品路线"
 date: 2026-08-15
-tags: [Agent Sandbox, E2B, Firecracker, MCP, OpenSandbox, Sandbox CRD, WarmPool, agent-sandbox, sandboxd, KEP, CNCF Landscape, 六层模型, 沙箱平台, 产品路线]
+tags: [Agent Sandbox, Firecracker, MCP, OpenSandbox]
+keywords: [E2B, Sandbox CRD, WarmPool, agent-sandbox, sandboxd, KEP, CNCF Landscape, 六层模型, 沙箱平台, 产品路线]
 aliases: [沙箱平台分层, 六层模型, 产品路线对比, E2B兼容]
 ---
 

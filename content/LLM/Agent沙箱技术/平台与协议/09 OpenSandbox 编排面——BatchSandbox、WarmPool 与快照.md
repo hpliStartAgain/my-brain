@@ -1,7 +1,8 @@
 ---
 title: "OpenSandbox 编排面——BatchSandbox、WarmPool 与快照"
 date: 2026-08-15
-tags: [Agent Sandbox, BatchSandbox, CRD, Kubernetes, OSEP, OpenSandbox, Pool, SandboxSnapshot, WarmPool, pause, resume, 快照, 预热池]
+tags: [Agent Sandbox, Kubernetes, OpenSandbox, 快照]
+keywords: [BatchSandbox, CRD, OSEP, Pool, SandboxSnapshot, WarmPool, pause, resume, 预热池]
 aliases: [OpenSandbox编排面, WarmPool详解, BatchSandbox, 沙箱快照]
 ---
 

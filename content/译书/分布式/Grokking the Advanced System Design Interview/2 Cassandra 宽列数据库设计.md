@@ -1,3 +1,10 @@
+---
+title: "2 Cassandra：如何设计宽列 NoSQL 数据库"
+date: 2026-07-26
+tags: [译书]
+aliases: []
+---
+
 # 2 Cassandra：如何设计宽列 NoSQL 数据库
 
 ## Cassandra 简介

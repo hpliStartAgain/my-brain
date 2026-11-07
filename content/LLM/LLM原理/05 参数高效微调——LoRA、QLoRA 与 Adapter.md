@@ -1,7 +1,8 @@
 ---
 title: "参数高效微调——LoRA、QLoRA 与 Adapter"
 date: 2026-03-04
-tags: [Adapter, DoRA, GRPO, LLM, LoRA, P-Tuning, PEFT, PiSSA, QLoRA, 低秩分解, 微调, 量化, 推理模型]
+tags: [LLM]
+keywords: [Adapter, DoRA, GRPO, LoRA, P-Tuning, PEFT, PiSSA, QLoRA, 低秩分解, 微调, 量化, 推理模型]
 aliases: []
 ---
 

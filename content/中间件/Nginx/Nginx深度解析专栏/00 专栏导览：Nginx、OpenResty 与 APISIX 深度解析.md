@@ -1,7 +1,8 @@
 ---
 title: "专栏导览：Nginx、OpenResty 与 APISIX 深度解析"
 date: 2026-02-28
-tags: [APISIX, Nginx, OpenResty, 专栏导览, 云原生网关, 反向代理, 性能调优]
+tags: [Nginx, 专栏导览, 性能优化]
+keywords: [APISIX, OpenResty, 云原生网关, 反向代理]
 aliases: []
 ---
 

@@ -1,7 +1,8 @@
 ---
 title: "11 部署实战——Kolla-Ansible 与生产架构设计"
 date: 2026-09-04
-tags: [OpenStack, Kolla-Ansible, 部署, 生产架构, 容器化]
+tags: [OpenStack]
+keywords: [Kolla-Ansible, 部署, 生产架构, 容器化]
 aliases: []
 ---
 

@@ -1,7 +1,8 @@
 ---
 title: "05 etcd 与 ZooKeeper——一代协调服务的分野"
 date: 2026-11-02
-tags: [etcd, ZooKeeper, Raft, ZAB, 一致性, 分布式协调, 技术选型, 中间件]
+tags: [etcd, ZooKeeper, Raft, 一致性, 中间件]
+keywords: [ZAB, 分布式协调, 技术选型]
 aliases: []
 ---
 

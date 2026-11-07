@@ -1,7 +1,8 @@
 ---
 title: "03 API 对象模型与 GVR 体系"
 date: 2026-03-04
-tags: [API, CRD, GVK, GVR, Kubernetes, ObjectMeta, REST, TypeMeta, 云原生, 对象模型]
+tags: [Kubernetes, 云原生]
+keywords: [API, CRD, GVK, GVR, ObjectMeta, REST, TypeMeta, 对象模型]
 aliases: []
 ---
 

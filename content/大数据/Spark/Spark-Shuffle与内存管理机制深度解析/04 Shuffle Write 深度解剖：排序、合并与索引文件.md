@@ -1,7 +1,8 @@
 ---
 title: "Shuffle Write 深度解剖：排序、合并与索引文件"
 date: 2026-02-27
-tags: [ExternalSorter, PartitionedAppendOnlyMap, Shuffle, Spark, Spill, 索引文件]
+tags: [Shuffle, Spark]
+keywords: [ExternalSorter, PartitionedAppendOnlyMap, Spill, 索引文件]
 aliases: []
 ---
 

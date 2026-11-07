@@ -1,7 +1,8 @@
 ---
 title: "CPU：运行队列、调度器与 CPU 缓存的性能博弈"
 date: 2026-07-16
-tags: [CPU, 调度器, 运行队列, CPU缓存, PMC, 性能分析, Linux]
+tags: [调度, 性能优化, Linux]
+keywords: [CPU, 运行队列, CPU缓存, PMC]
 aliases: [CPU 性能分析, 调度延迟, CPU 缓存博弈]
 ---
 

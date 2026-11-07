@@ -1,7 +1,8 @@
 ---
 title: "TCP/IP 协议栈内核实现——sk_buff、协议层与连接状态机"
 date: 2026-03-02
-tags: [inet_protos, Linux, sk_buff, SYN_RCVD, TCP/IP, TCP状态机, TIME_WAIT, 内核网络, 协议栈]
+tags: [Linux]
+keywords: [inet_protos, sk_buff, SYN_RCVD, TCP/IP, TCP状态机, TIME_WAIT, 内核网络, 协议栈]
 aliases: ["sk_buff结构", "TCP状态机内核", "Linux协议层实现", "TIME_WAIT原理", "TCP连接状态"]
 ---
 

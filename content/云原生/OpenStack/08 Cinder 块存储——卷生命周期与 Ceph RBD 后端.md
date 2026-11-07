@@ -1,7 +1,8 @@
 ---
 title: "08 Cinder 块存储——卷生命周期与 Ceph RBD 后端"
 date: 2026-09-04
-tags: [OpenStack, Cinder, 块存储, Ceph, RBD]
+tags: [OpenStack, Ceph, RBD]
+keywords: [Cinder, 块存储]
 aliases: []
 ---
 

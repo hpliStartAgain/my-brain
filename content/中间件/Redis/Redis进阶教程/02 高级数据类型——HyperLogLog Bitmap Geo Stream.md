@@ -1,7 +1,8 @@
 ---
 title: "02 高级数据类型——HyperLogLog Bitmap Geo Stream"
 date: 2026-03-03
-tags: [Bitmap, Geo, HyperLogLog, Redis, Stream, 中间件, 基数统计, 布隆过滤器, 消息队列]
+tags: [Redis, 中间件, 布隆过滤器, 消息队列]
+keywords: [Bitmap, Geo, HyperLogLog, Stream, 基数统计]
 aliases: []
 ---
 

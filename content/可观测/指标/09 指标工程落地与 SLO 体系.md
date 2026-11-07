@@ -1,7 +1,8 @@
 ---
 title: "09 指标工程落地与 SLO 体系"
 date: 2026-10-10
-tags: [Prometheus, SLO, SLI, VictoriaMetrics, 可观测性, 指标, 可靠性]
+tags: [Prometheus, VictoriaMetrics, 可观测性, 指标]
+keywords: [SLO, SLI, 可靠性]
 aliases: [错误预算, Error Budget]
 ---
 

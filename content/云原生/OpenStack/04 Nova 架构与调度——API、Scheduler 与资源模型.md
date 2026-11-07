@@ -1,7 +1,8 @@
 ---
 title: "04 Nova 架构与调度——API、Scheduler 与资源模型"
 date: 2026-09-04
-tags: [OpenStack, Nova, 调度器, Placement, 计算服务]
+tags: [OpenStack, 调度]
+keywords: [Nova, Placement, 计算服务]
 aliases: []
 ---
 

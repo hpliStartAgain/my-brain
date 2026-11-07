@@ -1,7 +1,8 @@
 ---
 title: "字符串解析：atoi、Add Binary 与进位模拟"
 date: 2026-10-11
-tags: [LeetCode, 8, 67, 415, 字符串, 状态机, 进位模拟, 算法, 面试]
+tags: [LeetCode, 字符串, 状态机, 算法, 面试]
+keywords: [8, 67, 415, 进位模拟]
 aliases: [atoi, 字符串转整数, Add Binary, 二进制加法, 有限状态机]
 ---
 

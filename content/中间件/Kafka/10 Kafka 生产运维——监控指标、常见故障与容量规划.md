@@ -1,7 +1,8 @@
 ---
 title: "10 Kafka 生产运维——监控指标、常见故障与容量规划"
 date: 2026-03-04
-tags: [Kafka, 运维, 监控, Consumer Lag, UnderReplicated, 容量规划, MirrorMaker]
+tags: [Kafka, 运维, 监控, 容量规划]
+keywords: [Consumer Lag, UnderReplicated, MirrorMaker]
 aliases: []
 ---
 

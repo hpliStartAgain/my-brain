@@ -1,7 +1,8 @@
 ---
 title: "服务端优雅停机（Graceful Shutdown）与生命周期管理"
 date: 2026-10-07
-tags: [Golang, GracefulShutdown, HTTP, Kubernetes, 信号处理, 生命周期, 长连接, SIGTERM]
+tags: [Golang, HTTP, Kubernetes]
+keywords: [GracefulShutdown, 信号处理, 生命周期, 长连接, SIGTERM]
 aliases: []
 ---
 

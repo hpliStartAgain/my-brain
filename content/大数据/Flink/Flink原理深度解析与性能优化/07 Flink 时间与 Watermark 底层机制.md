@@ -1,7 +1,8 @@
 ---
 title: "Flink 时间与 Watermark 底层机制"
 date: 2026-03-02
-tags: [Flink, InternalTimerService, Key Group, Timer, Watermark, Watermark传播, 事件时间, 时间语义]
+tags: [Flink, Watermark]
+keywords: [InternalTimerService, Key Group, Timer, Watermark传播, 事件时间, 时间语义]
 aliases: ["Flink Watermark原理", "InternalTimerService", "Flink事件时间底层", "Watermark传播机制"]
 ---
 

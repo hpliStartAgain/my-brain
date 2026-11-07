@@ -1,3 +1,10 @@
+---
+title: "4 分布式查询引擎：Apache Hive"
+date: 2026-07-26
+tags: [译书]
+aliases: []
+---
+
 # 4 分布式查询引擎：Apache Hive
 
 ## 引言

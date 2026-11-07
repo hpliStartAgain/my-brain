@@ -1,7 +1,8 @@
 ---
 title: "高级并发协作与背压流控——errgroup、singleflight 与令牌桶"
 date: 2026-10-07
-tags: [Golang, Concurrency, Backpressure, RateLimiting, errgroup, singleflight]
+tags: [Golang]
+keywords: [Concurrency, Backpressure, RateLimiting, errgroup, singleflight]
 aliases: []
 ---
 

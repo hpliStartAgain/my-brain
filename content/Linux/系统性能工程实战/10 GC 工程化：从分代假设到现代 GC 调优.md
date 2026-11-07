@@ -1,7 +1,8 @@
 ---
 title: "GC 工程化：从分代假设到现代 GC 调优"
 date: 2026-07-17
-tags: [GC, G1, ZGC, Shenandoah, 分代假设, GC 调优, JVM, 垃圾回收]
+tags: [GC, JVM]
+keywords: [G1, ZGC, Shenandoah, 分代假设, GC 调优]
 aliases: [GC 工程化, 垃圾回收调优, G1 调优, ZGC 原理]
 ---
 

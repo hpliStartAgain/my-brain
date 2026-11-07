@@ -1,7 +1,8 @@
 ---
 title: "07 Elasticsearch 对照——Loki 的边界与选型"
 date: 2026-10-10
-tags: [Elasticsearch, ELK, Kibana, 倒排索引, Grafana Loki, 可观测性, 日志]
+tags: [Elasticsearch, Loki, 可观测性, 日志]
+keywords: [ELK, Kibana, 倒排索引]
 aliases: []
 ---
 

@@ -1,3 +1,10 @@
+---
+title: "04 第四部分：从十到百（Ten to Hundred）"
+date: 2026-07-26
+tags: [译书]
+aliases: []
+---
+
 # 04 第四部分：从十到百（Ten to Hundred）
 
 > [!INFO] 本部分主题

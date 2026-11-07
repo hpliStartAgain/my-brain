@@ -1,7 +1,8 @@
 ---
 title: "Envoy代理——线程模型、Filter链与连接管理"
 date: 2026-03-05
-tags: [Envoy, FilterChain, HTTP连接管理, xDS, 云原生, 服务网格, 熔断, 线程模型, 连接池]
+tags: [云原生, 服务网格, 连接池]
+keywords: [Envoy, FilterChain, HTTP连接管理, xDS, 熔断, 线程模型]
 aliases: []
 ---
 

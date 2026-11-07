@@ -1,7 +1,8 @@
 ---
 title: "Z-Order 与数据跳过：查询加速的核心机制"
 date: 2026-02-28
-tags: [BloomFilter, Data Skipping, Delta Lake, Min/Max统计, OPTIMIZE, Z-Order, 列统计, 数据跳过, 查询加速]
+tags: [布隆过滤器, Delta Lake]
+keywords: [Data Skipping, Min/Max统计, OPTIMIZE, Z-Order, 列统计, 数据跳过, 查询加速]
 aliases: []
 ---
 

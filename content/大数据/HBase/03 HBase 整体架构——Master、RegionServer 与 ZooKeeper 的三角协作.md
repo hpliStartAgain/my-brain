@@ -1,7 +1,8 @@
 ---
 title: "HBase 整体架构——Master、RegionServer 与 ZooKeeper 的三角协作"
 date: 2026-02-27
-tags: [HBase, HMaster, Meta表, Region, RegionServer, ZooKeeper, 架构]
+tags: [HBase, ZooKeeper, 软件架构]
+keywords: [HMaster, Meta表, Region, RegionServer]
 aliases: [HBase架构, HBase组件职责]
 ---
 

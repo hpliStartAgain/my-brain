@@ -1,7 +1,8 @@
 ---
 title: "09 LLM 与 Agentic AI：大模型在 AIOps 中的边界与实践"
 date: 2026-10-10
-tags: [LLM, AIOps, Agentic AI, 大模型, 智能运维, MCP]
+tags: [LLM, AIOps, MCP]
+keywords: [Agentic AI, 大模型, 智能运维]
 aliases: [大模型运维, Agentic AIOps]
 ---
 

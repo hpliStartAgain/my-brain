@@ -1,7 +1,8 @@
 ---
 title: "系统级性能观测：从 proc 到 perf 与 Ftrace"
 date: 2026-07-15
-tags: [性能观测, /proc, sysctl, perf, Ftrace, strace, PMC, Linux]
+tags: [perf, Linux]
+keywords: [性能观测, /proc, sysctl, Ftrace, strace, PMC]
 aliases: [proc 性能观测, perf 采样, Ftrace 追踪, strace 开销分析, 系统级性能观测]
 ---
 

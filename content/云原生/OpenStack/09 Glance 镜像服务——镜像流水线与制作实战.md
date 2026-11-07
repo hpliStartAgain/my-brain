@@ -1,7 +1,8 @@
 ---
 title: "09 Glance 镜像服务——镜像流水线与制作实战"
 date: 2026-09-04
-tags: [OpenStack, Glance, 镜像, cloud-init, 虚拟化]
+tags: [OpenStack, 虚拟化]
+keywords: [Glance, 镜像, cloud-init]
 aliases: []
 ---
 

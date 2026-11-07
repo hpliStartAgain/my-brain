@@ -1,7 +1,8 @@
 ---
 title: "DFS 与回溯核心框架：状态树的系统性遍历"
 date: 2026-10-11
-tags: [DFS, 回溯, LeetCode, 130, 状态树, 剪枝, 算法, 面试]
+tags: [DFS, 回溯, LeetCode, 算法, 面试]
+keywords: [130, 状态树, 剪枝]
 aliases: [回溯框架, DFS回溯, 状态树, Surrounded Regions, LeetCode 130]
 ---
 

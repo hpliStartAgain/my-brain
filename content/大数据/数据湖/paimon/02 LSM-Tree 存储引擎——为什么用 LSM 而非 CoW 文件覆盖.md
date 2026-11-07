@@ -1,7 +1,8 @@
 ---
 title: "LSM-Tree 存储引擎——为什么用 LSM 而非 CoW 文件覆盖"
 date: 2026-03-02
-tags: [Compaction, LSM-Tree, MemTable, Paimon, RocksDB, SST, 写放大, 存储引擎, 读放大]
+tags: [Compaction, LSM-Tree, Paimon, RocksDB, 存储引擎]
+keywords: [MemTable, SST, 写放大, 读放大]
 aliases: ["Paimon LSM-Tree", "LSM-Tree存储引擎", "MemTable", "SST文件", "Paimon Compaction"]
 ---
 

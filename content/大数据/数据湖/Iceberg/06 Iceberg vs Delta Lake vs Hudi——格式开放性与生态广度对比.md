@@ -1,7 +1,8 @@
 ---
 title: "Iceberg vs Delta Lake vs Hudi——格式开放性与生态广度对比"
 date: 2026-03-02
-tags: [Delta Lake, Hudi, Iceberg, REST Catalog, 云原生, 开放表格式, 数据湖对比, 生态广度, 选型]
+tags: [Delta Lake, Hudi, Iceberg, 云原生]
+keywords: [REST Catalog, 开放表格式, 数据湖对比, 生态广度, 选型]
 aliases: ["Iceberg vs Delta Lake", "Iceberg vs Hudi", "数据湖三剑客", "开放表格式对比", "数据湖选型Iceberg视角"]
 ---
 

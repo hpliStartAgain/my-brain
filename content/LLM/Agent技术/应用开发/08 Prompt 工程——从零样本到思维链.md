@@ -1,7 +1,8 @@
 ---
 title: "Prompt 工程——从零样本到思维链"
 date: 2026-03-04
-tags: [Chain-of-Thought, Few-Shot, In-Context Learning, LLM, Prompt工程, Prompt注入, Self-Consistency, Structured Output, System Prompt, Zero-Shot, 思维树, 思维链, 推理模型, 约束解码]
+tags: [LLM]
+keywords: [Chain-of-Thought, Few-Shot, In-Context Learning, Prompt工程, Prompt注入, Self-Consistency, Structured Output, System Prompt, Zero-Shot, 思维树, 思维链, 推理模型, 约束解码]
 aliases: [Prompt 工程, 提示词工程, Prompt Engineering]
 ---
 

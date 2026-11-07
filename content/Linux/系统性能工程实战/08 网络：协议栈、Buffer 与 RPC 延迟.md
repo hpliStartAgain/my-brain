@@ -1,7 +1,8 @@
 ---
 title: "网络：协议栈、Buffer 与 RPC 延迟"
 date: 2026-07-16
-tags: [网络, 协议栈, TCP, Socket Buffer, 中断, RPC延迟, 性能分析, Linux]
+tags: [网络, 性能优化, Linux]
+keywords: [协议栈, TCP, Socket Buffer, 中断, RPC延迟]
 aliases: [网络性能分析, 协议栈延迟, TCP 拥塞控制, Socket Buffer]
 ---
 

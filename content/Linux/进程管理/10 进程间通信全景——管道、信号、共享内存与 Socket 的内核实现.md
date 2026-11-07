@@ -1,7 +1,8 @@
 ---
 title: "进程间通信全景——管道、信号、共享内存与 Socket 的内核实现"
 date: 2026-03-02
-tags: [IPC, Linux, mmap, socket, Unix Domain Socket, 信号, 信号量, 共享内存, 消息队列, 管道, 进程管理]
+tags: [Linux, 消息队列, 进程管理]
+keywords: [IPC, mmap, socket, Unix Domain Socket, 信号, 信号量, 共享内存, 管道]
 aliases: ["Linux IPC", "进程间通信原理", "Unix Domain Socket", "共享内存mmap", "管道内核实现"]
 ---
 

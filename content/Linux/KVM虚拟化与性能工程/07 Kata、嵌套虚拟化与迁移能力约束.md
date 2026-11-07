@@ -1,7 +1,8 @@
 ---
 title: "07 Kata、嵌套虚拟化与迁移能力约束"
 date: 2026-09-26
-tags: [KVM, Kata, 嵌套虚拟化, 迁移, 隔离, 性能工程]
+tags: [KVM, 性能优化]
+keywords: [Kata, 嵌套虚拟化, 迁移, 隔离]
 aliases: []
 ---
 

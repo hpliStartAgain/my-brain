@@ -1,7 +1,8 @@
 ---
 title: "04 安全组、conntrack、NAT 与连接异常"
 date: 2026-09-26
-tags: [安全组, conntrack, NAT, 连接跟踪, 故障定位]
+tags: [故障排查]
+keywords: [安全组, conntrack, NAT, 连接跟踪]
 aliases: []
 ---
 

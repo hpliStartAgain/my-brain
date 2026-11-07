@@ -1,7 +1,8 @@
 ---
 title: "UDF 开发体系：GenericUDF、UDAF 与 UDTF 全解"
 date: 2026-02-28
-tags: [GenericUDF, Hive, JAR, UDAF, UDF, UDTF, 函数注册, 文件描述符泄漏, 类加载, 自定义函数]
+tags: [Hive]
+keywords: [GenericUDF, JAR, UDAF, UDF, UDTF, 函数注册, 文件描述符泄漏, 类加载, 自定义函数]
 aliases: []
 ---
 

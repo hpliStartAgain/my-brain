@@ -1,7 +1,8 @@
 ---
 title: "06 从 Prometheus 迁移到 VictoriaMetrics"
 date: 2026-10-10
-tags: [Prometheus, VictoriaMetrics, 可观测性, 指标, 迁移, vmagent]
+tags: [Prometheus, VictoriaMetrics, 可观测性, 指标]
+keywords: [迁移, vmagent]
 aliases: []
 ---
 

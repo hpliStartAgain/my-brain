@@ -1,3 +1,9 @@
+---
+title: "02 YARN：资源调度架构与多租户实践"
+date: 2026-07-26
+tags: [大数据]
+aliases: []
+---
 
 > [!info] 摘要  
 > YARN 将 Hadoop 1.x 的“单体计算框架+固定资源分配”重构为**通用的分布式操作系统内核**。本文从 ResourceManager 与 NodeManager 的职责边界切入，深度解析**双层调度模型**（资源协商与容器执行）的设计取舍。通过源码级拆解 ApplicationMaster 注册、Container 分配、NM 心跳协议三大核心流程，还原一次 Spark 作业在 YARN 上的完整生命周期。结合生产案例，提供队列隔离、容器内存超卖、小作业延迟调度等典型问题排查方案。最后，在 2026 年云原生趋势下，讨论 YARN 与 Kubernetes 的竞争与共存边界。

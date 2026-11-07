@@ -1,7 +1,8 @@
 ---
 title: "OpenSandbox 架构深度解析——协议优先与六责任面"
 date: 2026-08-15
-tags: [Agent Sandbox, BatchSandbox, Credential Vault, FastAPI, FastSandbox, MCP, OSEP, OpenAPI, OpenSandbox, Sandbox Protocol, execd, osb CLI, 协议优先]
+tags: [Agent Sandbox, MCP, OpenSandbox]
+keywords: [BatchSandbox, Credential Vault, FastAPI, FastSandbox, OSEP, OpenAPI, Sandbox Protocol, execd, osb CLI, 协议优先]
 aliases: [OpenSandbox架构, OpenSandbox六责任面, Sandbox Protocol, 协议优先设计]
 ---
 

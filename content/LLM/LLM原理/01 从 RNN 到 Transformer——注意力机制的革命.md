@@ -1,7 +1,8 @@
 ---
 title: "从 RNN 到 Transformer——注意力机制的革命"
 date: 2026-03-04
-tags: [LLM, LSTM, RNN, Self-Attention, Transformer, 位置编码, 注意力机制, 深度学习, Mamba, FlashAttention, 混合架构, 线性注意力]
+tags: [LLM]
+keywords: [LSTM, RNN, Self-Attention, Transformer, 位置编码, 注意力机制, 深度学习, Mamba, FlashAttention, 混合架构, 线性注意力]
 aliases: []
 ---
 

@@ -1,7 +1,8 @@
 ---
 title: "02 RDD 的五大核心属性：深入剖析分布式对象的灵魂接口"
 date: 2026-02-27
-tags: [RDD, Spark, 架构设计, 源码分析]
+tags: [RDD, Spark, 软件架构]
+keywords: [源码分析]
 aliases: [RDD Core Attributes]
 ---
 

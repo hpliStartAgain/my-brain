@@ -1,7 +1,8 @@
 ---
 title: "Flannel深度解析——VXLAN、Host-GW与UDP模式"
 date: 2026-03-05
-tags: [CNI, Flannel, Host-GW, Kubernetes, UDP, VTEP, VXLAN, 云原生, 封包, 网络隧道]
+tags: [CNI, Kubernetes, 云原生]
+keywords: [Flannel, Host-GW, UDP, VTEP, VXLAN, 封包, 网络隧道]
 aliases: [Flannel深度解析, Flannel网络原理与模式对比]
 ---
 

@@ -1,7 +1,8 @@
 ---
 title: "RAG 架构——核心原理与工程实践"
 date: 2026-03-04
-tags: [Chunk, Embedding, LLM, MTEB, Qwen3-Embedding, RAG, Rerank, 向量数据库, 混合检索, 检索增强生成, 知识库, 语义搜索, 长上下文]
+tags: [Embedding, LLM, RAG, 向量数据库]
+keywords: [Chunk, MTEB, Qwen3-Embedding, Rerank, 混合检索, 检索增强生成, 知识库, 语义搜索, 长上下文]
 aliases: []
 ---
 

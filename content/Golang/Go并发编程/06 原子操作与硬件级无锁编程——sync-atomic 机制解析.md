@@ -1,7 +1,8 @@
 ---
 title: "原子操作与硬件级无锁编程——sync/atomic 机制解析"
 date: 2026-10-07
-tags: [Golang, sync/atomic, 原子操作, 无锁编程, CacheLine, 伪共享, 内存屏障, CAS, 缓存一致性]
+tags: [Golang, CAS]
+keywords: [sync/atomic, 原子操作, 无锁编程, CacheLine, 伪共享, 内存屏障, 缓存一致性]
 aliases: []
 ---
 

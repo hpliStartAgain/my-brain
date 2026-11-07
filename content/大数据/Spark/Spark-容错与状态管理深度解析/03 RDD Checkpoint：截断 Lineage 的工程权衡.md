@@ -1,7 +1,8 @@
 ---
 title: "RDD Checkpoint：截断 Lineage 的工程权衡"
 date: 2026-02-28
-tags: [Checkpoint, HDFS, Lineage, localCheckpoint, persist, RDD, Spark, 容错, 迭代算法]
+tags: [Checkpoint, HDFS, RDD, Spark, 容错]
+keywords: [Lineage, localCheckpoint, persist, 迭代算法]
 aliases: []
 ---
 

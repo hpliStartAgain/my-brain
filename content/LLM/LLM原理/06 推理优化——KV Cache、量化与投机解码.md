@@ -1,7 +1,8 @@
 ---
 title: "推理优化——KV Cache、量化与投机解码"
 date: 2026-03-04
-tags: [AWQ, Continuous Batching, EAGLE, FP8, GQA, GPTQ, KV Cache, LLM, MTP, PagedAttention, SnapKV, Speculative Decoding, 推理优化, 量化]
+tags: [LLM]
+keywords: [AWQ, Continuous Batching, EAGLE, FP8, GQA, GPTQ, KV Cache, MTP, PagedAttention, SnapKV, Speculative Decoding, 推理优化, 量化]
 aliases: []
 ---
 

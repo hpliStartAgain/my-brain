@@ -1,7 +1,8 @@
 ---
 title: "04 UnionFS 与容器镜像原理"
 date: 2026-03-04
-tags: [Docker, Linux, OCI, OverlayFS, UnionFS, 云原生, 分层存储, 容器, 镜像]
+tags: [Docker, Linux, 云原生, 容器]
+keywords: [OCI, OverlayFS, UnionFS, 分层存储, 镜像]
 aliases: []
 ---
 

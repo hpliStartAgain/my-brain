@@ -1,7 +1,8 @@
 ---
 title: "Table API 与 Flink SQL 实战"
 date: 2026-03-02
-tags: [Changelog, DDL, Flink, Flink SQL, Table API, 动态表, 实战, 流式Join, 窗口聚合]
+tags: [Flink]
+keywords: [Changelog, DDL, Flink SQL, Table API, 动态表, 实战, 流式Join, 窗口聚合]
 aliases: ["Flink SQL实战", "Table API", "Flink动态表", "流式SQL"]
 ---
 

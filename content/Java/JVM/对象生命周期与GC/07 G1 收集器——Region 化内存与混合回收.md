@@ -1,7 +1,8 @@
 ---
 title: "G1 收集器——Region 化内存与混合回收"
 date: 2026-03-05
-tags: [Full GC, G1, GC, Humongous, Java, JDK9, JVM, Region, Remembered Set, SATB, 停顿预测, 混合回收, CSet, Evacuation Failure, 写屏障, TAMS]
+tags: [GC, Java, JVM]
+keywords: [Full GC, G1, Humongous, JDK9, Region, Remembered Set, SATB, 停顿预测, 混合回收, CSet, Evacuation Failure, 写屏障, TAMS]
 aliases: [G1收集器, Garbage First, G1 GC, Mixed GC]
 ---
 

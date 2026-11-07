@@ -1,7 +1,8 @@
 ---
 title: "锁竞争与并发性能：从 synchronized 到 JOL"
 date: 2026-07-17
-tags: [锁竞争, synchronized, 锁升级, 偏向锁, JOL, 对象布局, 并发性能, JVM]
+tags: [JVM]
+keywords: [锁竞争, synchronized, 锁升级, 偏向锁, JOL, 对象布局, 并发性能]
 aliases: [锁竞争, 锁升级, JOL 对象布局, 并发性能]
 ---
 

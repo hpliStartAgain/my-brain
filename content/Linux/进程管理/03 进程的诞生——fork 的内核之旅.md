@@ -1,7 +1,8 @@
 ---
 title: "进程的诞生——fork 的内核之旅"
 date: 2026-03-02
-tags: [clone, Copy-on-Write, copy_process, do_fork, fork, Linux, vfork, 内核, 进程管理]
+tags: [Linux, 内核, 进程管理]
+keywords: [clone, Copy-on-Write, copy_process, do_fork, fork, vfork]
 aliases: ["Linux fork原理", "fork内核实现", "Copy-on-Write原理", "clone系统调用"]
 ---
 

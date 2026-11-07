@@ -1,7 +1,8 @@
 ---
 title: "自动装配原理——@EnableAutoConfiguration与spring.factories"
 date: 2026-03-04
-tags: [AutoConfiguration, EnableAutoConfiguration, Java, spring.factories, SpringBoot, SpringFactoriesLoader, 自动装配]
+tags: [Java, SpringBoot]
+keywords: [AutoConfiguration, EnableAutoConfiguration, spring.factories, SpringFactoriesLoader, 自动装配]
 aliases: []
 ---
 

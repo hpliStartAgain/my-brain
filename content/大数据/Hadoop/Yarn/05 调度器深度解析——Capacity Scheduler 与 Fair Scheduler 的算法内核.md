@@ -1,7 +1,8 @@
 ---
 title: "调度器深度解析——Capacity Scheduler 与 Fair Scheduler 的算法内核"
 date: 2026-02-27
-tags: [CapacityScheduler, FairScheduler, YARN, 公平调度, 抢占, 调度器, 队列]
+tags: [YARN, 调度, 队列]
+keywords: [CapacityScheduler, FairScheduler, 公平调度, 抢占]
 aliases: [YARN调度器, Capacity Scheduler, Fair Scheduler, 队列调度]
 ---
 

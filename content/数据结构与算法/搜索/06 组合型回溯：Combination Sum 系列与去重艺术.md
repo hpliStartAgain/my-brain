@@ -1,7 +1,8 @@
 ---
 title: "组合型回溯：Combination Sum 系列与去重艺术"
 date: 2026-10-11
-tags: [回溯, LeetCode, 39, 40, 77, CombinationSum, 去重, 组合, 算法, 面试]
+tags: [回溯, LeetCode, 算法, 面试]
+keywords: [39, 40, 77, CombinationSum, 去重, 组合]
 aliases: [组合总和, Combination Sum, 组合型回溯, LeetCode 39]
 ---
 

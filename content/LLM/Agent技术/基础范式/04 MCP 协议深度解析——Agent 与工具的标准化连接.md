@@ -1,7 +1,8 @@
 ---
 title: "MCP 协议深度解析——Agent 与工具的标准化连接"
 date: 2026-08-01
-tags: [Agent, AAIF, JSON-RPC, Linux Foundation, MCP, MRTR, Model Context Protocol, OAuth, Streamable HTTP, Tools, Resources, Prompts, Sampling, Roots, Elicitation, stdio]
+tags: [Agent, MCP]
+keywords: [AAIF, JSON-RPC, Linux Foundation, MRTR, Model Context Protocol, OAuth, Streamable HTTP, Tools, Resources, Prompts, Sampling, Roots, Elicitation, stdio]
 aliases: [MCP 协议深度解析, Model Context Protocol, MCP 架构, MCP 原语]
 ---
 

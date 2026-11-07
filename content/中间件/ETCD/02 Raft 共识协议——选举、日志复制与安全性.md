@@ -1,7 +1,8 @@
 ---
 title: "02 Raft 共识协议——选举、日志复制与安全性"
 date: 2026-11-02
-tags: [etcd, Raft, 共识算法, Leader选举, PreVote, 成员变更, 安全性, 分布式]
+tags: [etcd, Raft, 共识算法, Leader选举, 分布式系统]
+keywords: [PreVote, 成员变更, 安全性]
 aliases: []
 ---
 

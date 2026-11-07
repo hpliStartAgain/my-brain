@@ -1,7 +1,8 @@
 ---
 title: "ReAct 架构深度解析——Thought-Action-Observation 循环的本质"
 date: 2026-08-01
-tags: [Agent, Anthropic, Claude API, Function Calling, LangGraph, OpenAI, ReAct, ReAct 失败模式, Stop Sequence, Tool Use, 推理模型, 错误恢复, 终止条件, 循环控制]
+tags: [Agent]
+keywords: [Anthropic, Claude API, Function Calling, LangGraph, OpenAI, ReAct, ReAct 失败模式, Stop Sequence, Tool Use, 推理模型, 错误恢复, 终止条件, 循环控制]
 aliases: [ReAct 架构深度解析, Thought-Action-Observation 循环, ReAct 内部机制]
 ---
 

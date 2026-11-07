@@ -1,7 +1,8 @@
 ---
 title: "08 第 8 章：设计限流服务（Design a Rate-Limiting Service）"
 date: 2026-05-16
-tags: [分布式架构, 系统设计, 译书, 限流, 面试]
+tags: [分布式系统, 系统设计, 译书, 面试]
+keywords: [限流]
 aliases: ["Design a Rate-Limiting Service", "设计限流服务"]
 ---
 

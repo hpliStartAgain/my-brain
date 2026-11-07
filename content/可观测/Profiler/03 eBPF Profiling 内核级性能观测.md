@@ -1,7 +1,8 @@
 ---
 title: "03 eBPF Profiling 内核级性能观测"
 date: 2026-10-10
-tags: [BPF, eBPF, Parca, perf, Profiler, Pyroscope, 内核, 可观测性]
+tags: [eBPF, perf, 内核, 可观测性]
+keywords: [Parca, Profiler, Pyroscope]
 aliases: [eBPF 剖析, 内核级性能观测]
 ---
 

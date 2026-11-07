@@ -1,7 +1,8 @@
 ---
 title: "Hive Metastore 深度解析：元数据体系与 HMS 高可用"
 date: 2026-02-28
-tags: [Hive, HiveMetastore, HMS, MySQL, Thrift, ZooKeeper, 元数据, 元数据模型, 高可用]
+tags: [Hive, MySQL, ZooKeeper, 元数据, 高可用]
+keywords: [HiveMetastore, HMS, Thrift, 元数据模型]
 aliases: []
 ---
 

@@ -1,7 +1,8 @@
 ---
 title: "01 Doris 全局架构——FE BE 分离与 MPP 执行"
 date: 2026-03-05
-tags: [Doris, MPP, OLAP, FE, BE, 列式存储, 向量化执行, 分布式查询]
+tags: [Doris, MPP, OLAP, 列式存储, 向量化执行]
+keywords: [FE, BE, 分布式查询]
 aliases: []
 ---
 

@@ -1,7 +1,8 @@
 ---
 title: "Agent 应用实战——从零构建生产级 Agent"
 date: 2026-03-04
-tags: [Agent, LLM, RAG, Text-to-SQL, OpenTelemetry, 代码审查, 可观测性, 安全, 灰度发布, 语义缓存, 实战, 客服Agent, 数据分析Agent, 架构设计, 生产级, 监控, 部署]
+tags: [Agent, LLM, RAG, OpenTelemetry, 可观测性, 安全, 软件架构, 监控]
+keywords: [Text-to-SQL, 代码审查, 灰度发布, 语义缓存, 实战, 客服Agent, 数据分析Agent, 生产级, 部署]
 aliases: []
 ---
 

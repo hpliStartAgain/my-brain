@@ -1,7 +1,8 @@
 ---
 title: "10 动态资源申请（Dynamic Resource Allocation）：弹性计算的资源调度逻辑"
 date: 2026-02-27
-tags: [Dynamic Allocation, Kubernetes, Spark, YARN, 动态资源分配, 弹性计算]
+tags: [Kubernetes, Spark, YARN]
+keywords: [Dynamic Allocation, 动态资源分配, 弹性计算]
 aliases: [Dynamic Resource Allocation]
 ---
 

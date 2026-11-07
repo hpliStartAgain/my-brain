@@ -1,7 +1,8 @@
 ---
 title: "VFS 虚拟文件系统——超级块、inode、dentry 与 file"
 date: 2026-03-02
-tags: [address_space, dentry, file, inode, Linux, Page Cache, super_block, VFS, 文件系统, 虚拟文件系统]
+tags: [Linux, Page Cache, 文件系统]
+keywords: [address_space, dentry, file, inode, super_block, VFS, 虚拟文件系统]
 aliases: ["VFS四大对象", "Linux inode原理", "dentry cache", "super_block内核", "struct file"]
 ---
 

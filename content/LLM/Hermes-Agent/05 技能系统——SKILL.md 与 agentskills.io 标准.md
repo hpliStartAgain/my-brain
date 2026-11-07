@@ -1,7 +1,8 @@
 ---
 title: "技能系统——SKILL.md 与 agentskills.io 标准"
 date: 2026-08-01
-tags: [Hermes Agent, Skills System, SKILL.md, agentskills.io, Progressive Disclosure, Skills Hub, Skill Bundle, Context Files]
+tags: [Hermes Agent]
+keywords: [Skills System, SKILL.md, agentskills.io, Progressive Disclosure, Skills Hub, Skill Bundle, Context Files]
 aliases: [Hermes 技能系统, SKILL.md 格式, agentskills.io 标准, Skills Hub, 技能堆叠, 技能媒体投递]
 ---
 

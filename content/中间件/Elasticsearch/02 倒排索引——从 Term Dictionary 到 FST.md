@@ -1,7 +1,8 @@
 ---
 title: "倒排索引——从 Term Dictionary 到 FST"
 date: 2026-03-04
-tags: [Elasticsearch, FST, Lucene, Posting List, Term Dictionary, 中间件, 倒排索引, 全文搜索, 分词]
+tags: [Elasticsearch, 中间件]
+keywords: [FST, Lucene, Posting List, Term Dictionary, 倒排索引, 全文搜索, 分词]
 aliases: []
 ---
 

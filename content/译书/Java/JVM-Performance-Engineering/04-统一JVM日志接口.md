@@ -1,7 +1,7 @@
 ---
 title: "统一JVM日志接口"
 date: 2026-05-12
-tags: [Java, JVM, 性能工程, 日志]
+tags: [Java, JVM, 性能优化, 日志]
 aliases: [The Unified Java Virtual Machine Logging Interface]
 ---
 

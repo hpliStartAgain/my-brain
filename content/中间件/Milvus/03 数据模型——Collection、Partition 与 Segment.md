@@ -1,7 +1,8 @@
 ---
 title: "数据模型——Collection、Partition 与 Segment"
 date: 2026-03-05
-tags: [Collection, Milvus, Partition, Schema, Segment, 中间件, 向量数据库, 数据模型]
+tags: [Milvus, 中间件, 向量数据库]
+keywords: [Collection, Partition, Schema, Segment, 数据模型]
 aliases: []
 ---
 

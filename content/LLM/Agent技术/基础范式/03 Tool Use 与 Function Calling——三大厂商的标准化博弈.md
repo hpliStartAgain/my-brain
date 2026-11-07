@@ -1,7 +1,8 @@
 ---
 title: "Tool Use 与 Function Calling——三大厂商的标准化博弈"
 date: 2026-08-01
-tags: [Agent, Anthropic, Function Calling, Gemini, MCP, OpenAI, Programmatic Tool Calling, Responses API, Structured Outputs, Tool Search, Tool Use, tool_choice, 内置工具, 并行调用]
+tags: [Agent, MCP]
+keywords: [Anthropic, Function Calling, Gemini, OpenAI, Programmatic Tool Calling, Responses API, Structured Outputs, Tool Search, Tool Use, tool_choice, 内置工具, 并行调用]
 aliases: [Tool Use 与 Function Calling, 三大厂商 Function Calling 对比, Tool Use 标准化]
 ---
 

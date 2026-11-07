@@ -1,7 +1,8 @@
 ---
 title: "Agent 核心能力——推理、规划与工具调用"
 date: 2026-03-04
-tags: [Agent, Function Calling, LLM, Plan-and-Execute, ReAct, Reflexion, 工具调用, 推理, 自我反思, 规划, 推理模型, 任务分解, 代码执行]
+tags: [Agent, LLM]
+keywords: [Function Calling, Plan-and-Execute, ReAct, Reflexion, 工具调用, 推理, 自我反思, 规划, 推理模型, 任务分解, 代码执行]
 aliases: []
 ---
 

@@ -1,7 +1,8 @@
 ---
 title: "Cursor 与 IDE 类 Agent——从补全到自主编码的跨越"
 date: 2026-08-01
-tags: [Agent, Antigravity, Bugbot, Cloud Agent, Composer, Cursor, Gemini Code Assist, IDE Agent, MCP, Model Economics]
+tags: [Agent, MCP]
+keywords: [Antigravity, Bugbot, Cloud Agent, Composer, Cursor, Gemini Code Assist, IDE Agent, Model Economics]
 aliases: [Cursor 与 IDE Agent, Agent Swarm, Composer 模型, IDE 类 Agent]
 ---
 

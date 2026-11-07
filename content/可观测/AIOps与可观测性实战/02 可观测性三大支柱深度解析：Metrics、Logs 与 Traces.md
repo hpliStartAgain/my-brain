@@ -1,7 +1,8 @@
 ---
 title: "02 可观测性三大支柱深度解析：Metrics、Logs 与 Traces"
 date: 2026-10-10
-tags: [Metrics, Logs, Traces, OpenTelemetry, 可观测性, 监控]
+tags: [OpenTelemetry, 可观测性, 监控]
+keywords: [Metrics, Logs, Traces]
 aliases: [可观测性三支柱, MELT 框架, 指标日志链路]
 ---
 

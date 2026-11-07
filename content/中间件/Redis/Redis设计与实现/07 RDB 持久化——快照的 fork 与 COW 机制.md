@@ -1,7 +1,8 @@
 ---
 title: "07 RDB 持久化——快照的 fork 与 COW 机制"
 date: 2026-03-03
-tags: [BGSAVE, Copy-on-Write, fork, RDB, Redis, 中间件, 二进制文件, 快照, 持久化]
+tags: [Redis, 中间件, 快照]
+keywords: [BGSAVE, Copy-on-Write, fork, RDB, 二进制文件, 持久化]
 aliases: []
 ---
 

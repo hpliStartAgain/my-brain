@@ -1,7 +1,8 @@
 ---
 title: "05 PG 状态机与数据一致性——Peering、Recovery 与 Backfill"
 date: 2026-03-05
-tags: [Backfill, Ceph, Peering, PG, Placement Group, Recovery, 一致性, 副本, 状态机, 自愈]
+tags: [Ceph, 一致性, 状态机]
+keywords: [Backfill, Peering, PG, Placement Group, Recovery, 副本, 自愈]
 aliases: [PG 状态机, Peering, Recovery, Backfill, 数据一致性, 副本策略, 归置组]
 ---
 

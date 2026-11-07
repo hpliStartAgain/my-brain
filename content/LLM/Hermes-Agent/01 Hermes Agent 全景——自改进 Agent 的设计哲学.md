@@ -1,7 +1,8 @@
 ---
 title: "Hermes Agent 全景——自改进 Agent 的设计哲学"
 date: 2026-08-01
-tags: [Hermes Agent, Nous Research, Self-Improving Agent, Learning Loop, Persistent Agent, Personal Agent]
+tags: [Hermes Agent]
+keywords: [Nous Research, Self-Improving Agent, Learning Loop, Persistent Agent, Personal Agent]
 aliases: [Hermes Agent 全景, 自改进 Agent, Hermes 设计哲学, 长驻个人 Agent]
 ---
 

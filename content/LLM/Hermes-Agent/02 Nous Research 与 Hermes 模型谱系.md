@@ -1,7 +1,8 @@
 ---
 title: "Nous Research 与 Hermes 模型谱系"
 date: 2026-08-01
-tags: [Nous Research, Hermes 2, Hermes 3, Hermes 4, DeepHermes, SFT, DPO, Function Calling, Tool Call Token, Forge, Psyche]
+tags: []
+keywords: [Nous Research, Hermes 2, Hermes 3, Hermes 4, DeepHermes, SFT, DPO, Function Calling, Tool Call Token, Forge, Psyche]
 aliases: [Hermes 模型谱系, Hermes 2 Pro, Hermes 3, Hermes 4, DeepHermes, Nous Research 模型, Forge Reasoning API, Psyche]
 ---
 

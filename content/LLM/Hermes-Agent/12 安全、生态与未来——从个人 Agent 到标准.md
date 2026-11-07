@@ -1,7 +1,8 @@
 ---
 title: "安全、生态与未来——从个人 Agent 到标准"
 date: 2026-08-01
-tags: [Hermes Agent, Security, Ecosystem, Future, agentskills.io, Agent Interoperability, Personal Agent, Standard, Command Approval, Write Approval Gate]
+tags: [Hermes Agent]
+keywords: [Security, Ecosystem, Future, agentskills.io, Agent Interoperability, Personal Agent, Standard, Command Approval, Write Approval Gate]
 aliases: [Hermes 安全模型, Hermes 生态地位, Hermes 未来, 命令审批, 写审批门, Agent 互操作性, 个人 Agent 社会影响]
 ---
 

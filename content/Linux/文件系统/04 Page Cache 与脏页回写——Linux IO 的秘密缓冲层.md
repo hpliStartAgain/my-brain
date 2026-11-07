@@ -1,7 +1,8 @@
 ---
 title: "Page Cache 与脏页回写——Linux IO 的秘密缓冲层"
 date: 2026-03-02
-tags: [Direct I/O, kswapd, Linux, mmap, Page Cache, pdflush, readahead, writeback, 回写, 文件系统, 脏页, 预读]
+tags: [Linux, Page Cache, 文件系统]
+keywords: [Direct I/O, kswapd, mmap, pdflush, readahead, writeback, 回写, 脏页, 预读]
 aliases: ["Linux Page Cache原理", "脏页回写机制", "direct IO vs buffered IO", "mmap文件映射", "Linux IO缓冲层"]
 ---
 

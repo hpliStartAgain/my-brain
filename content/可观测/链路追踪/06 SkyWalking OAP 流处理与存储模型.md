@@ -1,7 +1,8 @@
 ---
 title: "06 SkyWalking OAP 流处理与存储模型"
 date: 2026-10-10
-tags: [BanyanDB, Elasticsearch, OAL, OAP, SkyWalking, 可观测性, 流处理]
+tags: [Elasticsearch, SkyWalking, 可观测性, 流处理]
+keywords: [BanyanDB, OAL, OAP]
 aliases: [OAP 流式分析, SkyWalking 存储模型]
 ---
 

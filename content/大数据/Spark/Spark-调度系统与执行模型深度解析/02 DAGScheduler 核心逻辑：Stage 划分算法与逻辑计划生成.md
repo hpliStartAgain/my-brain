@@ -1,7 +1,8 @@
 ---
 title: "02 DAGScheduler 核心逻辑：Stage 划分算法与逻辑计划生成"
 date: 2026-02-27
-tags: [DAGScheduler, Spark, Stage, 源码分析, 调度系统]
+tags: [Spark, 调度]
+keywords: [DAGScheduler, Stage, 源码分析]
 aliases: [Stage Splitting Logic]
 ---
 

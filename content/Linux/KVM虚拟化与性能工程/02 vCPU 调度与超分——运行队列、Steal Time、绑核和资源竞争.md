@@ -1,7 +1,8 @@
 ---
 title: "02 vCPU 调度与超分——运行队列、Steal Time、绑核和资源竞争"
 date: 2026-09-26
-tags: [KVM, vCPU, 调度, 超分, StealTime, 性能工程]
+tags: [KVM, 调度, 性能优化]
+keywords: [vCPU, 超分, StealTime]
 aliases: []
 ---
 

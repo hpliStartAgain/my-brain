@@ -1,7 +1,8 @@
 ---
 title: "事件驱动模型：epoll 与 Master-Worker 进程架构"
 date: 2026-02-28
-tags: [epoll, Linux网络, Master-Worker, Nginx, 事件驱动, 并发模型, 进程架构, 非阻塞IO]
+tags: [epoll, Nginx]
+keywords: [Linux网络, Master-Worker, 事件驱动, 并发模型, 进程架构, 非阻塞IO]
 aliases: []
 ---
 

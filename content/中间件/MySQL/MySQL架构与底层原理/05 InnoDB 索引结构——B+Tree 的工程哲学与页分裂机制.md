@@ -1,7 +1,8 @@
 ---
 title: "InnoDB 索引结构——B+Tree 的工程哲学与页分裂机制"
 date: 2026-03-02
-tags: [B+Tree, InnoDB, MySQL, 索引, 聚簇索引, 页分裂]
+tags: [B+树, InnoDB, MySQL, 索引]
+keywords: [聚簇索引, 页分裂]
 aliases: [B+Tree索引, 页分裂, 聚簇索引]
 ---
 

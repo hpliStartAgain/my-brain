@@ -1,7 +1,8 @@
 ---
 title: "Devin 与 ACI 设计——为 Agent 认知而生的计算机接口"
 date: 2026-08-01
-tags: [Agent, ACI, Computer Use, Confidence Reporting, DeepWiki, Devin, Devin 2.0, Devin 2.1, Devin 2.2, Devin CLI, Devin Desktop, Devin Oncall, Interactive Planning, SWE-2, SWE-agent, SWE-bench, 沙箱]
+tags: [Agent]
+keywords: [ACI, Computer Use, Confidence Reporting, DeepWiki, Devin, Devin 2.0, Devin 2.1, Devin 2.2, Devin CLI, Devin Desktop, Devin Oncall, Interactive Planning, SWE-2, SWE-agent, SWE-bench, 沙箱]
 aliases: [Devin 与 ACI 设计, Agent Computer Interface, Devin 架构, ACI 概念]
 ---
 
@@ -361,7 +362,7 @@ Devin 的定价与商业化，2024 到 2026 年走了一条陡峭的曲线：
 | 时期 | 定价结构 | 说明 |
 | :--- | :--- | :--- |
 | 2024-03 起 | Team $500/月 | 只对企业开放，需排队 |
-| 2025-04（2.0） | Core $20 起（ACU 计量，$2.25/ACU） | 首次向个人开放 |
+| 2025-04（2.0） | Core \$20 起（ACU 计量，\$2.25/ACU） | 首次向个人开放 |
 | 2026-04 | Free / Pro $20 / Max $200 / Teams（$80/月 + $40/座） | 取消旧 Core 与 Team，Ask Devin、DeepWiki、Devin Review 开始收费 |
 | 2026-04 起 | Enterprise 按 ACU 计费 | 面向大规模组织，含 SSO 与专用部署 |
 

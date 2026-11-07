@@ -1,7 +1,8 @@
 ---
 title: "内存：从 NUMA 与页表到 JVM 堆模型"
 date: 2026-07-16
-tags: [内存, NUMA, 虚拟内存, Page Cache, JVM 堆, OOM, 性能分析]
+tags: [内存管理, NUMA, Page Cache, OOM, 性能优化]
+keywords: [虚拟内存, JVM 堆]
 aliases: [内存性能分析, NUMA 与 JVM 堆, 虚拟内存与 Page Cache]
 ---
 

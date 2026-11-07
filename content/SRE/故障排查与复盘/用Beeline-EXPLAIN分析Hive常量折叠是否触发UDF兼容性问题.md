@@ -1,3 +1,10 @@
+---
+title: "用Beeline-EXPLAIN分析Hive常量折叠是否触发UDF兼容性问题"
+date: 2026-07-26
+tags: [SRE]
+aliases: []
+---
+
 **背景**: 排查 Hive on Tez 作业因 `AbstractMethodError: GenericUDF.initializeAndFoldConstants` 失败时，用于对比不同分区查询计划、判断常量折叠是否为触发路径的操作手册。
 
 ---

@@ -1,7 +1,8 @@
 ---
 title: "磁盘 IO 性能调优——fio 方法论、调度器与 IO 模式"
 date: 2026-03-02
-tags: [blktrace, fio, iodepth, iostat, IO性能测试, IO调度器, Linux, NVMe, SSD, 性能优化, 性能调优, 磁盘IO, blk-mq, mq-deadline, bfq, kyber, iotop, Little's Law, libaio]
+tags: [Linux, NVMe, 性能优化]
+keywords: [blktrace, fio, iodepth, iostat, IO性能测试, IO调度器, SSD, 磁盘IO, blk-mq, mq-deadline, bfq, kyber, iotop, "Little's Law", libaio]
 aliases: ["fio使用指南", "磁盘IO调优", "IO调度器选择", "blktrace分析", "NVMe性能调优", "iostat诊断", "blk-mq", "IO队列深度"]
 ---
 

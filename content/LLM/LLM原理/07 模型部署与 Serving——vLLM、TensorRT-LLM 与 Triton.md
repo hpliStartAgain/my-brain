@@ -1,7 +1,8 @@
 ---
 title: "模型部署与 Serving——vLLM、TensorRT-LLM 与 Triton"
 date: 2026-03-04
-tags: [GPU, LLM, Serving, TensorRT-LLM, Triton, vLLM, SGLang, FP8, 推理集群, 推理服务, 模型服务, 部署]
+tags: [LLM]
+keywords: [GPU, Serving, TensorRT-LLM, Triton, vLLM, SGLang, FP8, 推理集群, 推理服务, 模型服务, 部署]
 aliases: []
 ---
 
