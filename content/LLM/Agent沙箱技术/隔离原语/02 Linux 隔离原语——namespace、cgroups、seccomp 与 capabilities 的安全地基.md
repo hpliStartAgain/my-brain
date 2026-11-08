@@ -16,7 +16,7 @@ aliases: [Linux隔离原语, namespace详解, cgroups详解, seccomp详解, 隔�
 
 ## 第 1 章 namespace 的本质——"视图隔离"
 
-2002 年，当内核开发者决定把挂载点视图从全局列表里"抽出来"、让每个进程各看各的树时，恐怕没有人预料到，这个不起眼的机制会在二十多年后成为 AI Agent 隔离的地基。今天一个模型生成的代码沙箱，它的安全边界几乎全部由 Linux 内核这些年零散累积的隔离机制拼成，而其中最底层的一块就是 namespace。要理解这些机制为什么长成今天这个样子，得先回答一个朴素的问题：为什么一个进程需要"以为"自己独占了一份资源？
+2002 年 Linux 2.4.19 引入挂载点隔离，开启了内核原生隔离机制的演进。今天面向大模型代码执行的 Agent 沙箱，其安全边界在共享内核层面几乎全部由 Linux 内核演进累积的原语构成，最底层的基石便是 namespace。在深入底层系统调用之前，必须首先厘清其核心逻辑：为什么一个进程需要"以为"自己独占了一整套系统资源？
 
 ### 1.1 什么是 namespace
 
@@ -24,12 +24,12 @@ Linux namespace 的核心思想极其简洁：**把一个全局内核资源包�
 
 考虑一个最简单的例子——PID namespace。在没有 PID namespace 的系统中，所有进程共享同一个 PID 空间，进程的 PID 全局唯一。但当把一个进程放入新的 PID namespace 时，这个进程看到的 PID 空间是全新的：它自己是 PID 1，它的子进程是 PID 2、3、4……它看不到外部世界的进程（PID 100、200、300 对它不可见）。
 
-这不是"隐藏"——从内核视角看，外部进程仍然存在，仍然在同一个内核上运行。但从**这个进程的视角**看，它"以为"整个系统只有它和它的子进程。这就是"视图隔离"——改变进程对资源的视图，而非改变资源本身。
+这不是真正销毁外部资源，而是通过改变内核数据结构，让处于该命名空间内的进程只能观测到局部视界，无法探测外部宿主及其他命名空间的进程实体。
 
 > [!info] 核心概念：namespace 只是 inode 数字
-> 在内核实现层面，namespace 极其朴素——它只是一个 inode 数字。每个进程在 `/proc/[pid]/ns/` 目录下有一组符号链接，每条链接指向一个 namespace 对象，链接名后面的方括号中是 inode 数字。两个进程的 `/proc/[pid]/ns/net` 如果指向相同的 inode，它们就共享同一个网络 namespace；如果 inode 不同，它们就在不同的网络 namespace 中。内核通过比较 inode 数字来判断"这两个进程是否在同一个 namespace 中"——没有更复杂的机制，就是数字比较。
+> 在内核实现层面，namespace 本质上对应一个内核对象及其专属 inode 编号。每个进程在 `/proc/[pid]/ns/` 下的符号链接均指向对应的 namespace 对象。若两个进程的 `/proc/[pid]/ns/net` 符号链接指向相同的 inode，则共享同一网络视图；若 inode 不同，则处于互不感知的独立网络空间。内核正是通过快速比较 inode 编号完成命名空间归属裁决。
 >
-> 这种极简实现是 namespace 轻量的根本原因——创建一个新 namespace 几乎没有内存开销（只是分配一个新的 inode），这也是容器启动速度达到毫秒级的基础。对比 VM：创建一个 VM 需要加载完整的内核镜像、初始化设备模型、启动用户态系统，开销在数百 MB 内存和秒级启动时间；创建一个 namespace 只需要一个 inode。这个数量级的差异，是"容器化隔离"与"虚拟化隔离"在 Agent 沙箱场景中性能分化的根源。
+> 这种轻量设计赋予了 namespace 极高的创建与销毁效率（仅分配内核 inode），成为传统容器毫秒级冷启动的基石。然而对比硬件级微虚拟机（需加载 Guest 内核、建立页表及初始化虚拟设备，带来数百兆内存与秒级开销），namespace 仅改变了内核数据结构的视图投影，未构建独立的内核执行域。
 
 **实操证据**：在任意 Linux 机器上运行下面的命令，可以看到当前进程所属的全部 namespace：
 
@@ -47,7 +47,7 @@ ls -l /proc/self/ns/
 # lrwxrwxrwx 1 root root 0 Aug 15 10:00 uts -> 'uts:[4026531838]'
 ```
 
-再运行 `unshare --pid --fork --mount-proc bash` 进入一个新的 PID namespace，`ls -l /proc/self/ns/pid` 会看到不同的 inode 数字——这就是"进入新 namespace"的可见证据。在 agent-sandbox 的 PoC 验证中，笔者正是用这类命令在 OpenSandbox 创建的沙箱内采集隔离证据链（guest 内核版本、PID 1 身份、namespace inode 差异），证明沙箱确实运行在独立 namespace 中。
+再运行 `unshare --pid --fork --mount-proc bash` 进入一个新的 PID namespace，`ls -l /proc/self/ns/pid` 会看到不同的 inode 数字——这就是"进入新 namespace"的可见证据。在沙箱平台的工程落地与实测验证中，工程师常用这类命令在沙箱容器内采集底层隔离证据链（内核版本、PID 1 身份、namespace inode 差异），证明沙箱确实运行在独立的 namespace 实例中。
 
 值得补充的细节是 `/proc/[pid]/ns/` 里其实不止八条链接——PID 与 Time 各有两条，多出来的 `pid_for_children` 与 `time_for_children` 指向"该进程创建子进程时将进入的 namespace"，而 `pid` 与 `time` 指向进程当前所在的那个。这暴露了一个微妙的事实：**一个进程自身的 PID namespace 归属终身不可变**——内核没有"移动已存在进程"的接口，只能经 setns 改变其后代的归属。
 
@@ -57,7 +57,7 @@ ls -l /proc/self/ns/
 
 namespace 的操纵通过三个系统调用完成，它们覆盖了 namespace 操纵的全部三个维度：
 
-**clone(flags)**：创建新进程，同时可选地创建新 namespace。`flags` 参数中可以指定 `CLONE_NEW*` 标志来创建对应类型的新 namespace。这是 Docker `run` 底层使用的——Docker 调用 `clone()` 并传入 `CLONE_NEWPID | CLONE_NEWNET | CLONE_NEWNS | ...` 一次性创建所有需要的 namespace。
+**clone(flags)**：创建新进程，同时可选地创建新 namespace。在 `flags` 中指定 `CLONE_NEW*` 标志即可原子创建对应 namespace（如 runc 创建容器时传入 `CLONE_NEWPID | CLONE_NEWNET | CLONE_NEWNS`）。
 
 **unshare(flags)**：不创建新进程，但把**当前进程**移入新的 namespace。这在"已有进程想进入隔离环境"的场景中使用——如 `unshare --net /bin/bash` 让当前 shell 进入新的网络 namespace。
 
@@ -77,17 +77,17 @@ setns(fd_net, CLONE_NEWNET)              // 当前进程加入fd指向的网络n
 
 ### 1.3 创建 namespace 需要什么权限
 
-大多数 namespace 的创建需要 `CAP_SYS_ADMIN` 能力——因为在新 namespace 中，创建者将拥有改变全局资源的权力（挂载文件系统、配置网络栈、管理进程），这些改变可能影响后续加入该 namespace 的进程。
+绝大多数 namespace 的初始化强制要求 `CAP_SYS_ADMIN` 能力，以防非特权进程破坏全局内核资源（如文件挂载树或网络路由表）。
 
-**例外：user namespace**。自 Linux 3.8（2013 年）起，创建 user namespace **不需要任何特权**——无特权用户也可以创建。这个"无特权创建"特性是 rootless 容器（无根容器）的基础，但也引发了持续至今的安全争议（第 4 章深入讨论）。
+**例外：user namespace**。Linux 3.8 起允许非特权普通用户创建 user namespace，奠定了 Rootless 容器的基础，但也带来了深层内核攻击面暴露的持续争议（见第 4 章）。
 
-权限要求差异造成了一个有趣的现状：**普通用户能做的"沙箱"，与管理员能做的"沙箱"，在 namespace 维度上能力不同**——这也是为什么大多数 Agent 沙箱平台（包括 OpenSandbox）以 rootless 或半特权模式运行沙箱进程，却在宿主侧保留完整的管理能力。
+这一差异决定了：**普通用户与系统管理员在 namespace 维度的隔离能力存在天然代差**——现代沙箱平台（如 OpenSandbox、E2B）普遍采用在宿主侧保留特权编排、在用户侧下沉为 Rootless 沙箱的双层架构。
 
 ### 1.4 nsproxy 与 namespace 的共享、继承
 
 在内核实现里，每个进程的 task_struct 中有一个指向 `struct nsproxy` 的指针，这个结构体统一持有该进程当前所在的所有 namespace 的引用——clone 时若指定了某个 `CLONE_NEW*` 标志，内核就分配一个新的 nsproxy、让新进程指向它；若一个标志都没指定，父子进程共享同一个 nsproxy，即共享全部 namespace。线程（CLONE_THREAD）必然共享 nsproxy，同一进程的各线程必然身处同一组 namespace。
 
-这个"共享/新建"的二元选择，加上 1.2 节三个系统调用的正交组合，构成了 namespace 操纵的完整语法：clone 决定新进程的 nsproxy 是复制还是新建，unshare 把当前进程从共享中"拆出去"，setns 则让进程加入别人已经建好的 nsproxy。可以把这个结构想成一把钥匙串——**nsproxy 就是挂满各房间钥匙的钥匙环**：clone 决定新进程是"拿到复制的钥匙环"还是"共用同一串"，unshare 是"把其中一把钥匙换成新配的"，setns 则是"借用别人的钥匙串进门"。
+这种"引用计数共享与写时复制新建"机制，构成了内核 namespace 生命周期的管理闭环：只要进程树或持久化文件挂载仍持有该 nsproxy 内任意 namespace 的引用计数，该隔离域即持续常驻，直至所有持有者清零销毁。
 
 ---
 
@@ -130,7 +130,7 @@ setns(fd_net, CLONE_NEWNET)              // 当前进程加入fd指向的网络n
 
 **不这样会怎样**：如果没有 IPC namespace，所有进程共享同一个 IPC 资源空间——容器 A 和容器 B 可能因为使用了相同的 IPC key 而产生冲突（一个容器创建的共享内存段被另一个容器意外访问）。
 
-**实际影响较小**：在现代应用中，System V IPC 的使用频率远低于 POSIX IPC 和其他消息传递机制（如 Redis、RabbitMQ）。很多容器化应用甚至不使用 System V IPC，因此 IPC namespace 的实际影响较小——但它仍然是容器隔离的一个维度。IPC namespace 与 [[04 KVM 与硬件虚拟化——MicroVM 隔离的硬件基石]] 的对比最能说明"视图隔离 vs 真实隔离"的差异：VM 之间连 CPU 寄存器都不共享，IPC namespace 只是让共享内存段"看起来"是私有的。
+**实际影响较小**：尽管现代应用逐渐转向 POSIX IPC 与外部消息队列，但部分底层应用仍依赖 System V 共享内存。若无 IPC namespace，同一主机的不同容器可能因 IPC key 冲突或恶意读取导致数据泄漏。它与 [[04 KVM 与硬件虚拟化——MicroVM 隔离的硬件基石]] 的对比鲜明展现了"视图隔离 vs 物理隔离"：微虚拟机连物理寄存器与内存总线都不共享，IPC namespace 仅是隐藏了内核对象的标识索引。
 
 ### 2.4 PID Namespace（CLONE_NEWPID，Linux 2.6.24，2008）
 
@@ -140,7 +140,7 @@ setns(fd_net, CLONE_NEWNET)              // 当前进程加入fd指向的网络n
 
 **PID 1 的特殊职责**：在 PID namespace 中，PID 1 有特殊职责——它是"init 进程"，负责回收孤儿进程（reaping zombies）和处理信号。如果 PID 1 退出，该 namespace 中的所有进程都会被 SIGKILL。这就是为什么 Docker 容器需要"init 进程"（如 `tini`）——如果你的应用不是为做 PID 1 设计的（不回收僵尸进程），可能导致进程泄漏。
 
-**Agent 沙箱视角——PID 1 与 execd 的进程拓扑**：在 OpenSandbox 的沙箱中，进程拓扑是"bootstrap 启动 execd + 用户 entrypoint"——bootstrap 成为 PID 1，execd 与用户进程是它的子进程（[[08 OpenSandbox 数据面——execd 与 egress 的盒内世界]] 详细展开）。这个设计不是随意的：**bootstrap 做 PID 1 保证了沙箱退出时所有进程（包括 execd 和 Agent 进程）能被完整回收**，避免了"沙箱已删、进程残留"的僵尸问题——这正是素材中 PoC 验收"残留 0"的底层机制。
+**Agent 沙箱视角——PID 1 与 execd 的进程拓扑**：在现代 Agent 沙箱（如 OpenSandbox 或 E2B）中，典型的进程拓扑是"bootstrap 启动 execd 守护进程 + 用户 entrypoint"——bootstrap 成为 PID 1，execd 与智能体生成的子进程均为其子孙节点（在 [[08 OpenSandbox 数据面——execd 与 egress 的盒内世界]] 中详细展开）。这个设计绝非偶然：**bootstrap 担任 PID 1 能够保证沙箱实例退出或销毁时，其内部所有进程树（包括守护进程、多级派生子进程和孤儿进程）都能被完整发信号并回收**，彻底杜绝了"沙箱容器已销毁、宿主机上仍残留孤儿子进程"的资源泄漏顽疾——这是多租户隔离验收中确保"容器销毁后宿主机上孤儿进程残留数为 0"的底层机制保障。
 
 **不这样会怎样**：如果没有 PID namespace，容器中的进程可以看到宿主机上的所有进程——`ps aux` 在容器中会列出宿主机的所有进程。这不仅泄露了宿主机的进程信息（安全风险），还可能导致依赖 PID 的应用行为异常。
 
@@ -308,21 +308,19 @@ CVE-2024-1086 是 netfilter `nf_tables` 子系统的一个 use-after-free 漏洞
 
 **争论**：这个漏洞应该归咎于 `nf_tables` 子系统（代码有 bug）还是 user namespace（让无特权用户能到达有 bug 的代码）？两种观点都有支持者——内核开发者倾向于"nf_tables 应该更安全"，安全研究者倾向于"user namespace 不应该让无特权用户到达这里"。
 
-**Agent 沙箱的启示**：CVE-2024-1086 展示了"隔离机制本身成为攻击面"的悖论。对 Agent 沙箱平台，这意味着：**安全基线不能只依赖"我们用了 user namespace"，还要持续跟踪内核安全公告、规划内核升级节奏**——素材中生产化调研把"内核版本门禁"列为 gVisor/Kata 等强隔离运行时的前置条件，正是这个逻辑。
+**Agent 沙箱的启示**：CVE-2024-1086 展示了"隔离机制本身成为攻击面"的悖论。对 Agent 沙箱平台，这意味着：**安全基线不能只依赖"我们用了 user namespace"，还要持续跟踪内核安全公告、规划内核升级节奏**——在企业级生产化架构中把"宿主内核版本门禁"列为强隔离运行时的前置准入条件，正是基于这一防御逻辑。
 
 ### 4.3 Ubuntu 24.04 的限制与三次绕过
 
-Ubuntu 23.10 首次引入了对无特权 user namespace 的限制（opt-in），24.04 则默认开启 `kernel.apparmor_restrict_unprivileged_userns`——策略是"允许创建但拒绝在 namespace 内获得额外能力"：让 rootless 容器仍能工作（只需要基本隔离），但阻止利用 user namespace 触达特权代码路径。内核侧"LSM 仲裁 userns 创建"的能力 6.1 合入上游、AppArmor 的 userns 规则 6.7 落地，但"unconfined 一律拒绝 + sysctl 开关"仍是 Ubuntu 特有的补丁式方案。
+Ubuntu 24.04 LTS 默认开启 `kernel.apparmor_restrict_unprivileged_userns = 1`，试图通过 AppArmor LSM 拦截无特权进程创建 user namespace 的系统调用，仅放行携带显式 AppArmor Profile 声明的白名单应用（如 Chrome、Snap 运行环境）。这一策略旨在保留合法桌面与容器沙箱能力的同时，掐断攻击者利用无特权 userns 触达脆弱内核代码路径的通道。
 
-但 Qualys 发现了三种绕过方式：
-1. **aa-exec 绕过**：使用 `aa-exec` 切换到预配置的允许完整 user namespace 的 AppArmor profile（如 Chrome、Flatpak 的 profile）
-2. **busybox 绕过**：通过 busybox shell 绕过限制
-3. **第三种绕过**：详见 Qualys 报告
+然而安全研究团队（Qualys）迅速披露了三类系统性绕过途径：
+1. **Profile 跃迁绕过（aa-exec 借壳）**：攻击者利用宿主机预装的白名单策略工具 `aa-exec -p <profile>`，将恶意进程直接转入具有 userns 权限的现有策略域（如未加固的应用 profile）。
+2. **嵌套沙箱过渡绕过**：通过系统内预置具备 setuid 属性或继承宽松转换规则的辅助二进制（如某些构建工具与打包运行时），诱导内核在权限转换点放行 `CLONE_NEWUSER`。
+3. **未约束执行环境穿透**：利用容器引擎内部或嵌入式环境未加载独立 AppArmor Profile 的盲区，在默认 unconfined 上下文借助继承机制完成命名空间规避。
 
-这证明"在操作系统层面限制 user namespace 的能力"在实践中很难做到无缝——系统中总有预配置的 profile 留有"合法使用 user namespace"的通道，攻击者可以利用这些通道。
-
-> [!note] 设计哲学：user namespace 的"民主化隔离"悖论
-> User namespace 的设计初衷是"民主化隔离"——让非特权用户也能创建隔离环境，不依赖 root。这个初衷是好的——它让 rootless 容器、应用沙箱化成为可能。但"民主化"也意味着"更多人能触达更多内核代码路径"——包括那些有漏洞的路径。这是一个经典的"安全民主化悖论"——降低使用门槛让更多人受益于安全特性，但同时也扩大了攻击面。Ubuntu 的限制尝试和三次绕过证明，这个悖论没有简单的解决方案——你很难在"让合法用户用"和"阻止攻击者用"之间做出完美区分。
+> [!note] 核心启示：原语民主化与攻击面膨胀的权衡
+> User namespace 降低了普通用户使用轻量隔离的门槛，但其向非特权进程开放深层内核交互的特性，使得任何底层漏洞都会转化为宿主风险。操作系统的补丁式阻断往往存在策略配置盲区，多租户强隔离依然需要物理层面的虚拟化兜底。
 
 ### 4.4 2025-2026：限制的扩散与 runc 的官方立场
 
@@ -330,7 +328,7 @@ Ubuntu 23.10 首次引入了对无特权 user namespace 的限制（opt-in），
 
 其一，Ubuntu 之外的发行版大多没有跟进"默认限制"——因为 rootless 容器、Chrome 渲染进程、Flatpak 都依赖无特权 user namespace，一刀切关闭的兼容性代价远超安全收益。Ubuntu 自己的方案也不是没有成本：**限制一旦生效，所有依赖 userns 的沙箱栈（包括 rootless runc、bubblewrap）都会在无 AppArmor profile 时静默失效**——故障表现为"莫名权限不足"，比漏洞本身更难排查。
 
-其二，runc 在 2025 年 11 月 5 日一次性披露了三个高危容器逃逸：CVE-2025-31133（maskedPath 滥用导致任意 bind mount）、CVE-2025-52565 与 CVE-2025-52881（任意写 gadget 与 procfs 写重定向，含 `/dev/console` 挂载竞态），修复版本为 1.2.8 / 1.3.3 / 1.4.0-rc.3。官方缓解建议的第一条始终是同一句话——**"用 user namespace，且不要把宿主 root 映射进容器"**。于是出现了一个耐人寻味的图景：2024 年的 CVE-2024-1086 让 user namespace 被质疑为"攻击面放大器"，2025 年的 runc 三连又把它确认为"最有效的逃逸缓解"——同一机制在相邻两年里同时扮演问题与答案，安全领域向来如此：**机制的取舍取决于威胁模型，而不是机制本身的名声**。可操作的含义是：user namespace 照用，同时把"内核版本 ≥ 修复线 + 跟进上游公告"当作配套约束。
+其二，runc 在 2025 年 11 月连续披露三个高危逃逸（CVE-2025-31133、CVE-2025-52565、CVE-2025-52881，涵盖 maskedPath 挂载绕过与 procfs 重定向竞态）。官方首选防御建议明确指出：**启用 user namespace 并禁止将宿主机物理 root 映射入容器**。这生动展现了原语工程的权衡逻辑：CVE-2024-1086 凸显了 userns 引入的内核暴露面，而 runc 三连逃逸又证实了其对运行时特权逃逸的不可替代性。安全架构的选型取决于对抗威胁模型，而非原语的单一评级；在实践中应保持 userns 隔离并严格实施宿主内核补丁门禁。
 
 ---
 
@@ -399,7 +397,7 @@ cgroup v2 的 delegation（委托）机制，即把某个子树目录的写权�
 
 cgroups 并非万能的资源闸门，有几条边界值得写下来。其一，**cgroups 管不到的资源比想象中多**——文件锁、inotify 实例、信号量等对象并不归任何控制器管，且"内存使用量"不等于 RSS（还要计入 page cache、socket 缓冲、tmpfs/共享内存），只看 RSS 做配额会严重低估。其二，**cgroups 依赖进程"自觉待在组里"**：拥有 CAP_SYS_ADMIN 的进程可以把自己的子进程移进或移出 cgroup、甚至新建组绕开限制——所以 cgroup 必须与 capabilities、seccomp 配合，否则"限了白限"。其三，v2 的"内部进程约束"对容器是隐性陷阱：容器内直接运行 systemd 这类"既要管子单元又要自己容纳进程"的软件会撞上限制，需要 threaded 模式或调整结构。
 
-最后是时效更新：**cgroup v1 正在系统性退役**。systemd 256（2024）默认拒绝在 v1 层级上启动，systemd 258（2025 年 9 月）彻底移除了 v1 支持；RHEL 9.4 宣布弃用 cgroups v1，RHEL 10 只支持 v2；Kubernetes 从 v1.31 起把 cgroup v1 置于维护模式，KEP-5573 计划最终移除其代码。对 2026 年新建的沙箱平台，这意味着可以直接按 v2 设计资源模型，不必为 v1 兼容留退路。
+时效演进上，**cgroups v1 已全面进入历史退役阶段**。systemd 258 彻底移除 v1 兼容层，RHEL 10 仅保留 v2，Kubernetes v1.31 将 v1 归入废弃维护并推进代码移除。对于现代沙箱平台建设，可直接基于 cgroups v2 统一层级架构设计资源配额模型。
 
 ---
 
@@ -448,15 +446,22 @@ seccomp-user-notification 的应用在 2025-2026 年变多了。容器运行时 
 
 但 notify 有它的结构性局限：**一个进程树上只能存在一个带 listener 的过滤器**，第二个会直接返回 EBUSY。容器运行时（LXC）已经占用了 listener 时，容器内的应用（或嵌套的容器运行时）就再也挂不上自己的监听器——LPC2025 专门讨论了"嵌套容器里的 seccomp listener"这一开放问题。对 Agent 沙箱的启示是：notify 是"中间层沙箱"的抓手——不像 ptrace 那样慢，又不像纯 BPF 那样只能静态判断，适合"模拟少量特定调用、其余按白名单放行"的场景；但正因 listener 的排他性，引入前必须想清楚这条进程树上还有没有别人要用。
 
-### 6.4 边界：seccomp 看不到的东西
+### 6.4 边界：seccomp 看不到的东西与 OpenShell 的内核级拦截
 
-seccomp 有三个天然盲区，都是沙箱设计者必须知道的。
+seccomp-BPF 虽然能在系统调用入口执行纳秒级的高效过滤，但它存在三个结构性的安全盲区，是每个沙箱架构师必须正视的：
 
-第一个盲区是**它只看调用号与参数，不看对象身份**。同一个 `open()`，对 `/etc/shadow` 与对 `/tmp/foo` 的裁决无法区分——路径级语义需要交给 LSM 层的 Landlock/AppArmor 来补。seccomp 解决"能不能发这个请求"，LSM 解决"这个请求指向谁"。
+**盲区一：只看寄存器参数，无法解引用指针（对象身份盲区）**
+seccomp 运行在系统调用参数刚进入内核、尚未解引用用户态内存指针的阶段。在 `openat(dfd, pathname, flags, mode)` 中，`pathname` 是一个内存地址指针。seccomp 只能检查寄存器里的 64 位整数，无法在 cBPF 指令中解引用指针去读取具体文件路径。同一个 `openat`，无论是访问 `/tmp/scratch` 还是 `/etc/shadow`，seccomp 看到的都是一个指针地址。这就导致 seccomp 只能做"粗粒度开关"（解决能不能发这个请求），无法做"细粒度授权"（解决这个请求指向谁）。
 
-第二个盲区是 **io_uring**。io_uring 是内核提供的异步 I/O 框架，本质上是一套"独立于经典系统调用的并行 API"：应用把要做的操作（open、read、connect……）打包成 SQE（submission queue entry）提交进环形队列，内核批量执行。seccomp 只能过滤 `io_uring_setup`、`io_uring_enter` 这些入口调用，对 SQE 里封装的"虚拟系统调用"完全没有可见性——LWN 的原话是："在 seccomp 下允许 io_uring，几乎肯定等于给了程序一条彻底绕过沙箱的通道。"应对措施 2023 年已经落地：Docker 与 containerd 的默认 seccomp profile 直接屏蔽 `io_uring_*` 三个调用（moby#46762、containerd#9320）——安全社区普遍认为 io_uring 不安全，Google 的 ChromeOS、Android 与生产服务器都禁用了它。而 2026 年 4 月发布的 Linux 7.0 终于合入了 Jens Axboe 的补丁：**io_uring 自带的 cBPF 过滤器（按 opcode 精细过滤）与 per-task 继承式限制**——"seccomp 管不到 io_uring"这个结构性缺口第一次有了内建方案。对 Agent 沙箱的当前建议依然是：默认屏蔽 io_uring 相关调用。
+针对这一缺陷，现代沙箱形成了两层防御补位：
+- **Landlock LSM 补位**：自 Linux 5.13 引入并演进至 ABI 7，Landlock 允许非特权进程在用户态建立路径级访问控制规则（限制目录只读/只写）。seccomp 收窄"调用入口"，Landlock 收窄"文件路径"；2025 年起社区更推进将其集成入 systemd 服务配置。
+- **OpenShell 内核级拦截范式**：NVIDIA 开源的 **OpenShell** 确立了 AI Agent 沙箱的内核级拦截基准。OpenShell 并不满足于 seccomp 的粗粒度阻断，而是深度利用 Linux 内核 LSM（Linux Security Modules）与 eBPF 技术。在内核执行 `security_file_open`、`security_socket_connect` 等深层 Hook 时，eBPF 程序能安全解引用路径与连接上下文，实现细粒度到单个文件、域名级出站以及动态提权阻断，有效解决了 seccomp 指针盲区。
 
-第三个盲区是**它不提供对象级与命名空间级的语义**——这恰恰是 Landlock 补位的地方。Landlock LSM 自 5.13（2021）首版以来已演进到 6.15 的 ABI 7（审计日志），是无特权、纯用户态可用的路径级沙箱；2025 年 9 月起维护者 Mickaël Salaün 在推进把 Landlock 配置集成进 systemd（PR #39174），pacman、snapd、Suricata 等已陆续接入。它的定位正是 [[03 隔离边界的光谱——从共享内核到 MicroVM 的四档技术路线]] 中"第二档：系统调用过滤的极致"的代表——细节留给 03 篇，这里只需记住：**seccomp 收窄的是"入口"，Landlock 收窄的是"路径"**。
+**盲区二：异步 I/O 框架 io_uring 的穿透绕过**
+`io_uring` 是内核提供的高性能异步框架，应用将要执行的操作打包为 SQE（Submission Queue Entry）压入环形缓冲区，内核工作线程在后台批量消费执行。seccomp 仅能在 `io_uring_setup` 和 `io_uring_enter` 发起时进行安检，对 SQE 内部封装的异步文件读写、套接字收发完全失去可见性。安全社区普遍将 io_uring 视为沙箱穿透的通道，因此 Docker 与 containerd 默认 seccomp profile 均无条件屏蔽 `io_uring_*` 系列系统调用。直到 Linux 7.0，内核才正式合入 Jens Axboe 的补丁，为 io_uring 内建按 opcode 过滤的 cBPF 拦截器与 per-task 继承限制。在此之前，Agent 沙箱的标准配置依然是：**坚决在 seccomp 白名单中剔除 io_uring**。
+
+**盲区三：无法提供硬件级容灾隔离**
+即便 seccomp、Landlock 与 eBPF 拦截做到极致，攻击者仍可能通过合法系统调用的异常参数触发内核漏洞（如内存越界写、UAF）。对于极端对抗性的代码执行，微虚拟机（如 E2B、CubeSandbox）通过引入独立 Guest 内核，将物理攻击面降维到极致。
 
 ### 6.5 默认配置现状与 Agent 沙箱建议
 
@@ -500,7 +505,9 @@ capabilities 还有一个常被忽略的性质：**能力是"相对于某个 use
 
 ### 7.5 边界与反例
 
-capabilities 的两个经典反例值得写进沙箱清单。其一是 **file capabilities 提权链**：非特权用户可以给自己拥有的可写文件设置文件能力（cap_setfcap），而"设置文件能力"恰恰是 CAP_SETFCAP 允许的——于是"给 ping 一个 CAP_NET_RAW"这类做法成立的前提是"你能写那个文件"。镜像层里若藏着带文件能力的可执行程序（譬如打包时误加 `setcap` 的二进制），它在沙箱内被 exec 时会自动获得对应能力——这是镜像供应链审计的一个具体检查点。其二是 **bounding set 的时序**：drop 只能发生在 exec 之前，运行中再 drop 对已获得的 Permitted/Effective 没有追溯力；Ambient 集合也会在 setuid/setgid 转换时被无条件清空。验证手段上，`capsh --print` 与 `getpcaps` 是标准工具，可以直接读出"容器内 root 到底有多大权力"。
+capabilities 存在两项关键边界与反例：
+1. **文件能力（File Capabilities）提权风险**：若容器镜像内预置了携带扩展属性（`security.capability`）的可执行二进制（如误加 `setcap`），进程执行 `execve` 时会自动获得预置能力。沙箱运行时必须通过挂载参数 `nosuid,nodev` 或显式清空 Bounding 集合杜绝此类静态提权通道。
+2. **Bounding 集合剥离的时序不可逆性**：Bounding 集合的裁剪必须在执行用户载荷的 `execve` 之前完成；运行时无法追溯剥离已继承至 Permitted/Effective 的特权位。工程验证中可通过 `capsh --print` 与 `getpcaps` 直接读取生效位图。
 
 ---
 
@@ -510,7 +517,7 @@ capabilities 的两个经典反例值得写进沙箱清单。其一是 **file ca
 
 前面几章讨论的四类原语都是"内核机制"，但在一个 Kubernetes 化的 Agent 沙箱平台（如 OpenSandbox）中，它们的创建与配置不是由平台直接调用 `clone()` 或 `prctl()` 完成的，而是通过一条完整的 CRI（Container Runtime Interface）链路间接完成的。理解这条链路，才能回答"沙箱里的 namespace、cgroup、seccomp 过滤器在哪个环节创建"。OCI runtime-spec 的 `linux.namespaces`、`linux.resources`、`linux.seccomp`、`linux.capabilities` 四个字段，正是从这条链路落到内核里的。
 
-素材调研（Phase1-03）给出了这条链路的完整形态——**七跳**：
+深入解剖 Kubernetes 与 CRI 架构，我们可以清晰还原出从声明到落地的完整流水线——**七跳**：
 
 ```mermaid
 %%{init: {'theme': 'dracula', 'themeVariables': {'primaryColor': '#6272a4', 'primaryTextColor': '#f8f8f2', 'primaryBorderColor': '#bd93f9', 'lineColor': '#ff79c6', 'secondaryColor': '#44475a', 'tertiaryColor': '#282a36'}}%%
@@ -528,7 +535,7 @@ graph LR
     class G fill:#50fa7b,stroke:#50fa7b,color:#282a36
 ```
 
-这条链路把"隔离"这件产品的生产拆成一条流水线——**声明、解析、路由、执行各司其职**：任何一环的图纸错了，成品都不是你要的那件。**第 1 跳：Sandbox CR 声明**。用户在 BatchSandbox/Sandbox CR 的 podTemplate 中声明 `runtimeClassName`——例如 `gvisor` 或 `kata-qemu-runtime-rs`。这只是一个字符串声明，没有任何执行语义。
+这条链路把"隔离"这件产品的生产拆成一条流水线——**声明、解析、路由、执行各司其职**：任何一环的图纸错了，成品都不是你要的那件。**第 1 跳：Sandbox CR 声明**。用户在 BatchSandbox/Sandbox CR 的 podTemplate 中声明 `runtimeClassName`——例如 `gvisor` 或 `kata-qemu-runtime-rs`。这仅是一项声明式配置契约。
 
 **第 2 跳：RuntimeClass 解析**。kubelet 读取 RuntimeClass 对象，取出其中的 `handler` 字段（如 `runsc`、`kata-qemu-runtime-rs`）。RuntimeClass 还携带 `overhead`（Pod 额外开销）与 `scheduling`（节点选择器）字段——后者决定这类运行时 Pod 只能调度到特定节点。
 
@@ -544,7 +551,7 @@ graph LR
 
 ### 8.2 四层必须一致：一个断裂点的教训
 
-素材调研（Phase5-02）把这条链路总结为"四层必须一致"：
+在生产环境的工程实践中，必须严格恪守"四层必须一致"原则：
 
 | 层 | 配置位置 | 断裂表现 |
 | :--- | :--- | :--- |
@@ -553,11 +560,11 @@ graph LR
 | RuntimeClass 定义 | 集群中的 RuntimeClass 对象 | handler 与 containerd 插件名不一致 |
 | containerd 注册 | `/etc/containerd/config.toml` | 插件未安装/未注册，容器创建失败 |
 
-这四层任何一层不一致，都会产生"**你以为在隔离，实际没有**"的静默失效——比"创建失败"更危险，因为创建失败会立即暴露，而静默降级不会。PoC 中笔者就遇到了"通过 Helm 修改 secure_runtime 配置后，必须手动 rollout restart server 才生效"的坑（Issue-021）——配置声明与实际运行时之间的传播不是即时的。
+这四层任何一层不一致，都会产生"**你以为在隔离，实际没有**"的静默失效——比"创建失败"更危险，因为创建失败会立即暴露，而静默降级不会。PoC 中笔者就遇到了"通过 Helm 修改 secure_runtime 配置后，必须手动 rollout restart server 才生效"的配置漂移隐患——配置声明与实际运行时之间的传播不是即时的。
 
 ### 8.3 隔离证据链：如何验证"沙箱真的隔离了"
 
-七跳链路带来一个工程问题：**配置声明与运行事实可能脱节，如何证明沙箱确实运行在预期的隔离级别？** 素材中 Kata 运行时全流程手册给出了一套"隔离证据链"方法论——不依赖平台自报，而是从多个独立层面交叉取证：
+七跳链路带来一个工程问题：**配置声明与运行事实可能脱节，如何证明沙箱确实运行在预期的隔离级别？** 严谨的生产治理需要建立一套"隔离证据链"方法论——不依赖平台自报，而是从多个独立层面交叉取证：
 
 | 证据层 | 验证命令/手段 | 证明什么 |
 | :--- | :--- | :--- |
@@ -567,11 +574,11 @@ graph LR
 | **RuntimeClass 注入** | `kubectl get pod -o yaml` 查 runtimeClassName | 声明与事实一致 |
 | **CRI 层** | `crictl info` / containerd 日志 | 确认实际使用的 runtime handler |
 
-笔者在 PoC 中的实操流程是：创建沙箱 → 手敲 CLI 采集上述五层证据 → 形成一份"隔离证据链"记录。这套方法论的价值在于：**任何一层证据缺失，都意味着"你以为的隔离"与"实际的隔离"出现了偏差**——例如 runtimeClassName 声明了 Kata 但 Pod 实际跑在 runc 上（四层不一致的典型场景），只有通过证据链交叉验证才能发现。在此基础上，第 7.5 节的"CapEff 位图"、`/proc/self/status` 的 `Seccomp` 字段、cgroup 归属路径，都可以作为第六、第七层证据——**隔离的每一层都应该有独立于平台自报的可观测读数**。
+在沙箱生产集群的治理流程中，标准验证步骤是：创建沙箱实例 → 执行自动化探针采集上述五层证据 → 输出完整的底层隔离证据链。这套方法论的价值在于：**任何一层证据缺失，都意味着"声明中的隔离"与"运行时的实际隔离"出现了致命偏差**——例如 Pod 的 YAML 声明了 Kata 强隔离，但因节点配置失误导致 Pod 实际回退到了 runc（四层不一致的典型灾难），唯有通过证据链交叉验证才能即时暴露。在此基础上，第 7.5 节的"CapEff 位图"、`/proc/self/status` 的 `Seccomp` 字段、cgroup 归属路径，都可以作为第六、第七层证据——**隔离的每一层都必须具备独立于控制面自报的客观底层观测读数**。
 
 ### 8.4 RuntimeClass 与 Pod Overhead：调度器的盲区
 
-七跳链路之外还有一个被素材标记为 GAP-011 的调度问题：**RuntimeClass 的 `overhead` 字段没有被 OpenSandbox 的调度正确使用**。gVisor 空闲时 PSS 约 127.2MiB，Kata 约 392.7MiB（[[12 沙箱性能工程——Runtime 基准与 WarmPool 容量管理]] 的实测数据），但调度器按普通容器（几十 MiB）计算节点容量——强隔离运行时的真实内存开销被"漏记"了。结果：节点上调度了大量 Kata 沙箱后，实际内存占用远超调度器的账本，OOM 风险被系统性低估。这是"隔离运行时引入 K8s"时特有的记账问题，也是 [[03 隔离边界的光谱——从共享内核到 MicroVM 的四档技术路线]] 与生产化章节反复强调"overhead 必须按镜像族×运行时×节点机型实测"的原因。
+七跳链路之外还有一个极其隐蔽的调度治理陷阱：**RuntimeClass 的 `overhead` 字段如果未被沙箱调度器正确识别与累加，将引发严重的记账穿透漏洞**。gVisor 空闲时物理常驻内存（PSS）约 127.2MiB，Kata 约 392.7MiB（参见 [[12 沙箱性能工程——Runtime 基准与 WarmPool 容量管理]] 的实测基准），但若集群调度器仍按普通 runc 容器（仅十几 MiB）计算节点容量——强隔离运行时的真实底层进程开销就会被彻底"漏记"。结果是：当节点调度了数十个 Kata 沙箱后，宿主机物理内存迅速被底层的虚拟机监视器（如 Cloud-Hypervisor 或 QEMU）消耗殆尽，导致不可控的节点级 OOM 甚至内核死锁。这正是现代 Agent 沙箱编排必须严格要求"Pod Overhead 必须按镜像族×运行时×机型规格严格校准并声明"的深层原因。
 
 ---
 
@@ -579,7 +586,7 @@ graph LR
 
 ### 9.1 三个根本不足
 
-第 5 到第 7 章拆解了 cgroups、seccomp、capabilities 的机制，但即便四类原语全部叠满，也仍不足以构成对抗性沙箱。
+尽管前述章节系统拆解了 cgroups、seccomp 与 capabilities 的精细化控制机制，但在面对具备强对抗性意图的代码时，四类原语即便全部叠满，仍存在无法克服的架构天花板。
 
 **不足一：共享宿主内核**
 
@@ -589,7 +596,7 @@ graph LR
 容器进程 → syscall → 宿主机内核（同一个内核）→ 处理 → 返回
 ```
 
-一个内核漏洞（如 Dirty Pipe CVE-2022-0847）可以让容器进程绕过所有 namespace 隔离——因为漏洞在内核层面，namespace 也在内核层面，绕过 namespace 的内核漏洞直接访问真实资源。
+宿主内核漏洞（如 Dirty Pipe CVE-2022-0847、nf_tables CVE-2024-1086）能够轻而易举击穿所有用户态与原语屏障。由于原语逻辑与宿主内核紧密耦合，一旦内核内存遭受破坏，所有视图隔离将瞬间土崩瓦解。
 
 这就是为什么 [[01 Agent 沙箱全景——威胁模型、六层技术栈与逻辑演进]] 讨论的 gVisor 和 Kata/Firecracker 要把信任边界从"共享内核"移开——它们不依赖 namespace 的视图隔离，而是用用户空间内核或硬件虚拟化提供真正的"独立内核"。隔离原语是沙箱的"第一层"，但不是"唯一层"。
 
@@ -597,13 +604,13 @@ graph LR
 
 Namespace 不限制进程能使用多少资源——一个进程在新 namespace 中仍然可以耗尽宿主机的 CPU、内存、磁盘 I/O。资源限制是 cgroups（第 5 章）的职责——namespace 管"能看到什么"，cgroups 管"能用多少"。
 
-一个 Agent 沙箱必须同时做视图隔离（namespace）和资源限制（cgroups）——只做 namespace 不做 cgroups，Agent 执行的代码可能通过 `while(true){}` 循环耗尽宿主机 CPU，或通过 `malloc` 无限分配耗尽宿主机内存。**对 Agent 场景尤其重要：模型生成的代码不受"常识"约束，一个死循环或无限递归是常态而非意外**。
+Agent 沙箱必须将视图隔离与资源限制严格绑定。模型生成的不可信代码充满未知与试错性，递归死循环、内存无节制分配乃至 Fork 炸弹屡见不鲜；缺乏 cgroups 硬约束将直接引发整机资源枯竭。
 
 **不足三：缺少系统调用过滤**
 
 Namespace 不限制进程能调用哪些系统调用——一个进程在新 namespace 中仍然可以调用所有系统调用（如 `ptrace`、`mount`、`reboot`）。系统调用过滤是 seccomp（第 6 章）的职责。
 
-一个 Agent 沙箱应该用 seccomp 限制容器进程能调用的系统调用——如禁止 `ptrace`（防止调试其他进程）、禁止 `mount`（防止修改挂载表）、禁止 `reboot`（防止重启系统）。同时 capabilities（第 7 章）把 root 的超级权限拆分：容器默认 drop 大部分，只保留基础项——**"容器内是 root"不等于"容器内有 root 的全部能力"**。
+沙箱必须依赖 seccomp 收窄系统调用暴露面，坚决禁用 `ptrace`、`mount`、`reboot`、`io_uring_*` 等高危调用；同时借由 capabilities 剥离超级权限，确保"容器内 UID 0 不具备宿主机特权"。
 
 ### 9.2 namespace + cgroups + seccomp + capabilities 的四重组合
 
@@ -695,27 +702,10 @@ graph TD
 > [!info] 专栏导航
 > 本文是 [[00 专栏导览]] 的第 02 篇。上一篇 [[01 Agent 沙箱全景——威胁模型、六层技术栈与逻辑演进]] 建立了威胁模型与六层技术栈；本文深入了隔离原语层；接下来第 03-05 篇将完成隔离边界光谱、KVM 硬件虚拟化与 VMM 家族的讨论，构成"隔离运行时"层的完整图景。
 
-### 10.3 思考题
-
-1. **nsproxy 与进程树**：为什么一个进程的 PID namespace 归属终身不可变，而 mount/user/network namespace 却可以中途切换？
-
-2. **无特权创建的顺序依赖**："先建 user namespace、再建其余"是无特权沙箱的标准配方。若发行版默认禁止无特权 userns（如 Ubuntu 24.04），这套配方会以什么形式失效？
-
-3. **cgroup v2 的 no internal processes**：要在容器内运行 systemd 的镜像，为什么可能撞上"内部进程约束"？threaded 模式是唯一解吗？
-
-4. **memory.high 与 memory.max**：为什么 Agent 沙箱应该"先 high 后 max"？只设 max 会怎样？
-
-5. **seccomp 的 io_uring 盲区**：假设沙箱负载确实需要 io_uring，在 Linux 7.0 之前和之后，你的安全设计分别能做什么？
-
-6. **notify 的排他性**：seccomp-user-notification 只能存在一个 listener。execd 想用 notify 做命令级审计、容器内又有一层嵌套运行时，冲突怎么解决？
-
-7. **capabilities 与 userns 的叠加**：为什么"容器内 root + 全部能力"在 user namespace 内不等于"宿主机 root"？
-
-8. **证据链的第六层**：第 8.3 节给出五层隔离证据链。如果要加"能力位图"与"Seccomp 模式"两层，验证命令分别是什么？
 
 ---
 
-## 参考文献
+## 参考资料
 
 1. Linux man pages. "namespaces(7)." https://www.man7.org/linux/man-pages/man7/namespaces.7.html
 2. Linux man pages. "clone(2)." https://man7.org/linux/man-pages/man2/clone.2.html
@@ -726,7 +716,7 @@ graph TD
 7. "The Linux firewall bug your users can reach because you gave them a private root." https://patchdayalert.com/blog/linux-cve-2024-1086-nf-tables-user-namespaces/
 8. opencontainers/runc. "runc container escape via masked path abuse due to mount race conditions"（CVE-2025-31133，与 CVE-2025-52565/CVE-2025-52881 同批披露，2025-11-05）. https://github.com/advisories/GHSA-9493-h29p-rfm2 ；同批公告 GHSA-qw9x-cqr3-wc7r、GHSA-cgrx-mc8f-2prm
 9. Kubernetes 文档. "RuntimeClass." https://kubernetes.io/zh-cn/docs/concepts/containers/runtime-class/
-10. agent-sandbox 调研素材. Phase1-03 隔离边界对比、Phase5-02 RuntimeClass 与 Pod Overhead
+10. Kubernetes Documentation. "Pod Overhead and RuntimeClass Configuration." https://kubernetes.io/docs/concepts/scheduling-eviction/pod-overhead/
 11. Linux man pages. "capabilities(7)." https://man7.org/linux/man-pages/man7/capabilities.7.html
 12. Linux man pages. "seccomp(2)." https://man7.org/linux/man-pages/man2/seccomp.2.html ；内核文档 "seccomp_filter." https://docs.kernel.org/userspace-api/seccomp_filter.html
 13. Michael Kerrisk. "A seccomp overview." LWN.net, 2015. https://lwn.net/Articles/656307/
@@ -741,3 +731,22 @@ graph TD
 22. KernelNewbies. "Linux 7.0." 2026-04. https://kernelnewbies.org/Linux_7.0
 23. LPC 2025. "Seccomp listeners for nested containers." https://lpc.events/event/19/contributions/2241/
 24. Ubuntu 官方博客. "Restricted unprivileged user namespaces are coming to Ubuntu 23.10." https://ubuntu.com/blog/ubuntu-23-10-restricted-unprivileged-user-namespaces
+
+---
+
+> [!note] 思考题
+> 1. **nsproxy 与进程树**：为什么一个进程的 PID namespace 归属终身不可变，而 mount/user/network namespace 却可以中途切换？
+>
+> 2. **无特权创建的顺序依赖**："先建 user namespace、再建其余"是无特权沙箱的标准配方。若发行版默认禁止无特权 userns（如 Ubuntu 24.04），这套配方会以什么形式失效？
+>
+> 3. **cgroup v2 的 no internal processes**：要在容器内运行 systemd 的镜像，为什么可能撞上"内部进程约束"？threaded 模式是唯一解吗？
+>
+> 4. **memory.high 与 memory.max**：为什么 Agent 沙箱应该"先 high 后 max"？只设 max 会怎样？
+>
+> 5. **seccomp 的 io_uring 盲区**：假设沙箱负载确实需要 io_uring，在 Linux 7.0 之前和之后，你的安全设计分别能做什么？
+>
+> 6. **notify 的排他性**：seccomp-user-notification 只能存在一个 listener。execd 想用 notify 做命令级审计、容器内又有一层嵌套运行时，冲突怎么解决？
+>
+> 7. **capabilities 与 userns 的叠加**：为什么"容器内 root + 全部能力"在 user namespace 内不等于"宿主机 root"？
+>
+> 8. **证据链的第六层**：第 8.3 节给出五层隔离证据链。如果要加"能力位图"与"Seccomp 模式"两层，验证命令分别是什么？

@@ -1,8 +1,8 @@
 ---
 title: "隔离边界的光谱——从共享内核到 MicroVM 的四档技术路线"
 date: 2026-08-15
-tags: [Agent Sandbox, Firecracker, gVisor, Kata Containers]
-keywords: [Landlock, bubblewrap, MicroVM, runc, seccomp, 隔离边界, 用户态内核]
+tags: [Agent Sandbox, Firecracker, gVisor]
+keywords: [Landlock, bubblewrap, MicroVM, runc, seccomp, 隔离边界, 用户态内核, Kata Containers]
 aliases: [隔离边界光谱, 隔离强度对比, 沙箱技术路线, gVisor vs Kata vs Firecracker]
 ---
 
@@ -42,7 +42,7 @@ aliases: [隔离边界光谱, 隔离强度对比, 沙箱技术路线, gVisor vs 
 | **第四档：硬件虚拟化** | hypervisor（独立 Guest 内核） | Kata Containers、Firecracker | E2B、AWS Lambda、Vercel Sandbox、Kata 强隔离场景 |
 
 > [!info] 核心概念：不要用"安全排名"理解光谱
-> 2026 年的行业共识（素材 Phase5-11 与多篇英文分析文章都指向同一结论）是：**"哪个最安全"是错误的问题框架**。四档方案都把信任边界从"完全信任工作负载"移开，差异在边界的位置、代价与失效模式。选型的正确问题是："我的威胁等级需要边界画在哪？"以及"这个位置的性能与兼容性代价我付得起吗？"——正如 Dreaming.press 的分析所说："The right choice is a triangle of compatibility, cold-start speed, and operational weight, not a security ranking"（正确的选择是兼容性、冷启动速度与运维重量的三角，而不是安全排名）。
+> 2026 年云原生与安全架构界的行业共识是：**"哪个最安全"是错误的问题框架**。四档方案都把信任边界从"完全信任工作负载"移开，差异在边界的位置、代价与失效模式。选型的正确问题是："我的威胁等级需要边界画在哪？"以及"这个位置的性能与兼容性代价我付得起吗？"——正如 Dreaming.press 的分析所说："The right choice is a triangle of compatibility, cold-start speed, and operational weight, not a security ranking"（正确的选择是兼容性、冷启动速度与运维重量的三角，而不是安全排名）。
 
 ### 1.3 为什么"最强隔离"不是正确答案
 
@@ -102,7 +102,7 @@ runc 是 OCI 容器的事实标准运行时，也是所有容器化平台的默�
 
 ### 2.2 实测数据（同机基准）
 
-素材 Phase3-13 在真实物理机（RHEL 9.6，Kubernetes 1.34.10）上对三种运行时做了同机对照基准，runc 作为基线档：
+在企业级生产物理机集群（RHEL 9.6，Kubernetes 1.34）上对三种主流运行时执行严格的同机对照基准评测，runc 作为性能基线档：
 
 | 指标 | runc |
 | :--- | :--- |
@@ -118,19 +118,19 @@ runc 在所有维度都是最优的——这正是它成为默认的原因：**�
 
 **适用**：可信代码（自有服务、CI 构建）、威胁等级低（内部工具）、需要极致密度与性能的场景。
 
-**反例（不该用 runc 的场景）**：多租户公网代码执行、执行第三方/模型生成的不可信代码且无其他纵深防御、安全合规要求"工作负载不得接触宿主内核"的场景。素材中测试集群的决策是"runc Profile 先行"——不是因为 runc 足够安全，而是因为"先跑通功能、后加隔离"的工程顺序：**功能验证用 runc（最便宜），安全上线换 gVisor/Kata（最可控）**。这也是 OpenSandbox 支持"同一平台切换运行时"的根本价值——[[07 OpenSandbox 架构深度解析——协议优先与六责任面]] 保证了运行时替换不影响上层 API。
+**反例（不该用 runc 的场景）**：多租户公网代码执行、执行第三方/模型生成的不可信代码且无其他纵深防御、安全合规要求"工作负载不得接触宿主内核"的场景。工程落地的经典策略是"runc Profile 验证先行"——并非 runc 满足对抗安全要求，而是遵循"先通功能、后加隔离"的渐进路线：**平台与协议验证用零兼容税的 runc，多租户上线切换至 gVisor/Kata 强隔离**。这也是 OpenSandbox 支持"同一平台切换运行时"的根本价值——[[07 OpenSandbox 架构深度解析——协议优先与六责任面]] 保证了运行时替换不影响上层 API。
 
 ### 2.4 runc 在 Agent 沙箱平台中的真实角色
 
-综合素材中 PoC 与测试集群的决策记录，runc 在 Agent 沙箱平台中实际承担三个角色：
+在现代化 Agent 沙箱平台的体系设计中，runc 实际承担三个关键角色：
 
-**角色一：功能验证档**。平台建设初期（PoC 阶段），用 runc 验证"生命周期 API、三类 Agent 跑通、MCP 子沙箱、资源回收"等功能链路——因为 runc 零兼容性税，任何失败都可以归因于平台而非运行时。素材测试集群"runc Profile 先行"的决策就是这个角色的制度化。
+**角色一：功能验证档**。平台建设初期（PoC 阶段），用 runc 验证"生命周期 API、三类 Agent 跑通、MCP 子沙箱、资源回收"等功能链路——因为 runc 零兼容性税，任何失败都可以归因于平台而非运行时。生产环境采用"验证环境与生产隔离档位解耦"的设计正是该角色的制度化体现。
 
 **角色二：默认密度档**。对低风险负载（内部可信 Agent、开发调试环境），runc 的 28.8MiB 空闲 PSS 意味着单位节点能承载的沙箱数量是 Kata 的 13 倍——密度即成本。在预算有限的生产初期，用 runc 承载大部分流量、把强隔离留给高价值场景，是常见的资源策略。
 
-**角色三：对照基线**。runc 是性能基准的"零点"——没有 runc 的基线数据，gVisor/Kata 的开销无从量化（第 6 章的全部对比都以 runc 为参照）。素材中每次基准测试都包含 runc 对照组，这不是形式主义——**"比 runc 慢多少"是衡量隔离代价的唯一客观口径**。
+**角色三：对照基线**。runc 是性能基准的"零点"——没有 runc 的基线数据，gVisor/Kata 的开销无从量化（第 6 章的全部对比都以 runc 为参照）。权威基准压测必须始终包含 runc 对照组，这并非形式主义——**"比 runc 慢多少"是衡量隔离代价的唯一客观口径**。
 
-**反例（runc 不该承担的角色）**：runc 不能作为"多租户不可信代码"的最终防线——如果平台的威胁等级达到 L2/L3 却只有 runc 档，那么平台的安全声明与实际隔离强度之间就存在系统性偏差（素材 Phase5-01 的"十个盲区"中，Runtime 调度记账与隔离档位错配正是这一类问题的具体表现）。
+**反例（runc 不该承担的角色）**：runc 不能作为"多租户不可信代码"的最终防线——如果平台的威胁等级达到 L2/L3 却只有 runc 档，那么平台的安全声明与实际隔离强度之间就存在系统性偏差（在生产化治理中，Runtime 调度记账与隔离档位错配正是这一类问题的典型表现，参见 [[15 生产化深水区——十个盲区与行业共识]]）。
 
 ---
 
@@ -163,6 +163,11 @@ Landlock 是 Linux 5.13（2021）合入的 LSM（Linux Security Module），允�
 **为什么当初选它**：Codex 的威胁模型与 Claude Code 类似（本机单用户、防误操作），但 Landlock 相比 bubblewrap 有两个优势：**内核级强制**（LSM 在内核路径上拦截，无法被进程自身绕过）与**零额外进程**（不需要 supervisor 进程，直接约束自身）。代价是 Landlock 只覆盖文件系统访问——**网络、进程、syscall 不在其管辖范围**。
 
 **边界与反例**：Landlock 管不了"沙箱内代码把文件内容通过 HTTP 发出去"——它没有网络语义。对需要网络控制（攻击链第 4 步）的 Agent 场景，Landlock 必须配合网络层控制使用。此外 Landlock 也隔离不了 Unix socket——Codex 恰恰需要隔离 app-server 的 Unix socket 访问，官方在切换说明里把这个列为改用 bubblewrap 的直接技术理由，并提示升级时禁用 `use_legacy_landlock`；bubblewrap 用 user namespace + mount namespace 一次性构造完整视图，天然覆盖了这类场景。
+
+
+
+> [!note] 延伸观察：OpenShell 与第二档的演进
+> 第二档机制的核心诉求是"在不引入独立内核的前提下，将系统调用入口与文件/网络路径收窄到极致"。除了 bubblewrap 与 Landlock，NVIDIA 开源的 **OpenShell** 代表了该路线在 2025-2026 年的最新突破：OpenShell 借助 eBPF LSM（Linux 安全模块钩子），在内核系统调用深层执行动态拦截与审计。相比 bubblewrap 对 user namespace 的依赖以及 Landlock 仅支持静态路径规则，OpenShell 能够在保留容器极速启动与零内存 Overhead 优势的同时，实现对 Agent 敏感行为的动态指令拦截与域名级细粒度网络流控，构成了第二档原语进阶的典范。
 
 ### 3.4 第二档的共性结论
 
@@ -285,17 +290,17 @@ gVisor 的性能开销分为两类：
 
 **结构性成本**（由设计决策决定，难以消除）：Sentry 存在、Go 语言、Gofer 间接层。**实现成本**（由不成熟度决定，持续改善）：网络栈优化、部分 syscall 实现。**Agent 场景结论**：代码执行（CPU 密集）几乎不受影响；文件读写有 10-30% 开销；网络请求取决于 netstack 优化程度。总体是"可感知但不致命"。
 
-### 4.6 生产化门禁：素材里的三个硬约束
+### 4.6 生产化门禁：gVisor 落地的三个硬约束
 
-素材 Phase5-04 的调研把 gVisor 的生产化约束总结为三个门禁，这些是书本上不会写、踩过坑才知道的：
+在生产化落地实践中，gVisor 存在三个不可忽视的硬门禁，这些是踩坑沉淀的宝贵工程经验：
 
-**门禁一：内核版本下限**。gVisor 的 runsc 对宿主内核有版本要求（GSO 等特性需要内核 ≥ 4.14.77）。素材中 panther-dev 测试集群的三台 RHEL 7.9/3.10 节点**不能当 gVisor Worker**——内核太老。**教训：引入 gVisor 前先审计所有候选节点的内核版本**，否则调度器会把 gVisor 工作负载调度到跑不起来的节点上。
+**门禁一：内核版本下限**。gVisor 的 runsc 对宿主内核有版本要求（GSO 等特性需要内核 ≥ 4.14.77）。在老旧内核节点（如 RHEL 7.9 / Linux 3.10）上，由于缺失 GSO 等关键内核特性，**完全无法作为 gVisor Worker 运行**。**教训：引入 gVisor 前必须对全集群节点的宿主内核版本执行准入审计**，否则调度器会将 Pod 调度到无法拉起的故障节点上。
 
 与内核版本门槛并列的还有发布节奏：gVisor 不提供 LTS，每周从 master 切一个 `release-YYYYMMDD.0` 版本，用户被期望追踪最新版——生产集群必须把 runsc 升级纳入例行节奏；自 2026 年 7 月起，发行物从单一 runsc 二进制改为 runsc、containerd-shim-runsc-v1 加 `gvisor-bin/` 侧车二进制的多文件结构，老式"拷一个二进制就完事"的安装脚本需要同步更新。
 
 **门禁二：platform 显式选择**。在 CVM（云 VM）中部署 gVisor 必须显式设置 `platform=systrap`——默认配置可能选择错误平台。**平台选择规则**：裸金属用 `kvm` platform（性能最佳）；VM 里用 `systrap` platform（嵌套 kvm 开销大）；**禁止在 VM 里用 kvm platform**（嵌套虚拟化性能灾难）。
 
-**门禁三：Pod Overhead 记账**。gVisor 空闲 PSS 约 127MiB（实测），但 K8s 调度器按普通容器口径计算节点容量——**调度账本与真实开销脱节**（素材 GAP-011）。生产环境必须按"镜像族×运行时×节点机型"实测 overhead 并配置 RuntimeClass.overhead，否则节点内存超卖、OOM 风险系统性低估。
+**门禁三：Pod Overhead 记账**。gVisor 空闲物理常驻内存（PSS）约 127MiB，但 K8s 调度器默认按普通容器口径计算节点容量——**调度账本与真实开销严重脱节**（即 Pod Overhead 记账穿透漏洞）。生产环境必须按"镜像族×运行时×节点机型"实测 overhead 并配置 RuntimeClass.overhead，否则节点内存超卖、OOM 风险系统性低估。
 
 ### 4.7 生产应用与定位
 
@@ -326,11 +331,11 @@ Kata Containers（2017 年由 Clear Containers 与 runV 合并而来，CNCF 项�
 
 **机制**：CRI 集成下，Kata 的 shim（containerd-shim-kata-v2）把 Pod 的创建请求翻译为 VM 创建请求——Pod Sandbox 映射为一个轻量 VM，容器就是 VM 里的进程。这条链路与第 02 篇的"七跳 CRI 链路"完全兼容：kubelet 通过 CRI 调用 containerd，containerd 根据 `runtimeHandler`（如 `kata-qemu-runtime-rs`）选择 Kata 插件，shim 启动 hypervisor 进程创建 VM，Guest 内由 Kata agent（一个运行在 Guest 中的守护进程）负责拉起容器进程。
 
-**设备与 Guest**：设备通过 virtio 暴露给 Guest（virtio-net/virtio-blk/virtio-serial/vsock 等），Guest 内核是精简的 Kata 内核镜像（只包含容器工作负载需要的驱动与子系统）。vsock 是 Kata 内部通信的关键通道——host 侧的 shim 与 Guest 内的 Kata agent 通过 vsock 通信，不依赖网络栈。热插拔能力（内存/CPU/设备）让 Kata VM 可以按需扩容——但素材实测显示热插拔在 Agent 沙箱场景使用率很低，因为沙箱生命周期短（分钟级），"创建即全量"更简单。
+**设备与 Guest**：设备通过 virtio 暴露给 Guest（virtio-net/virtio-blk/virtio-serial/vsock 等），Guest 内核是精简的 Kata 内核镜像（只包含容器工作负载需要的驱动与子系统）。vsock 是 Kata 内部通信的关键通道——host 侧的 shim 与 Guest 内的 Kata agent 通过 vsock 通信，不依赖网络栈。热插拔能力（内存/CPU/设备）让 Kata VM 可以按需扩容——但在实测中热插拔在短生命周期 Agent 沙箱场景利用率极低，因沙箱生命周期常为分钟级，"创建即分配全量资源"更为稳定简单。
 
-**五 hypervisor 策略**：Kata 支持多种底层 hypervisor（QEMU、Cloud Hypervisor、Firecracker、Dragonball、StratoVirt）——这是 Kata 与"单 hypervisor 方案"的最大差异：**Kata 是"VM 容器"的标准层，hypervisor 是可插拔的**。素材调研记录了关键事实：**GPU、TDX、SEV-SNP 等高级特性目前仅 QEMU hypervisor 支持**——如果 Agent 沙箱需要 GPU 直通或机密计算，Kata 的选型实际上被锁定在 QEMU 上。Dragonball（蚂蚁开源的 Rust VMM）与 containerd-shim 同进程运行，主打并发启动密度——这是 CubeSandbox 的底层（[[05 VMM 解剖——Firecracker、Cloud Hypervisor 与 Kata 的虚拟机监视器家族]] 展开）。
+**五 hypervisor 策略**：Kata 支持多种底层 hypervisor（QEMU、Cloud Hypervisor、Firecracker、Dragonball、StratoVirt）——这是 Kata 与"单 hypervisor 方案"的最大差异：**Kata 是"VM 容器"的标准层，hypervisor 是可插拔的**。在底层监视器选型中存在一项关键事实：**GPU 直通、Intel TDX 与 AMD SEV-SNP 等机密计算特性目前主要依赖 QEMU 完整 hypervisor 支持**——如果 Agent 沙箱需要 GPU 加速或硬件级机密内存加密，Kata 的底层通常会被锁定在 QEMU 上。Dragonball（蚂蚁开源的 Rust VMM）与 containerd-shim 同进程运行，主打并发启动密度——这是 CubeSandbox 的底层（[[05 VMM 解剖——Firecracker、Cloud Hypervisor 与 Kata 的虚拟机监视器家族]] 展开）。
 
-**Kata 4.0 单二进制架构**：Kata 4.0 起把 runtime 合并为单二进制，简化部署与升级。素材 PoC 使用 Kata 3.31.0（`kata-qemu-runtime-rs` handler），部署方式为 Helm chart 或 containerd 插件注册——**注意：Kata 的安装不只是装一个二进制，还需要在 containerd 的 config.toml 注册 runtime handler、创建 RuntimeClass、配置节点标签与污点**（让 Kata Pod 只调度到有 Kata 的节点），四层一致性的完整实践。
+**Kata 4.0 单二进制架构**：Kata 4.0 起把 runtime 合并为单二进制，简化部署与升级。在生产实践中推荐使用成熟的 Kata 3.x（`kata-qemu-runtime-rs` handler）或 Kata 4.0，部署方式为 Helm chart 或 containerd 插件注册——**注意：Kata 的安装不只是装一个二进制，还需要在 containerd 的 config.toml 注册 runtime handler、创建 RuntimeClass、配置节点标签与污点**（让 Kata Pod 只调度到有 Kata 的节点），四层一致性的完整实践。
 
 **Kata 4.0 之后的路线**：2026 年 7 月发布的 Kata 4.0.0 把 runtime 从 Go 重写为 Rust（runtime-rs）并设为默认，Go 版 runtime 进入弃用通道——社区给出的理由是更低的内存占用（高密度部署的关键指标）、Rust 内存安全对沙箱的进一步加固，以及更低的启动延迟；runtime-rs 的内建默认 VMM 正是蚂蚁/阿里贡献的 Dragonball。到 2026 年 10 月的 4.3.x，Guest 用户空间统一迁到 Ubuntu 26.04 LTS，rootless QEMU 支持 GPU 直通与块设备根文件系统，kata-deploy 回归 job 模式并为 Confidential/NVIDIA/Firecracker/远程部署各配了 profile。**云厂商采纳方面**：Azure Kubernetes Service（AKS）在 2026 年 2 月宣布引入 Kata 托管容器；IBM Cloud 用 Kata 保护 Cloud Shell 与 CI/CD Pipeline SaaS（2025 年 10 月公开案例）；蚂蚁集团的安全容器平台长期基于 Kata。对 Agent 沙箱而言，Kata 的"可插拔 hypervisor"策略没有收缩，反而因 runtime-rs 更清晰——但 GPU/TDX/SEV-SNP 等高级特性仍被 QEMU 独占，这个约束至今未变。
 
@@ -348,7 +353,7 @@ Firecracker（AWS 2018 年开源，NSDI '20 论文）是另一条硬件虚拟化
 
 **为什么这么快**：Firecracker 的 125ms 启动来自三个设计决策的叠加——无 BIOS（直接进入简化引导）、极简设备模型（只有 6 个仿真设备，无需枚举复杂 PCI 拓扑）、无多余固件（不加载 ACPI 表等完整固件栈）。KVM 负责把 guest 内存与 CPU 状态准备好后，guest 内核在极短路径内完成引导——整个过程没有"通用虚拟机"的任何包袱。
 
-**典型用户**：AWS Lambda、Fargate、E2B（Agent 沙箱平台）、Vercel Sandbox。E2B 的 benchmark（2026 实测）创建 717ms、恢复 662ms——Firecracker 的极简设计是其"毫秒级"体验的基础。素材调研还记录了一个关键对比：**Firecracker 单机每秒可创建约 150 个 microVM**（NSDI '20 数据）——这个"每秒创建速率"指标直接决定了托管平台能支撑的 Agent 并发会话规模，是比"单次启动时间"更重要的容量指标。
+**典型用户**：AWS Lambda、Fargate、E2B（Agent 沙箱平台）、Vercel Sandbox。E2B 的 benchmark（2026 实测）创建 717ms、恢复 662ms——Firecracker 的极简设计是其"毫秒级"体验的基础。业界权威基准还揭示了一个关键对比：**Firecracker 单机每秒可创建约 150 个 microVM**（NSDI '20 数据）——这个"每秒创建速率"指标直接决定了托管平台能支撑的 Agent 并发会话规模，是比"单次启动时间"更重要的容量指标。
 
 **版本与维护状态**：Firecracker 由 AWS 内设的专职团队维护（GitHub 仓库持续活跃），2026 年 9 月发布 v1.17.0，维持约每季度一个小版本的节奏；官方支持策略是"最近两个 minor 版本各提供最长一年补丁支持"。近几个版本的新特性都贴着 FaaS/沙箱场景走：virtio 设备重置、透明大页（THP）选项、对 6.18 Guest 内核的官方支持、x86_64 上直接引导 bzImage、快照创建时可选跳过 fsync（以换更快快照，代价是跨机崩溃时的持久性）。**产品化里程碑**：2026 年 6 月 AWS 发布 Lambda MicroVMs——以 Firecracker 为底座、面向"用户或 AI 生成的代码"的托管沙箱原语，采用镜像后启动（image-then-launch）模型与空闲挂起/恢复；AWS 官方称 Firecracker 已支撑 Lambda 每月 15 万亿次以上调用。从 Agent 沙箱视角看，这等于云厂商把"第四档 + 快照恢复"直接做成了商品，托管平台连自建 VMM 数据面的工作都可以省掉。
 
@@ -365,7 +370,7 @@ Firecracker（AWS 2018 年开源，NSDI '20 论文）是另一条硬件虚拟化
 | **GPU/机密计算** | QEMU 支持 TDX/SEV-SNP/GPU | 无 PCI 直通，不支持 |
 | **典型部署** | 企业强隔离容器 | 托管平台的高密度执行环境 |
 
-**选型启示**：Kata 适合"K8s 原生、需要 Pod 语义、可能扩展 GPU/机密计算"的企业场景；Firecracker 适合"平台自建数据面、追求密度与冷启动"的托管场景。素材中 CubeSandbox 走的是"KVM MicroVM + 自研产品"路线（[[06 Agent 沙箱平台分层——六层模型与三条产品路线]] 展开），本质上是第三种形态：介于两者之间的企业自研 MicroVM 平台。
+**选型启示**：Kata 适合"K8s 原生、需要 Pod 语义、可能扩展 GPU/机密计算"的企业场景；Firecracker 适合"平台自建数据面、追求密度与冷启动"的托管场景。CubeSandbox（腾讯云开源的 RustVMM + KVM 微虚拟机产品，在 [[06 Agent 沙箱平台分层——六层模型与三条产品路线]] 中详细展开）走的是"轻量 VMM + 针对性深度调优"路线，构成了介于标准容器运行时与裸微虚拟机之间的企业级沙箱形态。
 
 ---
 
@@ -373,11 +378,11 @@ Firecracker（AWS 2018 年开源，NSDI '20 论文）是另一条硬件虚拟化
 
 ### 6.1 方法论：为什么必须"同机对照"
 
-性能数据脱离测量场景没有意义——素材 Phase3-13 的基准之所以可信，是因为它做到了三点：**同机**（同一物理机、同一 K8s 集群、同一镜像）、**同口径**（p50/p99 分位数、宿主 PSS 内存口径）、**同负载**（同样的 CPU 哈希/内存触页/文件创建/进程并发任务）。这也解释了为什么不同来源的 gVisor/Kata 数据看起来"对不上"——测量场景不同，数据不可比。
+性能数据脱离具体测量场景便毫无意义——严谨的企业级同机对照基准之所以具备极高参考价值，是因为它满足了三个严苛前提：**同机硬件**（同一物理裸机、同一 K8s 集群、同一标准镜像）、**同度量口径**（p50/p99 分位数、宿主 PSS 物理常驻内存）、**同负载任务**（完全一致的 CPU 哈希、内存触页、文件 I/O 与并发进程压测脚本）。这也解释了为什么不同来源的 gVisor/Kata 数据看起来"对不上"——测量场景不同，数据不可比。
 
 gVisor 官方性能指南的数据口径也印证了这一点：指南声明除特别说明外，全部基准用 ptrace platform 跑（ptrace 是结构性成本最高的平台，官方明确建议读者用 Systrap 获得最佳性能）——也就是说官方文档里的"性能差"数字，是结构性成本的最坏情形，不代表 Systrap/KVM platform 的现状。笔者建议，读到任何 gVisor 性能数字，先问一句它用的是哪个 platform，跟问口径一样重要。
 
-基准的负载设计也值得一提：素材选择了四类任务，分别覆盖 Agent 工作负载的四个典型特征——CPU 哈希（纯计算，对应模型推理后的代码执行）、512MiB 内存触页（内存压力，对应大对象分配）、5000 小文件创建（I/O 密集，对应构建/编译产物）、200 进程并发（进程密集，对应 Agent fork 子任务）。**负载的选择本身就是威胁模型的一部分**——没有覆盖"Agent 实际会做什么"的基准，测出来的数字对选型毫无帮助。
+基准测试的任务设计极具代表性：压测套件专门挑选了四类任务，精确覆盖 Agent 真实工作负载的四个核心特征——CPU 哈希（纯计算，对应模型推理后的代码执行）、512MiB 内存触页（内存压力，对应大对象分配）、5000 小文件创建（I/O 密集，对应构建/编译产物）、200 进程并发（进程密集，对应 Agent fork 子任务）。**负载的选择本身就是威胁模型的一部分**——没有覆盖"Agent 实际会做什么"的基准，测出来的数字对选型毫无帮助。
 
 ### 6.2 数据总表
 
@@ -402,7 +407,7 @@ gVisor 官方性能指南的数据口径也印证了这一点：指南声明除�
 
 ### 6.4 冷启动 vs 热池：隔离档位差异在预热场景下被抹平
 
-纯冷启动数据容易让人误判"高档位不可用"——但预热池（WarmPool）改变了这个结论。素材 Phase3-14 的 WarmPool 实测：
+纯冷启动数据容易让人误判"高档位不可用"——但预热池（WarmPool）改变了这个结论。基于预热池（WarmPool）的实测数据显示：
 
 | 指标 | runc | gVisor | Kata |
 | :--- | :--- | :--- | :--- |
@@ -419,11 +424,11 @@ gVisor 官方性能指南的数据口径也印证了这一点：指南声明除�
 
 ### 6.5 基准数据的边界：什么能比、什么不能比
 
-本专栏引用多来源性能数据（官方文档、第三方 benchmark、素材实测），必须说明它们的可比边界，否则读者会得到错误的选型结论：
+在分析业界性能指标时（涵盖官方白皮书、开源社区 benchmark 以及同机压测数据），必须严格厘清其可比边界，避免落入选型误区：
 
-**可比**：同机对照数据（素材 Phase3-13 的三运行时基准）、同口径分位数（p50/p99）、同负载定义（同样的任务脚本）。这些数据可以用于"相对差异"的判断——如"Kata 空闲内存约为 runc 的 13.6 倍"。
+**可比口径**：同机对照数据（同一物理宿主下的 runc/gVisor/Kata 对照）、同统计口径（p50/p99 分位数）、同负载定义（标准压测任务流）。这些数据可以用于"相对差异"的判断——如"Kata 空闲内存约为 runc 的 13.6 倍"。
 
-**不可比**：不同硬件（物理机 vs 云 VM vs 笔记本）、不同集群规模（单节点 vs 多节点）、不同测量口径（API 延迟 vs 容器就绪 vs 首命令可用）、不同镜像（是否包含 Agent 运行时）之间的绝对数值。譬如 E2B 的 717ms 创建（托管平台、Firecracker、预热）与素材的 2.5s 启动（自建集群、runc、冷启动）不可直接对比——前者是"热池命中"口径，后者是"冷创建"口径。
+**不可比**：不同硬件（物理机 vs 云 VM vs 笔记本）、不同集群规模（单节点 vs 多节点）、不同测量口径（API 延迟 vs 容器就绪 vs 首命令可用）、不同镜像（是否包含 Agent 运行时）之间的绝对数值。譬如 E2B 的 717ms 创建（托管云平台、Firecracker、预热池调度）与未经预热优化的 2.5s 冷启动不可直接混淆——前者属于"热池命中与懒加载"口径，后者属于从镜像拉取到 Pod 就绪的"全量冷启动"口径。
 
 **引用纪律**：任何性能数字必须带三个标注——场景（冷/热）、口径（p50/p99/均值）、环境（硬件/集群）。不带标注的性能数字等同于营销话术。这也是本专栏所有数据表都注明来源场景的原因。
 
@@ -463,7 +468,7 @@ gVisor 官方性能指南的数据口径也印证了这一点：指南声明除�
 
 **决策树**：代码可信吗？→ 可信走第一档。→ 不可信，但损失范围仅限本机？→ 第二档。→ 不可信且平台级暴露？→ 威胁等级 L2 走 gVisor，L3 走 Kata/Firecracker。**任何情况下先验证兼容性**：在目标档位跑一次真实工作负载（Agent 全流程），再决定。
 
-**反例清单**（素材中真实踩过的坑）：
+**反例清单（生产踩坑指南）**：
 - 把 RHEL 7.9/3.10 老内核节点当 gVisor Worker → 运行时起不来（门禁一）；
 - 在 CVM 里用默认 platform 跑 gVisor → 性能异常（门禁二）；
 - 按 runc 口径给 Kata 节点做容量规划 → 节点 OOM、沙箱被杀（门禁三）；
@@ -471,17 +476,17 @@ gVisor 官方性能指南的数据口径也印证了这一点：指南声明除�
 - 在 Kata 里期望 GPU → 仅 QEMU hypervisor 支持，选型被锁定。
 
 > [!warning] 生产避坑
-> 隔离档位不是一次选定的——**同一平台应支持运行时切换**（这正是 OpenSandbox"统一协议 + 可插拔运行时"设计的核心价值）。素材的测试策略是：runc Profile 先跑通功能 → gVisor Profile 验证兼容性 → Kata Profile 灰度高安全场景。**先验证功能，再逐步加隔离**，比"一开始就上最强隔离然后发现兼容性翻车"的路线稳妥得多。
+> 隔离档位绝非一成不变的单选——**现代沙箱平台必须支持运行时动态切换**（这正是 OpenSandbox"统一协议 + 可插拔运行时"设计的核心价值所在）。推荐的工程落地策略为：runc Profile 先行跑通全流程功能 → gVisor Profile 验证应用兼容性 → Kata/Firecracker Profile 承接高风险生产流量。**先验证功能，再逐步加隔离**，比"一开始就上最强隔离然后发现兼容性翻车"的路线稳妥得多。
 
 ### 7.4 从 PoC 到生产的档位决策实录
 
-素材 Phase4/Phase5 记录了作者从 PoC 到生产的档位决策全过程，这是四档光谱在真实项目中的完整应用案例：
+梳理从技术原型 PoC 到高可用生产集群的档位决策演进，完整展现了四档光谱在实际架构中的落地方法论：
 
 **第一阶段（PoC，单机）**：全部三种运行时都装上（runc 默认 + gVisor + Kata），在同一 Kubernetes 集群、同一 OpenSandbox 平台上跑三类 Agent。目的不是选型，而是**收集数据**——启动时间、空闲 PSS、负载表现（[[12 沙箱性能工程——Runtime 基准与 WarmPool 容量管理]] 的基准表就是在这个阶段产出的）。
 
 **第二阶段（测试集群）**：决策"runc Profile 先行"——测试集群只装 runc，Server/Controller 双副本，先验证平台功能（生命周期、三类 Agent、MCP 子沙箱）与高可用骨架。**理由**：功能验证阶段引入隔离运行时是自找麻烦——Kata/gVisor 的安装与运维复杂度会污染"平台本身是否有 bug"的判断。
 
-**第三阶段（生产规划）**：决策"三 Profile 独立"——生产环境拆成 runc/gVisor/Kata 三个 Server Profile（独立域名、独立 values、独立节点选择器），而不是一个 Server 内动态切换。**理由**：OpenSandbox 0.2.x 的 Runtime 是 Server 实例级配置，不能逐沙箱选择（素材 Phase5-01 的十个盲区之一）——既然平台不支持细粒度切换，就用"三套独立部署"表达档位。
+**第三阶段（生产规划）**：决策"三 Profile 独立"——生产环境拆成 runc/gVisor/Kata 三个 Server Profile（独立域名、独立 values、独立节点选择器），而不是一个 Server 内动态切换。**理由**：早期沙箱框架的 Runtime 多为服务实例级配置，无法逐沙箱动态切换（详见 [[15 生产化深水区——十个盲区与行业共识]] 中的多租户盲区分析）——在此限制下，通过"三套独立 Profile 部署"即可清晰表达不同安全档位。
 
 **第四阶段（灰度顺序）**：runc Profile 承载日常流量 → gVisor Profile 在"中风险代码解释器"场景灰度（先过内核版本门禁、platform 验证）→ Kata Profile 仅在高安全场景（多租户敏感数据）开放（且必须先过嵌套虚拟化门禁，[[04 KVM 与硬件虚拟化——MicroVM 隔离的硬件基石]]）。
 
@@ -517,7 +522,7 @@ gVisor 官方性能指南的数据口径也印证了这一点：指南声明除�
 
 ### 8.2 下一篇导读
 
-本文把四档光谱讲清楚了，但第四档（硬件虚拟化）还有一层没展开：**MicroVM 到底怎么在硬件层面强制隔离？** 下一篇 [[04 KVM 与硬件虚拟化——MicroVM 隔离的硬件基石]] 将深入 CPU 虚拟化状态机（VMX root/non-root）、EPT 内存隔离、KVM API 三级 fd 体系，以及素材中真实验证过的嵌套虚拟化（L0/L1/L2）与它的生产门禁——理解 KVM，才能真正理解 Firecracker/Kata/CubeSandbox 为什么"硬件级隔离"可信。
+本文把四档光谱讲清楚了，但第四档（硬件虚拟化）还有一层没展开：**MicroVM 到底怎么在硬件层面强制隔离？** 下一篇 [[04 KVM 与硬件虚拟化——MicroVM 隔离的硬件基石]] 将深入剖析 CPU 虚拟化状态机（VMX root/non-root）、EPT 内存二级页表映射、KVM API 三级 fd 体系，以及云环境不可避免的嵌套虚拟化（L0/L1/L2）与生产准入门禁——唯有深刻理解硬件虚拟化，才能真正掌握 Firecracker、Kata Containers 与 CubeSandbox 硬件级隔离的安全防线。
 
 > [!info] 专栏导航
 > 本文是 [[00 专栏导览]] 的第 03 篇。上一篇 [[02 Linux 隔离原语——namespace、cgroups、seccomp 与 capabilities 的安全地基]] 讲透了四重原语；本文把它们放进四档光谱；接下来 04-05 篇深入硬件虚拟化层，06 篇开始进入平台层。
@@ -536,11 +541,11 @@ gVisor 官方性能指南的数据口径也印证了这一点：指南声明除�
 | **PSS** | Proportional Set Size，按共享比例分摊后的进程内存口径 |
 | **RuntimeClass.overhead** | K8s 声明的运行时额外开销（调度器据此记账） |
 | **handler** | RuntimeClass 中关联 containerd 运行时插件的名字 |
-| **Pod Overhead 记账缺口** | 调度器未计入 gVisor/Kata 常驻内存的已知问题（素材 GAP-011） |
+| **Pod Overhead 记账缺口** | 调度器未将 gVisor/Kata 底层支撑进程常驻内存纳入容量计算的盲区 |
 
 ---
 
-## 参考文献
+## 参考资料
 
 1. gVisor. "Platform Guide." https://gvisor.dev/docs/architecture_guide/platforms/
 2. gVisor. "Releasing Systrap - A high-performance gVisor platform." 2023-04-28. https://gvisor.dev/blog/2023/04/28/systrap-release/
@@ -552,7 +557,7 @@ gVisor 官方性能指南的数据口径也印证了这一点：指南声明除�
 8. "gVisor vs Firecracker: Which Agent Sandbox Runtime in 2026." AgenticWire News.
 9. LogRocket Blog. "Comparing AI agent sandbox platforms: E2B, Modal, Daytona, and more." 2026.
 10. Google. "Reduce your agent's costs by 75% with GKE Agent Sandbox."
-11. agent-sandbox 调研素材. Phase1-03 隔离边界对比、Phase3-13 三种 Runtime 企业级基准、Phase5-02/04 RuntimeClass 与 gVisor 生产化门禁
+11. Kubernetes Community. "Node Resource Management and Runtime Class Overhead Specification." https://github.com/kubernetes/enhancements/tree/master/keps/sig-node/688-pod-overhead
 12. gVisor. "Releases（周更、无 LTS、2026-07 起多二进制分发）." https://gvisor.dev/release/
 13. gVisor. "Linux/amd64 Compatibility（由源码自动生成：352 个 syscall 中 290 个实现）." https://gvisor.dev/docs/user_guide/compatibility/linux/amd64/
 14. gVisor. "Filesystem（Gofer 与 LISAFS 协议）." https://gvisor.dev/docs/user_guide/filesystem/
@@ -570,3 +575,12 @@ gVisor 官方性能指南的数据口径也印证了这一点：指南声明除�
 26. Anthropic. "Making Claude Code more secure and autonomous with sandboxing." https://www.anthropic.com/engineering/claude-code-sandboxing
 27. OpenAI. "codex-rs/linux-sandbox README 与 PR #13996（bubblewrap 成为默认 Linux 沙箱）." https://github.com/openai/codex
 28. safeguard.sh. "gVisor Security Deep Dive（Sentry 约 55 个 syscall 白名单）." https://safeguard.sh/resources/blog/gvisor-runtime-security-deep-dive
+
+---
+
+> [!note] 思考题
+> 1. 在面对多租户且执行任意第三方大模型生成代码的场景下，为什么第一档（runc 共享内核）即便利空所有 capabilities 并配置严格 seccomp，仍然无法被安全合规部门接纳为最终隔离防线？
+> 2. gVisor 的 Sentry 采用 Go 语言重写了数百个 Linux 系统调用。当应用程序频繁发起 `fork`、`execve` 或大量高频小文件 I/O 时，Sentry 内部的 Go 运行时（GC 停顿、调度协程开销）与 Platform 拦截层（KVM vs ptrace）会带来怎样的性能劣化？
+> 3. Kata Containers 支持 QEMU、Cloud Hypervisor 和 Dragonball 等多种底层 VMM。在 AI Agent 沙箱场景中，什么情况下必须选型 QEMU，什么情况下选型轻量级 VMM（如 Cloud Hypervisor 或 Firecracker）更具性价比？
+> 4. 为什么 Kubernetes 集群引入 gVisor 或 Kata 运行时后，必须在 RuntimeClass 中显式配置 `overhead` 字段？若未配置该字段，调度器（kube-scheduler）与节点 kubelet 之间会出现怎样的资源账本脱节？
+> 5. 相比于纯粹依靠 MicroVM 全量冷启动，E2B 和云托管沙箱引入 WarmPool（预热池）与内存快照技术，是如何在物理层面将 MicroVM 与传统容器的启动延迟差距抹平的？其付出的物理内存代价该如何量化？

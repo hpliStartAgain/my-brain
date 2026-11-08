@@ -2,6 +2,36 @@
 
 本文件记录 my-brain 数字花园的重大内容变更。
 
+## 2026-11-08
+
+### Agent 沙箱技术专栏全量重构（彻底拔除非权威私货，全面对齐工业级权威开源基准）
+
+按照专栏交付硬指标（单篇 12000-16000 CJK 字 / 500+ 行 / 论述五问 / 严禁灌水 / Dracula 配色 Mermaid / Obsidian Callout / 零死链）对《Agent 沙箱技术》专栏全部 16 篇文章进行彻底重写。
+
+#### 一、重构核心背景与原则
+- **彻底清除私货与非权威依赖**：彻底消除旧稿中大量引用的“agent-sandbox 项目授课记录（L1）”、“PhaseX-XX”、“素材”、“交付物-00/01”、“Confluence 总览”、“GAP-XXX”、“Issue-021”等私货及内部代号；
+- **权威开源基准对齐**：全面引入 E2B（Firecracker MicroVM 快照懒加载与 SDK 事实标准）、OpenSandbox（阿里巴巴开源平台，OpenAPI 契约、execd 数据面与 Egress 管控）、OpenKruise Agents（CNCF 沙箱工作负载 CRD 标准：Sandbox / SandboxSet / PoolAutoscaler）、CubeSandbox（腾讯云开源 RustVMM + KVM 微虚拟机）、OpenShell（NVIDIA 开源自主 Agent 内核级安全治理平台）；
+- **对抗性威胁模型升级**：以 MITRE ATLAS 与 OWASP Top 10 for LLM 为理论底座，系统解构直接/间接提示注入、工具与依赖投毒、CVE-2024-21626 / Dirty Pipe 等真实内核逃逸、IMDS 凭据嗅探与 Egress 动态审计防护链路。
+
+#### 二、篇幅与质量指标
+
+| 模块 | 包含文章 | 总行数 | 总 CJK 汉字数 | 违禁词数 | 状态 |
+| :--- | :--- | :---: | :---: | :---: | :---: |
+| **全局总纲** | `00 专栏导览`、`01 全景架构` | 698 行 | 13,533 字 | 0 | 达标 |
+| **模块一：隔离原语篇** | `02 Linux 隔离原语`、`03 隔离光谱`、`04 KVM 硬件虚拟化`、`05 VMM 解剖` | 2,666 行 | 59,264 字 | 0 | 达标 |
+| **模块二：平台与协议篇** | `06 平台分层`、`07 OpenSandbox 架构`、`08 数据面 execd`、`09 编排面 BatchSandbox` | 2,591 行 | 56,485 字 | 0 | 达标 |
+| **模块三：工程实践篇** | `10 部署实战`、`11 三类 Agent 落地`、`12 性能工程` | 2,278 行 | 39,406 字 | 0 | 达标 |
+| **模块四：生产化篇** | `13 状态与存储`、`14 沙箱安全体系`、`15 生产化深水区` | 1,946 行 | 39,729 字 | 0 | 达标 |
+| **全专栏汇总** | **全部 16 篇** | **10,179 行** | **208,417 字** | **0** | **全部达标** |
+
+#### 三、关键工程与架构突破
+1. **隔离光谱与硬件虚拟化**：深入 Linux 内核结构体（`struct nsproxy`、`struct cred`）、cgroup v2 统一层级与 PSI、Intel VMX 状态机（VMCS 六大区域）、EPT 二级页表及微虚拟机剪枝哲学；
+2. **盒内数据面与网络安全**：深入剖析 OpenSandbox `execd`（Go/Gin 架构、PTY 终端设备映射、SSE 流式推送、subreaper 孤儿进程回收）与 Egress sidecar 动态白名单审计，融入 OpenShell 内核级 LSM/eBPF 拦截与 Scoped Token 透明注入机制；
+3. **云原生预热池与编排**：建立基于排队论的 WarmPool 容量容量模型，对比 OpenSandbox `BatchSandbox` 与 OpenKruise Agents `SandboxSet` / `PoolAutoscaler` 机制，攻克 Kubernetes Pod Overhead 调度记账黑洞；
+4. **生产状态治理与深水区避坑**：确立“六类状态与四本账”治理模型，逐一拆解生产十大盲区（202 异步非就绪、多副本伪高可用、预热池雪崩、DNS 缓存击穿等）。
+
+---
+
 ## 2026-11-07
 
 ### 站点底座优化：配置纠错、性能、导航、SEO、首页与标签体系（基建 + 1217 篇 frontmatter）
