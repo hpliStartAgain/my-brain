@@ -458,7 +458,7 @@ List-Watch 的两阶段设计：
 > [!note] 设计哲学：List-Watch 保证不丢失事件
 > 为什么不直接 Watch 而要先 List？因为如果直接 Watch，客户端不知道从哪个 resourceVersion 开始——可能错过 Watch 连接建立前的变更。先 List 获取当前状态和 resourceVersion，再从该 resourceVersion 开始 Watch，确保不丢失任何事件。如果 Watch 连接断开，客户端用最后收到的 resourceVersion 重新 Watch——API Server 会从该版本之后的所有事件重新发送。这是 K8s 分布式神经系统的基础——所有组件都依赖 List-Watch 获取状态变化。List-Watch 的详细分析将在第 06 篇展开。
 
-List-Watch 的一个工程细节是 Watch 连接的管理。在大规模集群中，可能有数百个组件同时 Watch 同一资源（譬如所有 kubelet 都 Watch Pod），API Server 需要管理大量长连接。K8s 通过 Watch 缓存（API Server 内存中缓存资源状态）和事件合并（多个 Watch 客户端共享同一份事件流）优化连接管理，但 Watch 连接数仍然是 API Server 的资源瓶颈之一。生产环境中可以通过限制 Watch 的资源范围（如只 Watch 特定 Namespace）减少连接压力。
+Watch 连接的管理，是 List-Watch 在大规模集群上的主要工程负担。在大规模集群中，可能有数百个组件同时 Watch 同一资源（譬如所有 kubelet 都 Watch Pod），API Server 需要管理大量长连接。K8s 通过 Watch 缓存（API Server 内存中缓存资源状态）和事件合并（多个 Watch 客户端共享同一份事件流）优化连接管理，但 Watch 连接数仍然是 API Server 的资源瓶颈之一。生产环境中可以通过限制 Watch 的资源范围（如只 Watch 特定 Namespace）减少连接压力。
 
 ### 4.3 CRI：容器运行时接口
 

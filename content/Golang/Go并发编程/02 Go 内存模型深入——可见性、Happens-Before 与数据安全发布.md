@@ -1,8 +1,8 @@
 ---
 title: "Go 内存模型深入——可见性、Happens-Before 与数据安全发布"
 date: 2026-10-07
-tags: [Golang, 内存模型]
-keywords: [Happens-Before, MESI, data race, race detector, sync, atomic, 可见性, 安全发布]
+tags: [Golang]
+keywords: [Happens-Before, MESI, data race, race detector, sync, atomic, 可见性, 安全发布, 内存模型]
 aliases: []
 ---
 

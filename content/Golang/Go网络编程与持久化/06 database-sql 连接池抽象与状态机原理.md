@@ -404,7 +404,7 @@ stats := db.Stats()
 
 很多从 Python 或 Java 转过来的开发者会直觉地把 `sql.Rows` 理解为一个"查询结果的列表"。但在 `database/sql` 的实现里，`Rows` 是一个**游标**——它指向的是底层 TCP socket 接收缓冲区里尚未消费的数据流。每次调用 `rows.Next()` 都会从 socket 里读取并解析下一行数据，而不是从一个已经加载到内存里的切片中取值。
 
-这意味着：
+结果是：
 
 1. **在 `rows.Next()` 返回 false 之前，查询结果并没有全部传输完毕**。数据库服务端可能还在发送数据，这些数据暂存在 TCP 接收缓冲区、`database/sql` 的内部缓冲区、以及驱动的解码缓冲区里。
 2. **在 `rows` 关闭之前，连接不能被复用**。因为连接上的数据流没有结束——还有未消费的行数据挂在 socket 上。如果此时把连接交给下一个查询使用，新查询的响应数据和旧查询的残留数据会混在一起，导致不可预测的行为。
@@ -563,9 +563,9 @@ if name != nil {
 
 无论选择哪种 NULL 映射方案，`rows.Scan` 在底层都需要做类型转换——从驱动的 `driver.Value` 类型（一种受限的类型联合）转换成用户指定的 Go 类型。这个过程使用反射（`reflect`），在性能敏感的批量扫描场景中可能成为瓶颈。
 
-`driver.Value` 的允许类型是：`int64`、`float64`、`bool`、`[]byte`、`string`、`time.Time`、`nil`。注意这里没有 `int`（只有 `int64`），没有 `uint` 系列，没有 `float32`（只有 `float64`）。这意味着驱动从数据库读取一个 `INT`（32 位整数）时，必须先提升为 `int64`，然后在 `Scan` 时再截断为 `int`。这种"统一提升再截断"的设计是为了简化 `Scan` 的类型匹配逻辑——它只需要处理 7 种源类型，而不是每种数据库的每种类型。
+`driver.Value` 的允许类型是：`int64`、`float64`、`bool`、`[]byte`、`string`、`time.Time`、`nil`。注意这里没有 `int`（只有 `int64`），没有 `uint` 系列，没有 `float32`（只有 `float64`）。这说明驱动从数据库读取一个 `INT`（32 位整数）时，必须先提升为 `int64`，然后在 `Scan` 时再截断为 `int`。这种"统一提升再截断"的设计是为了简化 `Scan` 的类型匹配逻辑——它只需要处理 7 种源类型，而不是每种数据库的每种类型。
 
-对于 `[]byte` 类型有一个需要特别注意的陷阱：驱动返回的 `[]byte` 通常是驱动内部缓冲区的引用，而不是独立的拷贝。这意味着在两次 `Next()` 调用之间使用这个 `[]byte` 是安全的，但如果你把它保存到某个 slice 或 map 里留待后续使用，下一次 `Next()` 调用可能会覆盖它的内容。正确的做法是在 `Scan` 之后立即拷贝 `[]byte` 的内容。
+对于 `[]byte` 类型有一个需要特别注意的陷阱：驱动返回的 `[]byte` 通常是驱动内部缓冲区的引用，而不是独立的拷贝。于是在两次 `Next()` 调用之间使用这个 `[]byte` 是安全的，但如果你把它保存到某个 slice 或 map 里留待后续使用，下一次 `Next()` 调用可能会覆盖它的内容。正确的做法是在 `Scan` 之后立即拷贝 `[]byte` 的内容。
 
 ### 6.5 第三套方案：Scanner 和 Valuer 接口
 
@@ -642,7 +642,7 @@ row2 := stmt.QueryRow("bob@example.com")
 
 `sql.Stmt` 有一个经常被忽视的特性：**它绑定到创建它的那根物理连接**。当调用 `db.Prepare` 时，`database/sql` 从连接池借出一根连接，在这根连接上执行 prepare 命令，然后把返回的 statement handle 和连接信息一起保存在 `sql.Stmt` 里。
 
-这意味着：
+结果是：
 
 1. 每次使用 `stmt` 执行查询时，`database/sql` 必须把请求路由到**原来那根连接**上。如果那根连接已经被借给其他 goroutine、或者已经被回收（因为过期或损坏），`sql.Stmt` 需要在另一根连接上重新 prepare——这个过程对调用方是透明的，但有性能开销。
 2. `stmt.Close()` 也必须路由到原来的连接上执行。如果原来的连接已经不可用，`Close()` 会静默失败（无法通知服务端释放 statement handle），但这通常不是严重问题——服务端的 prepared statement 通常在连接关闭时自动释放。
@@ -696,7 +696,7 @@ Go 1.9 引入了 `sql.Stmt` 的语句缓存机制：当 `stmt.Close()` 被调用
 
 Go 1.8 引入了 Context 感知的 API（`QueryContext`、`ExecContext`、`PingContext` 等），允许在获取连接、执行查询的整个生命周期中传播超时和取消信号。Context 的引入解决了一个长期痛点：在 `Query` 的时代，如果数据库响应很慢，应用 goroutine 只能通过 `SetDeadline` 来设置超时，但 `SetDeadline` 是连接级别的，无法精确控制单次查询的超时。`QueryContext` 把超时控制从连接级别细化到了查询级别，而且与 goroutine 的取消机制（参见[[Golang/Go并发编程/07 Context 的设计与取消传播机制|Context 的设计与取消传播机制]]）无缝集成——当 context 被取消时，正在等待连接的 goroutine 会立即返回 `context.Canceled` 错误，正在等待数据库响应的 goroutine 会尝试取消底层查询。
 
-不过 Context 的取消并不总是能真正中止数据库侧的执行。如果查询已经在数据库服务端开始执行，取消 context 只会让客户端不再等待结果——数据库侧的查询会继续执行直到完成（除非驱动特别实现了取消协议，譬如 PostgreSQL 的 cancel request）。这意味着取消 context 并不能替代数据库侧的超时控制（`max_execution_time` 或 `statement_timeout`），两者需要配合使用。
+不过 Context 的取消并不总是能真正中止数据库侧的执行。如果查询已经在数据库服务端开始执行，取消 context 只会让客户端不再等待结果——数据库侧的查询会继续执行直到完成（除非驱动特别实现了取消协议，譬如 PostgreSQL 的 cancel request）。这说明取消 context 并不能替代数据库侧的超时控制（`max_execution_time` 或 `statement_timeout`），两者需要配合使用。
 
 ### 8.6 连接池的监控盲点
 

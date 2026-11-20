@@ -1,8 +1,8 @@
 ---
 title: "Calico深度解析——BGP路由、eBPF数据面与网络策略"
 date: 2026-03-05
-tags: [eBPF, Kubernetes, NetworkPolicy, 云原生]
-keywords: [BGP, BIRD, Calico, Felix, IPIP, 网络策略]
+tags: [eBPF, Kubernetes, 云原生]
+keywords: [BGP, BIRD, Calico, Felix, IPIP, 网络策略, NetworkPolicy]
 aliases: [Calico深度解析, Calico BGP路由]
 ---
 

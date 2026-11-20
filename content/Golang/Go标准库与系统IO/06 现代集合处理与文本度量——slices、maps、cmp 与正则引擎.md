@@ -1,7 +1,7 @@
 ---
 title: "现代集合处理与文本度量——slices、maps、cmp 与正则引擎"
 date: 2026-10-07
-tags: [Golang]
+tags: [Golang, 数据结构, 算法]
 keywords: [标准库, slices, maps, cmp, regexp, RE2, strconv, 泛型, pdqsort]
 aliases: []
 ---
@@ -35,7 +35,7 @@ Go 在长达十余年的时间里，集合处理依赖一套基于 `interface{}`
 
 在过渡期，许多项目同时保留两套调用方式：旧代码继续使用 `sort.Slice`，新代码使用 `slices.SortFunc`。这种"双轨并存"的局面在大型代码库中会持续数年，直到旧 API 被逐步标记为 deprecated。Go 团队目前尚未正式弃用 `sort` 包，但官方文档已明确建议"新代码优先使用 `slices` 包"。
 
-值得注意的是，从 `sort.Interface` 迁移到 `slices.SortFunc` 并非简单的签名替换。`sort.Interface` 的 `Less(i, j int) bool` 接收的是索引，而 `slices.SortFunc` 的比较函数接收的是元素值。这意味着旧的排序逻辑中如果依赖索引（譬如"按下标优先"的排序），迁移时需要重新设计比较函数。此外，`sort.Stable`（稳定排序）在 `slices` 包中对应的是 `slices.SortStableFunc`，它保证相等元素的相对顺序不变——这在多轮排序（譬如先按部门排序，再按职级排序）时是必要的语义。
+从 `sort.Interface` 迁移到 `slices.SortFunc` 并非简单的签名替换。`sort.Interface` 的 `Less(i, j int) bool` 接收的是索引，而 `slices.SortFunc` 的比较函数接收的是元素值。这意味着旧的排序逻辑中如果依赖索引（譬如"按下标优先"的排序），迁移时需要重新设计比较函数。此外，`sort.Stable`（稳定排序）在 `slices` 包中对应的是 `slices.SortStableFunc`，它保证相等元素的相对顺序不变——这在多轮排序（譬如先按部门排序，再按职级排序）时是必要的语义。
 
 ### 1.3 没有泛型集合工具会怎样
 

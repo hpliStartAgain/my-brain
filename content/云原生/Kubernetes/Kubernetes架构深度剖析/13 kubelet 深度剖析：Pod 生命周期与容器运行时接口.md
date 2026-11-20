@@ -1,8 +1,8 @@
 ---
 title: "kubelet 深度剖析：Pod 生命周期与容器运行时接口"
 date: 2026-07-17
-tags: [Kubernetes, GC]
-keywords: [kubelet, CRI, Pod生命周期, PLEG, 健康检查, 容器运行时, containerd]
+tags: [Kubernetes, 云原生, 容器]
+keywords: [kubelet, CRI, Pod生命周期, PLEG, 健康检查, 容器运行时, containerd, 垃圾回收]
 aliases: [kubelet, CRI 接口, Pod 生命周期, PLEG, SyncPod, 容器运行时接口, kubelet 垃圾回收]
 ---
 
@@ -101,7 +101,7 @@ kubelet 管理的 Pod 有两个来源——动态 Pod 与静态 Pod。动态 Pod
 
 VolumeManager 是 kubelet 中容易被忽略但很重要的组件——它管理 Pod 的存储卷挂载/卸载。Pod 创建时，VolumeManager 调用 CSI 插件或内置卷插件（如 emptyDir、hostPath、configmap）挂载卷到 Pod 的目录树。Pod 删除时，VolumeManager 卸载卷。
 
-VolumeManager 的一个工程细节是"挂载时机"。kubelet 在 SyncPod 的早期阶段挂载卷——在创建容器之前，确保容器启动时卷已就绪。如果卷挂载失败（譬如 PVC 未绑定、CSI 插件故障），Pod 卡在 ContainerCreating 状态，容器不会被创建。这是"先准备存储再启动容器"的设计——避免容器启动后发现没有存储而崩溃。
+挂载时机是 VolumeManager 最容易出问题的地方。kubelet 在 SyncPod 的早期阶段挂载卷——在创建容器之前，确保容器启动时卷已就绪。如果卷挂载失败（譬如 PVC 未绑定、CSI 插件故障），Pod 卡在 ContainerCreating 状态，容器不会被创建。这是"先准备存储再启动容器"的设计——避免容器启动后发现没有存储而崩溃。
 
 VolumeManager 的另一个工程细节是"挂载与容器分离"。kubelet 把卷挂载到 Pod 的目录树（`/var/lib/kubelet/pods/<pod-id>/volumes/`），容器通过 volumeMounts 引用这个目录。这种分离使得卷挂载与容器生命周期解耦——容器重启不需要重新挂载卷（卷已挂载在 Pod 目录），只有 Pod 删除时才卸载卷。对于有状态应用（数据库），这种设计保证了容器重启后数据不丢失——卷的挂载点不变，容器重新挂载同一目录。
 
@@ -234,7 +234,7 @@ dockershim 是 K8s 的维护负担——它需要跟随 Docker 版本更新，�
 
 CRI 解耦的工程价值是"可替换的容器运行时"——用户可以根据需求选择运行时。containerd 适合大多数场景（轻量、稳定），CRI-O 适合 OpenShift 生态，Kata Containers 适合需要强隔离的场景（每个 Pod 一个轻量虚拟机），gVisor 适合需要内核级隔离的场景。这种可替换性是 K8s "可扩展性优先"原则在数据平面的体现——不锁定特定实现，通过接口解耦。
 
-CRI 的一个工程细节是"gRPC 调用开销"。kubelet 每次操作容器都通过 gRPC 调用容器运行时——创建容器、启动容器、查询状态都是 gRPC 调用。gRPC 调用有网络与序列化开销，对于高频操作（譬如 PLEG 每秒 ListContainers）累积开销不可忽略。生产中通常不需要优化这个开销——gRPC 的性能足够，但对于超大规模节点（数百容器），ListContainers 的响应可能变慢，影响 PLEG 的 relist 时间。
+CRI 的每一次容器操作都是一次 gRPC 调用，开销随调用频率累积。kubelet 每次操作容器都通过 gRPC 调用容器运行时——创建容器、启动容器、查询状态都是 gRPC 调用。gRPC 调用有网络与序列化开销，对于高频操作（譬如 PLEG 每秒 ListContainers）累积开销不可忽略。生产中通常不需要优化这个开销——gRPC 的性能足够，但对于超大规模节点（数百容器），ListContainers 的响应可能变慢，影响 PLEG 的 relist 时间。
 
 CRI 的另一个工程细节是"版本兼容"。CRI 接口有版本——kubelet 与容器运行时需要 CRI 版本兼容。K8s 升级时可能引入新 CRI 版本，旧容器运行时可能不支持。生产中升级 K8s 时需要同步升级容器运行时——譬如 K8s 1.26 需要 containerd 1.6+。版本不匹配会导致 kubelet 无法连接容器运行时，节点 NotReady。
 
@@ -290,7 +290,7 @@ PLEG 有一个常见的生产故障——"PLEG is not healthy"。kubelet 定期�
 
 "PLEG is not healthy"的根因通常是 CRI 调用卡住——ListContainers 调用容器运行时，如果容器运行时响应慢（譬如容器数过多、运行时故障、I/O 卡住），relist 超时，PLEG 标记为 not healthy。排查方法——检查容器运行时状态（`crictl ps`、`systemctl status containerd`）、检查节点 I/O（磁盘是否满、I/O 是否卡）、检查容器数（是否过多容器导致 ListContainers 慢）。这种故障通常不是 kubelet 的问题，而是容器运行时或节点资源的问题。
 
-"PLEG is not healthy"的一个常见根因是"容器运行时卡死"。containerd 或 CRI-O 可能因为镜像损坏、容器进程僵尸、I/O 阻塞等原因卡住——ListContainers 调用超时，PLEG 无法获取容器状态。排查时先检查容器运行时日志（`journalctl -u containerd`），看是否有错误信息。如果容器运行时卡死，重启容器运行时（`systemctl restart containerd`）能恢复，但这会重启所有容器——生产中需要谨慎，先尝试其他排查方法（譬如清理僵尸容器、修复 I/O）。
+"PLEG is not healthy"的一个常见根因是"容器运行时卡死"。containerd 或 CRI-O 可能因为镜像损坏、容器进程僵尸、I/O 阻塞等原因卡住——ListContainers 调用超时，PLEG 无法获取容器状态。排查时先检查容器运行时日志（`journalctl -u containerd`），看是否有错误信息。如果容器运行时卡死，重启容器运行时（`systemctl restart containerd`）能恢复，但这会重启所有容器，所以先尝试其它排查手段（譬如清理僵尸容器、修复 I/O），重启留作最后一步。
 
 "PLEG is not healthy"的另一个根因是"节点资源耗尽"。节点内存或磁盘耗尽时，容器运行时无法正常工作——譬如磁盘满导致容器运行时无法写入状态文件，ListContainers 超时。排查时检查节点资源（`free -m`、`df -h`），如果资源耗尽，清理资源（清理日志、清理已退出容器、驱逐 Pod）恢复容器运行时。
 
@@ -390,7 +390,7 @@ startupProbe 的设计体现了"启动与运行分离"的理念。应用启动�
 
 容器 GC 清理已退出的容器——容器退出后不立即删除，保留一段时间用于调试（`kubectl logs` 查看已退出容器的日志）。GC 策略控制保留策略——MinAge 控制最短保留时间，MaxPerPodContainer 控制每 Pod 保留的已退出容器数，MaxContainers 控制全节点保留总数。超过限制时，最旧的已退出容器被清理。
 
-容器 GC 的一个工程价值是"磁盘空间回收"。容器运行时为每个容器创建一层可写层（writable layer），容器退出后可写层残留。如果不清理，磁盘逐渐被已退出容器的可写层占满。GC 定期清理已退出容器的可写层，回收磁盘空间。
+容器 GC 回收的是已退出容器的可写层——节点磁盘能长期可用，靠的就是它。容器运行时为每个容器创建一层可写层（writable layer），容器退出后可写层残留。如果不清理，磁盘逐渐被已退出容器的可写层占满。GC 定期清理已退出容器的可写层，回收磁盘空间。
 
 ### 7.2 镜像 GC
 
@@ -541,7 +541,7 @@ Pod 处于 ContainerCreating 状态长时间不变化，常见原因：
 
 排查节点 NotReady 的步骤——第一步检查 kubelet 进程（`systemctl status kubelet`），第二步检查 kubelet 日志（`journalctl -u kubelet`），第三步检查节点资源（`free -m`、`df -h`），第四步检查网络（`ping apiserver`）。根据排查结果定位——kubelet 故障重启 kubelet，网络问题修复网络，资源耗尽清理资源或驱逐 Pod。
 
-节点 NotReady 的一个常见根因是"kubelet 卡死"。kubelet 可能因为 PLEG not healthy、CRI 调用卡住、VolumeManager 挂载卡住等原因卡死——kubelet 进程还在但无法正常工作。排查时检查 kubelet 日志的关键字——"PLEG is not healthy"、"Failed to connect to CRI"、"Volume mount timeout"。如果 kubelet 卡死，重启 kubelet（`systemctl restart kubelet`）能恢复，但这会重启所有 Pod——生产中需要谨慎。
+节点 NotReady 的一个常见根因是"kubelet 卡死"。kubelet 可能因为 PLEG not healthy、CRI 调用卡住、VolumeManager 挂载卡住等原因卡死——kubelet 进程还在但无法正常工作。排查时检查 kubelet 日志的关键字——"PLEG is not healthy"、"Failed to connect to CRI"、"Volume mount timeout"。如果 kubelet 卡死，重启 kubelet（`systemctl restart kubelet`）能恢复，但这会重启所有 Pod，代价不小。
 
 节点 NotReady 的另一个常见根因是"网络分区"。节点与 API Server 网络不通——kubelet 无法更新 Lease，Node Controller 检测心跳超时标记 NotReady。排查时检查节点与 API Server 的网络连通性——`curl -k https://<apiserver>:6443/healthz`。如果网络分区，修复网络后 kubelet 自动恢复 Lease 更新，节点恢复 Ready。
 
@@ -570,7 +570,7 @@ Pod 状态汇报是 kubelet 的另一个重要职责。StatusManager 负责把 P
 
 第三，kubelet **不做应用级故障转移**——容器崩溃后 kubelet 重启容器（根据 restartPolicy），但不做应用级故障转移（譬如数据库主从切换）。应用级故障转移需要 Operator 或应用自身实现。kubelet 的重启是"进程级"的，不是"应用级"的。
 
-第四，kubelet **依赖容器运行时**——kubelet 通过 CRI 调用容器运行时，容器运行时故障会导致 kubelet 无法管理容器（PLEG not healthy）。kubelet 与容器运行时是"管理者与执行者"关系，执行者故障管理者无法工作。生产中需要监控容器运行时健康，及时排查运行时故障。
+第四，kubelet **依赖容器运行时**——kubelet 通过 CRI 调用容器运行时，容器运行时故障会导致 kubelet 无法管理容器（PLEG not healthy）。kubelet 与容器运行时是"管理者与执行者"关系，执行者故障管理者无法工作。容器运行时的健康状况因此必须进入监控项，故障要尽早排查。
 
 第五，kubelet **依赖 cgroup 管理资源**——kubelet 通过 cgroup 限制 Pod 的 CPU/内存使用，cgroup 是 Linux 内核的资源隔离机制。kubelet 为每个 Pod 创建 cgroup，把 Pod 的容器进程放入 cgroup，通过 cgroup 限制资源使用（CPU shares、memory limit）。cgroup 驱动有两种——cgroupfs（直接写 cgroup 文件）与 systemd（通过 systemd 管理容器 cgroup）。K8s 1.24+ 推荐 systemd 驱动，因为 systemd 是大多数 Linux 发行版的 init 系统，用 systemd 管理 cgroup 与系统其他服务一致。kubelet 与容器运行时必须用相同的 cgroup 驱动，否则资源统计不一致——kubelet 用 systemd 统计，容器运行时用 cgroupfs 创建，kubelet 看不到容器运行时创建的 cgroup，导致资源统计缺失。
 

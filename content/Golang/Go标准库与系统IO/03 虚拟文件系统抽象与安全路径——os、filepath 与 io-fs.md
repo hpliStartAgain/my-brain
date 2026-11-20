@@ -114,7 +114,7 @@ type ReadDir interface {
 
 **`fs.FS`** 是整个体系的根。它只有一个方法 `Open(name string) (File, error)`，语义极其简单：给定一个路径，返回一个可以读取的文件对象。但正是这种极简设计赋予了它强大的组合能力——任何实现了 `Open` 方法的类型都可以被视为一个文件系统。`embed.FS` 实现了它，`archive/zip.Reader` 通过适配实现了它，测试代码中手写的 `mapfs` 也可以实现它。
 
-**`fs.File`** 同时嵌入了 `io.Reader`，这意味着它可以无缝接入上篇文章讨论的所有流式处理工具——`io.Copy`、`bufio.NewReader`、`io.LimitReader` 都能直接作用在一个 `fs.File` 上。同时，`File` 接口还要求实现 `Stat` 和 `Close`，这确保了文件对象既能提供元数据，也能释放资源。值得注意的是，`File` 是**只读**的——`io/fs` 刻意不包含 `Write` 方法，因为可写文件系统涉及权限、锁、事务等操作系统层面的复杂性，不适合用一个轻量接口来抽象。
+**`fs.File`** 同时嵌入了 `io.Reader`，这意味着它可以无缝接入上篇文章讨论的所有流式处理工具——`io.Copy`、`bufio.NewReader`、`io.LimitReader` 都能直接作用在一个 `fs.File` 上。同时，`File` 接口还要求实现 `Stat` 和 `Close`，这确保了文件对象既能提供元数据，也能释放资源。`File` 是**只读**的——`io/fs` 刻意不包含 `Write` 方法，因为可写文件系统涉及权限、锁、事务等操作系统层面的复杂性，不适合用一个轻量接口来抽象。
 
 **`fs.DirEntry`** 是 `fs.File` 在目录遍历场景下的优化。与 `fs.FileInfo` 不同，`DirEntry` 允许实现者在不调用 `Stat`（可能涉及额外的系统调用或 I/O）的情况下提供文件名、类型和基本元数据。这在遍历包含数万文件的目录时，性能差异可以达到一个数量级。`fs.FileInfo` 则保留了传统的完整文件元数据接口——大小、修改时间、权限位、模式位。
 
@@ -286,7 +286,7 @@ func serveFile(w http.ResponseWriter, r *http.Request) {
 }
 ```
 
-不过，`filepath.IsLocal` 有一个容易被忽视的语义细节：它只检查路径的**词法结构**，不检查文件系统上的实际状态。这意味着：
+不过，`filepath.IsLocal` 有一个容易被忽视的语义细节：它只检查路径的**词法结构**，不检查文件系统上的实际状态。于是：
 
 - 如果 `/var/www/static/link` 是一个指向 `/etc` 的**符号链接**，`IsLocal("link/passwd")` 返回 `true`（词法上无 `..`），但 `filepath.Join("/var/www/static", "link/passwd")` 经过内核的符号链接解析后会实际读取 `/etc/passwd`。
 - `IsLocal` 的行为在不同操作系统上可能略有差异——Windows 上的设备名（`CON`、`PRN`、`AUX`）处理、大小写不敏感等特性需要额外的防御层。
@@ -339,7 +339,7 @@ func safeOpen(root, name string) (*os.File, error) {
 ```
 
 > [!warning] `io/fs` 与路径安全的协同
-> `fs.ValidPath` 在 `io/fs` 框架层就拦截了含 `..` 的路径，这意味着任何实现了 `fs.FS` 接口的文件系统都不必在自己的 `Open` 方法中重复处理路径穿越——框架已经保证了传入的路径一定是词法安全的。但同样需要注意，`fs.ValidPath` 不处理符号链接（`embed.FS` 本身不支持符号链接，但基于磁盘的 `os.DirFS` 会受符号链接影响）。
+> `fs.ValidPath` 在 `io/fs` 框架层就拦截了含 `..` 的路径，结果是任何实现了 `fs.FS` 接口的文件系统都不必在自己的 `Open` 方法中重复处理路径穿越——框架已经保证了传入的路径一定是词法安全的。但同样需要注意，`fs.ValidPath` 不处理符号链接（`embed.FS` 本身不支持符号链接，但基于磁盘的 `os.DirFS` 会受符号链接影响）。
 
 ---
 
@@ -352,7 +352,7 @@ func safeOpen(root, name string) (*os.File, error) {
 文件描述符泄漏的常见原因包括：
 
 - **忘记调用 `Close`**：在错误处理路径中遗漏了 `f.Close()`，尤其是当函数有多个提前返回点时。这种遗漏在快速迭代中极为常见——开发者在正常路径上记得关闭文件，但在某个边界条件触发的错误分支中却忘记了。
-- **`defer f.Close()` 的延迟执行**：`defer` 会在函数返回时执行 `Close`，但如果函数长期运行（譬如一个持续处理请求的 HTTP Handler），fd 会在整个函数生命周期内被占用。这意味着在函数的整个执行期间，这个 fd 都是不可回收的，如果函数创建了大量临时文件对象，fd 的累积占用可能导致耗尽。
+- **`defer f.Close()` 的延迟执行**：`defer` 会在函数返回时执行 `Close`，但如果函数长期运行（譬如一个持续处理请求的 HTTP Handler），fd 会在整个函数生命周期内被占用。这说明在函数的整个执行期间，这个 fd 都是不可回收的，如果函数创建了大量临时文件对象，fd 的累积占用可能导致耗尽。
 - **Goroutine 泄漏导致 `Close` 永远不被调用**：当一个 Goroutine 阻塞在某个 channel 操作或 I/O 上而永远不退出时，它持有的 fd 也永远不会被释放。这种泄漏是最难排查的，因为它不表现为明显的错误，而是表现为 fd 数量的缓慢增长。
 - **`os/exec` 子进程的管道未关闭**：`exec.Command` 创建的子进程的 `StdoutPipe`/`StderrPipe` 返回的 `io.ReadCloser` 如果没有被关闭，对应的管道 fd 就会泄漏。这个问题在需要频繁创建子进程的服务中尤为突出。
 

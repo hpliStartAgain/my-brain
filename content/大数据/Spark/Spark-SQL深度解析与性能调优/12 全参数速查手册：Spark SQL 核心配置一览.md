@@ -1,8 +1,8 @@
 ---
 title: "全参数速查手册：Spark SQL 核心配置一览"
 date: 2026-02-28
-tags: [CBO, IO, Shuffle, Spark, SparkSQL, 内存管理]
-keywords: [AQE, Join, 调优参数, 速查手册, 配置参数]
+tags: [IO, Shuffle, Spark, SparkSQL, 内存管理]
+keywords: [AQE, Join, 调优参数, 速查手册, 配置参数, CBO]
 aliases: []
 ---
 

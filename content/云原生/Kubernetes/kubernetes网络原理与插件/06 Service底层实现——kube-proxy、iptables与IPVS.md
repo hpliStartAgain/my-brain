@@ -1,8 +1,8 @@
 ---
 title: "Service底层实现——kube-proxy、iptables与IPVS"
 date: 2026-03-05
-tags: [iptables, kube-proxy, Kubernetes, 云原生]
-keywords: [ClusterIP, DNAT, EndpointSlice, IPVS, LoadBalancer, NodePort, Service]
+tags: [Kubernetes, 云原生]
+keywords: [ClusterIP, DNAT, EndpointSlice, IPVS, LoadBalancer, NodePort, Service, iptables, kube-proxy]
 aliases: [Service底层实现, kube-proxy]
 ---
 

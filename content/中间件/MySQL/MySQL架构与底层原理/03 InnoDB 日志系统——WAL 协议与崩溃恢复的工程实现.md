@@ -1,8 +1,8 @@
 ---
 title: "InnoDB 日志系统——WAL 协议与崩溃恢复的工程实现"
 date: 2026-03-02
-tags: [InnoDB, MySQL, WAL, 崩溃恢复]
-keywords: [Binlog, LSN, Redo Log]
+tags: [InnoDB, MySQL, WAL]
+keywords: [Binlog, LSN, Redo Log, 崩溃恢复]
 aliases: [Redo Log, WAL协议, 崩溃恢复]
 ---
 

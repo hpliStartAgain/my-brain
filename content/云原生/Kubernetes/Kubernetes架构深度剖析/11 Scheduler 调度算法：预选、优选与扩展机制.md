@@ -1,8 +1,8 @@
 ---
 title: "Scheduler 调度算法：预选、优选与扩展机制"
 date: 2026-07-17
-tags: [Kubernetes, 调度]
-keywords: [调度算法, Filter, Score, 节点亲和性, Taint/Toleration, Scheduler Framework, 多调度器]
+tags: [Kubernetes, 云原生, 调度]
+keywords: [调度算法, Filter, Score, 节点亲和性, Taint/Toleration, Scheduler Framework, 多调度器, Scheduler-Framework, Taint, Toleration]
 aliases: [K8s 调度器, Scheduler 算法, 预选优选, 节点亲和性, 反亲和性, Taint Toleration, Scheduler Framework]
 ---
 
@@ -577,7 +577,7 @@ graph LR
 
 缓存一致性的边界需要清醒认识。调度器缓存通过 Watch 更新，Watch 有延迟——API Server 到调度器的 Watch 事件传播需要时间（通常毫秒级，但网络抖动时可能秒级）。这意味着调度器看到的节点状态可能短暂滞后于真实状态——譬如节点刚满了，但调度器缓存还没更新，仍认为节点有资源，把 Pod 调度过去——这个 Pod 到节点后发现资源不够，kubelet 拒绝创建，Pod 重新进入 Pending。这是"调度后失败"的一个来源，生产中通过 Pod 重试机制缓解——Pod 调度失败后重新进入调度队列，下次调度时缓存已更新。
 
-缓存一致性的另一个边界是"假设资源请求等于实际使用"。调度器基于 Pod 的 `resources.requests`（请求量）调度，而非 `resources.limits`（限制量）或实际使用量。这意味着——如果 Pod 请求 1 CPU 但实际用 5 CPU（超出限制被 throttled 或未限制），调度器不知道，仍认为节点只用了 1 CPU。这种"基于请求而非实际"的设计简化了调度（不需要监控实际使用），但可能导致节点实际负载高于调度器认为的——生产中需要配合监控（譬如 Prometheus）观察节点实际负载，必要时用 Descheduler 重调度。
+缓存一致性的另一个边界是"假设资源请求等于实际使用"。调度器基于 Pod 的 `resources.requests`（请求量）调度，而非 `resources.limits`（限制量）或实际使用量。这意味着——如果 Pod 请求 1 CPU 但实际用 5 CPU（超出限制被 throttled 或未限制），调度器不知道，仍认为节点只用了 1 CPU。这种"基于请求而非实际"的设计简化了调度（不需要监控实际使用），但可能导致节点实际负载高于调度器认为的——因此要配合监控（譬如 Prometheus）观察节点实际负载，必要时用 Descheduler 重调度。
 
 ### 8.2 批量调度与优先级队列
 

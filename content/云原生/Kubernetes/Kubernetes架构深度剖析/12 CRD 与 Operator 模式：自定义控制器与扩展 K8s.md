@@ -1,8 +1,8 @@
 ---
 title: "CRD 与 Operator 模式：自定义控制器与扩展 K8s"
 date: 2026-07-17
-tags: [Kubernetes]
-keywords: [CRD, Operator, controller-runtime, Custom Resource, 自定义控制器, Helm vs Operator]
+tags: [Kubernetes, 云原生, 控制器模式]
+keywords: [CRD, Operator, controller-runtime, Custom Resource, 自定义控制器, Helm vs Operator, Finalizer]
 aliases: [CRD, Operator 模式, Custom Resource Definition, controller-runtime, K8s 扩展, Operator SDK]
 ---
 
@@ -365,7 +365,7 @@ Finalizer 是 K8s 的删除保护机制——资源有 Finalizer 时，删除操
 
 Finalizer 的工作流程是——创建资源时添加 Finalizer，删除时检测 `deletionTimestamp`，执行清理逻辑，清理成功后移除 Finalizer，资源才真正删除。清理失败时返回 error，Reconcile 重试——直到清理成功。这个机制保证了"外部资源与 K8s 资源的生命周期一致"。
 
-Finalizer 的一个常见陷阱是"Finalizer 卡住"。如果清理逻辑一直失败（譬如外部 API 不可达），Finalizer 无法移除，资源永远处于 Terminating 状态。生产中需要监控 Terminating 资源的持续时间——长时间 Terminating 说明 Finalizer 卡住，需要人工介入。介入方式是手动移除 Finalizer（`kubectl patch database my-db --type=json -p='[{"op":"remove","path":"/metadata/finalizers"}]'`），但这会跳过清理逻辑——外部资源可能泄露。更稳妥的做法是修复清理逻辑（譬如增加超时与重试），让 Finalizer 自然完成。
+Finalizer 的一个常见陷阱是"Finalizer 卡住"。如果清理逻辑一直失败（譬如外部 API 不可达），Finalizer 无法移除，资源永远处于 Terminating 状态。Terminating 资源的存活时间应当被监控——长时间 Terminating 说明 Finalizer 卡住，需要人工介入。介入方式是手动移除 Finalizer（`kubectl patch database my-db --type=json -p='[{"op":"remove","path":"/metadata/finalizers"}]'`），但这会跳过清理逻辑——外部资源可能泄露。更稳妥的做法是修复清理逻辑（譬如增加超时与重试），让 Finalizer 自然完成。
 
 Finalizer 的另一个设计考量是"Finalizer 名唯一"。每个 Operator 用自己的 Finalizer 名（譬如 `example.com/database-cleanup`），避免与其他 Operator 冲突。一个资源可以有多个 Finalizer——多个 Operator 各自管理自己的外部资源，删除时各自清理自己的 Finalizer。这种"多 Finalizer"设计支持多 Operator 协作——譬如一个 Operator 管理数据库实例，另一个管理 DNS 记录，各自 Finalizer 独立。
 
@@ -386,7 +386,7 @@ OwnerReference 建立资源的"父子关系"——子资源（StatefulSet）的 
 
 OwnerReference 的级联删除有三种模式——Foreground（等子资源全部删除后才删父资源）、Background（先删父资源，后台删子资源）、Orphan（不删子资源）。Operator 创建子资源时默认用 Background——父资源删除后子资源自动清理。如果需要保留子资源（譬如迁移到新 Operator），用 `--cascade=orphan`。
 
-OwnerReference 的一个工程细节是"UID 匹配"。OwnerReference 包含父资源的 UID，垃圾收集器通过 UID 确认父资源是否还存在。如果父资源被删除后重建（同名但新 UID），旧的子资源不会被新父资源的 GC 管理——因为 UID 不匹配。这意味着重建父资源后，需要重新创建子资源（或手动更新子资源的 OwnerReference UID）。Operator 的 Reconcile 通常会检查子资源的 OwnerReference UID 是否匹配当前父资源 UID，不匹配就重建子资源。
+OwnerReference 靠 UID 匹配来确认父子关系，这是它最容易被忽略的一处。OwnerReference 包含父资源的 UID，垃圾收集器通过 UID 确认父资源是否还存在。如果父资源被删除后重建（同名但新 UID），旧的子资源不会被新父资源的 GC 管理——因为 UID 不匹配。这意味着重建父资源后，需要重新创建子资源（或手动更新子资源的 OwnerReference UID）。Operator 的 Reconcile 通常会检查子资源的 OwnerReference UID 是否匹配当前父资源 UID，不匹配就重建子资源。
 
 OwnerReference 的另一个设计考量是"跨命名空间限制"。K8s 默认不允许跨命名空间的 OwnerReference——子资源与父资源必须在同一命名空间。这是因为 GC 需要能访问父资源，跨命名空间访问受 RBAC 限制。如果需要跨命名空间管理（譬如 Operator 在 operator-system 命名空间，管理 default 命名空间的资源），Operator 不能用 OwnerReference，需要用 Finalizer 手动管理子资源删除。
 
@@ -573,7 +573,7 @@ ValidatingWebhook 在资源创建/更新时调用外部服务验证——CRD 的
 
 Webhook 的另一个类型是 MutatingWebhook——在资源持久化前修改资源。譬如 Database 创建时自动注入默认配置（如果用户没指定），或根据 `engine` 自动设置合理的 `replicas` 默认值。MutatingWebhook 与 ValidatingWebhook 的区别——前者修改资源，后者只验证不修改。
 
-Webhook 的一个工程考量是"可用性依赖"。Webhook 是外部服务，如果 Webhook 服务不可用，API Server 的创建/更新请求会被拒绝（默认 fail-closed）或放行（fail-open）。生产中 Webhook 服务必须高可用——多副本部署，避免 Webhook 故障导致资源无法创建。对于关键 CRD，Webhook 故障可能导致整个 Operator 无法工作——用户无法创建 Database，Operator 无资源可协调。
+Webhook 是外部服务，因此把可用性风险引入了准入链。Webhook 是外部服务，如果 Webhook 服务不可用，API Server 的创建/更新请求会被拒绝（默认 fail-closed）或放行（fail-open）。生产中 Webhook 服务必须高可用——多副本部署，避免 Webhook 故障导致资源无法创建。对于关键 CRD，Webhook 故障可能导致整个 Operator 无法工作——用户无法创建 Database，Operator 无资源可协调。
 
 Webhook 的另一个设计考量是"超时"。API Server 调用 Webhook 有超时限制（默认 10 秒），超时后按 fail-closed/fail-open 策略处理。Webhook 的验证逻辑应该快速——避免调用外部服务（譬如查数据库），只做本地验证。如果需要调用外部服务，用异步方式（譬如创建后由 Operator 异步验证），不阻塞 Webhook。
 
@@ -663,7 +663,7 @@ Leader Election 用 Lease 资源实现——多个 Operator 实例竞争一个 L
 
 Leader Election 的代价是"切换间隙"——Leader 故障到新 Leader 选出之间（通常几秒到几十秒），Reconcile 暂停。如果切换频繁，说明集群网络或 etcd 不稳定，需要排查。生产中通常设置合理的 Lease 续约时间（譬如 15 秒续约，60 秒过期），平衡故障检测速度与误判风险。
 
-Leader Election 的一个工程细节是"Lease 资源的位置"。Lease 通常创建在 Operator 所在的命名空间（譬如 operator-system），用 `LeaderElectionID` 区分不同 Operator。多个 Operator 共存时，每个用不同的 LeaderElectionID，避免 Lease 冲突。Lease 续约失败的原因通常是网络分区或 etcd 故障——Leader 无法续约 Lease，其他实例认为 Leader 已死，开始竞选。如果网络恢复，原 Leader 可能仍认为自己是 Leader（Lease 续约成功），但新 Leader 已选出——这种"双 Leader"情况通过 Lease 的原子性避免——Lease 的 renewTime 是原子更新，只有一个实例能成功续约。
+Leader Election 用的 Lease 放在哪个命名空间，是一个容易踩的细节。Lease 通常创建在 Operator 所在的命名空间（譬如 operator-system），用 `LeaderElectionID` 区分不同 Operator。多个 Operator 共存时，每个用不同的 LeaderElectionID，避免 Lease 冲突。Lease 续约失败的原因通常是网络分区或 etcd 故障——Leader 无法续约 Lease，其他实例认为 Leader 已死，开始竞选。如果网络恢复，原 Leader 可能仍认为自己是 Leader（Lease 续约成功），但新 Leader 已选出——这种"双 Leader"情况通过 Lease 的原子性避免——Lease 的 renewTime 是原子更新，只有一个实例能成功续约。
 
 Leader Election 的实现基于 coordination.k8s.io/v1 的 Lease 资源。Lease 对象包含 holderIdentity（当前持有者）、leaseDurationSeconds（租约时长）、renewTime（最后续约时间）、acquireTime（获取时间）。Leader 定期更新 renewTime（默认每 2 秒），如果 renewTime 超过 leaseDurationSeconds（默认 15 秒）未更新，其他实例认为 Leader 已死，尝试获取 Lease。获取 Lease 用乐观并发控制——多个实例同时尝试更新 Lease 的 holderIdentity，只有第一个成功（CAS 成功），其他实例收到 409 Conflict，继续等待。这种基于 etcd CAS 的选举保证了选举的原子性——不会有两个实例同时成为 Leader。
 
@@ -685,7 +685,7 @@ ctrl.NewControllerManagedBy(mgr).
 
 并发安全的几个常见陷阱值得注意。第一，共享缓存未加锁——多个 Reconcile 并发读写共享缓存，导致数据竞争。解决方案是加读写锁（`sync.RWMutex`），读操作加读锁，写操作加写锁。第二，外部客户端非线程安全——譬如某些 SDK 的 client 不是线程安全的，多并发调用会 panic。解决方案是每个 Reconcile 创建独立 client，或用线程安全的 client。第三，限速器共享——多个 Reconcile 共享一个限速器，导致总速率被限制。解决方案是每个 Reconcile 用独立限速器，或调高限速器上限。
 
-并发调高的另一个考量是"API Server 压力"。并发 Reconcile 越多，对 API Server 的请求越多——5 个并发 Reconcile 可能同时发 5 个请求，如果每个 Reconcile 发多个请求（Get/Update/Status Update），瞬时请求数可能很高。生产中需要监控 API Server 的请求速率，避免 Operator 压垮 API Server。对于大规模集群（数千资源），通常保持默认并发 1，避免 API Server 压力过大。
+并发调高的另一个考量是"API Server 压力"。并发 Reconcile 越多，对 API Server 的请求越多——5 个并发 Reconcile 可能同时发 5 个请求，如果每个 Reconcile 发多个请求（Get/Update/Status Update），瞬时请求数可能很高。API Server 的请求速率必须被监控，否则 Operator 可能把它压垮。对于大规模集群（数千资源），通常保持默认并发 1，避免 API Server 压力过大。
 
 > [!warning] 生产避坑：Operator 必须有监控和告警
 > 生产级 Operator 必须暴露监控指标——Reconcile 次数、延迟、错误率。没有监控的 Operator 是"黑箱"——你不知道它是否正常工作、是否有性能问题。controller-runtime 内置 Prometheus 指标，默认在 :8080/metrics 暴露。配置 Prometheus 抓取这些指标，并设置告警——Reconcile 错误率 >5% 或延迟 P99 >5s 告警。

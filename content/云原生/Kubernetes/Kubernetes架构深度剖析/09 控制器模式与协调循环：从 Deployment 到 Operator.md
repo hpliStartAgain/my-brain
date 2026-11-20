@@ -491,7 +491,7 @@ func Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 }
 ```
 
-这段代码体现了 Finalizer 的两个关键时机——创建对象时添加 Finalizer，删除对象时执行清理后移除 Finalizer。添加 Finalizer 必须在"对象创建后、控制器第一次 Reconcile 时"完成，如果对象创建后控制器还没来得及添加 Finalizer 就被删除了，Finalizer 不会被添加，删除时不会触发清理逻辑——这是 Finalizer 模式的一个边界条件，生产中需要确保控制器高可用，避免长时间不可达导致 Finalizer 未添加。
+这段代码体现了 Finalizer 的两个关键时机——创建对象时添加 Finalizer，删除对象时执行清理后移除 Finalizer。添加 Finalizer 必须在"对象创建后、控制器第一次 Reconcile 时"完成，如果对象创建后控制器还没来得及添加 Finalizer 就被删除了，Finalizer 不会被添加，删除时不会触发清理逻辑——这是 Finalizer 模式的一个边界条件：控制器一旦长时间不可达，Finalizer 就可能没被加上，删除时的清理逻辑也就永远不会触发。
 
 清理失败的处理也值得注意——`cleanupExternalResources` 失败时返回 error，Reconcile 返回 error 后 WorkQueue 会重新入队这个 key，下一次 Reconcile 重新尝试清理。这种"失败重试"依赖协调循环的幂等性——`cleanupExternalResources` 必须幂等，多次调用不能有副作用（譬如重复删除外部资源不能报错）。
 
@@ -504,7 +504,7 @@ Finalizer 在生产中有几个常见陷阱需要警惕。
 
 第一个陷阱是**Finalizer 卡住导致对象无法删除**。如果控制器崩溃了、被删除了、或者清理逻辑有 bug 一直失败，Finalizer 永远不会被移除，对象会一直处于 Terminating 状态。这是生产中最常见的 Finalizer 问题——用户发现某个对象删不掉，kubectl delete 等了很久还在 Terminating。排查方法是 `kubectl get <resource> <name> -o yaml` 查看 finalizers 字段，确认是哪个 Finalizer 卡住，然后检查对应控制器的日志。紧急恢复手段是手动 patch 移除 finalizers（`kubectl patch <resource> <name> --type=merge -p '{"metadata":{"finalizers":[]}}'`），但这会跳过清理逻辑，可能导致外部资源泄露，只能作为最后手段。
 
-第二个陷阱是**Finalizer 与级联删除的交互**。Foreground 级联删除会阻塞父对象删除直到子对象删除完毕，如果子对象有 Finalizer，父对象会一直 Terminating。这种"Finalizer 阻塞级联删除"的链式效应，在大规模集群中可能导致删除操作大面积卡住。生产中需要为关键资源设置删除超时与告警，监控长时间 Terminating 的对象。
+第二个陷阱是**Finalizer 与级联删除的交互**。Foreground 级联删除会阻塞父对象删除直到子对象删除完毕，如果子对象有 Finalizer，父对象会一直 Terminating。这种"Finalizer 阻塞级联删除"的链式效应，在大规模集群中可能导致删除操作大面积卡住。关键资源应当配删除超时与告警，盯住长时间 Terminating 的对象。
 
 第三个陷阱是**Finalizer 的命名冲突**。Finalizer 是字符串，没有命名空间的隔离，不同控制器可能用相同的 Finalizer 字符串导致冲突。最佳实践是用域名前缀——`example.com/my-cleanup` 而非 `my-cleanup`，避免与其它控制器冲突。
 

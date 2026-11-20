@@ -1,7 +1,7 @@
 ---
 title: "操作系统时间模型——单调时钟、NTP 偏差与运行时定时器演进"
 date: 2026-10-07
-tags: [Golang]
+tags: [Golang, 系统调用, 内核]
 keywords: [操作系统, 时间模型, 单调时钟, NTP, 定时器]
 aliases: []
 ---
@@ -190,7 +190,7 @@ fmt.Println(t1.Equal(t2))   // true：物理时刻相同
 
 ### 5.1 定时器的基本语义
 
-Go 的定时器由 `time.NewTimer(d)` 创建，返回一个 `*time.Timer`，其 `C` 字段是一个 channel，经过物理时间 `d` 之后，runtime 会向 `C` 发送当前时刻。`time.Sleep(d)`、`time.After(d)`、`select` 的 `case <-time.After(d)` 都建立在这一机制之上。值得注意的是，`time.Sleep` 并不创建用户可见的 `*Timer` 对象——它直接告诉调度器"当前 goroutine 在 X 时刻之前不要调度"，由 runtime 内部处理；而 `NewTimer` 则显式创建一个对象，供应用层控制。
+Go 的定时器由 `time.NewTimer(d)` 创建，返回一个 `*time.Timer`，其 `C` 字段是一个 channel，经过物理时间 `d` 之后，runtime 会向 `C` 发送当前时刻。`time.Sleep(d)`、`time.After(d)`、`select` 的 `case <-time.After(d)` 都建立在这一机制之上。`time.Sleep` 并不创建用户可见的 `*Timer` 对象——它直接告诉调度器"当前 goroutine 在 X 时刻之前不要调度"，由 runtime 内部处理；而 `NewTimer` 则显式创建一个对象，供应用层控制。
 
 ### 5.2 第一阶段：全局互斥堆（Go 1.10 之前）
 
@@ -330,7 +330,7 @@ for _, req := range reqs {
 
 ### 6.5 `time.Tick` 的长期泄漏
 
-`time.Tick(d)` 返回一个 `<-chan time.Time`，底层创建了一个 `*time.Ticker`，但调用者拿不到 Ticker 的引用，因此**永远无法 Stop 这个 ticker**。官方文档明确警告："The underlying Ticker is never recovered by the garbage collector; it will leak for the duration of the program." 这意味着 `time.Tick` 只适合在**整个进程生命周期内持续运行**的场景（譬如定时清理任务的 worker goroutine），而绝不应用于按需创建、按需销毁的场景。后者必须显式使用 `time.NewTicker` + `Stop`。
+`time.Tick(d)` 返回一个 `<-chan time.Time`，底层创建了一个 `*time.Ticker`，但调用者拿不到 Ticker 的引用，因此**永远无法 Stop 这个 ticker**。官方文档明确警告："The underlying Ticker is never recovered by the garbage collector; it will leak for the duration of the program." 于是 `time.Tick` 只适合在**整个进程生命周期内持续运行**的场景（譬如定时清理任务的 worker goroutine），而绝不应用于按需创建、按需销毁的场景。后者必须显式使用 `time.NewTicker` + `Stop`。
 
 ### 6.6 一张对照表
 
@@ -392,7 +392,7 @@ t, _ = time.ParseInLocation("2006-01-02 15:04:05", logLine, loc)
 
 ### 7.5 序列化与时区
 
-`time.Time` 的 `MarshalJSON` 使用 RFC 3339 格式（`2006-01-02T15:04:05Z07:00`），会自动带上时区偏移——如果 Location 是 UTC，则输出 `Z`；如果是东八区，则输出 `+08:00`。反序列化时 `UnmarshalJSON` 会根据偏移重建 Location（但重建的是一个 fixed zone，而非 IANA 时区，因此不包含 DST 历史）。这意味着跨 JSON 边界传递的时间会丢失 IANA Location 信息——这是另一个 subtle 的源头，需要在 API 边界谨慎处理。
+`time.Time` 的 `MarshalJSON` 使用 RFC 3339 格式（`2006-01-02T15:04:05Z07:00`），会自动带上时区偏移——如果 Location 是 UTC，则输出 `Z`；如果是东八区，则输出 `+08:00`。反序列化时 `UnmarshalJSON` 会根据偏移重建 Location（但重建的是一个 fixed zone，而非 IANA 时区，因此不包含 DST 历史）。结果是跨 JSON 边界传递的时间会丢失 IANA Location 信息——这是另一个 subtle 的源头，需要在 API 边界谨慎处理。
 
 ```go
 // 序列化前是 IANA Location，能正确处理历史 DST
@@ -425,7 +425,7 @@ parsed.UnmarshalJSON(b)
 
 ### 8.2 pprof CPU 剖析的时间来源
 
-`pprof` 的 CPU profile 通过 `setitimer(ITIMER_PROF)` 或 Linux 的 `perf_event_open` 周期性地采样当前 goroutine 的调用栈。每次采样的间隔是基于进程的 CPU 时间（而非墙上时间），这意味着它天然使用单调时钟——NTP 跳变不会影响 CPU profile 的采样频率。但 profile 中的"总耗时"如果按墙上时间解读（譬如比较两次 profile 之间实际流逝的秒数），就会受 NTP 影响。正确做法是：**分析 CPU profile 时只看"每函数占比"与"每函数绝对样本数"，不要依赖采样间隔对应的墙上时间**。
+`pprof` 的 CPU profile 通过 `setitimer(ITIMER_PROF)` 或 Linux 的 `perf_event_open` 周期性地采样当前 goroutine 的调用栈。每次采样的间隔是基于进程的 CPU 时间（而非墙上时间），这说明它天然使用单调时钟——NTP 跳变不会影响 CPU profile 的采样频率。但 profile 中的"总耗时"如果按墙上时间解读（譬如比较两次 profile 之间实际流逝的秒数），就会受 NTP 影响。正确做法是：**分析 CPU profile 时只看"每函数占比"与"每函数绝对样本数"，不要依赖采样间隔对应的墙上时间**。
 
 ### 8.3 基准测试中的时间语义
 

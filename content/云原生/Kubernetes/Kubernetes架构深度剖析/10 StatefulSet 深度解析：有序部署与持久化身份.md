@@ -1,8 +1,8 @@
 ---
 title: "StatefulSet 深度解析：有序部署与持久化身份"
 date: 2026-07-17
-tags: [Kubernetes]
-keywords: [StatefulSet, 有序部署, 持久化身份, Headless Service, PV绑定, 滚动更新, 状态化应用]
+tags: [Kubernetes, 云原生, 分布式存储]
+keywords: [StatefulSet, 有序部署, 持久化身份, Headless Service, PV绑定, 滚动更新, 状态化应用, PVC, Headless-Service]
 aliases: [StatefulSet, 有序部署, 持久化身份, Headless Service, 状态化应用, K8s 状态管理]
 ---
 
@@ -223,7 +223,7 @@ Parallel 模式的选择需要谨慎——它放弃了有序保证，要求应�
 
 StatefulSet 控制器实现有序性的机制值得了解。控制器维护一个"期望序号"——当前应该创建的下一个 Pod 的序号。创建时，控制器检查序号 N-1 的 Pod 是否 Ready，Ready 才创建序号 N 的 Pod，然后等待序号 N Ready 才创建序号 N+1。删除时逆序——控制器检查序号 N 的 Pod 是否已删除，删除后才删除序号 N-1。
 
-这个机制依赖协调循环的持续检查——控制器每次 Reconcile 都检查所有 Pod 的状态，决定下一步操作。如果某个 Pod 卡在 Pending（譬如资源不足），后续 Pod 都不会创建——StatefulSet 会"卡住"在当前序号。这种"卡住"是设计而非 bug——它保证有序性，但生产中需要监控 StatefulSet 的部署进度，避免长时间卡住无人发现。
+这个机制依赖协调循环的持续检查——控制器每次 Reconcile 都检查所有 Pod 的状态，决定下一步操作。如果某个 Pod 卡在 Pending（譬如资源不足），后续 Pod 都不会创建——StatefulSet 会"卡住"在当前序号。这种"卡住"是设计而非 bug——它保证有序性，但部署进度必须被监控，否则卡住会一直无人发现。
 
 ### 3.4 OrderedReady 卡住的语义与处置
 
@@ -294,7 +294,7 @@ volumeClaimTemplates 的核心设计是——**PVC 与 Pod 解耦，PVC 的生�
 
 PVC 与 Pod 解耦的另一个后果是——**缩容不删除 PVC**。StatefulSet 从 3 副本缩容到 1 副本，删除 mysql-2 与 mysql-1 的 Pod，但保留 `data-mysql-2` 与 `data-mysql-1` 两个 PVC。这是为了防止数据丢失——如果后续扩容回 3 副本，PVC 仍在，mysql-2 重建后挂载原 PVC，数据恢复。这种"缩容保留 PVC"的设计是有状态应用数据安全的保护，但也意味着缩容不释放存储——需要手动清理。
 
-PVC 的生命周期与 StatefulSet 的关系值得厘清。PVC 在 Pod 创建时由 StatefulSet 控制器根据 volumeClaimTemplates 自动创建，但 PVC 不会随 Pod 删除而删除——PVC 的删除只发生在两种情况：第一，删除 StatefulSet 时用级联删除（默认），PVC 随之删除；第二，手动删除 PVC。这意味着 PVC 的生命周期实际上与 StatefulSet 对象绑定，而非与 Pod 绑定。如果用 `--cascade=orphan` 删除 StatefulSet，PVC 保留；如果用默认级联删除，PVC 随 StatefulSet 一起删除——这是生产中需要警惕的，误删 StatefulSet 可能导致数据丢失。
+PVC 的生命周期与 StatefulSet 的关系值得厘清。PVC 在 Pod 创建时由 StatefulSet 控制器根据 volumeClaimTemplates 自动创建，但 PVC 不会随 Pod 删除而删除——PVC 的删除只发生在两种情况：第一，删除 StatefulSet 时用级联删除（默认），PVC 随之删除；第二，手动删除 PVC。这意味着 PVC 的生命周期实际上与 StatefulSet 对象绑定，而非与 Pod 绑定。如果用 `--cascade=orphan` 删除 StatefulSet，PVC 保留；如果用默认级联删除，PVC 随 StatefulSet 一起删除——这正是要警惕的地方：误删 StatefulSet 可能连数据一起删掉。
 
 > [!info] 核心概念：PVC 与 Pod 解耦保证数据不飘移
 > Deployment 的 Pod 重建后可能调度到不同节点，如果用共享 PV，数据可能"飘移"。StatefulSet 通过 volumeClaimTemplates 为每个 Pod 创建独立 PVC——PVC 和 PV 的绑定是持久的，Pod 重建后仍绑同一 PVC。即使 Pod 调度到不同节点，PV 的数据仍在原节点（除非用网络存储如 NFS/Ceph）。这是 StatefulSet 保证数据一致性的核心机制。
@@ -618,7 +618,7 @@ PDB 的局限需要明确——它只对自愿驱逐有效，非自愿驱逐（�
 
 podAntiAffinity 与 PDB 的配合是有状态应用高可用的标准配置。podAntiAffinity 确保 StatefulSet 的 Pod 分散到不同节点——`podAntiAffinity` 的 `requiredDuringSchedulingIgnoredDuringExecution` 规则强制 Pod 调度到没有同 StatefulSet Pod 的节点。PDB 确保自愿驱逐时保留最小可用副本数。两者配合，单节点故障只影响一个 Pod（podAntiAffinity 保证分散），自愿驱逐时不会同时驱逐多个（PDB 保证最小可用），从两个维度保护有状态应用的可用性。
 
-但 podAntiAffinity 有一个代价——它限制了调度灵活性。如果集群节点数少于 StatefulSet 副本数，podAntiAffinity 会导致部分 Pod 无法调度（Pending）。生产中需要确保集群有足够节点容纳 StatefulSet 的所有 Pod，或者用 `preferredDuringSchedulingIgnoredDuringExecution`（软亲和性）允许在节点不足时降级调度。
+但 podAntiAffinity 有一个代价——它限制了调度灵活性。如果集群节点数少于 StatefulSet 副本数，podAntiAffinity 会导致部分 Pod 无法调度（Pending）。要么保证集群节点数够容纳所有 Pod，要么改用 `preferredDuringSchedulingIgnoredDuringExecution`（软亲和性），在节点不足时降级调度。
 
 ---
 

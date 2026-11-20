@@ -1,7 +1,7 @@
 ---
 title: "流式 I/O 的数学契约——io.Reader、io.Writer 与组合流模型"
 date: 2026-10-07
-tags: [Golang, IO]
+tags: [Golang, IO, 系统调用]
 keywords: [EOF, ReaderFrom, TeeReader, WriterTo, io.Copy, io.Pipe, io.Reader, io.Writer, 短读, 组合子, 部分写, 流式契约, 装饰器模式]
 aliases: []
 ---
@@ -118,7 +118,7 @@ type Writer interface {
 
 这几个接口合在一起，构成了 `io` 包对"数据访问"的完整抽象：流式读、流式写、关闭、随机访问、偏移读。它们之间的组合与约束，为第 2 章将要展开的装饰器模式提供了基座。
 
-值得注意的是，这些接口之间的**组合约束**同样重要。`io.ReadWriteCloser` 仅仅是 `Reader + Writer + Closer` 的组合，但它的语义要求三个方法对同一个底层资源操作——不能读从一个文件、写往另一个文件。`io.ReadSeeker`、`io.ReadWriteSeeker` 等组合接口同样遵循这种"同一资源"的隐含约束。一旦实现者把 Read 和 Seek 指向不同的底层源（譬如读来自一个文件，Seek 操作另一个文件），就会产生难以预料的行为——`SectionReader` 之所以能正确工作，正是因为它假设底层的 `ReaderAt` 和 `Seeker` 操作的是同一个连续的字节序列。这种"组合接口对同一资源的隐含绑定"，是 `io` 包里没有被写进签名、但必须被实现者遵守的另一层契约。
+这些接口之间的**组合约束**同样重要。`io.ReadWriteCloser` 仅仅是 `Reader + Writer + Closer` 的组合，但它的语义要求三个方法对同一个底层资源操作——不能读从一个文件、写往另一个文件。`io.ReadSeeker`、`io.ReadWriteSeeker` 等组合接口同样遵循这种"同一资源"的隐含约束。一旦实现者把 Read 和 Seek 指向不同的底层源（譬如读来自一个文件，Seek 操作另一个文件），就会产生难以预料的行为——`SectionReader` 之所以能正确工作，正是因为它假设底层的 `ReaderAt` 和 `Seeker` 操作的是同一个连续的字节序列。这种"组合接口对同一资源的隐含绑定"，是 `io` 包里没有被写进签名、但必须被实现者遵守的另一层契约。
 
 > [!note] 契约的多层性
 > `io.Reader` 的签名只规定了 `(n, err)` 的语义，但它背后还承载着更多隐含约束：不能返回 `(0, nil)`、不能修改 `p` 之外的内存、不能在 EOF 后"诈尸"返回数据、不能保留 `p` 的引用延迟使用。这些约束没有写在类型系统里，只能靠文档和共识维护——这也是为什么自定义 Reader 实现的 bug 在 Go 社区里如此常见。每多一层隐含约束，就多一个可能被违反的契约点；组合子嵌套得越深，整条链路的脆弱性就越高。
@@ -177,7 +177,7 @@ flowchart LR
 
 ### 2.4 组合子的组合：从单点到生态
 
-值得注意的是，`io` 包提供的组合子虽然数量有限，但它们与标准库中其他实现 `io.Reader`/`io.Writer` 的包叠加之后，会产生更大的组合爆炸。`compress/gzip`、`compress/zlib`、`compress/flate` 的 Reader/Writer 是装饰器；`crypto/cipher` 的 Stream 模式是装饰器；`encoding/base64` 的 Encoder/Decoder 也是装饰器。把这些全部视作 `io.Reader` 的派生，就能构造出诸如"gzip 解压 → base64 解码 → AES 解密 → SHA256 校验 → 写入文件"这种多层流水线，每一层都只用一个 `io.Reader` 或 `io.Writer` 接口对接，代码量极小，性能也足够好——因为数据是逐块流过整条流水线的，内存占用始终是 O(缓冲区大小)，与数据总量无关。
+`io` 包提供的组合子虽然数量有限，但它们与标准库中其他实现 `io.Reader`/`io.Writer` 的包叠加之后，会产生更大的组合爆炸。`compress/gzip`、`compress/zlib`、`compress/flate` 的 Reader/Writer 是装饰器；`crypto/cipher` 的 Stream 模式是装饰器；`encoding/base64` 的 Encoder/Decoder 也是装饰器。把这些全部视作 `io.Reader` 的派生，就能构造出诸如"gzip 解压 → base64 解码 → AES 解密 → SHA256 校验 → 写入文件"这种多层流水线，每一层都只用一个 `io.Reader` 或 `io.Writer` 接口对接，代码量极小，性能也足够好——因为数据是逐块流过整条流水线的，内存占用始终是 O(缓冲区大小)，与数据总量无关。
 
 这种"流式流水线"的编程范式，在 Go 里是如此自然，以至于很多开发者写了很多年都没意识到这是一种特定的设计模式。它背后的数学事实是：**只要所有组件都遵守同一套 Read/Write 契约，它们的组合就自动遵守同一套契约**——这是一种代数意义上的"封闭性（Closure）"，组合子的输出仍然是 Reader/Writer，可以继续被其他组合子消费。这种封闭性在 Unix 管道的哲学里早有渊源（Doug McIlroy 在 1964 年提出的 "write programs that handle text streams, because that is a universal interface"），而 Go 的 `io` 包把它从文本流推广到了字节流，从进程间通信推广到了函数调用级别。
 
