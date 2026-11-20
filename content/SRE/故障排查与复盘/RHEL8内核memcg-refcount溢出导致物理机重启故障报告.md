@@ -1,8 +1,9 @@
 ---
 title: "RHEL8 内核 memcg refcount 溢出导致物理机重启"
 date: 2026-04-21
-tags: []
+tags: [SRE, 故障排查, Linux, 内核]
 keywords: [crash, kernel, kswapd, memcg, refcount, RHEL8]
+aliases: ["dn-023 内核 panic", "memcg refcount 溢出"]
 category: 系统故障
 severity: P1
 ---
@@ -20,6 +21,15 @@ severity: P1
 [45897053.291409] Hardware name: Inspur SA5212M5/YZMB-00882-10F, BIOS 4.1.23 01/02/2022
 ```
 
+## 故障时间线
+
+| 时间点 | 事实 |
+|---|---|
+| `[18120485s]` → `[45897053s]`（跨约 320 天） | `vmcore-dmesg.txt` 累计 160+ 次 `refcount_t overflow at mem_cgroup_id_get_online` |
+| 2026-04-21 17:05:07 | dn-023 `/var/log/messages` 最后一条正常日志 |
+| 2026-04-21 17:05 | 物理机 dn-023 重启，`vmcore-dmesg.txt` 末尾为内核 NULL 指针解引用 panic |
+| 2026-04-21 17:10:50 | 重启后 `/var/log/messages` 第一条内核日志（中间无任何 `kernel:` 报错行） |
+
 ## 根因分析
 
 ### 直接原因
@@ -28,28 +38,19 @@ severity: P1
 
 ### 完整崩溃链路
 
-```
-系统长期运行（约 320 天）
-    ↓
-kswapd/khugepaged 内存回收时反复调用 mem_cgroup_id_get_online()
-    ↓
-memcg->id.ref 引用计数缓慢泄漏，持续递增
-    ↓
-refcount 达到 0xc0000000（溢出阈值 REFCOUNT_SATURATED）
-    ↓
-内核连续触发 WARNING: refcount_t overflow at mem_cgroup_id_get_online
-    ↓
-memcg 内部数据结构被损坏（RCU 回调指针清零）
-    ↓
-systemd 通过 cgroup_mkdir → mem_cgroup_css_alloc 创建新 cgroup
-    ↓
-pcpu_alloc 中被 timer 中断打断
-    ↓
-中断返回路径执行 RCU 软中断 rcu_do_batch
-    ↓
-调用已损坏的回调函数指针 → RIP: 0x0
-    ↓
-kernel panic → 物理机重启
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+flowchart TD
+    C1["系统长期运行（约 320 天）"] --> C2["kswapd/khugepaged 内存回收时反复调用 mem_cgroup_id_get_online()"]
+    C2 --> C3["memcg->id.ref 引用计数缓慢泄漏，持续递增"]
+    C3 --> C4["refcount 达到 0xc0000000（溢出阈值 REFCOUNT_SATURATED）"]
+    C4 --> C5["内核连续触发 WARNING: refcount_t overflow at mem_cgroup_id_get_online"]
+    C5 --> C6["memcg 内部数据结构被损坏（RCU 回调指针清零）"]
+    C6 --> C7["systemd 通过 cgroup_mkdir → mem_cgroup_css_alloc 创建新 cgroup"]
+    C7 --> C8["pcpu_alloc 中被 timer 中断打断"]
+    C8 --> C9["中断返回路径执行 RCU 软中断 rcu_do_batch"]
+    C9 --> C10["调用已损坏的回调函数指针 → RIP: 0x0"]
+    C10 --> C11["kernel panic → 物理机重启"]
 ```
 
 ### 关键证据
@@ -177,12 +178,12 @@ sysctl vm.swappiness=1
 
 本次故障中，`refcount_t overflow` WARNING 在崩溃前 320 天就已出现，完全可以通过日志监控提前发现。
 
-```
-dmesg / journalctl -k          /var/log/messages (rsyslog)      /var/crash/vmcore-dmesg.txt
-    │                              │                                  │
-    └─ 环缓冲区（易失）            └─ 持久化，实时告警可用            └─ kdump 快照（仅事后分析）
-       panic 瞬间日志丢失            ✅ refcount_t overflow              ✅ 包含完整 panic 调用栈
-                                    正常运行时写入，但会 logrotate       ❌ panic 瞬间的 BUG: 行不会写入
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+flowchart LR
+    K["内核日志落盘"] --> K1["dmesg / journalctl -k<br/>环缓冲区（易失）<br/>panic 瞬间日志丢失"]
+    K --> K2["/var/log/messages (rsyslog)<br/>持久化，实时告警可用<br/>✅ refcount_t overflow 正常运行时写入，但会 logrotate"]
+    K --> K3["/var/crash/vmcore-dmesg.txt<br/>kdump 快照（仅事后分析）<br/>✅ 包含完整 panic 调用栈<br/>❌ panic 瞬间的 BUG: 行不会写入"]
 ```
 
 **实际验证**（dn-023 `/var/log/messages`）：

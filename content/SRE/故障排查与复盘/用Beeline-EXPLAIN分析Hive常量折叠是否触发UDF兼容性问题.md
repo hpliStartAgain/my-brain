@@ -1,8 +1,8 @@
 ---
 title: "用Beeline-EXPLAIN分析Hive常量折叠是否触发UDF兼容性问题"
 date: 2026-07-26
-tags: [SRE]
-aliases: []
+tags: [SRE, 故障排查, Hive]
+aliases: ["Beeline EXPLAIN 判断常量折叠", "常量折叠与 UDF 兼容性"]
 ---
 
 **背景**: 排查 Hive on Tez 作业因 `AbstractMethodError: GenericUDF.initializeAndFoldConstants` 失败时，用于对比不同分区查询计划、判断常量折叠是否为触发路径的操作手册。
@@ -213,10 +213,11 @@ DESCRIBE FORMATTED msns.mvp_dwd_event_click PARTITION(dt='20260318');
 
 ## 总结：判断流程
 
-```
-开关对照（constant.propagation=false）
-    ├── 成功 → 常量折叠是根因 → 永久修复：UDF 迁移到 GenericUDF
-    └── 仍失败 → 与分区无关
-              └── 检查 Tez 容器实际加载的 hive-exec 版本
-                  └── javap GenericUDF → 是否 abstract
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+flowchart TD
+    J0["开关对照（constant.propagation=false）"] -->|成功| J1["常量折叠是根因 → 永久修复：UDF 迁移到 GenericUDF"]
+    J0 -->|仍失败| J2["与分区无关"]
+    J2 --> J3["检查 Tez 容器实际加载的 hive-exec 版本"]
+    J3 --> J4["javap GenericUDF → 是否 abstract"]
 ```

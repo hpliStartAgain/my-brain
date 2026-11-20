@@ -1,468 +1,384 @@
 ---
 title: "堆外内存与 Tungsten Unsafe 内存世界"
-date: 2026-02-27
-tags: [Spark, 堆外内存]
-keywords: [GC优化, MemoryBlock, sun.misc.Unsafe, Tungsten, UnsafeRow, 二进制格式]
+date: 2026-11-19
+tags: [Spark, 大数据, 内存管理, 性能优化]
+keywords: [UnsafeRow, 堆外内存, memoryOverhead, 容器 OOMKilled, OFF_HEAP, 直接内存, RocksDB, 页大小, SparkOutOfMemoryError]
 aliases: []
 ---
 
 # 09 堆外内存与 Tungsten Unsafe 内存世界
 
-## 摘要
+**摘要：**
 
-Project Tungsten 是 Spark 历史上最深刻的底层性能重构，其核心理念是：**绕过 JVM 对象模型，直接用二进制内存操作替代 Java 对象操作**。通过 `sun.misc.Unsafe` API，Tungsten 实现了手动内存管理——堆外内存分配、紧凑的二进制行格式 `UnsafeRow`、以内存页（`MemoryBlock`）为单位的批量分配，以及基于 CPU 缓存行友好的数据布局。这套体系在 Shuffle 中的关键应用是 `UnsafeShuffleWriter`，它在序列化和排序两个最耗性能的环节做了根本性优化：数据插入时即序列化，排序时操作的是定长指针而非变长对象，从而将 Shuffle Write 的 CPU 和内存开销降低到接近 C++ 的水平。本文从 JVM 对象模型的局限出发，系统讲解 Tungsten 的内存抽象层次、`UnsafeRow` 的二进制布局，以及 `UnsafeShuffleWriter` 在内存中的完整工作流程。
-
----
-
-## 第 1 章 JVM 对象模型：Tungsten 诞生的背景
-
-### 1.1 JVM 对象的三重开销
-
-在理解 Tungsten 的价值之前，必须先理解 JVM 对象模型对性能的影响。在 Java/Scala 中，一个普通对象在内存中的布局如下：
-
-**开销一：对象头（Object Header）**
-
-每个 Java 对象都有 12-16 字节的对象头，包含：
-- **Mark Word**（8 字节）：存储对象的哈希码、锁状态信息、GC 年龄标记
-- **Klass Word**（4 字节，开启指针压缩时）：指向类元数据（Class metadata）的指针
-
-这意味着一个只存储一个 `int`（4 字节）的 `Integer` 对象，实际在内存中占用 12（对象头）+ 4（int 字段）+ 4（对齐填充）= **20 字节**，比原始数据大 5 倍。
-
-**开销二：对齐填充（Alignment Padding）**
-
-JVM 要求每个对象的大小必须是 8 字节的整数倍（64 位 JVM，开启指针压缩时）。即使对象的有效数据只有 5 字节，也会被填充到 8 字节。这种填充在大量小对象场景下造成显著的内存浪费。
-
-**开销三：引用开销（Reference Overhead）**
-
-Java 中的对象不能直接嵌套（不像 C++ 的结构体内嵌），只能通过引用（指针）关联。每个引用在 64 位 JVM 开启压缩指针时占 4 字节，未压缩时占 8 字节。
-
-**实际影响**：一个 Spark `Row` 对象，假设有 5 列（1个 int，2个 long，2个 String）：
-```
-JVM 对象布局（使用引用）：
-- Row 对象头:       16 字节
-- Array 引用:        4 字节 → 指向 Object[] 数组
-- Object[] 对象头:  16 字节
-- Object[] 内容:    5 × 4 字节 = 20 字节 (5 个引用)
-- Integer 对象:     16 字节 × 1 = 16 字节
-- Long 对象:        24 字节 × 2 = 48 字节
-- String 对象:      40+ 字节 × 2 = 80+ 字节
-总计: 约 200+ 字节
-
-实际数据量:
-- 1 个 int:   4 字节
-- 2 个 long: 16 字节
-- 2 个 String (各 10 字符): 40 字节
-实际数据:    60 字节
-
-内存放大倍数: 200 / 60 ≈ 3.3 倍
-```
-
-这种内存放大在处理数亿行数据时，意味着需要 3 倍多的物理内存，同时 GC 需要追踪数亿个对象节点，GC 停顿时间急剧增加。
-
-### 1.2 GC 是 Spark 性能的隐形杀手
-
-GC 对 Spark 性能的影响是系统性的：
-
-**影响一：GC 停顿直接延迟 Task 执行**
-
-JVM GC 的 Stop-The-World（STW）停顿会暂停 Task 的所有线程。在处理大量数据的 Spark Task 中，Young GC 可能每隔几秒触发一次（每次停顿 10-100ms），Full GC 可能每隔几分钟触发（每次停顿 1-30 秒）。对于一个运行 10 分钟的 Task，GC 时间可能占总时间的 10-30%。
-
-**影响二：GC 停顿触发 Shuffle Fetch 超时**
-
-当 Reducer 节点上的 Executor 发生 Full GC 时，Map 端 Executor 发来的 Fetch 请求无法被处理，如果停顿超过 `spark.shuffle.io.connectionTimeout`（默认 120 秒），Fetch 请求超时，触发 FetchFailedException，整个 Stage 需要重试——这是生产中 Stage 失败最常见的原因之一。
-
-**影响三：GC 增大内存估算误差**
-
-第 04 篇中提到，`ExternalSorter` 通过采样估算内存使用量。GC 后内存使用量会突然降低（GC 清理了大量临时对象），导致估算值偏低，延迟 Spill 触发，使得实际内存使用量超出预期后 OOM。
-
-### 1.3 Tungsten 的解题思路
-
-Tungsten（2014 年 Spark 1.4 开始，全称"Project Tungsten"）的核心洞察是：
-
-**问题根源**：Spark 把太多的时间花在了 JVM 对象管理、GC 和序列化上，而不是真正的计算上。在某些 Benchmark 中，JVM 开销占 Spark 总 CPU 时间的 70% 以上。
-
-**解题方向**：用 C/C++ 程序员管理内存的方式来管理 Spark 的内存——手动分配、手动释放、直接操作内存字节，完全绕过 JVM 的对象系统和 GC。
-
-Tungsten 分三个方向推进：
-1. **内存管理与二进制处理**：用堆外内存替代 JVM 堆对象，引入 `UnsafeRow` 等二进制数据格式
-2. **缓存友好的计算**：利用 CPU 的 L1/L2 Cache，设计缓存行对齐的数据结构
-3. **代码生成（Code Generation/WSCG）**：通过运行时生成字节码，消除虚函数调用和解释器开销
-
-本篇聚焦第一个方向——内存管理与 `UnsafeRow`，以及它在 Shuffle 中的直接应用 `UnsafeShuffleWriter`。
+「开了堆外内存，作业还是被容器杀掉」是 Spark 内存运维里最容易被误判的一类现场，因为它的证据链几乎全在 JVM 之外：堆不高、没有 `Java heap space`、也没有堆转储，只有一条退出码 137。本篇按运维判据来写。先把 Spark 语境里被叫作堆外的四块地分开：`UnsafeRow` 的字节区（默认住在堆里，仅靠 `sun.misc.Unsafe` 做紧凑布局）、`OFF_HEAP` 存储级别的缓存块、Netty 传输用的直接缓冲、以及 RocksDB 与 JNI 这类不受 Spark 管的原生内存。四者分配者不同、额度来源不同、观测点不同、越界的报错形态也不同，混着叫就必然算错账。再给四条能证伪「省到了」的判据：行对象与行字节区不是一回事，堆内与堆外的池子不互相借贷，GC 不扫描的那部分照样计入容器常驻内存，逐次 `malloc` 与 `free` 的代价在小对象场景里会反超 GC。核心交付是一张配置代价表与一条「容器 OOMKilled 而堆很空」的六步排查路径，配一个 24GiB 堆的核算算例。机制推导（`MemoryBlock`、页表与地址编码、二进制记录的排序归并）不再重复，按章路由到内核系列与本列前两篇。
 
 ---
 
-## 第 2 章 sun.misc.Unsafe：Java 的"后门 API"
+## 第 1 章 一个开了堆外仍然被杀的容器
 
-### 2.1 Unsafe 是什么
+三百节点的集群，每天两千个作业，堆外这一层的问题有个共同点：它几乎不在 JVM 里留下证据。上周的一台 executor 就是这样死的，Structured Streaming 的双流 join，堆 12GiB，打开 `spark.memory.offHeap.enabled=true` 并给了 `spark.memory.offHeap.size=8g`，容器额度 20GiB，跑了六小时零七分被 Kubernetes 杀掉，退出码 137。事后翻记录，堆的已用峰值不到一半，`hs_err_pid` 没有，堆转储没有，任务日志在最后几秒甚至还在正常刷心跳。
 
-`sun.misc.Unsafe`（在 Java 9+ 中改为 `jdk.internal.misc.Unsafe`）是 Java 标准库中一个非公开的、仅供 JDK 内部使用的底层 API，提供了直接操作内存的能力：
+值班同学按顺序试了三个动作。先把 `spark.memory.offHeap.size` 从 8g 加到 12g，下一次运行两小时就死；再把 `spark.executor.memory` 从 12GiB 压到 8GiB，以为能把额度匀出来，结果换成了 `Java heap space`；最后把 `spark.executor.memoryOverhead` 抬到 4GiB，稳了两周，状态数据涨上来之后又开始被杀。
 
-- **堆外内存分配**：`Unsafe.allocateMemory(size)` 直接向操作系统申请内存，返回内存地址（long 型指针）；`Unsafe.freeMemory(address)` 释放内存
-- **任意内存读写**：`Unsafe.putLong(address, value)` 向指定地址写入 8 字节；`Unsafe.getLong(address)` 从指定地址读取 8 字节
-- **对象字段偏移量**：`Unsafe.objectFieldOffset(field)` 获取对象字段在对象内存布局中的偏移量，可以绕过访问控制直接读写字段
-- **CAS 操作**：`Unsafe.compareAndSwapLong()` 等原子操作，是 Java `AtomicLong` 等并发类的底层实现
+三个动作各自都对了一半，错在同一处：把「堆外」当成一块边界清楚的额外内存。实际的情况是，Spark 里被叫作堆外的内存有四块来源、四套额度算法、四个观测点，它们的共同点只有一个：都不受 GC 管。而这一点恰好是误判的起点——不受 GC 管，不等于不占内存。
 
-Spark 通过反射获取 `Unsafe` 实例（因为它的构造函数是私有的），封装在 `org.apache.spark.unsafe.Platform` 中，屏蔽了不同 JVM 实现之间的差异。
-
-### 2.2 Unsafe 为什么危险
-
-`Unsafe` 的名字暗示了它的风险：
-
-1. **不受 GC 保护**：通过 `allocateMemory()` 分配的堆外内存，GC 完全不知道它的存在。如果程序员忘记调用 `freeMemory()`，内存就会泄漏，且泄漏的内存不会在 JVM 进程结束时自动回收（实际上会，但只有在 JVM 进程退出时才能被 OS 回收）。
-
-2. **越界访问不报错**：访问一个非法地址（已释放的内存、超出分配范围的地址），不会抛出 `ArrayIndexOutOfBoundsException`，而是直接读/写到无关内存，可能导致数据损坏或 JVM Crash（SIGSEGV）。
-
-3. **类型安全被绕过**：可以用 `putInt()` 向只该放 `long` 的位置写入数据，JVM 不做任何检查。
-
-尽管如此，Spark/Tungsten 接受了这些风险，因为收益（内存效率和 GC 消除）足以抵消风险——前提是代码中对内存的分配和释放有严格的会计管理（这正是 `TaskMemoryManager` 和 `MemoryConsumer` 的职责）。
-
-> [!warning] 生产避坑
-> 如果 Spark 日志中出现 `SIGSEGV` 或 `SIGBUS` 信号导致的 JVM Crash，并且 crash 发生在 Tungsten 相关的代码路径（堆栈中有 `sun.misc.Unsafe` 或 `Platform`），通常是以下原因之一：
-> 1. 堆外内存在某处被重复释放（double free）
-> 2. 程序 Bug 导致越界写入（buffer overflow）
-> 3. 极少数情况下是硬件内存故障（ECC 纠错内存错误）
->
-> 区分方式：检查是否只在特定节点上 Crash（硬件问题），还是所有节点都 Crash（代码 Bug）。
+本篇回答两个问题。第一，这台 executor 的容器额度里，哪几块地属于堆外，各自归谁管、在哪里看。第二，把堆外打开之后，为什么经常一点内存都没省下来——后者会落成四条可以用指标证伪的判据，再从容器被杀反推到具体那笔账。Tungsten 的内存抽象（`MemoryBlock` 的两种形态、页表与 64 位地址编码）、二进制记录的排序与归并，内核系列已经推到源码级，本文只引用结论，见 [[大数据/Spark/读书笔记-spark内核/05_Shuffle核心机制/6. Spark_Shuffle聚合与排序结构|Shuffle 聚合与排序结构]] 第 9 章与 [[大数据/Spark/读书笔记-spark内核/06_性能调优实战/5. Spark_JVM性能调优|JVM 性能调优]] 第 5 章。
 
 ---
 
-## 第 3 章 MemoryBlock：Tungsten 的内存抽象单元
+## 第 2 章 四块地：堆外这个词指向四件事
 
-### 3.1 MemoryBlock 是什么
+四块地先列出来，再逐块拆。可以把容器额度想成一栋楼的总电表，四块地则是四个租户：Spark 的堆外池跟 Spark 签合同，直接内存跟 JVM 签合同，原生库既不跟 Spark 签也不跟 JVM 签，只跟容器相关。总电表只有一个，抄表的人却有三个，这就是为什么「明明堆还很空」和「进程已经被杀」可以同时为真。表里的「是否在池账上」决定了加参数能不能解决问题：在池账上的，调额度有效；只在容器账上的，调额度只是把一个洞挪到另一个地方。
 
-`MemoryBlock` 是 Tungsten 对一块连续内存区域的抽象，类似 C 中的 `(void* ptr, size_t length)` 组合。它有两种形态：
+| 用途 | 谁申请 | 额度由谁定 | 是否在 Spark 内存池的账上 | 观测点 | 越界形态 |
+|---|---|---|---|---|---|
+| 行的字节区（默认在堆内） | `TaskMemoryManager` 申请的页，或用户代码里的 `byte[]` | 堆内执行池，或 `spark.memory.offHeap.size` 按内存模式二选一 | 是，按内存模式记在对应池 | 堆转储里的 `[B`、Executor 页的 on/off-heap execution 行 | `Java heap space` 或 `SparkOutOfMemoryError` |
+| `OFF_HEAP` 缓存块 | BlockManager 经 MemoryStore 写入堆外存储池 | `spark.memory.offHeap.size`，内部再按 `storageFraction` 划保护线 | 是，记在堆外存储池 | Storage 页的存储级别列、Executor 页堆外 storage 行 | `SparkOutOfMemoryError`、块被驱逐或写盘 |
+| Netty 直接缓冲 | Netty 的池化分配器 | JVM 直接内存上限，未显式设置时与堆同量级 | 否 | 堆内的 `DirectByteBuffer` 数量、RSS 与堆的差值 | `OutOfMemoryError: Direct buffer memory` |
+| 原生库与子进程 | RocksDB、JNI 编解码、Arrow、PySpark 进程 | 没有统一上限，只受容器额度约束 | 否，4.1 起可被轮询抵扣一部分 | RSS 减去堆与直接内存的余量、`smaps_rollup` | 容器 OOMKilled、退出码 137、`beyond physical memory limits` |
 
-**堆内 MemoryBlock（On-Heap）**：底层是一个 `byte[]` 数组，内存由 JVM 管理，受 GC 影响。访问时通过 `Unsafe.getByte(array, offset + BYTE_ARRAY_BASE_OFFSET)` 读写——其中 `BYTE_ARRAY_BASE_OFFSET` 是 JVM 中 byte 数组第一个元素的固定偏移量（通常是 16）。
-
-**堆外 MemoryBlock（Off-Heap）**：底层是一个通过 `Unsafe.allocateMemory()` 分配的原始内存地址（`long` 型）。访问时通过 `Unsafe.getByte(null, address + offset)` 读写——`obj` 参数为 `null` 时，`Unsafe` 将第二个参数视为绝对地址。
-
-`MemoryBlock` 的关键设计是**统一接口**：无论是堆内还是堆外，上层代码通过同一套 `Platform.get/put` 方法访问数据，不需要知道底层是哪种存储形式。
-
-```java
-// MemoryBlock 的核心字段（简化）
-public class MemoryBlock {
-    @Nullable
-    public final Object obj;   // 堆内：byte[] 数组；堆外：null
-    public final long offset;  // 堆内：数组内偏移；堆外：绝对地址
-    private final long length; // 块大小（字节）
-    
-    // 创建堆外 MemoryBlock（由 Unsafe.allocateMemory() 分配）
-    public static MemoryBlock fromLongArray(final long[] array) {
-        return new MemoryBlock(array, Platform.LONG_ARRAY_OFFSET, array.length * 8L);
-    }
-}
-```
-
-### 3.2 MemoryBlock 的 Page 分配
-
-在 `TaskMemoryManager` 中，堆外内存以固定大小的 `MemoryBlock`（Page）为单位分配，默认 64MB：
-
-```
-TaskMemoryManager
-  └── pageTable: MemoryBlock[8192]   // 最多 8192 个 Page
-        ├── Page 0: MemoryBlock(null, 0x7f8c000, 64MB)   // 第一个堆外 Page
-        ├── Page 1: MemoryBlock(null, 0x7f8c400, 64MB)
-        └── ...
-```
-
-每个 `MemoryBlock`（Page）分配后会记录在 `pageTable` 数组中，页号（Page Number）就是数组下标（0-8191）。
-
-这个设计允许 Tungsten 用一个 64 位 `long` 编码任意一条记录的位置：
-
-```
-64 位地址编码：
-┌──────────────────────┬────────────────────────────────────────────┐
-│  高 13 位 (Page 号)  │  低 51 位 (Page 内字节偏移量)              │
-└──────────────────────┴────────────────────────────────────────────┘
-```
-
-有了这个编码方案，`UnsafeShuffleWriter` 的 `ShuffleInMemorySorter` 只需要一个 `long[]` 数组，就能表示所有记录的位置，实现 O(n log n) 的基数排序。
-
----
-
-## 第 4 章 UnsafeRow：行数据的二进制极简格式
-
-### 4.1 传统行格式的问题
-
-在 Tungsten 之前，Spark SQL 的行数据以 `Row`/`InternalRow` 的形式存储，每一行是一个 JVM 对象，其中每个字段是另一个 JVM 对象（`Integer`、`Long`、`String` 等）。这种设计有两个核心问题：
-
-**问题一：内存开销巨大**，如第 1 章所分析，对象头和引用开销导致 3-5 倍的内存放大。
-
-**问题二：每次访问都需要对象追踪**，访问一行的第 3 个字段需要：对象解引用 → 数组解引用 → 字段对象解引用，每一步都可能造成 CPU 缓存 Miss（因为对象分散在堆上不同位置）。
-
-### 4.2 UnsafeRow 的二进制布局
-
-`UnsafeRow` 将一行数据存储在**连续的内存字节序列**中，格式如下：
-
-```
-UnsafeRow 内存布局（N 列）：
-
-┌─────────────────────────────────┐
-│ Null Bitset                      │
-│ (ceil(N/64) × 8 字节)           │  ← 每一位表示对应列是否为 null
-├─────────────────────────────────┤
-│ 固定长度值区域（Fixed-Length Area）│
-│ 每列占 8 字节（64 位）            │  ← int/long/double 直接存值
-│                                 │  ← String/Array 存偏移量+长度
-├─────────────────────────────────┤
-│ 可变长度值区域（Variable-Length） │
-│ String 和 Array 的实际字节数据   │  ← UTF-8 编码的字符串等
-└─────────────────────────────────┘
-```
-
-**Null Bitset（空值位图）**：每列对应一个 bit，bit = 1 表示该列为 null，bit = 0 表示非 null。访问任意列的 null 状态只需一次位操作（O(1)）。
-
-**固定长度值区域**：每列固定占 8 字节（64 位）。对于 `int`、`long`、`double` 等定长类型，直接将值存入这 8 字节；对于 `String`、`Array`、`Map` 等变长类型，存储的是`(偏移量:32位, 长度:32位)` 的组合，指向可变长度值区域中的实际数据。
-
-**可变长度值区域**：紧随固定长度区域之后，存放所有变长字段的实际字节数据，按列序顺次排列。
-
-这个布局的精妙之处：
-- 访问固定长度列（`int`、`long`）：`base + 8*(columnIndex) + nullBitsetSize`——一次计算，直接读取，**O(1) 且缓存友好**
-- 访问变长列（`String`）：读固定区域的 `(offset, length)` → 再读 `base + offset` 处的数据——**两次访问，但都在连续内存中**
-- 整行数据是一块连续字节，可以直接 `memcpy` 到磁盘或网络缓冲区，**无需序列化**
-
-### 4.3 与传统 Row 的对比
-
-| 维度 | 传统 Java/Scala Row | UnsafeRow |
-|------|-------------------|-----------|
-| **存储形式** | JVM 对象树（分散的堆对象） | 连续字节序列（一块内存） |
-| **每列访问** | 多次对象解引用，可能多次 Cache Miss | 计算内存偏移量，直接读取，Cache 友好 |
-| **内存开销** | 3-5 倍放大（对象头 + 引用） | 接近原始数据大小（轻微对齐开销） |
-| **null 判断** | `if (obj == null)` | 位操作：`(nullBitset >> columnIndex) & 1` |
-| **序列化** | 需要递归序列化每个字段对象 | 直接 `memcpy`，无需序列化 |
-| **GC 影响** | 每个字段对象都是 GC Root，GC 负担重 | 堆外存储时完全不受 GC 影响 |
-| **适用场景** | 用户代码（RDD API） | SQL 引擎内部（DataFrame/Dataset） |
-
-> [!info] 核心概念
-> `UnsafeRow` 的"Unsafe"来自它底层使用 `sun.misc.Unsafe` 直接操作内存。当你在 Spark SQL 中使用 DataFrame/Dataset API 时，所有 SQL 算子（Filter、Project、Join、Aggregate 等）在内部操作的都是 `UnsafeRow`，而不是普通的 `Row` 对象。这是 DataFrame 比 RDD 快的核心原因之一——不仅有 Catalyst 优化器的查询重写，还有 Tungsten 带来的内存和 CPU 效率提升。只有在调用 `collect()`、`map()` 等触发用户代码执行的地方，`UnsafeRow` 才会被反序列化为用户可见的 `Row` 对象。
-
----
-
-## 第 5 章 UnsafeShuffleWriter：Shuffle 中的 Tungsten 实践
-
-### 5.1 UnsafeShuffleWriter 的适用条件
-
-`UnsafeShuffleWriter` 是 Sort Shuffle 中专门为 Tungsten 设计的 Writer，其使用条件（第 03 篇已提及）：
-
-1. 没有 Map 端聚合（`mapSideCombine = false`）——因为 `UnsafeShuffleWriter` 存储的是序列化字节，不支持在内存中对相同 key 做聚合
-2. 序列化器支持重定向（`serializer.supportsRelocationOfSerializedObjects = true`）——即序列化后的字节可以被移动，移动后仍然合法（Kryo 和 Java 序列化都满足）
-3. 分区数不超过 `MAX_SHUFFLE_OUTPUT_PARTITIONS_FOR_SERIALIZED_SORT`（16,777,216）
-
-满足这三个条件时，Spark 自动选择 `UnsafeShuffleWriter`，性能优于 `SortShuffleWriter`。
-
-### 5.2 ShuffleInMemorySorter：核心排序结构
-
-`UnsafeShuffleWriter` 的内存数据结构是 `ShuffleInMemorySorter`，它的核心是一个 `LongArray`（堆外内存中的 `long[]` 数组）。
-
-**数据插入流程**：
-
-1. 对每条输入记录 `(key, value)` 进行序列化，将序列化字节写入当前的 `MemoryBlock`（Page）中
-2. 在 `LongArray` 中追加一条 64 位记录指针：高 24 位存 `partitionId`，低 40 位存该记录在 Page 中的地址编码
-
-```
-LongArray 中每个元素的编码：
-┌──────────────────────────┬────────────────────────────────────────┐
-│  高 24 位 (partitionId)  │  低 40 位 (Page 内记录地址)            │
-└──────────────────────────┴────────────────────────────────────────┘
-```
-
-这样，`LongArray` 中的每个 `long` 值就是一个指向序列化记录的"标记指针"，包含了 partitionId 信息（用于排序）和记录位置（用于定位实际数据）。
-
-**内存布局示意**：
-
-```
-Page 0 (MemoryBlock, 64MB)：
-┌─────────────────────────────────────────────┐
-│ 记录 0 的序列化字节 [长度:4B][数据:NB]         │
-│ 记录 1 的序列化字节 [长度:4B][数据:NB]         │
-│ 记录 2 的序列化字节 [长度:4B][数据:NB]         │
-│ ...                                         │
-└─────────────────────────────────────────────┘
-
-LongArray（排序数组）：
-┌─────────────────────┬──────────────────────┐
-│ (partId=2, addr=P0) │ (partId=0, addr=P0+offset1) │
-│ (partId=1, addr=P0+offset2) │ ...          │
-└──────────────────────────────────────────────┘
-```
-
-### 5.3 基数排序：比较排序的高效替代
-
-`ShuffleInMemorySorter` 使用**基数排序（Radix Sort）**而非比较排序（如快排）对 `LongArray` 排序。
-
-**为什么用基数排序？**
-
-比较排序（快排、归并排序）的复杂度是 O(n log n)。对于 n = 1,000,000 条记录，O(n log n) ≈ 2,000,000 次比较。
-
-基数排序的复杂度是 O(n × k)，其中 k 是"排序键的位数"。`LongArray` 中每个元素的排序键是高 24 位的 `partitionId`（最多 16M 分区），基数排序只需扫描 24 位，每次处理 8 位（按字节），共 3 轮扫描。
-
-对于 n = 1,000,000：
-- 比较排序：约 2,000,000 次比较 + 随机访问
-- 基数排序：3 次 O(n) 的线性扫描，每次扫描访问连续内存
-
-基数排序的另一个优势是**缓存友好**：每轮扫描都是对 `LongArray` 的线性遍历，CPU 预取器可以有效预取下一个 cache line，几乎没有 Cache Miss。而比较排序的随机访问模式在大数组上会造成大量 L2/L3 Cache Miss。
-
-在 Spark 的 Benchmark 中，对 1 亿条记录的 `LongArray` 做基数排序，比快排快约 **3 倍**。
-
-### 5.4 Spill 时的效率优势
-
-`UnsafeShuffleWriter` 的 Spill 与 `SortShuffleWriter` 有本质不同：
-
-**`SortShuffleWriter`（普通模式）**：
-1. 对 `PartitionedAppendOnlyMap`/`PartitionedPairBuffer` 排序
-2. **反序列化**当前内存中的 Java 对象（因为 `AppendOnlyMap` 存的是原始对象）
-3. 序列化成字节写入 Spill 文件
-
-**`UnsafeShuffleWriter`（Tungsten 模式）**：
-1. 对 `LongArray` 按 partitionId 基数排序（操作的是定长 long 指针，比对象排序快得多）
-2. 遍历排序后的 `LongArray`，通过地址编码找到 Page 中的序列化字节
-3. **直接将序列化字节拷贝到 Spill 文件**（无需序列化，数据插入时已序列化）
-
-关键优势：**Spill 时没有序列化开销**。序列化是 Shuffle 中 CPU 开销最大的操作之一，`UnsafeShuffleWriter` 通过"插入时序列化"将这个开销分散到数据写入阶段，Spill 时只需字节拷贝（`memcpy`），速度接近内存带宽上限。
-
-### 5.5 Merge 阶段的零拷贝合并
-
-Merge 阶段（`UnsafeShuffleWriter.mergeSpills()`）同样有 Tungsten 的效率优化：
-
-对于每个分区 j，将所有 Spill 文件中分区 j 的数据块顺次拼接到最终 `.data` 文件中。这个拼接不需要反序列化，直接通过 `FileChannel.transferTo()` 实现**零拷贝（Zero-Copy）**文件合并：
-
-```
-transferTo() 的工作原理：
-  数据从 Spill 文件 → OS 页缓存 → 最终 .data 文件
-  全程在内核态完成，不需要将数据拷贝到用户态（JVM 堆）
-  避免了 JVM 堆内存的额外占用，也避免了用户态/内核态的上下文切换
-```
-
-与 `SortShuffleWriter` 的 Merge（需要反序列化 → 可选聚合 → 重新序列化）相比，`UnsafeShuffleWriter` 的 Merge 代价极低——本质上只是文件的字节级别拼接，CPU 开销接近零，瓶颈纯粹是磁盘 I/O 带宽。
+下图把容器额度与四块地的关系画在一起。注意右侧两条分支：一条是 Spark 自己的池子，一条只在容器的账上、Spark 根本看不见。
 
 ```mermaid
-%%{init: {"theme": "dracula", "themeVariables": {"primaryColor": "#6272a4", "primaryTextColor": "#f8f8f2", "primaryBorderColor": "#bd93f9", "lineColor": "#ff79c6", "secondaryColor": "#44475a", "tertiaryColor": "#282a36"}}}%%
-graph TD
-    subgraph "SortShuffleWriter（普通 Spill 路径）"
-        A1["Java 对象插入</br>PartitionedAppendOnlyMap"] --> B1["内存满时：</br>对象排序（对象比较）</br>→ 序列化写 Spill 文件"]
-        B1 --> C1["Merge：</br>反序列化 → 归并 → 重序列化</br>写最终 .data 文件"]
-    end
-
-    subgraph "UnsafeShuffleWriter（Tungsten Spill 路径）"
-        A2["数据插入时即序列化</br>写入堆外 MemoryBlock</br>LongArray 追加指针"] --> B2["内存满时：</br>LongArray 基数排序（定长指针比较）</br>→ 直接字节拷贝写 Spill 文件（无需序列化）"]
-        B2 --> C2["Merge：</br>FileChannel.transferTo() 零拷贝</br>拼接字节块写最终 .data 文件"]
-    end
-
-    classDef normal fill:#6272a4,stroke:#bd93f9,color:#f8f8f2
-    classDef tungsten fill:#44475a,stroke:#50fa7b,color:#f8f8f2
-
-    class A1,B1,C1 normal
-    class A2,B2,C2 tungsten
+%%{init: {'theme': 'dracula'}}%%
+flowchart TB
+    C["容器额度<br/>堆 + overhead + offHeap + pyspark"] --> H["JVM 堆 · -Xmx"]
+    C --> O["Spark 堆外池<br/>spark.memory.offHeap.size"]
+    C --> D["直接内存<br/>受 MaxDirectMemorySize 约束"]
+    C --> N["原生库与 JVM 自身<br/>没有 Spark 级上限"]
+    H --> H1["行的字节区 默认在这里<br/>记堆内执行池或存储池"]
+    O --> O1["OFF_HEAP 缓存块<br/>记堆外存储池"]
+    O --> O2["堆外模式下的行与页<br/>记堆外执行池"]
+    D --> D1["Shuffle 在途块与 RPC 缓冲"]
+    N --> N1["RocksDB 块缓存 / JNI / mmap / PySpark"]
+    classDef box fill:#6272a4,stroke:#bd93f9,color:#f8f8f2
+    classDef spark fill:#50fa7b,stroke:#282a36,color:#282a36
+    classDef outside fill:#ffb86c,stroke:#282a36,color:#282a36
+    class C,H box
+    class O,O1,O2 spark
+    class D,D1,N,N1 outside
 ```
+
+### 2.1 第一块：行的字节区，默认住在堆里
+
+`UnsafeRow` 这个名字误导了很多人。Unsafe 指的是它用 `sun.misc.Unsafe` 这套 API 按字节读写，而不是它住在堆外；默认配置下，一行数据就是一个 `byte[]`，由 JVM 分配、受 GC 扫描，只是布局被压紧了，省掉了对象头与引用跳转。真正决定字节区落在哪的，是内存管理器启动时定下的内存模式：`spark.memory.offHeap.enabled=true` 且 `spark.memory.offHeap.size>0`（两个条件都要满足，否则 `MemoryManager` 的构造直接失败）时，Tungsten 内存模式切成 `OFF_HEAP`，此后从 `TaskMemoryManager` 申请的页全部来自堆外；否则一切照旧在堆内。
+
+这里有一层常被忽略的结构：`UnsafeRow` 这个对象本身永远在堆上，它只有三个字段，指向字节区的 `base` 引用、偏移 `offset`、长度 `sizeInBytes`。堆外化的只是它指向的那段连续字节，行壳仍然是堆上的小对象。所以「把行搬到堆外」从来不是「堆里不再有这些对象」，而是「堆里只剩下这些壳」；行数极多的作业，壳本身的分配与回收仍要记在堆的账上。
+
+至于 SQL 执行侧，4.3.0 的公开配置里没有独立的「把行放到堆外」开关。旧资料里流传的 `spark.sql.execution.offHeap.enabled` 在 4.3.0 的配置文档与 `SQLConf` 里都找不到，写上去不会改变任何行为；真正起作用的是上文那个内存模式。与之相邻的还有一个内部键 `spark.sql.columnVector.offheap.enabled`（2.3.0 起），它只管列式向量（`ColumnarBatch`）要不要用堆外的 `OffHeapColumnVector`，未设置时回落到 `spark.memory.offHeap.enabled`。这几个名字对应的是不同对象：内存模式、列式向量、缓存级别，串着用就会出现「我以为开了」。
+
+这三层的关系要单独画一次，因为绝大多数混淆都来自把中间的「字节区」与最上面的「行壳」当成一件事。
+
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+flowchart LR
+    U["UnsafeRow 行壳<br/>base / offset / sizeInBytes<br/>永远在堆上"] --> B{"字节区落在哪<br/>由内存模式决定"}
+    B -- "默认 ON_HEAP" --> H["堆内 byte[]<br/>受 GC 扫描<br/>记堆内执行池或存储池"]
+    B -- "OFF_HEAP 且 size 大于 0" --> O["堆外地址<br/>不受 GC 扫描<br/>记堆外执行池"]
+    H --> Q1["堆转储里能看到 byte 数组"]
+    O --> Q2["堆转储里几乎看不到<br/>RSS 上涨"]
+    S["缓存块走 OFF_HEAP 级别<br/>与行字节区是两条路"] -->|只影响缓存块| O2["堆外存储池"]
+    classDef q fill:#44475a,stroke:#8be9fd,color:#f8f8f2
+    classDef heap fill:#6272a4,stroke:#bd93f9,color:#f8f8f2
+    classDef off fill:#ff79c6,stroke:#282a36,color:#282a36
+    class U q
+    class B q
+    class H,Q1 heap
+    class O,Q2,O2 off
+```
+
+判断这批行到底在堆里还是堆外，堆转储比任何参数都可靠。堆里如果还能看到大量 `[B` 且总量与数据规模对得上，说明行数据没搬走；如果 `[B` 的总量远小于数据规模、RSS 却一路涨，那才是搬出去了。`jmap -histo:live <pid>` 先看 `[B` 的排名与字节数，代价很低，适合作为第一动作。
+
+### 2.2 第二块：OFF_HEAP 存储级别
+
+把缓存块本身放到堆外，只有 `StorageLevel.OFF_HEAP` 这一个级别。前提是堆外池已经打开，块以序列化字节的形态存放在堆外存储池里；块目录（block id、大小、副本状态）这类元数据仍在堆内，由 BlockManager 记账。一块 200MiB 的缓存在 `OFF_HEAP` 下，堆内占用的只是几十字节的条目，堆外占用的是序列化之后的 200MiB 上下。
+
+这一块与执行侧的关系要划清：它**只解决存得下，不解决算得快**。缓存块换了地方，不会让任何一次 join 或聚合多拿到一个字节的执行内存，因为存储与执行分属两只池子；堆外那两只池子同样按 `spark.memory.storageFraction` 划保护线，两套池子之间的隔离规则与堆内完全一致，见 [[大数据/Spark/读书笔记-spark内核/04_存储与容错机制/2. Spark内存管理模型深度解析|统一内存池的两个视图]] 第 8 章。判据在 Executor 页的堆外存储行与 Storage 页的存储级别列：堆外存储用量能不能涨起来、目标数据集的 `Fraction Cached` 是否到 100%、以及块大小与对象形态的比值是否落在预期区间。
+
+还有一处代价常被算漏：`OFF_HEAP` 的块是序列化形态，每次读回都要反序列化。只读一次的数据集换成 `OFF_HEAP`，付了序列化的钱，省下的只是堆上那一时的对象，账并不划算。缓存块在池子里的存取与驱逐路径，见 [[大数据/Spark/Spark-Shuffle与内存管理机制深度解析/07 Execution 与 Storage 的动态边界|Execution 与 Storage 的动态边界]] 第 2 章与第 6 章。
+
+### 2.3 第三块：Netty 的直接缓冲
+
+Shuffle 拉取、块传输、RPC 都走 Netty，而 Netty 默认优先用直接缓冲：`spark.shuffle.io.preferDirectBufs`（1.2.0 起）与 `spark.network.io.preferDirectBufs`（3.0 起，作用于共享分配器）默认都是 true。官方文档对后者的解释很直白，堆外缓冲用于减少 shuffle 与缓存块传输过程中的 GC，如果环境里堆外内存本来就紧，可以关掉，强制所有分配走堆内。
+
+**这笔内存的额度不归 Spark 管**。它的上限是 JVM 的直接内存上限，未显式设置 `-XX:MaxDirectMemorySize` 时 HotSpot 按堆的上限同等对待；而容器额度是按堆加 overhead 申请的，于是直接内存天然带着一个和堆同量级的缺口。用量的形状由并发决定：每个 reduce task 同时拉取的量受 `spark.reducer.maxSizeInFlight`（默认 48m）约束，在途块总量大致是并发数乘这个常数；单个远程块超过 `spark.network.maxRemoteBlockSizeFetchToMem`（默认 200m，3.0 之前的键名没有 `network.` 前缀，那是现在仍被兼容的旧名）时改走落盘，避免一个巨大请求把直接内存顶穿。文件侧还有一处容易漏的：4.0 起的 `spark.shuffle.file.merge.buffer` 默认 32k，官方文档写明它用堆外缓冲，按同时打开的文件数乘起来并不小。
+
+越界的形态很有辨识度：`OutOfMemoryError: Direct buffer memory`，异常文本里带 `Direct buffer` 字样，与 `Java heap space` 完全不是一回事；它往往出现在拉取最密集的那几分钟，而堆的水位反而很低。看到这条异常就去查 `offHeap.size`，方向从一开始就错了，该查的是并发拉取数与 `preferDirectBufs`。
+
+直接缓冲的回收靠 Netty 的引用计数与 JDK 的清理器，泄漏不会立刻变成异常，而是 RSS 缓慢爬升，直到某次拉取高峰顶穿上限。要确认是泄漏而不是用量峰值，可以短时打开 Netty 的泄漏检测（`-Dio.netty.leakDetection.level=paranoid`），代价是所有缓冲的分配路径都被采样跟踪，只适合在定位阶段开几十分钟。
+
+### 2.4 第四块：不受 Spark 管的原生内存
+
+第四块最杂，也最容易在算 overhead 时被漏掉。Structured Streaming 的默认状态存储用 RocksDB，block cache 与 write buffer 都是 native 内存，通过 `spark.sql.streaming.stateStore.rocksdb.` 前缀的一组选项调整，这些字节既不进堆，也不进 `spark.memory.offHeap.size`；压缩编解码（snappy、lz4、zstd）走 JNI 时有临时缓冲；pandas UDF 走 Arrow，堆外占相当一部分；PySpark 的 worker 是独立进程，用 `spark.executor.pyspark.memory` 单独申报，申报后叠加到容器额度上；文件侧超过 `spark.storage.memoryMapThreshold`（默认 2m）的块读回时用内存映射，映射的文件页计入 cgroup，但属于可回收的文件页，压力上来时内核会先收它。
+
+还有一笔 4.1 起才有的账：`spark.memory.unmanagedMemoryPollingInterval` 默认 0，关闭时这些「自己管内存」的组件按零计；打开后内存管理器会定期向它们查询用量，并在计算统一池上限时先减掉。这笔账的性质要单独记一句：它不是「Spark 之外」的内存，而是「不在 M 账上」的内存，展开见 [[大数据/Spark/Spark-Shuffle与内存管理机制深度解析/06 Spark 统一内存管理模型|统一内存模型]] 第 4 章。
+
+四块地摊在容器额度里，只有前两块在 Spark 的池子里；后两块**不在任何池子的账上，只在容器的账上**，这句话是后面所有排查的出发点。
 
 ---
 
-## 第 6 章 Tungsten 在 Shuffle 中的综合收益
+## 第 3 章 UnsafeRow 为什么快，以及为这个快付了什么
 
-### 6.1 性能提升的量化
+一行的字节区被压成「空值位图 + 定长区 + 变长区」之后，比较两个键不再需要解引用对象树，比的就是两段字节，哈希也是对字节算的，对象头、引用指针、装箱全部消失；这就是 `UnsafeRow` 快的原因，一句话说完。布局本身、变长列的偏移编码、二进制比较为什么比对象比较快，见 [[大数据/Spark/读书笔记-spark内核/05_Shuffle核心机制/6. Spark_Shuffle聚合与排序结构|Shuffle 聚合与排序结构]] 第 9 章。
 
-根据 Databricks 2015 年发布的 Project Tungsten 博客和后续 Benchmark：
+| 维度 | 传统 `Row`（对象树） | `UnsafeRow`（连续字节） |
+|---|---|---|
+| 访问一个字段 | 对象解引用、可能多次缓存未命中 | 基址加偏移，一次计算 |
+| 内存形态 | 对象头与引用占大头，行内分散 | 紧凑字节，行内连续 |
+| 跨边界代价 | 直接可用 | 需 `Serializer` 或 `InternalRow` API 转换 |
 
-| 操作 | 普通模式 | Tungsten 模式 | 提升幅度 |
-|------|---------|--------------|---------|
-| **内存占用（相同数据集）** | 基准 | 约 50-70% | 减少 30-50% |
-| **排序速度（100M 记录）** | 基准 | 约 3-5x | 提升 3-5 倍 |
-| **Spill 写入速度** | 基准 | 约 2-3x | 提升 2-3 倍 |
-| **Merge 速度** | 基准 | 约 5-10x | 提升 5-10 倍（零拷贝 vs 反序列化+重序列化） |
-| **GC 时间** | 基准 | 接近 0（堆外） | 减少 90%+ |
-
-### 6.2 使用 UnsafeShuffleWriter 的配置要点
-
-`UnsafeShuffleWriter` 的选择是自动的（满足条件时 Spark 自动选用），但有几个配置影响其效果：
-
-**序列化器选择**（必须配置）：
-```
-spark.serializer=org.apache.spark.serializer.KryoSerializer
-```
-Java 序列化也支持 `UnsafeShuffleWriter`（满足 `supportsRelocationOfSerializedObjects`），但 Kryo 的序列化速度和紧凑性更好，效果更优。
-
-**堆外内存启用**（推荐配置）：
-```
-spark.memory.offHeap.enabled=true
-spark.memory.offHeap.size=4g
-```
-`UnsafeShuffleWriter` 的 `MemoryBlock`（Page）默认在堆内分配（`byte[]` 数组）。启用堆外内存后，Page 分配在堆外，彻底消除 Page 数据对 GC 的影响。
-
-**Page 大小调整**：
-```
-spark.buffer.pageSize=64m  # 默认 64MB，通常不需要修改
-```
-Page 过小导致 Page 数量过多，管理开销增大；Page 过大在内存紧张时分配失败概率增加。64MB 是经过 Databricks 生产验证的合理默认值。
-
-### 6.3 边界案例：UnsafeShuffleWriter 不适用的情况
-
-`UnsafeShuffleWriter` 有明确的不适用场景：
-
-**不适用一：需要 Map 端聚合**
-
-`reduceByKey`、`aggregateByKey` 等算子需要在 Map 端对相同 key 合并，而 `UnsafeShuffleWriter` 存储的是序列化字节，无法在不反序列化的情况下合并两个值。此时强制使用 `SortShuffleWriter`（利用 `PartitionedAppendOnlyMap`）。
-
-**不适用二：分区数极多（>16M）**
-
-`LongArray` 中每条记录用 24 位存 partitionId，最多支持 2^24 = 16,777,216 个分区。超过这个限制时，退回 `SortShuffleWriter`。实践中，分区数超过 10 万已经很少见，这个限制几乎不触发。
-
-**不适用三：自定义序列化器不支持对象重定位**
-
-某些自定义序列化器在序列化时在字节流中嵌入了绝对地址（如指针），这样的序列化结果不能被移动（移动后绝对地址失效）。此时 `supportsRelocationOfSerializedObjects = false`，退回 `SortShuffleWriter`。标准的 Kryo 和 Java 序列化都是位置无关的，满足条件。
+代价同样清楚：读写必须走 `InternalRow` 的 API，跨到用户代码时要有序列化或转换，调试时看到的是偏移量而不是字段名，堆外模式下越界时抛的是 `SparkOutOfMemoryError`，堆内模式下才是 `Java heap space`。这套格式的收益只对 SQL 引擎内部的算子成立，RDD API 里的用户对象不在其中，堆外开与不开，对 `map` 里那个 `case class` 没有任何影响。
 
 ---
 
-## 第 7 章 Tungsten 的局限与 Java 21 的新格局
+## 第 4 章 开了堆外却没省到：四条判据
 
-### 7.1 Tungsten 的维护成本
+四条判据各自能证伪一种期待，顺序按现场出现的频率排：先怀疑开关打在了错的层，再怀疑额度不能互通，再怀疑死法不对，最后才考虑成本倒挂。
 
-Tungsten 的代价是显著增加了代码复杂度：
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+flowchart TD
+    A["开了堆外 但没看到收益"] --> B{"堆转储里 byte 数组是否仍占大头"}
+    B -- 是 --> C["判据一 开关打在错层<br/>缓存级别与内存模式"]
+    B -- 否 --> D{"溢出与 Peak Execution Memory<br/>是否仍贴着堆内上限"}
+    D -- 是 --> E["判据二 两套池子不互借<br/>堆外救不了执行侧"]
+    D -- 否 --> F{"进程是否被 SIGKILL 而堆不高"}
+    F -- 是 --> G["判据三 容器账没跟上<br/>按 RSS 判死"]
+    F -- 否 --> H{"GC 时间降了<br/>总时长没降或更高"}
+    H -- 是 --> I["判据四 分配成本倒挂"]
+    H -- 否 --> J["收益成立 瓶颈在别处"]
+    classDef q fill:#44475a,stroke:#8be9fd,color:#f8f8f2
+    classDef bad fill:#ff79c6,stroke:#282a36,color:#282a36
+    classDef ok fill:#50fa7b,stroke:#282a36,color:#282a36
+    class A q
+    class B,D,F,H q
+    class C,E,G,I bad
+    class J ok
+```
 
-- `sun.misc.Unsafe` 是非公开 API，在不同 JVM 版本中行为可能有细微差异
-- Java 9 模块系统（JPMS）默认禁止访问 JDK 内部 API（包括 `Unsafe`），Spark 需要通过 `--add-opens` JVM 参数绕过这个限制
-- 堆外内存的手动管理需要严格的生命周期会计，一旦出错（内存泄漏、double free），排查成本极高
+### 4.1 判据一：省的是字节区，不是行对象
 
-### 7.2 Java 21 的 Vector API 与 Panama 项目
+最常见的落差是开关打在了错的层上。有人打开 `spark.memory.offHeap.enabled` 与 `size`，缓存级别却仍是 `MEMORY_AND_DISK`，SQL 侧也没走列式向量的堆外路径，于是堆内该占的还占着。开关只改了 Tungsten 从哪本账申请页，没有义务把已经存在的对象形态搬走；更常见的配置错误是只写了 `spark.memory.offHeap.size` 而忘了 `enabled`，`MemoryManager` 只会打一条 “offHeap.size is > 0 when enabled == false” 的警告，行为一点没变，日志里那行警告很容易被当成正常输出划过去。
 
-Java 的 Panama 项目（JEP 442 等）正在提供官方的堆外内存 API（`MemorySegment`、`Arena`）和 SIMD 向量化 API（`VectorAPI`），这些将是 `sun.misc.Unsafe` 的合法替代：
+这里的比喻很贴切：开关换的是仓库的门锁，货还留在旧仓库里。堆外那份额度一旦开出来，只有从 `TaskMemoryManager` 申请页的路径才会走过去用它；已经在堆上的对象、已经建好的缓存块、用户代码里 `new` 出来的集合，都不会自己搬过去。
 
-- `MemorySegment`：官方的堆外内存分配和访问 API，与 Unsafe 相比更安全（有边界检查选项）
-- `VectorAPI`：允许 Java 程序利用 CPU 的 SIMD 指令并行处理多个数据
+**行壳在堆上，字节区才可能在堆外**，这是判据一的核心。三个证据足以定性：堆转储里 `[B` 是否仍占大头、目标数据集的存储级别是否显示为 Off Heap、Executor 页堆外那组行里的 storage 与 execution 是否都贴着零。三条同时成立，说明这批数据压根没进堆外池，调 `size` 只是给一块空仓库加面积。
 
-未来的 Spark 版本可能逐步迁移到这些官方 API，在保持 Tungsten 性能优势的同时，摆脱对 `sun.misc.Unsafe` 的依赖。
+处置方向按目标分三支：要让缓存搬家，换 `StorageLevel.OFF_HEAP`；要让 SQL 执行搬上二进制路径，用 DataFrame 算子（内部本来就是 `UnsafeRow`）并确认内存模式已切；两者都不适用时，接受「堆内就是它该在的地方」，转去查 GC 与对象形态。
 
-> [!note] 设计哲学
-> Tungsten 的本质是："在 JVM 生态内，用 C 的方式管理内存"。这是一个不得已而为之的设计——如果 JVM 本身的 GC 和对象模型足够高效，就不需要 Tungsten 这样的"绕过层"。未来 Java 的改进（Panama、Valhalla 中的值类型等）有望从语言层面解决这些问题，使 Spark 的代码可以恢复到更简洁、更符合 JVM 惯例的实现方式。
+### 4.2 判据二：两套池子不互相借贷
+
+第二种落差更隐蔽：堆外额度再大，也借不到堆内去。官方文档在 `spark.memory.offHeap.size` 这一条上写得很明确——这个设置对堆内存的使用没有任何影响，如果 executor 的总内存消耗必须落在某个硬上限里，就要相应缩小 JVM 堆。这句话同时也是整条判据的出处：堆外不是从堆里挪出来的一块，而是额外加的一块。
+
+机制上还有一层限制。用 Java 对象装的结构，譬如聚合表 `AppendOnlyMap` 这一路，永远记在堆内执行池上（`MemoryMode.ON_HEAP`），开堆外也不会变；只有二进制形态的结构（排序页、哈希表页）跟着内存模式走，见 [[大数据/Spark/读书笔记-spark内核/06_性能调优实战/7. Spark_Shuffle内存调优|Shuffle 内存调优]] 的堆外一节。所以「加了 `offHeap.size` 之后聚合还是溢出」不是配置没生效，而是那本账从头到尾没被碰过。
+
+读数口径上还有一个坑。Stage 页的 task 汇总里，峰值执行内存有时分成堆内与堆外两列（`Peak Execution Memory` 与其堆外版本），只有一个总数时，要按内存模式自己判断这行数字记在哪本账上。把堆外的峰值当成总数，会得出「执行侧已经搬出去了」的错误结论；反过来把总数当成堆内，会把一次正常的堆外使用误判成堆内不足。
+
+证据落在三个数上：Executor 页堆外 execution 的用量是否长期贴着零或只有零头、spill 字节是否一点没减、堆内 `Peak Execution Memory` 是否仍贴着份额上限。三条里的后两条同时成立，结论就是执行侧不够，处置在单 task 数据量与并发上，或者回到统一池的比例，见 [[大数据/Spark/Spark-Shuffle与内存管理机制深度解析/06 Spark 统一内存管理模型|统一内存模型]] 第 6 章。
+
+### 4.3 判据三：GC 不扫描，cgroup 照收
+
+第三种落差是死法不对。堆外不参与 GC，但仍计入容器的常驻内存，于是失败形态不是 `Java heap space`，而是进程被 SIGKILL：退出码 137、没有 `hs_err_pid`、没有堆转储、日志戛然而止。SIGKILL 不给 JVM 任何写现场的机会，所以「没有堆转储」这件事本身就是一条证据，而不是现场丢了。
+
+**GC 看不见它，cgroup 看得见**。三个地方能确认这条路径：`kubectl describe pod` 里的 `Last State: Terminated`、`Reason: OOMKilled`、`Exit Code: 137`；cgroup v2 的 `memory.events` 里 `oom_kill` 计数上涨（v1 是 `memory.oom_control`）；YARN 侧则是 “Container killed by YARN for exceeding memory limits” 与 physical memory 的用量对比。三条里任意两条成立，就可以把「堆内不够」这条线排除掉。
+
+处置不在这一章动，路径见第 6 章。这里先记住一个反直觉的推论：容器被杀得越干净，越说明问题在堆外；如果真的是堆内不够，现场反而会留下堆转储和 OOM 的堆栈。
+
+### 4.4 判据四：分配与释放的逐次成本
+
+第四种落差来自成本。堆内分配短命小对象走 TLAB 的指针碰撞，回收由年轻代整块处理，几乎不产生逐次开销；堆外没有这层摊销，每次申请都要经过 `Platform.allocateMemory`，释放要显式归还，页表与记账还要更新。当记录很窄、生命周期很短、每秒分配次数很高时，省下的 GC 扫描时间会被分配调用的开销吃掉，甚至倒挂。这一段的绝对数字随分配器与内核版本变化，笔者只给量级判断：小对象的分配成本能差出十倍以上，回收路径差得更多。
+
+还有一处连带效应值得记住：开了堆外之后，页大小的基数从堆内执行池换成了堆外执行池，算法是「池容量除以核数再除以 16，向上取到 2 的幂，夹在 1MiB 到 64MiB 之间」。堆外只给 2g 而核数不少时，算出来的页可能只有 1MiB 或 2MiB，页数变多、页表与元数据开销上升，跨页记录也变多，这是「开了堆外反而慢」的一条真实路径（示例推算，取决于核数与池容量）。**页大小的基数是执行池**，这一点在调 `offHeap.size` 与 `storageFraction` 时经常被忘掉。
+
+证据在性能剖析里：GC 时间下降而作业总时长不降、async-profiler 或 JFR 里 `Unsafe_AllocateMemory` 与 `malloc`、`free` 排在热点前列、小 task 的 CPU 使用率上升。处置很直接，小行、窄记录、短生命周期、超高并发的场景留在堆内，别为了「少一点 GC」付更多分配成本。
 
 ---
 
-## 小结
+## 第 5 章 旋钮与它各自的账
 
-Tungsten 项目从 JVM 对象模型的根本局限出发，用三个关键工具重塑了 Spark 的内存效率：
+参数本身没有对错，只有换来什么、付出什么。下表把与堆外相关的旋钮排在一起，两个代价列是重点，缺了它就只能背默认值。
 
-- **`sun.misc.Unsafe`**：JVM 的"后门"，允许直接分配和操作堆外内存，完全绕过 GC
-- **`MemoryBlock`**：堆内/堆外内存的统一抽象，以 Page 为单位管理，配合 64 位地址编码支持高效的内存寻址
-- **`UnsafeRow`**：二进制行格式，Null Bitset + 固定区域 + 可变区域的三段结构，缓存友好，可 `memcpy` 直接传输
-- **`UnsafeShuffleWriter`**：Tungsten 在 Shuffle 中的落地——插入即序列化、`LongArray` 基数排序、Spill 时字节拷贝、Merge 时零拷贝，在 CPU 和 I/O 两个维度都大幅优于普通 `SortShuffleWriter`
+| 参数 | 默认 | 真正控制什么 | 调大（或打开）的代价 | 调小（或关闭）的代价 |
+|---|---|---|---|---|
+| `spark.memory.offHeap.enabled` | false | Tungsten 从哪本账申请页 | 容器额度要同步加，页大小基数换成堆外池，原生与直接内存的余量被挤压 | Tungsten 全部回堆内，GC 扫描恢复，存活集大的作业停顿变长 |
+| `spark.memory.offHeap.size` | 0 | 堆外池总量，必须大于 0 才能开 | 容器总账等额增加，堆内一点不变，配错会出现两头都不够 | 堆外页更快拿不到，抛 `SparkOutOfMemoryError`，页大小被推小 |
+| `spark.sql.columnVector.offheap.enabled` | 未设置，回落到上一行 | 列式向量是否用堆外 | 向量读取的字节离堆，直接内存与堆外池同时吃紧 | 列式读取回堆内，GC 压力回来，扫描类作业更明显 |
+| `spark.sql.execution.offHeap.enabled` | 4.3.0 的文档与源码里都没有 | 不控制任何行为 | 设置无效，只让配置文件多一行噪音 | 同上 |
+| `spark.network.maxRemoteBlockSizeFetchToMem` | 200m | 多大的远程块直接读进内存 | 大块进内存，直接内存与堆的压力同时上升，换更少的落盘 | 落盘变多，本地 IO 上升，直接内存压力下降 |
+| `spark.executor.memoryOverhead` | max(384MiB, 堆 × 0.1) | 容器额度里留给非堆的部分 | 单 executor 占更多资源，同集群能容纳的 executor 数下降 | 原生与 JVM 自身越界，按 RSS 判死，退出码 137 |
+| `spark.shuffle.io.preferDirectBufs` 与 `spark.network.io.preferDirectBufs` | true | Netty 是否优先用直接缓冲 | 直接内存占用上升，GC 少扫一批 | 全部回堆内，GC 压力回来，大并发拉取时停顿更明显 |
+| `spark.buffer.pageSize` | 未设置，按池与核数推算 | Tungsten 页的粒度 | 单页更大，页表项更少，但一次拿不到整页的概率上升 | 页数变多，元数据与页表开销上升，跨页记录变多 |
+| `spark.storage.memoryMapThreshold` | 2m | 多大的磁盘块用内存映射读回 | 映射变少，堆内读缓冲变多 | 映射变多，文件页进 cgroup，但属于可回收部分 |
 
-理解 Tungsten 不仅是理解 Spark 性能的关键，也是理解现代大数据计算引擎在"应用层内存管理"这条道路上走了多远、付出了多少代价的一个窗口。
+表里有两行的默认值是「未设置」，容易在评审时被当成漏配。`spark.buffer.pageSize` 不设置时由内存管理器按池容量、核数推算，1MiB 到 64MiB 之间；`spark.sql.columnVector.offheap.enabled` 不设置时回落到 `spark.memory.offHeap.enabled`。把它们写成固定值之前，先确认原来的推算结果是多少，否则一次「显式配置」可能把页大小改小一个量级。
 
-第 10 篇将综合前九篇的所有知识，提供一份系统性的生产调优手册——从 Executor 内存配置到 Shuffle 参数，从 Spill 防治到数据倾斜应对，给出可以直接落地的调优策略。
+`spark.memory.offHeap.size` 给多少没有通用公式，但有一个可以复核的顺序。先估出二进制结构的实际占用，依据是堆转储里属于 Tungsten 页的那部分 `[B`，加上关掉堆外时的峰值执行内存；再按这个量的两成到三成给第一版（示例推算）。跑一轮看 Executor 页堆外执行池的水位：长期贴着上限说明给少了，长期在两成以下说明给多了，把额度还给堆或还给 overhead 更划算。一次只动一个旋钮，堆、堆外、overhead 三者同时改，出了问题是没法归因的。
+
+下图给出这几个旋钮的作用域：左侧每个参数只影响右侧某一本账，跨账的调参不会产生跨账的效果。
+
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+flowchart LR
+    K1["memory.offHeap.enabled / size"] --> A1["堆外执行池与存储池"]
+    K2["StorageLevel.OFF_HEAP"] --> A2["只有缓存块进堆外存储池"]
+    K3["columnVector.offheap.enabled"] --> A3["列式向量的字节区"]
+    K4["shuffle.io / network.io preferDirectBufs"] --> A4["Netty 直接缓冲"]
+    K5["executor.memoryOverhead"] --> A5["容器账上的非堆预算"]
+    K6["network.maxRemoteBlockSizeFetchToMem"] --> A6["大块改走落盘 少占直接内存"]
+    K7["buffer.pageSize"] --> A7["堆内或堆外的页粒度"]
+    A1 --> Z["容器额度"]
+    A2 --> Z
+    A3 --> Z
+    A4 --> Z
+    A5 --> Z
+    A6 --> Z
+    A7 --> Z
+    classDef knob fill:#6272a4,stroke:#bd93f9,color:#f8f8f2
+    classDef acct fill:#50fa7b,stroke:#282a36,color:#282a36
+    classDef sink fill:#ff79c6,stroke:#282a36,color:#282a36
+    class K1,K2,K3,K4,K5,K6,K7 knob
+    class A1,A2,A3,A4,A5,A6,A7 acct
+    class Z sink
+```
+
+什么负载值得开堆外，判据有三条。排序与聚合走二进制路径、单 task 数据量大到几十万行以上、GC 停顿已经是主要瓶颈（回收后存活集不大但停顿占比高），三条同时成立时，把字节区搬到堆外通常能换来实打实的停顿下降。什么负载不值得开，判据有两条：行很窄、生命周期短、每秒分配次数极高；或者容器额度本来就没余量，开堆外等于向 cgroup 多借一笔钱。
+
+还有一条启动期的硬失败要提前知道：平台不支持非对齐访问时，打开堆外会直接在启动时抛 “No support for unaligned Unsafe”，作业起不来。这类失败反而好办，日志明确；难办的是前面那四种静默的落差。
+
+---
+
+## 第 6 章 容器被杀、堆却很空：一条排查路径
+
+这条路径的目标只有一个：把 RSS 里那部分既不在堆、也不在 Spark 池子里的字节，拆成能对上账的几笔。找不到拆分，就只能猜参数；拆出来了，处置方向是唯一的。
+
+| 步骤 | 看什么 | 在哪看 | 判据 |
+|---|---|---|---|
+| 1 定死法 | 退出码、终止原因、cgroup 事件 | `kubectl describe pod`、`memory.events`、YARN 日志 | 137 加 OOMKilled，且没有 `hs_err_pid` |
+| 2 排堆内 | 有没有 `Java heap space` 与堆转储 | 任务日志、`/tmp` 下的 hprof | 有则回堆内路径，这条线上不必再耗 |
+| 3 量总量 | RSS 与堆的已提交量 | `/proc/<pid>/status` 的 VmRSS、`jcmd GC.heap_info` | RSS 明显大于堆 |
+| 4 拆四笔 | 堆外池、直接缓冲、原生库、JVM 自身 | Executor 页堆外行、`jmap` 里的 `DirectByteBuffer`、NMT、`smaps_rollup`、RocksDB 配置 | 四笔之和能对上 RSS 减堆的差值 |
+| 5 核额度 | 容器算式与 limits 是否一致 | 提交参数、pod spec | 堆加 overhead 加 offHeap 加 pyspark 是否等于 limits |
+| 6 处置 | 先降驻留，再抬 overhead，最后才动堆 | — | 顺序反了会把「被杀」换成「OOM」或「变慢」 |
+
+下图是这六步的顺序，注意第 2 步的回退分支：只有确认了不是堆内 OOM，才轮到四笔核算。
+
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+flowchart TD
+    S["容器被杀 堆却不高"] --> A["确认死法<br/>137 / OOMKilled / oom_kill"]
+    A --> B{"有没有 hs_err 与堆转储"}
+    B -- 有 --> B1["堆内路径<br/>回到池子与对象形态"]
+    B -- 没有 --> C["量 RSS 与堆已提交量"]
+    C --> D["差值拆四笔<br/>堆外池 直接内存 原生库 JVM 自身"]
+    D --> E["核对容器算式与 limits"]
+    E --> F["先降驻留<br/>再抬 overhead<br/>最后才动堆"]
+    classDef q fill:#44475a,stroke:#8be9fd,color:#f8f8f2
+    classDef act fill:#ff79c6,stroke:#282a36,color:#282a36
+    classDef back fill:#50fa7b,stroke:#282a36,color:#282a36
+    class S,A,C,D,E q
+    class B q
+    class F act
+    class B1 back
+```
+
+第 4 步的四笔拆账，用一个 24GiB 堆的例子走一遍，全部为示例推算。堆 24GiB，16 核，`offHeap.size=4g`，未设 PySpark 内存，overhead 未显式设置时按 `max(384MiB, 24GiB × 0.1)` 算约 2.4GiB，容器额度是 24 + 2.4 + 4 = 30.4GiB。
+
+另一套按消耗类型切的账（缓存、Shuffle 缓冲、用户对象、框架开销）见 [[大数据/Spark/读书笔记-spark内核/04_存储与容错机制/1. Spark内存管理机制|Executor 消耗的四本账]]，两套切法只在用户对象这一块重叠，可以用来交叉校验下面的拆分。
+
+| 那一笔 | 量级 | 判定依据 |
+|---|---|---|
+| 堆外池 | 最多 4GiB | 实际驻留看 Executor 页堆外 execution 与 storage 用量 |
+| 直接缓冲 | 并发拉取 32 个 task 乘 48m 约 1.5GiB，加 RPC 零头 | 堆内 `DirectByteBuffer` 数量乘容量，或 NMT 的 Other 段 |
+| RocksDB 与 JNI | block cache 512MiB 加 write buffer 256MiB 加索引过滤约 1GiB | 状态存储选项与进程 RSS 的差值 |
+| JVM 自身 | 元空间、代码缓存、线程栈合计约 0.8GiB | `jcmd VM.metaspace`、线程数乘栈大小 |
+
+除堆外池之外的三笔合计约 3.3GiB，而 overhead 只给了 2.4GiB，缺口约 0.9GiB；`offHeap.size` 那 4GiB 是单独加在总账上的，不占 overhead 的份额。缺口为负的时候什么事都没有，缺口一旦为正，容器按 RSS 判死只是时间问题——状态数据是慢慢涨的，所以表现为「跑了几小时才死」。
+
+量的时候有三个易错点。第一，cgroup 的 `memory.current` 包含文件页，mmap 的干净页与 spill 产生页缓存都在里面，压力下内核会先回收这部分，把它当成不可回收占用会高估缺口；要看 `memory.stat` 里的 anon 与 file 分解。第二，Kubernetes 只有 `limits.memory` 会成为判死依据，`requests.memory` 只影响调度，两者不一致时调度器认为资源够、cgroup 当场杀进程。第三，`jcmd GC.heap_info` 给的已提交量可能远小于 `-Xmx`，用 `-Xmx` 去减 RSS 会把缺口算大一圈，必须用已提交量。
+
+时间轴上的形状也能说明方向。RSS 与堆同步上涨，压力在堆内，堆外那几笔只是被顺带抬高；堆平着不动而 RSS 呈阶梯状上涨，多半是堆外池或原生库在按批累积；RSS 随批次周期性地起落、锯齿明显，先怀疑 RocksDB 的 memtable 与 compaction，而不是泄漏。三种形状对应三个方向，比任何单点读数都稳。
+
+---
+
+## 第 7 章 三个反例
+
+### 7.1 只加 -Xmx，不看 cgroup
+
+一台 24GiB 堆、容器额度 26.4GiB 的 executor 被杀，第一反应是把堆加到 28GiB，理由是「内存不够就多给点」。改完启动更快死：堆的上限抬到了容器额度之上，JVM 还没热身完，RSS 就撞上了 cgroup 的线。这里错了两处，一是把容器额度当成堆额度，二是改堆会让页大小按新的执行池重算，溢出行为跟着变，副作用比预期多。
+
+**上游加额度，不如先降驻留**。这条现场的处置顺序应该是：先确认 limits 与算式一致，再把 RocksDB 的 block cache 与直接内存的余量收一收，最后才讨论堆要不要动。改堆之前先看 limits，是一分钟能做完的动作，能省掉一整轮试错。
+
+### 7.2 把 OFF_HEAP 当省内存的万能药
+
+第二个反例是缓存全部换成 `OFF_HEAP` 之后，Executor 页的堆外存储用量确实涨了，但执行侧的 spill 一点没少，GC 时间只降了两成，而作业反而慢了半拍。原因在判据一与判据二：`OFF_HEAP` 只搬缓存块，不搬执行侧的结构；序列化与每次读回的反序列化都成了新增成本，读次数少的数据集把这份成本白白付掉。
+
+正确的用法是把它当成一次兑换：用「序列化与反序列化的 CPU」换「堆上的对象与 GC 扫描」。兑换率取决于这份缓存被读多少次，读一次就不划算，读十次以上才值得算。判据上先看 Storage 页的堆外用量与 `Fraction Cached`，再看下游 Stage 的 `Input Size` 是否真的缩小，两条都对上才谈收益。
+
+### 7.3 算 overhead 时漏掉 RocksDB
+
+第三个反例最典型。Structured Streaming 作业的状态涨到 3GiB 之后，每六小时被杀一次；overhead 按默认 10% 给，评审时的结论是「已经留了 1.2GiB，够了」。实际核算时，RocksDB 的 block cache、write buffer、索引与过滤器全被算进了「Spark 会管」的那一侧，而它们只落在容器账上。
+
+这条路径的判据是差值：进程 RSS 减去堆已提交量、再减去堆外池与直接缓冲，剩下的若是数百 MiB 到数 GiB 且随状态增长，基本就是原生库。处置有两条，收 RocksDB 的内存选项（block cache 与 write buffer 是最直接的两个），或者把 overhead 抬到覆盖它的量级；两件事都要做，只做一件会在下一次状态高峰时复发。
+
+---
+
+## 第 8 章 量级与合账
+
+把四类用途的典型量级放在一起，方便在评审时先估个大概，再看实测差多少。下表所有数字都是示例推算，具体值取决于记录宽度、并发与依赖库。
+
+| 用途 | 典型量级 | 主要变量 | 观测点 |
+|---|---|---|---|
+| 行的字节区（堆内默认） | 堆的 20% 到 50% | 记录宽度、并发 task 数、算子形态 | 堆转储的 `[B`、Executor 页 on-heap execution |
+| 行的字节区（堆外模式） | 0 到堆外执行池上限 | 同上，再加页大小 | Executor 页 off-heap execution |
+| `OFF_HEAP` 缓存块 | 0 到堆外存储池上限 | 缓存集大小、序列化比、`storageFraction` | Executor 页堆外 storage 行、Storage 页存储级别列 |
+| Netty 直接缓冲 | 数百 MiB 到数 GiB | 并发拉取数乘 48m、连接数、块大小分布 | `DirectByteBuffer` 计数、RSS 与堆的差值 |
+| 原生库与子进程 | 数百 MiB 到数 GiB | RocksDB 选项、Arrow、编解码 | RSS 差值、`smaps_rollup` 的 anon |
+| JVM 自身 | 300MiB 到 800MiB | 核数、依赖类数、线程数 | `jcmd` 的元空间与代码缓存、线程数乘栈大小 |
+
+overhead 给多少，判据不在比例本身，而在非堆里有几类东西在长。下表按负载形态给建议，仍是示例推算，落地时用第 6 章的六步核算校准。
+
+| 负载形态 | overhead 建议 | 依据 |
+|---|---|---|
+| 纯 JVM 批处理，不开堆外，无状态存储 | 默认比例，且不低于 384MiB | 只有 JVM 自身与少量直接缓冲 |
+| 开了 `offHeap.size` | 在默认比例上加 3 到 5 个百分点 | 堆外池单独进总账，要加的是直接内存与原生库那一份 |
+| RocksDB 状态存储 | 15% 到 25%，或显式给不小于 1GiB | block cache 加 write buffer 加索引过滤 |
+| PySpark 与 pandas UDF | 15% 到 20%，并单独申报 pyspark 内存 | Arrow 与 Python 进程各自有堆外占用 |
+| 高并发 shuffle 拉取 | 15%，并把大块阈值调小 | 在途块数量乘每块上限 |
+
+从哪开始量，取决于手上有什么。能进容器就量 RSS 与堆的差值，这是最快的一条；只能看历史指标就先看 Executor 页的堆外两行与 Storage 页，再对 cgroup 的峰值；两者都拿不到时，从预算侧反推——把 overhead 与 `offHeap.size` 的算式写下来，跟实际提交的 limits 对一遍，多数缺口在这一步就露出来了。
+
+这四类用途之间没有兑换关系，只有竞争关系：**它们抢的是同一个容器额度**。把一笔开销从一个类别搬到另一个类别，总量不变，只是换了一个更难观测的位置。判断一次调整是否值得，看的是总账有没有下降，而不是某一栏指标有没有变好看；这一条在评审堆外方案时比任何参数都管用。
+
+---
+
+## 第 9 章 落点
+
+堆外内存这一个词，在 Spark 里至少指向四块地：行的字节区、`OFF_HEAP` 的缓存块、Netty 的直接缓冲、原生库与子进程。前两块在 Spark 的池子里，调参数有效；后两块只在容器的账上，只能靠预算与约束。分清这一点之后，「开了堆外没省到」就不再是一个玄学问题，而是四条判据里总能命中的一条：开关打错层、额度不互通、死法不对、成本倒挂。
+
+四条判据的顺序也有讲究。先看堆转储，因为它是唯一能直接回答「行在哪里」的证据；再看池子用量，确认执行侧有没有被搬走；然后看死法，把容器层的账排除掉；最后才谈成本，因为在这一步之前，任何性能讨论都建立在错误的前提上。
+
+堆外不是免费扩容，它把风险从「GC 停顿与对象膨胀」换成了「容器按 RSS 判死与逐次分配成本」。这笔兑换在排序、聚合这类二进制路径上通常划算，在窄行高并发的场景里往往倒亏。**先量差值，再动参数**，这是本文唯一想留下的操作习惯。
+
+---
+
+## 参考资料
+
+1. Apache Spark 4.x 文档：Configuration 的 Memory Management、Shuffle Behavior 与 Deployment 三节。https://spark.apache.org/docs/latest/configuration.html
+2. Apache Spark 源码：`core/src/main/scala/org/apache/spark/memory/MemoryManager.scala`，Tungsten 内存模式的判定、页大小的推算与分配器选择。https://github.com/apache/spark/blob/master/core/src/main/scala/org/apache/spark/memory/MemoryManager.scala
+3. Apache Spark 源码：`sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala`，`spark.sql.columnVector.offheap.enabled` 的定义与回落关系。https://github.com/apache/spark/blob/master/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala
+4. Apache Spark 源码：`common/network-common/src/main/java/org/apache/spark/network/util/TransportConf.java`，`preferDirectBufs` 与 `memoryMapThreshold` 的默认值。https://github.com/apache/spark/blob/master/common/network-common/src/main/java/org/apache/spark/network/util/TransportConf.java
+5. SPARK-26700：新增 `spark.network.maxRemoteBlockSizeFetchToMem`，旧键 `spark.maxRemoteBlockSizeFetchToMem` 作为兼容别名保留。https://issues.apache.org/jira/browse/SPARK-26700
+6. SPARK-47208：允许覆盖非堆内存下限，新增 `spark.executor.minMemoryOverhead`，默认 384MiB。https://issues.apache.org/jira/browse/SPARK-47208
+7. SPARK-53001：把 RocksDB 的用量接入统一内存管理，引入 `spark.memory.unmanagedMemoryPollingInterval`。https://issues.apache.org/jira/browse/SPARK-53001
+8. Project Tungsten: Bringing Apache Spark Closer to Bare Metal（2015）。https://www.databricks.com/blog/2015/04/28/project-tungsten-bringing-spark-closer-to-bare-metal.html
+9. 内核系列：[[大数据/Spark/读书笔记-spark内核/04_存储与容错机制/1. Spark内存管理机制|Executor 消耗的四本账]]、[[大数据/Spark/读书笔记-spark内核/04_存储与容错机制/2. Spark内存管理模型深度解析|统一内存池的两个视图]]、[[大数据/Spark/读书笔记-spark内核/05_Shuffle核心机制/6. Spark_Shuffle聚合与排序结构|Shuffle 聚合与排序结构]]、[[大数据/Spark/读书笔记-spark内核/06_性能调优实战/5. Spark_JVM性能调优|JVM 性能调优]]、[[大数据/Spark/读书笔记-spark内核/06_性能调优实战/7. Spark_Shuffle内存调优|Shuffle 内存调优]]。
+10. 本列前两篇：[[大数据/Spark/Spark-Shuffle与内存管理机制深度解析/06 Spark 统一内存管理模型|统一内存管理模型]]、[[大数据/Spark/Spark-Shuffle与内存管理机制深度解析/07 Execution 与 Storage 的动态边界|Execution 与 Storage 的动态边界]]。
 
 ---
 
 > [!note] 思考题
-> 1. Tungsten 的 `UnsafeRow` 使用固定长度的二进制格式存储数据，避免了 Java 对象头和指针的开销。但这要求列的偏移量在行格式固定。对于变长字段（如 `String`、`Array`），`UnsafeRow` 是如何在保持"固定偏移量访问"的同时支持变长数据的？这个设计有什么局限性？
-> 2. `sun.misc.Unsafe` 绕过了 JVM 的数组边界检查，直接操作内存地址。这在性能上有显著优势，但如果 Spark 代码存在 bug，计算了错误的内存偏移量，会发生什么？与普通 Java 代码的数组越界相比，`Unsafe` 操作越界的后果严重性有何不同？
-> 3. Tungsten 使用 `MemoryBlock` 来管理内存页，每个页可以是堆内或堆外。在 `UnsafeShuffleWriter` 中，数据先写入堆外内存的 `ShuffleExternalSorter`，再序列化到磁盘。相比传统的先序列化到 Java 字节数组再写磁盘的方式，这个流程减少了哪些内存拷贝？能减少几次？
-
-## 参考资料
-
-- [Project Tungsten: Bringing Apache Spark Closer to Bare Metal](https://databricks.com/blog/2015/04/28/project-tungsten-bringing-spark-closer-to-bare-metal.html)
-- [Project Tungsten On Spark - 内存设计](https://blog.csdn.net/qq_28680977/article/details/109960303)
-- [Spark UnsafeRow 解析](https://blog.csdn.net/zhixingheyi_tian/article/details/124322109)
-- Apache Spark 源码：`org.apache.spark.unsafe.memory.MemoryBlock`
-- Apache Spark 源码：`org.apache.spark.sql.catalyst.expressions.UnsafeRow`
-- Apache Spark 源码：`org.apache.spark.shuffle.sort.UnsafeShuffleWriter`
-- Apache Spark 源码：`org.apache.spark.shuffle.sort.ShuffleInMemorySorter`
+> 1. 一台 executor 打开了 `spark.memory.offHeap.enabled` 与 `size=8g`，缓存却仍是 `MEMORY_AND_DISK`，堆转储里 `[B` 仍然占大头。此时「堆外已经开了」这句话在哪一层成立、在哪一层不成立？
+> 2. `spark.memory.offHeap.size` 从 4g 调到 12g，聚合作业的 spill 字节完全没有变化。除了「配置没生效」之外，还有哪两种解释可以用现有指标区分？
+> 3. 容器被 OOMKilled，而 `jcmd GC.heap_info` 显示堆只提交了六成。要在一小时内把缺口拆成四笔，你会先量哪两个数，为什么？
+> 4. 页大小由「执行池除以核数再除以 16」推算。把 `offHeap.size` 设为 2g 而堆保持 24GiB，页大小往哪个方向变，这个变化会怎样影响溢出与分配成本？
+> 5. 一个只在作业开始时读一次、之后不再访问的数据集，换成 `OFF_HEAP` 之后 Storage 页指标很好看，但作业总时长上升。这笔兑换的判据应该看哪三个数？

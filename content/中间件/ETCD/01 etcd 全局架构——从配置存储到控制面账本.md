@@ -1,8 +1,8 @@
 ---
 title: "01 etcd 全局架构——从配置存储到控制面账本"
 date: 2026-11-02
-tags: [etcd, Kubernetes, Raft, MVCC, WAL, 中间件, 分布式存储]
-keywords: [gRPC, BoltDB]
+tags: [etcd, Kubernetes, Raft, MVCC, 中间件, 分布式存储]
+keywords: [gRPC, BoltDB, WAL]
 aliases: []
 ---
 

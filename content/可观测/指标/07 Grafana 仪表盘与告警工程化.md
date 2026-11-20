@@ -1,8 +1,8 @@
 ---
 title: "07 Grafana 仪表盘与告警工程化"
 date: 2026-10-10
-tags: [可观测性, 指标, 告警]
-keywords: [Alertmanager, 可视化, Grafana]
+tags: [可观测性, 指标]
+keywords: [Alertmanager, 可视化, Grafana, 告警]
 aliases: []
 ---
 

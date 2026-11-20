@@ -1,8 +1,8 @@
 ---
 title: "CNI体系详解——插件规范、调用链与主流实现对比"
 date: 2026-03-05
-tags: [Cilium, CNI, Kubernetes, 云原生]
-keywords: [Calico, Flannel, IPAM, WeaveNet, 网络插件]
+tags: [CNI, Kubernetes, 云原生]
+keywords: [Calico, Flannel, IPAM, WeaveNet, 网络插件, Cilium]
 aliases: [CNI体系详解, CNI插件规范与选型对比]
 ---
 

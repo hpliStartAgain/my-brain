@@ -1,8 +1,8 @@
 ---
 title: "HBase Compaction 机制深度解析——Minor、Major 与写放大的三角关系"
-date: 2026-02-27
+date: 2026-11-19
 tags: [Compaction, HBase, LSM-Tree]
-keywords: [Compaction策略, HFile合并, Major Compaction, Minor Compaction, 写放大, 读放大]
+keywords: [Minor Compaction, Major Compaction, ExploringCompactionPolicy, RatioBasedCompactionPolicy, Stripe Compaction, 写放大, 读放大, 空间放大, blockingStoreFiles]
 aliases: [HBase Compaction原理, HBase合并机制, HBase写放大]
 ---
 
@@ -10,522 +10,518 @@ aliases: [HBase Compaction原理, HBase合并机制, HBase写放大]
 
 **摘要：**
 
-Compaction 是 HBase 中最复杂、对性能影响最深远的后台机制。它是 LSM-Tree 架构的"代谢系统"——通过合并磁盘上不断积累的 HFile，持续降低读放大（减少需要扫描的文件数量）；但合并本身消耗的 CPU、内存与磁盘 I/O，又构成了写放大的主体。本文围绕 Compaction 的三个核心问题展开：**为什么做（读/写/空间放大的三角困境）**、**怎么做（Minor/Major Compaction 的执行机制与文件选择策略）**、**如何做好（生产中的 Compaction 调优与避坑）**。深度解析 `ExploringCompactionPolicy`、`FIFOCompactionPolicy`、`StripeCompactionPolicy` 三种策略的适用场景，以及 Compaction 对业务延迟的影响与控速机制。
+如果要在 HBase 的所有后台机制里挑一个"最容易变成运维事故"的，答案多半不是 WAL，也不是 Region 分裂，而是 Compaction。它一头连着写入链路产生的 HFile 堆积，一头连着读路径要归并的文件数量，中间还夹着"删除的数据什么时候才真正从磁盘上消失"这个几乎所有团队都问过的问题。本文把 Compaction 拆成两条线来讲：一条是机制线，逐个交代 Minor 与 Major 在选择范围、墓碑清理、版本裁剪上的差别，回答"只有 Major 才真正释放空间"这一结论的确切边界，并给出从墓碑写入到 HDFS 回收 Block 的三层时间账；另一条是权衡线，把读放大、写放大、空间放大放在同一张图上，论证三者为什么在给定资源下不能同时最优、策略的差别实质上就是"选择牺牲哪一项"，再用三份算例把量级关系落成数字。文章的落点是运维判据：两个线程池与限速器如何决定合并的真实吞吐，编码压缩如何把 I/O 问题转成 CPU 问题，分裂留下的引用文件为什么必须等合并才消解，以及六类故障各自的观测信号与三个被反复踩到的反例。
 
 ---
 
-## 第 1 章 为什么需要 Compaction：LSM-Tree 的代谢困境
+## 第 1 章 一张"删了数据、磁盘不降"的工单
 
-### 1.1 没有 Compaction 会发生什么
+### 1.1 问题的现场
 
-回顾 HBase 的写入链路：每次 MemStore Flush 都会在 HDFS 上生成一个新的 HFile。对一个写入活跃的表，Flush 可能每隔几分钟就触发一次。如果没有任何合并机制，时间一长会发生什么？
+2006 年 Google 的 BigTable 论文把 LSM-Tree 式的存储组织带进了工业界，2008 年 HBase 作为 Hadoop 的子项目出现，2010 年毕业成为 Apache 顶级项目；这套设计能撑起海量写入的根本原因，是把随机写变成了顺序写——数据先进内存里的 MemStore，攒够了就整块刷成磁盘上的 HFile，追加而不修改。代价则被推迟到"以后"：文件越来越多，删除和更新只是追加新的标记，旧数据一个字节都没少。
 
-**读取性能急剧恶化**：一个 Store（列族）下积累了数百个 HFile，每次 Get 查询都需要对数百个文件执行 Bloom Filter 查询，即使过滤掉 99%，仍有数个 HFile 需要通过索引定位和磁盘读取。随机点查延迟从毫秒级退化到百毫秒甚至秒级。
+这笔账最终要在 Compaction 上结清。这类工单的典型现场是这样的：某电商订单表按合规要求清理 90 天前的历史数据，DBA 写了分批 Delete，删掉十几亿行、上 TB 的逻辑数据，两周后回看 HDFS，`DFS Used` 只降了几个百分点。运维的第一反应往往是"删除没生效"，于是再删一遍，磁盘依旧。真正的原因在于，Delete 在 HBase 里并不删除任何东西，它只是又写了一条墓碑（Tombstone）记录；而被墓碑覆盖的旧数据、墓碑自身、以及过期版本，都要等到一次"看得见所有文件"的合并发生之后才会从盘上消失，这种合并就是 Major Compaction。
 
-**版本管理失控**：对于频繁更新的数据，同一个 RowKey 的多个历史版本散落在不同 HFile 中。读取时需要合并所有版本，然后才能应用版本裁剪。KeyValueHeap 的归并代价随 HFile 数量线性增长。
+### 1.2 一个机制，三种放大
 
-**"墓碑"数据永不清理**：Delete 操作写入的墓碑 KeyValue 与被删除的数据同时存在于磁盘。如果没有合并来进行物理清除，删除的数据永远占用磁盘空间，存储空间不断膨胀。
+Compaction 之所以是 HBase 最大的运维痛点，不在于它复杂，而在于它同时是三个互相拉扯的指标的唯一调节阀：
 
-**TTL 过期数据不回收**：列族配置了 TTL（数据存活时间）的场景，过期数据同样不会被物理删除，只是读取时被过滤，磁盘空间无法回收。
+- 它把多个 HFile 合成更少的文件，直接决定一次 Get 需要归并多少个文件，也就是**读放大**；
+- 它自己要把参与合并的数据整份读出再写回，是**写放大**的主要来源，在 HDFS 三副本下还要再乘一次网络流量；
+- 它是唯一能丢弃墓碑与过期版本的路径，决定**空间放大**能不能回落。
 
-这四个问题共同构成了 LSM-Tree 在没有 Compaction 的情况下不可避免的"熵增"——系统状态越来越混乱，性能越来越差。
-
-**Compaction 是 LSM-Tree 抵抗熵增的机制**，通过周期性地将多个小 HFile 合并成更大的 HFile，同时清理过期数据、旧版本、墓碑标记，维持系统在一个性能可接受的稳态。
-
-### 1.2 Compaction 的核心工作
-
-一次 Compaction 操作的核心工作是：
-
-1. **选择一组 HFile** 作为输入（根据选择策略决定合并哪些文件）
-2. **多路归并**：使用 KeyValueHeap 以 K 路归并的方式读取所有输入 HFile 的 KeyValue，产生有序的 KeyValue 流
-3. **清理过期数据**：在归并过程中，跳过以下类型的 KeyValue：
-   - 版本号超过列族配置上限的旧版本（`maxVersions` 之外的版本）
-   - 时间戳超过 TTL 的过期数据
-   - 被墓碑标记覆盖的数据（Delete/DeleteColumn 对应的 Put）
-   - 墓碑标记本身（在 Major Compaction 中，确认没有更旧的 HFile 后才能清除）
-4. **写入新的 HFile**：将清理后的 KeyValue 流顺序写入一个（或多个）新的 HFile
-5. **原子替换**：新 HFile 写入完成后，原子地用新 HFile 替换参与合并的旧 HFile，更新 Store 的 HFile 列表
-
-整个过程的 I/O 模式是：**顺序读（读取多个输入 HFile）+ 顺序写（写入一个输出 HFile）**，没有随机 I/O——这是 Compaction 能够在不阻塞读写请求（太多）的情况下在后台执行的基础。
-
-### 1.3 三角困境：读放大、写放大、空间放大
-
-第 04 篇已经抽象地介绍了 LSM-Tree 的三种放大问题，这里结合 Compaction 来具体化这三角关系：
-
-**读放大（Read Amplification）**：
-- 来源：HFile 数量多，每次读取需要检查多个文件
-- Compaction 的作用：减少 HFile 数量，直接降低读放大
-- 激进 Compaction → 读放大低，但写放大高
-
-**写放大（Write Amplification）**：
-- 来源：Compaction 本身——同一份数据被反复读出、写入。一条数据从 MemStore Flush 到 L0，参与 Minor Compaction 合并到更大的文件，再参与 Major Compaction 被重写，每次 Compaction 都带来一次写入放大
-- 激进 Compaction → 写放大高，磁盘 I/O 增加，SSD 损耗加速
-- 保守 Compaction → 写放大低，但读放大高
-
-**空间放大（Space Amplification）**：
-- 来源：Compaction 执行期间，新旧 HFile 同时存在（新文件写入完成前旧文件不能删除），临时空间需求约为参与合并文件总大小的 1 倍
-- Compaction 的作用：完成后清理旧版本、过期数据、墓碑，长期来看降低空间放大
-- 但 Compaction 执行期间，空间放大临时增加
-
-三者之间的关系是**零和博弈**：降低任何一种放大，都意味着另一种或两种放大的增加。Compaction 策略的本质是**在三者之间寻找最适合当前业务场景的平衡点**。
+三者共用一个资源池——磁盘带宽、网络带宽、CPU、BlockCache 的有效容量。资源给定，我们每把其中一项往好里推，另外两项通常都要付账。这张图给出了三者之间的张力方向，具体论证留到第 6 章。
 
 ```mermaid
-%%{init: {'theme': 'dark', 'themeVariables': {'primaryColor': '#6272a4', 'primaryTextColor': '#f8f8f2', 'primaryBorderColor': '#bd93f9', 'lineColor': '#ff79c6', 'secondaryColor': '#44475a', 'tertiaryColor': '#282a36'}}}%%
-graph TD
-    subgraph Tradeoffs["Compaction 三角权衡"]
-        RA["读放大</br>HFile数量多</br>每次读取扫描多文件"]
-        WA["写放大</br>Compaction频繁</br>数据被反复重写"]
-        SA["空间放大</br>新旧文件并存</br>过期数据未清理"]
+%%{init: {'theme': 'dracula'}}%%
+flowchart LR
+    subgraph POOL["同一份磁盘带宽与 CPU"]
+        RA["读放大<br/>一次读要归并的 StoreFile 数"]
+        WA["写放大<br/>合并期间重写的字节数"]
+        SA["空间放大<br/>物理占用除以可见数据"]
     end
-
-    AC["激进 Compaction</br>频繁合并"] -->|"降低"| RA
-    AC -->|"提高"| WA
-    AC -->|"短期增加、长期降低"| SA
-
-    LC["保守 Compaction</br>少量合并"] -->|"提高"| RA
-    LC -->|"降低"| WA
-    LC -->|"短期小、长期增加"| SA
-
-    classDef problem fill:#ff5555,stroke:#ff5555,color:#282a36
-    classDef action fill:#50fa7b,stroke:#50fa7b,color:#282a36
-    class RA,WA,SA problem
-    class AC,LC action
+    RA <-->|"合并得更频繁"| WA
+    WA <-->|"合并得更彻底"| SA
+    SA <-->|"留着文件不动"| RA
 ```
+
+### 1.3 本文的边界与版本口径
+
+这个专栏的定位需要先说清：`读书笔记-大数据概览` 那一列是概览口径，回答"HBase 是什么、适合什么"；本列回答"每个机制怎么实现、出了问题怎么判"，因此凡是涉及分布式文件系统与 LSM 结构本身的部分，只给一句结论并挂上已有的双链，不重复展开——HFile 与 Store 的组织见 [[04 HBase 存储引擎深度解析——LSM-Tree、MemStore 与 HFile 的设计奥秘]]，读路径上的 BlockCache 与归并见 [[06 HBase 读取链路深度解析——BlockCache、Scanner 与多版本合并]]，Flush 如何产生 HFile 见 [[05 HBase 写入链路深度解析——WAL、MemStore Flush 与持久性保证]]。
+
+版本口径取 HBase 2.x（以 2.5 为准）。相对 1.x，与本篇相关的变化有几处：DDL 与分裂等运维动作改由 Master 的 ProcedureV2 框架驱动，分裂不再是 RegionServer 单方面发起；`hbase:meta` 变成一张普通表而不再是特殊的目录结构，它也参与同样的 Compaction 规则；RegionServer 分组（rsgroup）与重写后的 AssignmentManager 改变的是 Region 的落位与迁移节奏，因而间接改变了合并请求在机器之间的分布；`hbase.hregion.max.filesize` 的默认值在 2.x 为 10GB，并带 `hbase.hregion.max.filesize.jitter` 的抖动。凡本文未能在文档中核实到确切默认值的参数，都会标注"以对应版本文档为准"。
 
 ---
 
-## 第 2 章 Minor Compaction：日常的小规模整理
+## 第 2 章 一次 Compaction 到底做了什么
 
-### 2.1 Minor Compaction 是什么
+### 2.1 五个阶段
 
-**Minor Compaction** 是将一个 Store 下的少数几个 HFile 合并成一个更大 HFile 的操作。它是 HBase 中最频繁执行的 Compaction 类型，可以理解为"日常清洁"——不做彻底大扫除，只是把最近堆积的小文件整合一下，防止文件数量失控。
+无论 Minor 还是 Major，一次 Compaction 在代码层面都走同一条流水线，区别只在"输入集合怎么选"和"过滤规则开到哪一档"。这条流水线由 `HStore`、`CompactSplit`、`CompactionRequest`、`DefaultCompactor` 几个类串起来：
 
-Minor Compaction 的特征：
-- **参与文件少**：通常合并 2~10 个 HFile，不涉及全部文件
-- **不做彻底清理**：墓碑标记（如果不是最老的 HFile 中）可能不会被清除，TTL 过期数据也可能不被清除（取决于是否有更旧的版本）
-- **执行频繁**：每当 HFile 数量超过阈值（`hbase.hstore.compaction.min`，默认 3）就会触发
-- **I/O 相对可控**：参与文件少，每次 Compaction 的 I/O 量有限
+1. 选文件：由 `CompactionPolicy` 的实现类（`ExploringCompactionPolicy` 等）在当前的 `StoreFileManager` 文件列表上选出一个子集，形成 `CompactionRequest`；
+2. 建扫描器：为每个被选中的 StoreFile 打开一个 `StoreFileScanner`，用 `StoreScanner` 把多个有序流包装成一路归并输入，底层是 `KeyValueHeap`（按 row、family、qualifier、timestamp 降序、type 的复合比较器排序）；
+3. 边合并边过滤：`CompactionScanQueryMatcher` 决定每一个 Cell 是保留、丢弃还是"暂留"。TTL 过期、超出 `maxVersions` 的旧版本、被墓碑覆盖的 Put 在这里被淘汰；墓碑本身是否保留，取决于这次合并能不能保证"所有更老的、可能含同一 Key 的文件都在输入集合里"；
+4. 写新 HFile：过滤后的 Cell 流被顺序写入新的 `HFile`（可能是多个，见 2.3），写入时按列族配置重新做编码与压缩，这也是 Compaction 属于 CPU 密集操作的原因；
+5. 原子替换：新文件落盘并 close 之后，`HStore` 更新文件列表，旧文件被移出服务集合并进入归档目录，随后由 HFileCleaner 延迟清理。
 
-**为什么 Minor Compaction 不做彻底清理？**
+对上层读请求来说，第 5 步是一次"文件列表的切换"：切换之前读到的全是旧文件，切换之后读到的是新文件加上未被选中的文件。列表切换在 RegionServer 内是原子的，因此不会出现"读到一半文件消失"的情况，但一个正在进行的 Scan 可能跨过切换点，需要在新列表上继续（这部分与租约、Scanner 续读的细节在 [[06 HBase 读取链路深度解析——BlockCache、Scanner 与多版本合并]] 里）。
 
-这是一个关键的设计细节。考虑墓碑清理：一个 `Delete` 墓碑标记必须被放置在比被删除的 Put 更"新"（在所有 HFile 层级中可见）的位置。如果 Minor Compaction 将包含墓碑的新 HFile 与部分旧 HFile 合并，但还有更老的 HFile 没有参与合并，那么这些老 HFile 中可能还有被删除的 Put 数据。
+### 2.2 归并的对象是"同一行的所有版本"
 
-如果 Minor Compaction 在合并时清除了墓碑，而老 HFile 中的 Put 数据依然存在，读取时就会读到"已删除"的数据——这破坏了删除的语义。
+Compaction 的最小处理单位不是行，而是 Cell 的排序序列。相同 RowKey、相同列族的 Cell 在归并流里彼此相邻，按时间戳从新到旧排开，墓碑（`DeleteFamily`、`DeleteColumn`、`Delete`）也作为带类型的 Cell 参与排序。`CompactionScanQueryMatcher` 一边走这个序列，一边维护当前行的删除信息：先遇到墓碑就记下来，后续同 Key 的更老版本即可丢弃；`maxVersions` 的作用是给每一列保留前 N 个版本，其余丢弃。
 
-因此，**只有在确认没有更老的 HFile 可能包含被删除数据时，才能安全地清除墓碑**。Major Compaction（合并所有文件）能满足这个条件；Minor Compaction 则不能，所以墓碑保留。
+这套规则解释了一个常被误解的现象：更新并不占用额外空间，至少在逻辑上是如此——写入新版本后，旧版本在读取时不可见，但在物理上仍然存在，直到某次合并把它裁掉。`maxVersions` 调大并不会让写变慢多少，但会让空间放大与合并时的过滤成本同步上升，这也是第 6 章算例中的一项输入。
 
-### 2.2 Minor Compaction 的触发条件
+### 2.3 输出不一定只有一个文件
 
-Minor Compaction 的触发有两个路径：
+"Major Compaction 把一个 Store 的所有 HFile 合成一个"是教科书说法，也是默认模型的正确抽象，但工程判断上要留一个例外与一个前提。例外是 `StripeCompactionPolicy`：每个条带各自输出一个文件，条带数不变，文件数就不会收敛到一。前提是"合成一个"本身不等于"清理完成"——真正的判据是该 Store 的墓碑与过期版本还会不会被读路径跳过，而这只有输入闭合才能保证。此外，Major 只覆盖请求创建时磁盘上的那些文件，合并期间新 Flush 出来的 HFile 自然不在其中，所以"Major 完成后文件数不为 1"并不必然意味着合并失败了。
 
-**被动触发（Flush 触发）**：每次 MemStore Flush 完成后，RegionServer 检查该 Store 的 HFile 数量。如果超过 `hbase.hstore.compaction.min`（默认 3），向 Compaction 线程池提交一个 Minor Compaction 请求。
+### 2.4 顺序 I/O 不等于免费
 
-**主动触发（定期检查）**：RegionServer 有一个周期性的 Compaction Checker 线程（默认每隔 `threadWakeFrequency` = 10 秒扫描一次），检查所有 Store 是否需要 Compaction。
-
-**写入阻塞触发（紧急情况）**：当一个 Store 的 HFile 数量超过 `hbase.hstore.blockingStoreFiles`（默认 16），HBase 会阻塞该 Region 的所有写入，直到 Compaction 完成将 HFile 数量降到阈值以下。这是防止 HFile 数量失控的最后防线，但代价是写入延迟暴增。
-
-> [!warning] 生产避坑
-> `hbase.hstore.blockingStoreFiles` 默认值 16 在高写入负载下容易触发写入阻塞。生产建议调整为 100，同时确保 Compaction 线程池足够大（`hbase.regionserver.thread.compaction.large` 和 `hbase.regionserver.thread.compaction.small`），避免 Compaction 处理不过来导致阻塞。
-
-### 2.3 Minor Compaction 的文件选择策略：ExploringCompactionPolicy
-
-Minor Compaction 的核心问题是：当一个 Store 有 N 个 HFile，应该选择哪几个来合并？选择不同的文件组合，Compaction 的效果和 I/O 代价差异显著。
-
-**最朴素的想法**：每次选最小的几个文件合并。这能控制单次 Compaction 的 I/O 量，但可能导致大文件和小文件长期共存，小文件反复被合并，大文件一直不参与合并，形成"富者越富、穷者越穷"的马太效应。
-
-**HBase 的选择思路：基于文件大小比例的选择**
-
-HBase 的文件选择策略基于一个核心约束：**在一个候选合并序列中，较小的文件不应该比较大的文件大太多倍**（因为合并大小差距悬殊的文件效率很低）。
-
-具体规则（`ExploringCompactionPolicy`，HBase 0.96+ 默认策略）：
-
-对于一个候选序列（按文件大小升序排列），从最小的文件开始，若满足以下条件则加入合并集合：
-
-```
-当前文件大小 × hbase.hstore.compaction.ratio (默认 1.2)
-  >= 候选序列中所有更大文件的大小之和
-```
-
-直到不满足条件为止。同时还有上下限约束：
-- 合并文件数量 ≥ `hbase.hstore.compaction.min`（默认 3）
-- 合并文件数量 ≤ `hbase.hstore.compaction.max`（默认 10）
-- 单个参与合并的文件大小 ≤ `hbase.hstore.compaction.max.size`（默认 Long.MAX_VALUE）
-
-**ExploringCompactionPolicy vs RatioBasedCompactionPolicy 的区别**：
-
-旧版本（0.96 之前）的 `RatioBasedCompactionPolicy` 是贪心算法：从头到尾遍历文件列表，遇到第一个满足 Ratio 条件的序列就停止，提交这个序列进行 Compaction。
-
-`ExploringCompactionPolicy` 是改进版：**遍历所有可能满足条件的序列**，从中选出"总文件大小最小（I/O 代价最小）且文件数量最多（合并效果最好）"的序列。
-
-**举例说明差异**：
-
-假设 Store 有以下 HFile（按时间顺序，大小单位 MB）：
-```
-HFile_1: 100MB（最老）
-HFile_2: 10MB
-HFile_3: 8MB
-HFile_4: 5MB
-HFile_5: 4MB（最新，刚 Flush）
-```
-
-`RatioBasedCompactionPolicy`：从最老的文件开始检查，发现 HFile_5(4MB) 满足：`4 × 1.2 = 4.8 < 5+8+10+100`，继续检查 HFile_4(5MB)：`(4+5) × 1.2 = 10.8 > 8+10+100` 不满足……最终只选 [HFile_5]，不够最小合并数（3），不发生合并；或者选择了一个次优序列。
-
-`ExploringCompactionPolicy`：穷举所有满足条件的序列，找到 [HFile_2, HFile_3, HFile_4, HFile_5]（大小最均匀、总 I/O 最小），选这个序列合并。
+Compaction 的读是多个 HFile 的顺序读，写是新 HFile 的顺序写，没有随机寻道，这是它能够与在线读写并存的前提。但顺序不等于免费：HDFS 上的顺序读写仍然要占 DataNode 的磁盘带宽与网络带宽，三副本还要走 pipeline；一台 RegionServer 上并发的 Compaction 越多，每次 Flush 能拿到的带宽就越少，Flush 变慢又会让 MemStore 水位升高，最终触发写入限流或阻塞。这条反馈回路是第 7 章"Compaction 跟不上"判据的物理基础。
 
 ---
 
-## 第 3 章 Major Compaction：周期性的彻底清理
+## 第 3 章 Minor Compaction：有选择的整理
 
-### 3.1 Major Compaction 是什么
+### 3.1 三条边界
 
-**Major Compaction** 是将一个 Store 下的**所有** HFile 合并成**一个**大 HFile 的操作。它是 LSM-Tree 的"彻底大扫除"——在 Major Compaction 之后，一个 Store 只有唯一一个 HFile，读放大降为理论最低值（对该 Store 只需访问 1 个文件）。
+Minor Compaction 是 HBase 里执行最频繁的一类合并，它在一个 Store（Region 内的一个列族）范围内，从现有 HFile 中挑一部分合成为更少的文件。与 Major 相比，它有三条明确的边界：
 
-Major Compaction 独有的清理能力（Minor Compaction 做不到的）：
-- **彻底清除墓碑**：因为所有 HFile 都参与了合并，没有更老的文件存在，墓碑可以安全删除（被删除的数据在本次合并中不会出现在输出文件里）
-- **彻底清除过期版本**：超过 `maxVersions` 的版本被丢弃
-- **彻底回收 TTL 过期数据**：TTL 过期的 KeyValue 被过滤，磁盘空间真正释放
-- **彻底清除过期的 Delete Family**：`DeleteFamily` 类型墓碑（删除整个列族某时间点之前的所有数据）在 Major Compaction 后真正生效
+- 不清理墓碑：它无法证明"更老的文件里没有同一 Key 的数据"，因此墓碑必须保留，作为后续合并的判断依据；
+- 不保证回收过期版本：它可以在本次输入集合内部裁掉超出 `maxVersions` 的版本，但对于"更老文件里还有同 Key 更老版本"的情形无能为力；TTL 过期数据同理，只有整个文件都过期时才有机会被整体处理；
+- 不跨 Store、不跨 Region：合并的作用域是单个 Store，既不会把两个列族的数据放在一起，也不会把两个 Region 的数据放在一起。后者在工程上意味着一件事——跨 Region 的垃圾没有"合并"这条出路，只能各自等自己的 Major，或者先做 Region 合并。
 
-### 3.2 Major Compaction 的触发机制
+第三条边界常被忽略，但它解释了不少"Region 数很多、每个 Region 都不大、垃圾却清不掉"的场景：每个 Region 的 Store 都在按自己的节奏等 Major，Region 越多，越容易出现"每个 Region 都只差一次 Major"的长期状态。
 
-**自动触发（定期，默认 7 天）**：
+### 3.2 墓碑为什么不能在这个阶段清掉
+
+要理解 Minor 为什么保守，不妨先把删除的可见性规则摆出来。假设同一个 RowKey 在两个文件里：老文件 `A` 里有一条 `Put`，新文件 `B` 里有一条 `Delete`。读取时按时间戳判定，`Delete` 更新，所以该行不可见。此时如果一次合并只选了 `B` 和一个更新的文件 `C`，并且顺手把墓碑清掉，会发生什么？合并后 `B` 里那条 `Delete` 消失，而 `A` 里的 `Put` 还在服务集合中，读取该行时会重新看到它——数据"复活"了。
+
+由此得到墓碑清理的充要条件：只有当所有可能包含同一 Key 更老版本的文件都参与了同一次合并，才能安全地丢弃墓碑，并把被它覆盖的数据一并丢弃。Major Compaction 把整个 Store 的文件全部纳入，天然满足；Minor Compaction 的输入是一个子集，不满足，因此只能把墓碑原样搬到输出文件里，等下一次合并再判。把两种合并各自选中哪些文件画在同一组文件上，差别一目了然：
+
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+flowchart TD
+    subgraph S["同一个 Store 的 5 个 HFile（从老到新）"]
+        F1["F1 含 r1 的旧 Put"]
+        F2["F2 含 r2 的旧 Put"]
+        F3["F3 含 r1 的墓碑"]
+        F4["F4 新写入"]
+        F5["F5 刚 Flush"]
+    end
+    M["Minor：选 F3 F4 F5"] --> R1["输出保留墓碑<br/>F1 不在输入里，旧 Put 仍在服务"]
+    J["Major：全部五个文件"] --> R2["墓碑与旧 Put 一起丢弃<br/>空间真正释放"]
+    S --> M
+    S --> J
+```
+
+上图是理解本篇最核心结论的钥匙：Minor 与 Major 的差别不是"合并得多与少"，而是**输入集合是否闭合**。闭合的那一次，才可以做不可逆的删除；不闭合的那一次，只能做搬运。
+
+### 3.3 `hbase.hstore.compactionThreshold` 与触发路径
+
+触发 Minor 的经典参数是 `hbase.hstore.compactionThreshold`，默认值为 3，语义是"一个 Store 的文件数超过这个值才考虑合并"。HBase 2.x 里它有一个新名字 `hbase.hstore.compaction.min`，两个键同时存在时以新键为准，旧键留着是为了兼容历史配置——这一点值得注意，因为在老集群上改 `compactionThreshold` 而不生效，往往就是新键已经被显式设置过。
+
+触发路径有三条：
+
+- Flush 之后检查：每次 MemStore 刷成 HFile，`HStore` 都会检查文件数是否达到阈值，达到就向 `CompactSplit` 提交请求；
+- 周期扫描：`CompactionChecker` 线程按固定周期（10 秒级）遍历本机所有 Store，补上那些"文件数够但没被 Flush 路径触发"的情形，同时负责判断 Major 是否到期；
+- 阻塞兜底：文件数超过 `hbase.hstore.blockingStoreFiles`（默认 16）时，Region 会阻塞该 Region 的写入，并把该 Store 的合并请求立刻排入队列、不再等周期扫描，详见第 7 章。
+
+还有一条容易漏掉的路径：Region 刚打开的那段时间。RegionServer 启动或 Region 迁移之后，MemStore 是空的，文件数就是磁盘上的既有存量，只要这个基数已经偏高，接下来的几轮 Flush 就会把文件数推过阈值，因此重启一台负载较高的 RegionServer 之后，十几分钟里出现一波合并 I/O 几乎是必然的。
+
+### 3.4 文件选择：`ratio` 与 `min.size` 的分工
+
+一个 Store 有 N 个文件时，选哪几个合并，直接决定单次合并的读写量与长期的文件数曲线。HBase 的判断标准是"大小可比性"：把大小相近的文件合成一个，单次 I/O 可控；把 1KB 和 10GB 放在一起合，等于把整个大文件重写一遍，收益却只有一个文件数。
+
+具体规则由 `hbase.hstore.compaction.ratio`（默认 1.2）表达：对一个按大小升序的候选窗口，只有当"窗口内较小文件的大小乘以 ratio"不小于"窗口内更大文件的大小之和"时，这个窗口才被认为值得合并。直观地说，小文件的总量必须与大文件相称，合起来才划算。围绕这条主规则，还有四个边界参数：
+
+- `hbase.hstore.compaction.min`（默认 3）：一次合并至少要有的文件数，低于此数不值得启动；
+- `hbase.hstore.compaction.max`（默认 10）：一次合并最多纳入的文件数，控制单次 I/O 的上限；
+- `hbase.hstore.compaction.min.size`（默认 134217728，即 128MB）：小于这个体积的文件不看 ratio，一律可以被选入，避免"永远不满足比例条件的小文件"长期滞留；它的默认值与 `hbase.hregion.memstore.flush.size` 的默认值相同，但两者是独立的键：一旦把 Flush 大小改小而不动它，每个新文件都会小于 min.size 而被无条件选入候选，合并触发频率随之上升，而几个小文件合出来的结果可能仍然小于 min.size，于是又被立刻选入下一轮；
+- `hbase.hstore.compaction.max.size`（默认 `Long.MAX_VALUE`）：超过这个体积的文件不参与 Minor，把大文件留给 Major 处理。
+
+`ratio` 的方向要记清：调大（譬如从 1.2 到 1.8）会让更多"大小悬殊"的窗口被判定为值得合并，单次合并更大、文件数下降更快、写放大更高；调小（譬如 1.0）则更挑食，单次合并更小、写放大更低，但文件数容易在高位徘徊。这个参数没有"最佳值"，只有"匹配当前 I/O 预算的值"，第 6 章的算例会给出估算方法。
+
+---
+
+## 第 4 章 Major Compaction：换回空间的唯一常规路径
+
+### 4.1 定义与它能做而 Minor 不能做的四件事
+
+Major Compaction 把该 Store 的所有 HFile 纳入一次合并。输入集合闭合之后，四类"垃圾"才第一次可以被安全地丢弃：
+
+- 墓碑：`Delete`、`DeleteColumn`、`DeleteFamily` 在合并中可以连同被覆盖的数据一起消失，删除从逻辑语义变成物理事实；
+- 过期版本：超出 `maxVersions` 的历史版本被裁掉；
+- TTL 过期数据：时间戳早于 TTL 边界的 Cell 被过滤，磁盘空间真正释放；
+- `DeleteFamily` 的完整生效：删除某个列族某一时刻之前的全部数据这类操作，在 Minor 阶段只是加了一条范围墓碑，要等 Major 才把范围内的旧数据整体清掉。
+
+### 4.2 "删了数据磁盘不降"的完整答案
+
+这个问题的答案有三层，缺一层就会得出"HBase 不回收空间"的错误结论。
+
+第一层在 HBase 内部：删除只是写墓碑，只有输入闭合的合并才能丢弃被删除数据，也就是只有 Major（或策略上等价的整体合并、或 FIFO 策略下的整文件过期）才回收空间。Minor 阶段被合并的文件在物理上并没有变小多少，它只是把墓碑和数据重新排列了一遍。
+
+第二层在归档机制：Major 完成之后，旧 HFile 并不会立刻从 HDFS 上删掉，而是被移动到表的 `.archive` 目录，等 HFileCleaner 按 `hbase.master.hfilecleaner.ttl`（默认 5 分钟量级，以对应版本 `hbase-default.xml` 为准）确认无人引用后才真正删除。因此在 Major 刚结束时看 `DFS Used`，常常还是原样。
+
+第三层在 HDFS：文件被删除后，DataNode 上的 Block 回收也有延迟，删除报告需要经过 NameNode 的处理周期。三层都走完之后，磁盘占用才会出现台阶式下降。把这条三段式的回收路径按时间展开，就是下面这条链路：
+
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+flowchart TD
+    A["业务执行 Delete"] --> B["写入墓碑，旧数据仍在原 HFile"]
+    B --> C{"发生哪一类合并"}
+    C -->|"Minor：输入不闭合"| D["墓碑被搬到新文件<br/>磁盘占用基本不变"]
+    C -->|"Major：输入闭合"| E["墓碑与旧版本被丢弃<br/>输出只含可见数据"]
+    E --> F["旧 HFile 移入 .archive"]
+    F --> G["HFileCleaner 按 TTL 删除"]
+    G --> H["HDFS 回收 Block，DFS Used 台阶下降"]
+```
+
+这也是为什么"先确认最近一次 Major 是什么时候"应当成为这类工单的第一个动作：Region 侧记录了最近一次 Major 的时间戳（`lastMajorCompactionTs`），通过 RegionServer 的 JMX 或 `admin` 接口能读到；如果这个时间戳是几天甚至几周之前，而自动 Major 又被关掉了，那么磁盘不降就不是故障，而是配置的必然结果。
+
+### 4.3 触发方式：7 天、抖动与手工
+
+自动 Major 的周期由 `hbase.hregion.majorcompaction` 控制，单位毫秒，默认 604800000，即 7 天。这个默认值配上 `hbase.hregion.majorcompaction.jitter`（默认 0.5）使用：如果所有 Region 都严格按 7 天触发，一个由数千个 Region 组成的集群会在大致相同的时刻集体发起 Major，形成周期性的 I/O 风暴。抖动的意义就是把触发时刻打散，具体是"在基线上随机延后一段比例"还是"在基线两侧浮动"，各版本实现略有差异，效果一致——同一批 Region 不会同时动。
+
+手工触发有三个粒度，对应 `Admin` 接口里的三个方法（Shell 的 `major_compact` 是它们的包装）：
+
+```shell
+# 整表
+hbase> major_compact 'ods_order'
+# 指定列族
+hbase> major_compact 'ods_order', 'info'
+# 指定 Region（迁移后修复、单点问题定位时用）
+hbase> major_compact 'a1b2c3d4e5f6...'
+```
+
+有一个细节决定运维脚本怎么写：`major_compact` 只是把请求放进合并队列，命令返回并不代表合并完成。要判断是否真的做完，得看队列长度与该 Store 的 `lastMajorCompactionTs`，而不是看命令是否成功返回。
+
+### 4.4 代价：写放大等于参与合并文件的总大小
+
+Major 的代价可以精确表述：它要把该 Store 当前所有 HFile 的字节完整读一遍、把过滤后的结果写一遍，因此单次写放大的下限就是"该 Store 的文件总大小"。一个 50GB 的 Store，一次 Major 至少产生 50GB 的读和接近 50GB 的写；在 HDFS 三副本下，这 50GB 写入在网络上要按 pipeline 复制三份。再叠加在线流量的读取，RegionServer 的磁盘与网络带宽会被压到一个很窄的余量里。
+
+这还只是带宽账。Major 期间，服务该 Store 的读请求仍要访问旧文件（新文件尚未切换），于是同一份磁盘要同时承担"合并读、合并写、业务读"三种负载；合并完成后短期内，被替换掉的旧文件在 BlockCache 里的数据块全部失效，新文件的块还没预热，读延迟会出现一段波动。这类波动不是"缓存被合并写满了"，而是"缓存里原来的东西没了"——两者的处置方式不同，判断依据是命中率曲线的形状而非绝对值。
+
+### 4.5 生产上为什么关掉自动 Major
+
+自动 Major 的问题不在于它做错了什么，而在于它的触发时机由时间决定，而不是由负载决定。生产集群的低峰与高峰差别可能是数倍带宽，7 天的定时器撞上高峰就是一次事故；更麻烦的是 Major 请求会在队列里堆积，一旦某个 Region 的 Major 迟迟跑不完，后续请求持续入队，队列长度本身会变成新的问题。
+
+因此常见做法是把 `hbase.hregion.majorcompaction` 设为 0，关闭自动触发，改由调度系统在低峰期按表轮转：
 
 ```xml
-<!-- hbase-site.xml -->
 <property>
   <name>hbase.hregion.majorcompaction</name>
-  <value>604800000</value>  <!-- 7天，单位毫秒 -->
+  <value>0</value>
 </property>
 ```
 
-这个时间间隔有一定的随机抖动（`hbase.hregion.majorcompaction.jitter`，默认 0.5），即实际触发时间在 `[7天 * 0.5, 7天 * 1.5]` 之间随机，防止集群中所有 Region 同时触发 Major Compaction（雷同效应）造成 I/O 风暴。
-
-**手动触发**：管理员可以通过 HBase Shell 手动触发：
-```shell
-# 对指定表执行 Major Compaction
-hbase> major_compact 'tablename'
-
-# 对指定 Region 执行 Major Compaction
-hbase> major_compact 'region_name'
-
-# 对指定表的指定列族执行 Major Compaction
-hbase> major_compact 'tablename', 'column_family'
-```
-
-### 3.3 Major Compaction 的代价与生产实践
-
-Major Compaction 是代价最高的操作之一，它的代价来自几个方面：
-
-**I/O 代价巨大**：假设一个 Store 有 50GB 的数据分布在若干 HFile 中，Major Compaction 需要：
-- 读取所有 50GB 数据
-- 写入一个新的大 HFile（约 50GB - 过期数据大小）
-- 写入期间同时存在旧文件和新文件，临时磁盘使用量翻倍（约 100GB）
-
-这对 HDFS 的磁盘和网络带宽是极大的压力。
-
-**写放大严重**：在 HDFS 3 副本的场景下，写入 50GB 实际上产生了 150GB 的网络 I/O（数据需要在 RegionServer 和 DataNode 之间传输，3 个副本 = 3 倍网络流量）。
-
-**对在线业务的影响**：Major Compaction 期间，RegionServer 的磁盘 I/O 和 CPU 被大量占用，读取请求的 BlockCache 命中率可能因为 Compaction 向 BlockCache 写入大量新 Block 而下降（缓存污染），写入延迟也可能增加（磁盘竞争）。
-
-> [!warning] 生产最佳实践
-> **生产环境中，强烈建议关闭自动 Major Compaction，改为在业务低峰期手动触发。**
-> 
-> ```xml
-> <!-- 关闭自动 Major Compaction -->
-> <property>
->   <name>hbase.hregion.majorcompaction</name>
->   <value>0</value>
-> </property>
-> ```
-> 
-> 然后通过定时任务（Cron Job）在业务低峰期（如凌晨 2~4 点）对关键表执行 Major Compaction：
-> ```shell
-> # 脚本示例
-> hbase shell <<EOF
-> major_compact 'important_table'
-> EOF
-> ```
-> 
-> 同时配合 Compaction 限速（见第 4 章），防止 Major Compaction 影响在线服务。
+这个选择必须配三件事才成立：一是轮转表清单，按数据量与重要性排序，重要表频率高一些，冷表可以按月；二是限速与并发控制，Major 期间用吞吐控制器把合并速度压在可接受范围（第 7 章），并避免多张大表同时 Major；三是完成度监控，把每个表的 `lastMajorCompactionTs` 当作 SLA 指标看，超过预定周期未完成就告警。缺了第三件，关掉自动 Major 就变成了"永久不做 Major"，空间放大与读放大会一路累积，最后以一次更难收拾的方式爆发。
 
 ---
 
-## 第 4 章 Compaction 的执行机制
+## 第 5 章 三种策略与"该用哪个"的判据
 
-### 4.1 Compaction 线程池
+### 5.1 `RatioBasedCompactionPolicy`：贪心的第一版
 
-RegionServer 有专用的 Compaction 线程池，分为两个：
+这是 HBase 早期唯一的策略，思路是沿着文件列表从老到新滑动一个窗口，窗口内文件满足 ratio 条件就继续扩张，一旦不满足就停止，取第一个满足最小文件数的窗口提交。它的优点是实现简单、每次只做局部决策；缺点是"第一个可行解"未必是好解——在文件大小分布不均匀时，它会挑到一个只含两三个小文件的窗口，合并完文件数下降有限，过一会儿又要再合一次，长期写放大偏高。
 
-- **Large Compaction 线程池**（`hbase.regionserver.thread.compaction.large`，默认 1 个线程）：执行超过 `hbase.regionserver.thread.compaction.throttle`（默认 2 * flushSize * minFilesToCompact = 约 256MB）大小的 Compaction
-- **Small Compaction 线程池**（`hbase.regionserver.thread.compaction.small`，默认 1 个线程）：执行小于阈值的 Compaction
+### 5.2 `ExploringCompactionPolicy`：默认策略
 
-这种分离的设计防止了大 Compaction（如 Major Compaction）独占线程，让小 Compaction（快速整理少数小文件）能够及时执行，不被阻塞。
+0.96 之后成为默认策略，思路从"第一个可行解"改成"在所有可行解里挑一个最好的"。它对每个可能的起点增量扩张候选窗口，在满足 `ratio`、`max.size`、`max` 个数的约束下，按两个优先级比较：文件数最多的优先，其次总字节数最小的优先。前者对应"合并效果"，后者对应"I/O 代价"，两个目标一起看，比贪心稳得多。
 
-**为什么默认只有 1 个 Large Compaction 线程？**
+不妨用一组具体文件体会差别（示例推算，单位为 MB，按从老到新排列）：`[100, 10, 8, 5, 4]`。贪心从最老的 100 开始算，`100 × 1.2` 远大于后面四项之和，窗口直接不成立，只能退而求其次去试更小的窗口，最终常常只选到一两个文件；`ExploringCompactionPolicy` 会试到 `[10, 8, 5, 4]` 这个窗口——四个文件总量 27MB，彼此大小可比，合并一次能让文件数从 5 降到 2，I/O 只有 27MB，明显是更好的解。
 
-因为 Large Compaction 已经是 I/O 密集型操作，多个并发的 Large Compaction 会激烈竞争 HDFS 带宽，导致每个 Compaction 都慢，还会影响正常读写。1 个线程确保 Large Compaction 是串行的，不相互干扰。
+### 5.3 `StripeCompactionPolicy`：给大 Region 分而治之
 
-但在有大量 Region 的繁忙集群（每个 RegionServer 管理 200+ Region）上，1 个线程可能跟不上 Flush 速度，导致 HFile 数量持续增加。此时适当增加线程数（到 2~3 个）是合理的，但需要同时增加 Compaction 限速（见下节）以防止 I/O 过载。
+Stripe 策略针对的是"Region 太大导致 Major 代价不可接受"这个具体问题。它把一个 Store 的 RowKey 空间按字典序切成若干条带（Stripe），每个条带内部独立维护文件集合，合并只在条带范围内发生，于是"一次 50GB 的 Major"被摊成"十次 5GB 的条带合并"。开启方式是通过 `hbase.hregion.stripe.compaction.policy` 指定策略实现，条带数量与各层最小合并文件数由另一组 `hbase.hstore.stripe.*` 参数控制，具体键名与默认值以对应版本的 `hbase-default.xml` 为准。
 
-### 4.2 Compaction 限速机制
+它的收益与代价都很清楚：收益是避免了超大 Region 的整库重写，空间回收可以按条带渐进完成；代价是多了一层路由——每次读写都要先确定目标 RowKey 落在哪个条带，条带边界信息要常驻内存，且 RowKey 分布严重倾斜时条带大小不均，最大的那个条带又变回了老问题。因此它的适用条件写得很窄：Region 长期大于 2GB 且难以再分裂、RowKey 分布相对均匀、团队能接受多一层调优复杂度。
 
-为了降低 Compaction 对在线读写的影响，HBase 提供了 Compaction 限速：
+### 5.4 `FIFOCompactionPolicy`：TTL 场景的例外
 
-```xml
-<!-- 限制 Compaction 的吞吐量，单位：bytes/second -->
-<property>
-  <name>hbase.regionserver.throughput.controller</name>
-  <value>org.apache.hadoop.hbase.regionserver.throughput.PressureAwareCompactionThroughputController</value>
-</property>
+FIFO 策略严格来说不是"合并"，而是"按文件整体过期来删除"。它扫描 Store 的文件列表，把整个文件的数据都超过 TTL 的那些文件直接删掉，不做任何重写。对日志、埋点、会话这类"按时间顺序写、TTL 短且均匀"的数据，它把写放大压到接近零，空间也能回收——这是 Minor 之外另一条能真正还空间的路径，只是它只对整文件过期成立。
 
-<!-- 低压力时（HFile数量正常）的最大 Compaction 速度 -->
-<property>
-  <name>hbase.hstore.compaction.throughput.lower.bound</name>
-  <value>52428800</value>  <!-- 50MB/s -->
-</property>
+代价在读放大：文件不会被合并，数量随 Flush 持续增长，直到过期被删；如果 TTL 与写入速率的组合不合适（写入快、TTL 长），文件数会先涨到触发阻塞，再被删掉一批，形成锯齿。用它之前要先算清楚"稳态文件数 = TTL 时长除以 Flush 间隔"，再对照 `hbase.hstore.blockingStoreFiles`。
 
-<!-- 高压力时（HFile数量接近阻塞阈值）的最大 Compaction 速度 -->
-<property>
-  <name>hbase.hstore.compaction.throughput.higher.bound</name>
-  <value>104857600</value>  <!-- 100MB/s -->
-</property>
-```
+### 5.5 四种策略的横向对比与判据
 
-**`PressureAwareCompactionThroughputController`** 是动态限速控制器：
-- 当 HFile 数量在正常范围内，Compaction 速度限制在 `lower.bound`（较低速度，减少对在线业务的影响）
-- 当 HFile 数量接近 `blockingStoreFiles`（写入阻塞阈值），Compaction 速度提升到 `higher.bound`（较高速度，紧急清理，防止写入阻塞）
+| 策略 | 合并范围 | 写放大 | 读放大 | 空间回收 | 适用判据 |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `RatioBasedCompactionPolicy` | 局部窗口，贪心选第一个可行解 | 中偏高（重复合并小文件） | 中偏高 | 依赖 Major | 仅存量集群兼容，新表不建议 |
+| `ExploringCompactionPolicy` | 局部窗口，全局择优 | 中 | 低到中 | 依赖 Major | 默认选项，绝大多数在线表 |
+| `StripeCompactionPolicy` | 条带内合并 | 中偏低（单次摊薄） | 低 | 条带内渐进回收 | Region 大于 2GB 难分裂、RowKey 均匀 |
+| `FIFOCompactionPolicy` | 不合并，整文件过期删除 | 接近零 | 高（文件数随 Flush 增长） | 整文件回收 | TTL 短、按时间顺序写、读以点查为主 |
 
-这种自适应限速在正常情况下对在线业务干扰小，在紧急情况下能快速响应，是生产环境的推荐配置。
-
-### 4.3 Compaction 的完整执行流程
-
-一次 Compaction 从触发到完成的完整流程：
+把选择逻辑画成判定顺序会更直观——先问数据生命周期，再问 Region 规模，最后才落到默认策略：
 
 ```mermaid
-%%{init: {'theme': 'dark', 'themeVariables': {'primaryColor': '#6272a4', 'primaryTextColor': '#f8f8f2', 'primaryBorderColor': '#bd93f9', 'lineColor': '#ff79c6', 'secondaryColor': '#44475a', 'tertiaryColor': '#282a36'}}}%%
-graph TD
-    A["触发 Compaction</br>（Flush后/定时检查/手动）"] --> B["请求加入 Compaction 队列"]
-    B --> C["Compaction 线程取出请求"]
-    C --> D["文件选择（CompactionPolicy）"]
-    D --> E{"是否选出足够文件？"}
-    E -->|"否"| F["跳过，等待下次触发"]
-    E -->|"是"| G["创建新 HFile Writer"]
-    G --> H["多路归并读取选中的 HFile"]
-    H --> I["过滤墓碑/TTL/旧版本"]
-    I --> J["顺序写入新 HFile"]
-    J --> K["新 HFile close 并提交到 HDFS"]
-    K --> L["原子替换：新文件上线，旧文件下线"]
-    L --> M["更新 Store 的 HFile 列表"]
-    M --> N["删除旧 HFile（标记待清理）"]
-    N --> O["更新 BlockCache（无效化旧 Block）"]
-    O --> P["Compaction 完成"]
-
-    classDef trigger fill:#ff79c6,stroke:#ff79c6,color:#282a36
-    classDef process fill:#6272a4,stroke:#bd93f9,color:#f8f8f2
-    classDef decision fill:#f1fa8c,stroke:#f1fa8c,color:#282a36
-    classDef end fill:#50fa7b,stroke:#50fa7b,color:#282a36
-
-    class A trigger
-    class B,C,D,G,H,I,J,K,L,M,N,O process
-    class E decision
-    class P end
-    class F end
+%%{init: {'theme': 'dracula'}}%%
+flowchart TD
+    Q1{"列族有短 TTL<br/>且数据按时间顺序写入？"}
+    Q1 -->|是| FIFO["FIFOCompactionPolicy<br/>整文件过期删除"]
+    Q1 -->|否| Q2{"Region 长期大于 2GB<br/>且难以继续分裂？"}
+    Q2 -->|是| Q3{"RowKey 分布<br/>是否足够均匀？"}
+    Q3 -->|是| STRIPE["StripeCompactionPolicy<br/>按条带摊薄 Major"]
+    Q3 -->|否| EXPLORE
+    Q2 -->|否| EXPLORE["ExploringCompactionPolicy<br/>默认策略"]
+    EXPLORE --> MAJOR["配合关闭自动 Major<br/>低峰手工触发"]
 ```
 
-**步骤 L（原子替换）**是整个流程的关键：在新 HFile 写入完成之前，旧 HFile 仍然可以服务读请求；新 HFile 写入完成后，原子地更新 Store 的文件列表——HBase 通过 ZooKeeper 或 RegionServer 内部锁保证这个切换的原子性，在切换过程中读取请求看到的是完整的文件列表（要么全是旧文件，要么全是新文件 + 旧文件中未被覆盖的部分）。
+---
+
+## 第 6 章 三角关系：为什么三者不能同时最优
+
+### 6.1 三个量的度量方式
+
+要把"三角"讲成可论证的命题，先得给三个量一个可计算的形态。设某个 Store 在统计窗口内的用户写入字节为 `W`，参与合并的文件总字节为 `ΣC`，物理占用为 `P`，逻辑可见数据为 `L`：
+
+- **写放大** = `ΣC / W`，直观含义是"用户写一个字节，磁盘上被写了几个字节"；HDFS 三副本下网络侧还要再乘副本数；
+- **空间放大** = `P / L`，删除与更新越多、Major 越少，这个比值越大；
+- **读放大** 没有单一公式，工程上取"一次点查平均要碰的 StoreFile 数"乘"单文件探测成本"（Bloom 过滤后的索引查找与可能的磁盘读）。文件数从 100 降到 5，读放大的改善通常不是线性的，因为 Bloom 过滤本身已经把大部分文件挡在门外，但"要打开的 Reader 数、要建的 Scanner 数、要归并的堆节点数"都随文件数增长。
+
+### 6.2 三者的耦合方向
+
+读放大与写放大方向相反：减少文件数唯一的手段是更频繁、更彻底地合并，而每一次合并都要把参与的文件读一遍写一遍。这里有个容易算错的点——不是"合并一次就把数据重写一次"这么简单，数据会随着不断被小合并、再被大合并而重复重写，一条记录从 Flush 到最终落进大文件，可能经历三到五次重写，`ΣC / W` 因此是层数的函数，而不是"1 加 1 次 Major"。
+
+写放大与空间放大也方向相反：能回收空间的合并是"输入闭合"的那种，也就是代价最大的那种。少做 Major 能省下当期的写放大，但墓碑与旧版本会一直占着盘，空间放大随时间单调上升；而 Major 一旦执行，当期又会出现"新旧文件并存"的临时空间峰值，`P` 在合并窗口内会短暂跳高。
+
+空间放大与读放大方向相同但要分阶段看：文件越多、越老、垃圾越多，读要碰的文件与要跳过的版本都越多。因此在"完全不做合并"的极端下，读放大与空间放大同时恶化——这也是为什么"省 I/O 就少合并"不是一条可长期成立的路。
+
+### 6.3 论证：单一资源下的零和
+
+把三个量放在同一个资源约束下看，结论会变得很直接。RegionServer 的可用资源是磁盘带宽 `B`、网络带宽 `N`、CPU `C`（合并要解码、过滤、重新编码）与 BlockCache 容量 `M`。用户写入速率 `W` 给定之后，合并可支配的带宽是 `min(B, N) − 用户读写占用`，这是一个常数。于是：
+
+- 提高合并频率或扩大每次合并的输入集合，能让读放大下降，但 `ΣC` 上升，写放大上升，并且挤占用户读写的带宽，把延迟推高；
+- 降低合并频率，写放大下降、带宽让给业务，但文件数上行，读放大与空间放大同时上行；
+- 想同时压住读放大和空间放大，就必须做"输入闭合的合并"，而这是写放大的最大值所在，并且带来临时空间的峰值。
+
+也就是说，在资源给定的平面上，三个目标构成的可行域是一条边界（**帕累托前沿**），前沿上的每一个点都意味着牺牲了某些东西；**三种放大不能同时最优**，只存在"对当前业务最重要那一个指标最优"的选择。
+
+> [!info] 边界要记清
+> 三角关系描述的是"资源给定"时的取舍；改变硬件、数据模型或策略，推动的是整条前沿，而不是在前沿的某一点上做微调。前者是架构决策，后者是参数调整，两者能换来的收益量级不同。
+
+这个命题有一个重要的补充：前沿本身可以被外力推动。带宽翻倍、CPU 更宽裕、开启条带策略把大 Major 摊薄、或者数据本身具备短 TTL 顺序写特性（FIFO 可以让写放大趋近零），都会让整条前沿向外移动。所以真正的调优不是"在旧前沿上找点"，而是"先看能不能把前沿推出去，再在前沿上选点"——前者靠硬件与数据建模，后者才是参数。
+
+### 6.4 取舍表与三份算例
+
+| 业务诉求 | 优先压低 | 必然付出的代价 | 典型手段 | 风险点 |
+| :--- | :--- | :--- | :--- | :--- |
+| 点查延迟敏感（在线交易、画像查询） | 读放大 | 写放大升高，后台 I/O 占比变大 | 较小 `ratio`、较小 `blockingStoreFiles`、更勤的 Minor | 合并与业务抢带宽，P99 抖动 |
+| 写入吞吐优先（日志、IoT 采集） | 写放大 | 读放大与空间放大升高 | 大 `blockingStoreFiles`、FIFO、降低 Major 频率 | 文件数高位运行，故障恢复变慢 |
+| 存储成本敏感（冷数据、归档） | 空间放大 | 写放大出现周期性尖峰 | 定期 Major、编码压缩、TTL | Major 期间临时空间翻倍 |
+| 恢复时间敏感（大规模集群运维） | 恢复成本 | 需要更多合并、更多 I/O | 控制文件数上限、避免超大 Region | 参数收紧后合并压力上升 |
+
+三份算例把上面的定性关系落成数字，全部按示例推算给出，只用于说明量级关系，不代表任何真实集群的基准：
+
+**算例一（写放大）**：某 Store 稳态每天产生 48 个 128MB 的 HFile，即用户写入 `W = 6GB/天`。在 `compaction.min = 3`、`ratio = 1.2` 的默认配置下，文件大致按三级合并收敛到接近 Region 上限的体积，一条记录平均被重写约 4 次（三次 Minor 加一次 Major），于是 `ΣC ≈ 4 × 6GB = 24GB`，写放大约 4 倍；若 HDFS 副本数为 3，网络侧写入量约为 72GB/天。把 `ratio` 调大到 1.8，合并更积极，层数可能降到 3 层，但每次合并的输入更大，写放大未必下降——这正是"调参要算总账"的原因。
+
+**算例二（读放大）**：某 Store 有 120 个 HFile，一次点查按 Bloom 过滤后平均命中 3 个文件，需要建立 120 个 Scanner、归并 120 路输入；合并到 8 个文件后，Bloom 命中仍是 2 到 3 个，但 Scanner 数与堆规模降了一个数量级，单次点查的 CPU 与打开 Reader 的开销随之下降。读放大的改善主要发生在"归并路数"这一项上，而不是磁盘读取次数上——这也是为什么文件数从 120 降到 8 的体感远大于从 8 降到 1。
+
+**算例三（空间回收与 Major 时间）**：某 Store 物理占用 50GB，其中约 30% 是被墓碑覆盖的旧数据与过期版本，逻辑可见数据约 35GB。执行一次 Major：读 50GB，写约 35GB，若限速设为 100MB/s，仅写侧就需要约 350 秒，加上读侧与三副本 pipeline，端到端通常在十几分钟到一个小时量级（示例推算，取决于文件数、Cell 大小与磁盘并发）。完成后空间放大从约 1.43 回落到接近 1，但 `DFS Used` 的台阶要等归档清理与 HDFS 回收之后才出现。
 
 ---
 
-## 第 5 章 Compaction 策略详解
+## 第 7 章 并发控制、限速与"跟不上"的判据
 
-### 5.1 ExploringCompactionPolicy（默认策略）
+### 7.1 两个线程池与一条分界线
 
-如前文所述，`ExploringCompactionPolicy` 是 HBase 0.96+ 的默认 Minor Compaction 策略。
+RegionServer 的合并请求由 `CompactSplit` 分派到两个线程池：小合并池 `hbase.regionserver.thread.compaction.small`（默认 1 个线程）与大合并池 `hbase.regionserver.thread.compaction.large`（默认 1 个线程）。分界依据是本次合并的输入总大小与 `hbase.regionserver.thread.compaction.throttle` 的比较——超过阈值视为大合并，走 large 池；否则走 small 池。阈值的默认值不是一个固定字节数，而是由 `hbase.hregion.memstore.flush.size` 与 `hbase.hstore.compaction.min` 推导出来的量级，因此改 Flush 大小时它会跟着变（具体推导系数与默认取值以对应版本的 `hbase-default.xml` 为准）。
 
-**核心参数：**
+分成两个池的用意是隔离：一次大合并（尤其 Major）会长时间占用线程与带宽，如果和日常小合并挤在一个池里，小合并就得排队，文件数会在排队期间继续上涨。不过默认各 1 个线程意味着**默认配置下合并是串行的**，这是"合并跟不上"最常见的结构性原因，而不是某个参数配错了。
 
-```xml
-<!-- 最少参与合并的 HFile 数量，低于此数量不触发 Compaction -->
-<property>
-  <name>hbase.hstore.compaction.min</name>
-  <value>3</value>
-</property>
+### 7.2 `blockingStoreFiles` 的阻塞语义
 
-<!-- 最多参与合并的 HFile 数量，单次合并的 I/O 上限 -->
-<property>
-  <name>hbase.hstore.compaction.max</name>
-  <value>10</value>
-</property>
+`hbase.hstore.blockingStoreFiles` 默认 16，是 HBase 防止文件数失控的最后一道闸：当某个 Store 的文件数超过这个值，Region 会**阻塞写入**，同时立即为该 Store 提交一次高优先级的合并请求（不再等后台检查周期），让合并尽快把文件数压下去。阻塞不是无限期的，`hbase.hstore.blockingWaitTime`（默认 90000 毫秒）到期后，即使合并还没完成也会放行写入——这是一个明确的取舍：宁可让文件数继续增长，也不能让写入永久停摆。
 
-<!-- 文件大小比例因子，越大选择越激进（更多文件参与合并） -->
-<property>
-  <name>hbase.hstore.compaction.ratio</name>
-  <value>1.2</value>
-</property>
+> [!warning] 阻塞是保护机制在兜底
+> 把 `hbase.hstore.blockingStoreFiles` 调高可以让告警消失，但文件数、读放大与 Region 打开时间会一起变差。判断该不该动这个参数，先看合并能力是否真的提升了，而不是看告警是否安静。
 
-<!-- 小文件无论大小都参与合并（防止小文件永远不被合并） -->
-<property>
-  <name>hbase.hstore.compaction.min.size</name>
-  <value>134217728</value>  <!-- 128MB -->
-</property>
+这个"放行"带来的后果要提前想清楚。阻塞期间客户端的写入请求会变慢甚至超时，放行之后又会有一批积压写入涌入，Flush 频率随之上升，产生更多 HFile，把阻塞再次触发。所以在监控上，阻塞事件的次数比阻塞的时长更有诊断价值：偶发一次是保护机制在工作，周期性反复出现则说明合并能力与写入速率已经结构性失衡。
 
-<!-- 大文件排除在 Minor Compaction 之外（留给 Major Compaction） -->
-<property>
-  <name>hbase.hstore.compaction.max.size</name>
-  <value>9223372036854775807</value>  <!-- Long.MAX_VALUE，即不限制 -->
-</property>
+### 7.3 单次合并的粒度与校验
+
+两个不那么显眼但会影响稳定性的参数：
+
+- `hbase.hstore.compaction.kv.max`（默认 10）：每一次从归并流中取出处理的 Cell 数量上限。它存在的意义是控制单次处理的内存驻留，防止宽行或大 Cell 场景下把过多数据同时拉进内存。调大能减少批处理开销、提升单次合并吞吐，代价是每批的内存峰值上升；在 Cell 很大（数百 KB）的表上，这个值应该保持保守。
+- `hbase.regionserver.compaction.verify.checksums`（默认 false）：开启后合并时会逐块校验 checksum，把 HDFS 层的静默损坏在合并阶段暴露出来。代价是额外的 CPU 与读开销，适合放在低峰的 Major 上作为定期体检，而不是给所有 Minor 打开。
+
+### 7.4 限速器：把合并的胃口调成可接受
+
+HBase 2.x 默认的吞吐控制器是 `PressureAwareCompactionThroughputController`，它按"压力"调节合并速度：文件数在正常范围时按 `hbase.hstore.compaction.throughput.lower.bound`（默认 50MB/s）限速，尽量少打扰在线业务；文件数逼近 `blockingStoreFiles` 时提升到 `hbase.hstore.compaction.throughput.higher.bound`（默认 100MB/s），优先避免写入阻塞。这种"平时慢、紧急快"的自适应，比固定限速更贴合真实负载。
+
+需要注意限速是按 RegionServer 汇总的，不是按 Store 或按线程。也就是说，一个有 200 个 Region 的 RegionServer 上，所有合并共享这 50 到 100MB/s 的额度；Region 越密集，单个 Region 分到的合并速度越慢，"跟不上"的风险越集中。
+
+### 7.5 配置的代价对照
+
+| 配置项 | 默认值 | 调大的代价 | 调小的代价 |
+| :--- | :--- | :--- | :--- |
+| `hbase.regionserver.thread.compaction.small` | 1 | 并发小合并变多，随机 I/O 与上下文切换上升，挤占用户带宽 | 小合并排队，文件数下降慢，易触发阻塞 |
+| `hbase.regionserver.thread.compaction.large` | 1 | 多个大合并并发，HDFS 带宽被摊薄，单次合并耗时变长 | 大合并串行，Major 排队时间变长 |
+| `hbase.hstore.blockingStoreFiles` | 16 | 阻塞更难触发，但文件数上限抬高，读放大与恢复成本上升 | 阻塞频繁，写入延迟抖动，业务侧超时增多 |
+| `hbase.hstore.blockingWaitTime` | 90000 | 写入可能长时间卡住，客户端超时先于放行发生 | 保护形同虚设，文件数在放行后继续失控 |
+| `hbase.hstore.compaction.ratio` | 1.2 | 单次合并更大，写放大上升，合并耗时变长 | 更挑食，小文件滞留，读放大偏高 |
+| `hbase.hstore.compaction.max` | 10 | 单次 I/O 变大，大合并更容易超时 | 文件数收敛慢，极端分布下难以降到阈值以下 |
+| `hbase.hstore.compaction.throughput.lower.bound` | 50MB/s | 平时合并更激进，业务 I/O 被挤占 | 平时合并过慢，文件数缓慢上行 |
+| `hbase.hstore.compaction.throughput.higher.bound` | 100MB/s | 紧急时冲击更大，可能出现 I/O 尖峰 | 紧急时救不回来，阻塞时间变长 |
+
+### 7.6 "Compaction 跟不上"的判据
+
+笔者不建议靠感觉判断这件事，用四组信号交叉验证更可靠：
+
+| 信号 | 观测位置 | 判据 | 说明 |
+| :--- | :--- | :--- | :--- |
+| 合并队列长度 | hadoop-metrics2 的 `compactionQueueSize`（`Hadoop:service=HBase,name=RegionServer,sub=Server`），部分监控模板把它记作 `hbase.regionserver.compactionQueueSize` | 持续大于线程数的数倍且不回落 | 请求入队速度长期高于出队速度，是"跟不上"最直接的证据 |
+| 队列构成 | RegionServer 日志与 Web UI 中的合并请求记录 | 大合并请求占比高，单次大合并耗时显著长于平均 | 大合并占住 large 池，小合并请求全部排在后面 |
+| 写入阻塞事件 | 日志中的 `Blocking updates` 与 `blockingWaitTime` 相关记录 | 按小时统计的阻塞次数呈上升趋势 | 偶发是保护，周期性出现是失衡 |
+| 文件数分布 | 每个 Store 的 `storeFileCount` 的 P95 与最大值 | P95 接近 `blockingStoreFiles`，最大值长期贴在阈值上 | 说明合并能力刚好压在临界点，没有余量 |
+
+再补一个常被忽略的间接信号：`flushQueueSize` 与 Flush 耗时的同步上升。合并抢走带宽会让 Flush 变慢，Flush 变慢让 MemStore 更早触顶，于是 Flush 更频繁、产生更多 HFile——这条正反馈一旦形成，单看 compaction 指标会以为是"合并不够快"，实际是"合并把 Flush 拖慢了"。观测顺序应当是：先看 Flush 队列与耗时，再看合并且队列，最后才看文件数。
+
+---
+
+## 第 8 章 编码与压缩：Compaction 的 CPU 账
+
+### 8.1 合并是一次重新编码
+
+HFile 里的数据块不是裸 Cell，而是按列族的 `DATA_BLOCK_ENCODING` 编码过的（`PREFIX`、`DIFF`、`FAST_DIFF`、`ROW_INDEX_V1` 等）。合并时数据被解码成 Cell 流、过滤、再按当前列族配置重新编码写出。这就是为什么 Compaction 既是 I/O 密集也是 CPU 密集：`FAST_DIFF` 这类前缀编码在编码阶段要做前缀比较与偏移重写，`ROW_INDEX_V1` 还要维护行级索引结构，Cell 越小、版本越多，单位字节的编码开销越高。
+
+由此得到一个与运维直接相关的结论：**旧文件不会自动重编码**。已有 HFile 的头部记录了它自己被编码与压缩的方式，读路径能正确解码，所以改配置不会读错数据；但要让新配置覆盖整个 Store，必须等这些文件被合并重写，通常需要一次 Major。这也解释了为什么"改了压缩算法，磁盘没降"是正常现象，而不是配置没生效。
+
+### 8.2 压缩算法与合并的交互
+
+`COMPRESSION` 决定 Flush 时的输出压缩，`COMPACTION_COMPRESSION` 决定合并输出时的压缩（可以不同，例如日常 Minor 不压缩以减少 CPU，Major 时才压）。这与编码是两笔独立的 CPU 账：压缩比越高，读时解压的 CPU 越多；合并时解压旧块再压缩新块，等于把 CPU 开销又付一遍。在合并高峰期，压缩算法选得重（如 GZ 一类高压缩比算法）会显著拉长单次合并时间，进而延长队列。
+
+### 8.3 该不该开压缩、开哪种编码的判据
+
+| 场景特征 | 建议 | 依据 | 代价 |
+| :--- | :--- | :--- | :--- |
+| 写入量极大、磁盘紧张、读以点查为主 | 开轻量压缩（SNAPPY 一类），编码用 `FAST_DIFF` | 顺序写场景压缩收益高，点查不需要全解压 | 合并时多一次解压与压缩的 CPU |
+| CPU 已接近饱和、延迟敏感 | 压缩保持不变或降级，编码保持 `FAST_DIFF` | 合并与业务争 CPU 时，压缩是放大器 | 磁盘占用上升，I/O 传输量变大 |
+| Cell 很小、列族列数多 | 编码用 `PREFIX` 或 `ROW_INDEX_V1` | 前缀重复率高，编码收益明显 | 编码 CPU 上升，合并变慢 |
+| 需要定期体检数据完整性 | 低峰 Major 时开 `verify.checksums` | 把静默损坏暴露在可控窗口 | 单次 Major 时间变长 |
+| 大 Cell、宽行 | 压缩可以开，编码保持简单 | 大 Cell 的编码收益有限，CPU 花在压缩上更划算 | 单块内存占用高，注意 `kv.max` |
+
+判据的核心是资源归属：如果 RegionServer 的 CPU 有富余而磁盘是瓶颈，压缩与编码都值得开；反过来，CPU 已经被合并与业务读吃满时，再加重压缩等于给本已排队的合并再加一道工序。
+
+---
+
+## 第 9 章 Compaction 与 Region 分裂的相互牵制
+
+### 9.1 分裂由文件总大小触发
+
+Region 分裂的触发条件是 Store 的文件总大小超过 `hbase.hregion.max.filesize`（2.x 默认 10GB），并带 `hbase.hregion.max.filesize.jitter` 的抖动，避免同一批 Region 同时分裂。注意它看的是文件总大小，不是文件数：一个文件数很多但总体积不大的 Region 不会因为"文件太多"而分裂，而一个只有两个超大文件的 Region 到了 10GB 就会分裂。这条规则把"文件数问题"和"容量问题"分成了两条独立的演化线，也意味着分裂并不能缓解文件数过多导致的读放大。
+
+在 2.x 里，分裂由 Master 侧的 ProcedureV2 驱动（`SplitTableRegionProcedure`），RegionServer 执行实际的拆分与元数据更新，这与 1.x 由 RegionServer 自主发起有本质区别：分裂变成了一次可追踪、可重试的分布式过程，也因此会与合并争抢同一批 Store 的锁。
+
+### 9.2 分裂留下的是"引用文件"
+
+分裂并不是把父 Region 的 HFile 复制成两份——那代价太大。实际做法是：父 Region 关闭后，两个子 Region 各自拿到一组指向父文件的引用文件（Reference File），上半区是 top reference，下半区是 bottom reference，语义是"父文件里属于我这个区间的那一段"。读取时，引用文件所在的 Scanner 会按引用类型做区间裁剪：top 引用跳过起始之前的部分，bottom 引用在越过终点后停止。引用文件的产生与消解可以画成一条单向路径：
+
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+flowchart LR
+    P["父 Region<br/>一个 10GB HFile"] --> SP["split"]
+    SP --> A["子 Region A<br/>top reference"]
+    SP --> B["子 Region B<br/>bottom reference"]
+    A --> CA["一次覆盖它的合并后<br/>数据实体化到本地文件"]
+    B --> CB["一次覆盖它的合并后<br/>数据实体化到本地文件"]
+    CA --> RA["引用消失，读路径回到普通文件"]
+    CB --> RB["引用消失，读路径回到普通文件"]
 ```
 
-**`compaction.min.size` 参数的工程含义：**
+### 9.3 引用要等合并才真正拆开
 
-配置为 128MB 意味着：所有小于 128MB 的 HFile，无论其大小是否满足 Ratio 条件，都会被选入合并候选集合。这解决了这样一个问题：假设有一个 128MB 的文件和一个 1KB 的文件，按 Ratio 规则，1KB 的文件不可能满足 `1KB × 1.2 >= 128MB`，永远不会被合并——但它会让 HFile 数量增加，影响读取性能。`min.size` 确保所有小文件都被及时合并。
+引用文件在磁盘上并不占额外空间（它只是指向父文件的一段），但它带来两个运维后果：其一，读路径要多处理一层引用语义，半引用还会让 Scanner 跳过一段数据，这是分裂后短期内读性能不如预期的原因之一；其二，只有一次覆盖到它的合并发生之后，数据才会被真正复制到子 Region 自己的文件里，引用随之消失。
 
-### 5.2 FIFOCompactionPolicy：TTL 场景的专用策略
+因此"分裂完成"与"分裂生效"是两件事。判断引用是否还在，可以看 Region 目录下的文件是否带引用标记，也可以看 Store 的 `storeFileCount` 与实际数据量是否明显不匹配（文件数不多、单文件很大、总量却只有一半）。如果一个大表在短时间内连续分裂多次，引用会层层叠加，读放大与合并复杂度都会上升——这也是"分裂不是越勤越好"的另一面：分裂把容量压力转成了引用与合并压力。
 
-**`FIFOCompactionPolicy`** 是一种极度简化的策略：它不做真正的合并（不重写 HFile），只是**扫描所有 HFile，删除其中所有数据都已过期（超过列族 TTL）的文件**。
-
-**适用场景：**
-- 数据有明确的、较短的 TTL（如时序数据保留 7 天、会话缓存保留 1 小时）
-- 数据按时间顺序写入，老 HFile 中的数据整体比新 HFile 中的数据更早过期
-- 读取模式是点查或短时间范围查询，不需要对历史数据做全表扫描
-
-**FIFO 策略的工程价值：**
-
-对于 TTL 数据，传统 Compaction（读旧文件 + 写新文件）会产生大量 I/O——即使最终只是为了删掉过期数据。`FIFOCompactionPolicy` 完全跳过合并，直接删除整个过期 HFile（HDFS 文件删除是 O(1) 操作），**将写放大降低到接近零**。
-
-代价是：它不合并文件，因此 HFile 数量持续增长（每次 Flush 产生一个新文件，FIFO 策略只删除过期文件，不合并现有文件）。但只要 TTL 足够短、数据流速恒定，删除速度可以与产生速度持平。
-
-**配置示例（适合日志类短 TTL 表）：**
-
-```java
-// Java API 设置列族策略
-TableDescriptorBuilder tableBuilder = TableDescriptorBuilder.newBuilder(tableName);
-ColumnFamilyDescriptor cf = ColumnFamilyDescriptorBuilder
-    .newBuilder(Bytes.toBytes("log"))
-    .setTimeToLive(86400)  // TTL = 1 天
-    .setCompactionCompressionType(Compression.Algorithm.SNAPPY)
-    .build();
-
-// 使用 FIFO Compaction 策略
-tableBuilder.setCompactionPolicy(FIFOCompactionPolicy.class.getName());
-```
-
-### 5.3 StripeCompactionPolicy：为大 Region 优化
-
-**`StripeCompactionPolicy`** 是为解决 Major Compaction 对大 Region 的 I/O 冲击问题而设计的。
-
-**背景问题：**
-
-传统 Major Compaction 对大 Region（如 50GB）的操作是"一次性合并所有文件"，I/O 极大，期间对业务影响显著。能不能将大 Region 的 Compaction 切成更小的单元，每次只合并一部分数据？
-
-**Stripe 的思路：**
-
-`StripeCompactionPolicy` 将一个 Store 的 RowKey 空间按字典序切分为若干"条带（Stripe）"，每个 Stripe 包含一段 RowKey 范围的数据。每次 Compaction 只合并同一个 Stripe 内的 HFile，I/O 量大幅降低。
-
-类似于将一个 50GB 的 Region 内部切成 10 个 5GB 的"逻辑子 Region"，每次只对其中一个做 Compaction——等效于 Major Compaction 被切成 10 次小操作，分散了 I/O 冲击。
-
-**适用场景：**
-- Region 大小 > 2GB 且不能频繁分裂的场景
-- RowKey 分布比较均匀（能合理地按字典序分 Stripe）
-- 希望彻底避免大 I/O 的 Major Compaction 事件
-
-**局限性：**
-- RowKey 分布极度不均匀时，Stripe 大小差异大，效果差
-- 配置复杂，需要对 RowKey 分布有充分了解
-- 目前生产使用较少，成熟度不如默认策略
-
-### 5.4 四种策略的横向对比
-
-| 策略 | 合并方式 | 写放大 | 读放大 | 适用场景 |
-|------|---------|--------|--------|---------|
-| **ExploringCompaction** | 选小文件合并 | 中 | 中 | 通用，适合大多数场景 |
-| **RatioBased**（旧版本）| 贪心选文件合并 | 中 | 中偏高 | 已基本弃用 |
-| **FIFO** | 不合并，只删过期文件 | 极低 | 高（随文件增多） | 短 TTL 的时序/日志数据 |
-| **Stripe** | 按 RowKey 段合并 | 中低 | 低 | 大 Region，写入规律，RowKey 均匀 |
+顺带一个容易被忽略的交互：分裂前的 Region 如果正在做 Major，分裂请求会被推迟到合并结束；反过来，分裂刚完成的 Region 上若有大量引用文件，合并选择逻辑会优先把引用纳入候选，否则引用永远不会被消解。两者互为前置，这也是"分裂与合并要放在同一个低峰窗口里安排"的原因。
 
 ---
 
-## 第 6 章 Compaction 对读写延迟的影响与监控
+## 第 10 章 六个故障形态与判据
 
-### 6.1 Compaction 对写入延迟的影响
+按出现频率从高到低，Compaction 相关的故障可以归成六类。每一项都给出可观测的判据与处置方向，日志关键字按片段给出，具体措辞随版本略有差异。
 
-Compaction 与写入路径的竞争点主要是**磁盘 I/O 带宽**。当 Compaction 在高速写入磁盘时，RegionServer 的 Flush 操作（将 MemStore 写入 HFile）需要同样的 HDFS I/O 带宽。两者竞争导致 Flush 变慢，MemStore 内存压力上升，最终可能触发写入阻塞。
+| 故障形态 | 典型日志或指标 | 判据 | 处置方向 |
+| :--- | :--- | :--- | :--- |
+| `Too many store files` | 日志中的 store 文件数告警、`storeFileCount` 持续上行 | 单个 Store 文件数长期高于 `compaction.min` 的数倍且不回落 | 查合并线程是否被大合并占满、查 Flush 是否过频、必要时临时提高合并线程 |
+| `Blocking updates` | 日志中的阻塞记录、写入延迟曲线出现平台 | 阻塞按小时重复出现，且 `blockingWaitTime` 到期放行后才恢复 | 加合并能力而不是抬阈值；同时评估 Region 数量与单机 Region 密度 |
+| Compaction 队列堆积 | `compactionQueueSize` 持续高于线程数数倍 | 队列不回落，且大合并请求占比高 | 拆分大 Region、限制并发大合并、评估是否该用条带策略 |
+| Major 长时间不完成 | `lastMajorCompactionTs` 长期不更新、Major 请求在队列中挂住 | 单次 Major 超过预定窗口仍未更新完成时间 | 降低单次 Major 的数据量（分表、条带）、核对限速是否过低、查是否有 Region 迁移干扰 |
+| `Compaction failed` | 日志中的合并失败记录与异常栈 | 同一 Store 反复失败，或合并后 HFile 校验异常 | 查 DataNode 磁盘与网络、查 checksum 校验结果、必要时触发一次带校验的 Major |
+| 磁盘空间突增 | `DFS Used` 阶跃上升，且与合并时间相关 | 合并窗口内占用上涨接近输入文件总大小 | 按 1.5 倍预留磁盘、限制同时进行的合并数、把 Major 排到低峰 |
 
-**量化感知方法：**
+笔者把每一类都展开两句。`Too many store files` 通常不是参数问题而是能力问题：合并线程数、限速、单机 Region 密度三者之一不足以匹配写入速率；`Blocking updates` 是它的下游症状，先出现阻塞说明文件数已经越过了阈值，处置顺序应当是"提升合并吞吐、降低 Flush 频率、最后才考虑调大阈值"。队列堆积往往由大 Region 引起：一次 50GB 的 Major 会把 large 池占住几十分钟到小时级，期间所有需要 large 池的合并全部排队，这条因果链在监控上看是"队列长"，在根因上是"Region 太大"。
 
-通过监控以下指标来判断 Compaction 是否影响了写入：
-- `regionserver.flushQueueSize`：Flush 队列积压数量，如果持续增大，说明 Flush 跟不上写入速度
-- `regionserver.compactionQueueSize`：Compaction 队列积压，积压过大说明 Compaction 跟不上 Flush 速度
-- `regionserver.storeFileCount`：Store 下 HFile 数量，持续增长说明 Compaction 速度不够
+`Compaction failed` 容易被当成 HBase 的 bug，实际多数来自底层：DataNode 短暂不可用导致读失败、checksum 校验失败、合并期间 RegionServer 被重启导致请求中断（重启后 Region 打开时会重新检查文件数，通常能自愈）。处置的第一步是确认失败是否可重现，第二步是查是否有 HDFS 层的副本问题，第三步才是调整合并参数。
 
-### 6.2 Compaction 对读取延迟的影响
-
-Compaction 对读取的影响有正反两面：
-
-**正面影响（长期）**：减少 HFile 数量，降低读取时需要扫描的文件数，BlockCache 中的有效数据比例提高，读取延迟长期下降。
-
-**负面影响（短期）**：
-- **BlockCache 抖动**：Compaction 生成的新 HFile 的 INDEX Block 和 BLOOM Block 会被加载到 BlockCache，可能驱逐原来缓存的热点 DATA Block，导致短期内 BlockCache 命中率下降
-- **磁盘 I/O 竞争**：Compaction 读取旧 HFile 的同时，读取操作也在读 HFile，两者竞争 HDFS 读取带宽
-- **RegionScanner 迭代中断**：一个正在执行的 Scan 如果跨越了 Compaction 的发生时刻（新文件替换旧文件），RegionServer 需要处理"文件已被替换"的情况，可能导致 Scan 短暂重试
-
-### 6.3 关键监控指标与健康基线
-
-| 指标 | 健康范围 | 超出时的意义 |
-|------|---------|------------|
-| `storeFileCount`（每 Store）| < 5 | 5~10 需关注，> 10 需立即触发 Compaction |
-| `compactionQueueSize` | < 5 | 持续增长说明 Compaction 线程不足 |
-| `majorCompactionTime` | < 1 小时/次 | 超过 2 小时说明 Region 过大，需要分裂 |
-| `blockCacheHitPercent` | > 90% | Compaction 期间短暂下降是正常的 |
-| `writtenBytes`（Compaction）| 随负载变化 | 异常升高说明 Compaction 进入死循环 |
+磁盘突增是最容易误判的一类：它看起来像"泄露"，实质是合并的**临时空间**需求——合并期间新旧文件并存，峰值约为输入文件总大小。一个按 70% 使用率运行的集群，遇到一次 50GB 的 Major 就可能把磁盘打到水位以上。这类问题的正确答案在容量规划里，而不是在合并参数里。
 
 ---
 
-## 第 7 章 Compaction 与 Region 大小的关系
+## 第 11 章 三个反例
 
-### 7.1 Region 大小决定了 Major Compaction 的代价
+### 11.1 开着自动 Major 上生产
 
-一个 Region 的 HFile 总大小直接决定了 Major Compaction 的 I/O 代价。这是 HBase 控制 Region 大小的重要动机之一：
+第一种反例是把默认配置直接带上生产，7 天定时 Major 保留着。它的问题不是"Major 有害"，而是触发时刻与负载无关：抖动只打散了 Region 之间的同步，没有改变"高峰也可能轮到 Major"这件事。一旦某天高峰撞上几张大表的 Major，表现就是写入延迟整体抬升、RegionServer 带宽打满、队列堆积，而排查者往往先去怀疑写入链路与 GC。
 
-- **Region 越大**：Major Compaction 的 I/O 量越大，持续时间越长，对业务影响越大
-- **Region 越小**：Major Compaction 代价小，但 Region 数量多，管理开销大，HMaster 负担重
+更隐蔽的版本是"半关"：把 `hbase.hregion.majorcompaction` 设成 0，但没有建轮转机制与完成度监控，于是 Major 从"定时失控"变成"永远不做"。半年前删掉的数据还在盘上，空间放大一路爬升，读放大也随版本堆积变差，直到某次容量告警才被发现。
 
-HBase 默认的 Region 分裂阈值（`hbase.hregion.max.filesize`，默认 10GB）正是在这两者之间的折中选择。生产中，根据集群规模和业务场景，Region 大小通常在 5~20GB 之间调整。
+### 11.2 把 `compactionThreshold` 调得很大
 
-### 7.2 预分区减少 Compaction 压力
+第二种反例的动机通常是"合并太频繁，占用 I/O"，于是把 `hbase.hstore.compactionThreshold` 从 3 调到 10 甚至 20。直觉上是"少合几次省点带宽"，实际效果相反：文件数在高位运行，读放大居高不下；每次合并启动时输入文件更多，单次 I/O 更大，反而更容易在高峰撞上带宽墙；更麻烦的是文件数长期贴着 `blockingStoreFiles`，稳定性余量被吃掉。
 
-在第 03 篇中提到了预分区（Pre-splitting）。预分区不仅避免了热点 Region，还能从一开始就将数据均匀分布到多个 Region，使得每个 Region 的数据量更小、Compaction 更轻量。
+正确的方向是"降低每次合并的成本"而不是"减少合并次数"：把 `ratio` 调小、把 `max` 调小、用限速把合并摊到全天，让合并变得"细水长流"；确实需要少合并的场景（短 TTL 顺序写）应当换 FIFO 策略，而不是靠抬高阈值硬扛。
 
-对于已知数据量和 RowKey 分布的表，在建表时通过预分区设置合理的初始 Region 数量和 Startkey，是减少后期 Compaction 压力的主动手段。
+### 11.3 调大 `blockingStoreFiles` 掩盖问题
+
+第三种反例最危险，因为它在短期内"有效"：把 `blockingStoreFiles` 从 16 调到 200，阻塞告警立刻消失，延迟曲线也变好看了。但阻塞本身就是保护机制，它用"写入变慢"换"文件数不失控"；把阈值抬高等于拆掉这道闸，让文件数继续涨，读放大、合并耗时、Region 打开时间全部随之恶化。
+
+RegionServer 重启时的代价尤其明显：一个 Store 有 200 个文件，Region 打开要逐个校验、加载元数据、重建 Scanner，恢复时间可能从秒级变成分钟级；一次全集群滚动重启，这个差异会放大成小时级的可用性事件。因此 `blockingStoreFiles` 的正确用法是"在合并能力确实提升之后同步微调"，而不是"用来消除告警"。
 
 ---
 
-## 第 8 章 总结：Compaction 是 LSM-Tree 的调控阀
+## 第 12 章 结语
 
-Compaction 在 HBase 的整体架构中扮演着"调控阀"的角色：
+Compaction 值得单独用一篇来讲，是因为它把 LSM 架构的所有代价集中到了一个后台机制上：读放大要它来降，空间放大要它来还，而它自己就是写放大的来源。三种放大共用同一份磁盘与 CPU，因此不存在"三个都调好"的配置，只存在"按业务重要性排序后接受哪种代价"的选择；前面关于 Minor 与 Major 的机制差别，最终都指向这一条——Minor 是在不闭合的输入上做搬运，Major 是在闭合的输入上做删除，前者维持秩序，后者归还空间，两者缺一，系统要么读得慢，要么装得满。
 
-- **写入积极，Compaction 保守**：写入吞吐量极高，文件数量快速增长，读取性能受损。适合批量写入、对读取性能要求不高的离线场景。
+由此也可以看出调优的正确姿态：先看能不能推动前沿（数据模型、TTL、条带、硬件），再在前沿上选点（线程、限速、ratio），最后才是用参数掩盖症状。把 `blockingStoreFiles` 调大、把阈值调大、把限速关掉，都属于把问题往后推的做法，短期指标好看，长期恢复成本更高。
 
-- **写入积极，Compaction 积极**：写入吞吐量高，同时文件数量受控，读取性能良好。但 Compaction 消耗大量 I/O，需要足够的磁盘带宽和线程资源。适合在线 OLTP 场景，需要充足的硬件资源支撑。
+关于 Region 大小与合并代价的关系，还有一层没有展开：分裂策略与合并策略都盯着"文件总大小"，但两者的时间尺度不同，一个以小时计，一个以天计，它们之间的错配才是容量规划里最难调的部分。它的完整拆解在 [[08 HBase Region 分裂与负载均衡——水平扩展的工程底层]]，而把这些判据串成一套可执行诊断流程的，是 [[10 HBase 生产调优实战——从诊断到落地的系统方法论]]。
 
-- **写入保守，Compaction 适中**：通过批量写入（BulkLoad）等手段减少 Flush 频率，配合适度 Compaction，实现低写放大。适合数据仓库类场景，周期性批量写入，实时查询为主。
+---
 
-理解了 Compaction 的三角困境，才能在 HBase 调优时做出正确的参数选择——这将在第 10 篇（生产调优实战）中得到全面应用。
+## 关联篇目与阅读路径
 
-接下来的第 08 篇将讨论 **Region 分裂与负载均衡**：Region 的大小与 Compaction 代价密切相关，而 Region 分裂的时机和策略，直接影响了 Compaction 的长期效果。
+| 篇目 | 与本篇的关系 | 建议阅读时机 |
+| :--- | :--- | :--- |
+| [[04 HBase 存储引擎深度解析——LSM-Tree、MemStore 与 HFile 的设计奥秘]] | HFile 结构、Store 组织与三种放大的结构性来源 | 读本篇第 2、6 章之前 |
+| [[05 HBase 写入链路深度解析——WAL、MemStore Flush 与持久性保证]] | Flush 如何产生 HFile、阈值如何决定文件产生速率 | 读本篇第 7 章之前 |
+| [[06 HBase 读取链路深度解析——BlockCache、Scanner 与多版本合并]] | 读路径如何归并多文件、版本与墓碑在读取侧如何处理 | 读本篇第 3、6 章之前 |
+| [[08 HBase Region 分裂与负载均衡——水平扩展的工程底层]] | 分裂阈值、引用文件与合并的交互 | 读本篇第 9 章之后 |
+| [[10 HBase 生产调优实战——从诊断到落地的系统方法论]] | 把本篇判据组织成诊断流程 | 全篇读完之后 |
+
+---
+
+## 参考资料
+
+1. Apache HBase Reference Guide — Compaction: https://hbase.apache.org/book.html#compaction
+2. Apache HBase 2.5 `hbase-default.xml`（参数默认值来源）: https://github.com/apache/hbase/blob/rel/2.5.0/hbase-common/src/main/resources/hbase-default.xml
+3. `ExploringCompactionPolicy` API 文档: https://hbase.apache.org/2.3/devapidocs/org/apache/hadoop/hbase/regionserver/compactions/ExploringCompactionPolicy.html
+4. Stripe Compaction 设计文档（HBASE-7667）: https://issues.apache.org/jira/browse/HBASE-7667
+5. Chang F., et al. Bigtable: A Distributed Storage System for Structured Data. OSDI 2006: https://research.google/pubs/pub27898/
+6. 深入理解 HBase Compaction 机制: https://cloud.tencent.com/developer/article/1488439
+7. HBase Compaction 参数调优: https://cloud.tencent.com/developer/article/1635417
+8. HBase Compaction 策略解析: https://lihuimintu.github.io/2019/06/06/HBase-Compaction/
 
 ---
 
 > [!note] 思考题
-> 1. Major Compaction 将一个 Region 的所有 HFile 合并成一个，同时清理过期数据、墓碑记录和超出版本数的数据。这个操作的 I/O 代价极高（读出所有数据再写回），在生产环境中通常禁止自动 Major Compaction（`hbase.hregion.majorcompaction=0`），改为在业务低峰期手动触发。如果长期不执行 Major Compaction，会有什么系统性问题逐渐积累？
-> 2. Compaction 策略（`CompactionPolicy`）决定了哪些 HFile 被选中参与 Minor Compaction。默认的 `ExploringCompactionPolicy` 倾向于选择大小相近的 HFile 进行合并。这个策略的背后逻辑是什么？如果大量小 HFile 和少量超大 HFile 并存，这个策略会不会让小 HFile 长期无法被 Compact（因为找不到大小相近的文件）？
-> 3. Compaction 会读取大量 HFile 数据，占用 RegionServer 的磁盘 I/O 和 CPU 资源，与正常读写请求竞争资源，导致读写延迟波动（Compaction 抖动）。HBase 提供了 Compaction 限速（`hbase.regionserver.throughput.controller`）来控制 Compaction 的资源占用。在设计 HBase 集群的容量规划时，应该为 Compaction 预留多少额外的 I/O 带宽？
-
-## 参考资料
-
-- [1] 深入理解 HBase Compaction 机制: https://cloud.tencent.com/developer/article/1488439
-- [2] HBase Compaction 参数调优: https://cloud.tencent.com/developer/article/1635417
-- [3] HBase Compaction 策略解析: https://lihuimintu.github.io/2019/06/06/HBase-Compaction/
-- [4] ExploringCompactionPolicy API: https://hbase.apache.org/2.3/devapidocs/org/apache/hadoop/hbase/regionserver/compactions/ExploringCompactionPolicy.html
-- [5] Apache HBase Reference Guide — Compaction: https://hbase.apache.org/book.html#compaction
-- [6] Stripe Compaction Design Doc: https://issues.apache.org/jira/browse/HBASE-7667
+> 1. 一个 Store 在关闭自动 Major 之后，文件数稳定、读延迟也稳定，但三个月后的一次容量审计发现空间放大到了 2.3。在不做 Major 的前提下，有没有别的手段能把空间放大压回去？FIFO 与条带策略各自在什么条件下成立？
+> 2. Minor 无法清理墓碑的论证依赖"输入集合不闭合"这一点。如果某次 Minor 恰好选中了从最老到最新的全部文件，它是否等价于一次 Major？HBase 的选择逻辑会不会走到这种情形，又为什么不能依赖它？
+> 3. 把 `blockingStoreFiles` 从 16 调到 200 能让告警消失，但会让 RegionServer 重启后的恢复时间显著变长。请估算一个有 200 个 Region、每个 Region 平均 3 个列族的 RegionServer，在两种配置下打开 Region 的文件扫描量差异，并说明这个差异为什么会出现在可用性指标上。
+> 4. 写放大的算例里，一条记录平均被重写 4 次。如果把 Flush 大小从 128MB 调到 32MB，这个次数会怎么变，读放大会怎么变，而 HDFS 网络侧的写入量又会怎么变？
+> 5. 限速器按 RegionServer 汇总额度。当一个 RegionServer 承载 300 个 Region 时，单个 Region 分到的合并速度可能只有几百 KB/s。这种情形下应当调整限速、减少 Region 密度，还是拆集群？请给出你的判断依据。

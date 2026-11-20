@@ -1,8 +1,8 @@
 ---
 title: "08 LSM 派系——Tree、Hash 与 Array"
 date: 2026-10-24
-tags: [LSM-Tree, LevelDB, RocksDB, 存储引擎, 中间件, 读写放大]
-keywords: [Bitcask]
+tags: [LSM-Tree, LevelDB, RocksDB, 存储引擎, 中间件]
+keywords: [Bitcask, 读写放大]
 aliases: []
 ---
 

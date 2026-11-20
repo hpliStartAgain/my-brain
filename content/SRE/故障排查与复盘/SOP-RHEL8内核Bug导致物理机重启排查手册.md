@@ -1,8 +1,9 @@
 ---
 title: "SOP: RHEL8 内核 Bug 导致物理机重启排查手册"
 date: 2026-04-21
-tags: [故障排查]
+tags: [故障排查, 运维, 内核, SRE]
 keywords: [crash, kernel, RHEL8, SOP]
+aliases: ["物理机重启排查 SOP", "RHEL8 内核 Bug 排查手册"]
 category: 运维规范
 severity: P0
 ---
@@ -17,22 +18,19 @@ severity: P0
 
 ## 排查流程图
 
-```
-物理机重启
-    ↓
-① 确认重启时间与类型（30s）
-    ↓
-② 检查 crash dump 是否存在（30s）
-    ↓ 有 crash dump                ↓ 无 crash dump
-③ 提取 panic 关键信息（2min）      跳转附录 A：无 crash dump 排查
-    ↓
-④ 判断是否为已知内核 bug（1min）
-    ↓ 是                           ↓ 否
-⑤ 对照已知 bug 数据库确认根因      ⑥ 深入分析 vmcore
-    ↓                              ↓
-⑦ 制定修复方案（升级/规避）        ⑧ 输出分析报告
-    ↓
-⑨ 验证修复并关闭
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+flowchart TD
+    P["物理机重启"] --> S1["① 确认重启时间与类型（30s）"]
+    S1 --> S2["② 检查 crash dump 是否存在（30s）"]
+    S2 -->|有 crash dump| S3["③ 提取 panic 关键信息（2min）"]
+    S2 -->|无 crash dump| A["跳转附录 A：无 crash dump 排查"]
+    S3 --> S4["④ 判断是否为已知内核 bug（1min）"]
+    S4 -->|是| S5["⑤ 对照已知 bug 数据库确认根因"]
+    S4 -->|否| S6["⑥ 深入分析 vmcore"]
+    S5 --> S7["⑦ 制定修复方案（升级/规避）"]
+    S6 --> S8["⑧ 输出分析报告"]
+    S7 --> S9["⑨ 验证修复并关闭"]
 ```
 
 ---
@@ -348,7 +346,7 @@ ansible all -m shell -a "journalctl -k --since '1 week ago' | grep 'refcount_t o
 
 可观测性方案（Loki/Prometheus 告警规则、一键巡检脚本）已整合至本次故障分析报告，参见：
 
-→ [RHEL8内核memcg-refcount溢出导致物理机重启故障报告](RHEL8内核memcg-refcount溢出导致物理机重启故障报告.md#可观测与告警)
+→ [[RHEL8内核memcg-refcount溢出导致物理机重启故障报告#可观测与告警|RHEL8内核memcg-refcount溢出导致物理机重启故障报告]]
 
 ---
 
@@ -360,9 +358,12 @@ ansible all -m shell -a "journalctl -k --since '1 week ago' | grep 'refcount_t o
 | Red Hat Bugzilla | https://bugzilla.redhat.com/ |
 | RHEL 内核发布历史 | https://access.redhat.com/articles/3078 |
 | Kdump 配置文档 | https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/8/html/managing_monitoring_and_updating_the_kernel/configuring-kdump |
-| 本次故障分析报告 | [RHEL8内核memcg-refcount溢出导致物理机重启故障报告](RHEL8内核memcg-refcount溢出导致物理机重启故障报告.md)（含可观测性与告警配置） |
+| 本次故障分析报告 | [[RHEL8内核memcg-refcount溢出导致物理机重启故障报告]]（含可观测性与告警配置） |
 
 ---
 
 **维护人**：SRE 团队  
 **最后更新**：2026-04-21
+
+> [!warning] 待补充
+> 本文只覆盖排查步骤与判据，缺少操作侧的回滚约定：内核升级后若出现新问题如何回退到旧内核、临时规避措施（关闭 THP、`vm.swappiness`）在何时撤销。补写时请依据实际保留的旧内核包与变更流程核实，不要凭空补。

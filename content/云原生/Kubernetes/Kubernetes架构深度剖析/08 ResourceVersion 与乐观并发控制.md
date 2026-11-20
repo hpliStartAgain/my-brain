@@ -1,8 +1,8 @@
 ---
 title: "ResourceVersion 与乐观并发控制"
 date: 2026-07-17
-tags: [Kubernetes, etcd, CAS]
-keywords: [ResourceVersion, 乐观并发控制, ModRevision, List-Watch, 冲突重试]
+tags: [Kubernetes, etcd]
+keywords: [ResourceVersion, 乐观并发控制, ModRevision, List-Watch, 冲突重试, CAS]
 aliases: [ResourceVersion, 乐观并发控制, K8s 并发, CAS, 冲突重试, generation, observedGeneration]
 ---
 

@@ -1,581 +1,513 @@
 ---
-title: HBase 的诞生——为什么 HDFS 不够用，列族存储的设计哲学
-date: 2026-02-27
-tags: [HBase, HDFS]
-keywords: [BigTable, NoSQL, 分布式数据库, 列族存储]
-aliases:
-  - HBase诞生
-  - BigTable开源实现
+title: "HBase 的诞生——为什么 HDFS 不够用，列族存储的设计哲学"
+date: 2026-11-19
+tags: [HBase, LSM-Tree, HDFS]
+keywords: [BigTable, CAP, 列族, Region, RegionAssignment, ProcedureV2, CheckAndMutate]
+aliases: []
 ---
 
 # HBase 的诞生——为什么 HDFS 不够用，列族存储的设计哲学
 
 **摘要：**
 
-本文从 Google 2006 年发表的 BigTable 论文出发，深入剖析 HBase 诞生的历史必然性。通过分析互联网数据爆炸时代关系型数据库的扩展困境、HDFS 的随机读写盲区，以及半结构化数据对存储模型的全新要求，逐步推导出"列族存储"这一设计哲学的内在逻辑。文章重点回答三个核心问题：大规模互联网数据究竟遇到了什么样的存储危机？为什么 HDFS + MapReduce 的批处理模型无法解决随机访问问题？列族模型相较于行存储、纯列存储，在工程实践上做了哪些深思熟虑的取舍？理解这些问题，是读懂 HBase 所有后续设计决策的根基。
+HBase 常被描述成"跑在 HDFS 上的数据库"，这个说法掩盖了它真正的来历。它并不是在 HDFS 之上补了一个索引层，而是把 HDFS 的三条物理限制逐条翻译成了三笔必须偿还的账：HDFS 只支持追加，于是 HBase 用 MemStore 缓冲随机写、用 HFile 承载有序不可变的数据，把随机写折叠成顺序写，代价是写放大与 Compaction；HDFS 没有记录级索引，于是 HBase 让行键排序本身成为索引，代价是排序位置决定写入位置，热点从建表那天就被写进表结构；HDFS 不为低延迟随机读设计，于是 HBase 用 BlockCache 与 Bloom Filter 把读路径从 HDFS 手里抢回来，代价是 RegionServer 堆里那笔固定的内存账。本文沿这三笔账展开，再辨清"HBase 是 BigTable 的开源实现"这句话的准确边界——哪些是照搬，哪些是被 GFS 换成 HDFS、Chubby 换成 ZooKeeper 逼出来的不同；随后给出 HBase 一致性的精确表述（单行原子、跨行无事务、跨表无事务），把"强一致"这个含糊词拆开；最后落到列族的物理约束与"HBase 不适合什么"的判据清单。全文的落点是一句判断：HBase 的每一个长处，都能在它付出的某一笔账里找到对价。
+
+> [!info] 本列的口径
+> 大数据概览那一组 survey 里，HBase 是作为 Hadoop 生态的一个组件被顺带提到的，讲的是"它是什么、适合什么"（见 [[大数据/读书笔记-大数据概览/01 HDFS：分布式文件系统的数据可靠性与扩展性|概览篇的 HDFS 那一节]]）。本列写另一层：每个机制在 RegionServer 内部怎么实现、参数调大调小各付什么钱、出问题时日志长什么样。HDFS 自身的取舍见 [[大数据/Hadoop/HDFS/01 HDFS 的诞生——大规模分布式存储的工程哲学|HDFS 的诞生]]，LSM 的写放大、读放大、空间放大三笔账见 [[中间件/Leveldb/01 LevelDB 全局架构——LSM-Tree 的写优化设计|LevelDB 的 LSM-Tree]]，这两处已定稿，本文只给结论并注明出处。
 
 ---
 
-## 第 1 章 时代背景：互联网数据爆炸与存储系统的生死危机
+## 第 1 章 三条硬限制，三次交易
 
-### 1.1 一个具体的工程问题：Google 究竟要存什么
+### 1.1 先把需求钉死
 
-2003 年到 2006 年，Google 陆续发表了三篇奠定大数据时代基础的论文——GFS（Google File System）、MapReduce 和 BigTable。这三篇论文不是偶然出现的，而是 Google 工程师在解决真实业务问题时逼出来的工程结晶。要理解 HBase 为什么诞生，必须先理解 Google 当时面临的是什么样的具体问题。
+在线服务向存储系统提出的请求，说到底只有三种形状：给定一个标识（订单号、用户 ID、URL、设备号），返回该标识下的一小组列，响应时间以毫秒计；给定同样的标识与一组列值，写入并确认，写的时候不知道这一行现在有多大、将来会有多少列；给定标识的一个区间，按顺序取一批。这三件事在关系型数据库里由 B+Tree 与聚簇索引包办，在 HDFS 上则处处掣肘。
 
-彼时 Google 的核心业务是全球最大规模的网页爬虫与索引系统。每天，Google 的爬虫要抓取数十亿个网页，对每一个 URL，它需要存储以下数据：
+拘束的根源可以用一句话说清：HDFS 的定位单位是"文件加字节偏移"，而在线服务的定位单位是"记录键"。HDFS 里一个文件被切成 128MB 的块，NameNode 记的是每个块在第几个 DataNode 上，它并不知道文件内部第 300 万条记录的键是什么、在哪个偏移处。要把这个差说透，不妨把 HDFS 想成一座按卷存放的档案馆：每一卷都有编号、有厚度、有对应的架子，但没有目录卡片告诉你"张三的合同在第几卷第几页"。要查一个人，只能把相关卷从头翻到尾。批处理不在乎这一点，因为它本来就要把全部卷翻完；在线查询在乎，因为它每次只想翻一页。
 
-- 该 URL 的原始 HTML 内容（可能有数百 KB）
-- 该 URL 被多少其他页面引用（链接关系图）
-- 该 URL 上次被爬取的时间戳
-- 该 URL 的语言、编码格式等元数据
-- 该 URL 对应页面上的所有锚文本
+HBase 做的事，不是改造这座档案馆，而是在档案馆门口另建一套目录与借阅规则：目录（行键排序、`hbase:meta`、HFile 的块索引）由 HBase 自己维护，卷（HFile）一旦封存就不再修改，新的借阅登记（WAL 加 MemStore）单独记一本流水账，等攒够了再封成一卷。这套规则的每一部分都对应一条 HDFS 的硬限制，而每一条规则都要付钱。
 
-这里出现了一个极度不规则的数据特征：**每个 URL 所拥有的属性数量天差地别**。一个简单的个人主页可能只有几个入链，而像 `cnn.com` 这样的新闻门户则可能有数百万个入链。一篇新闻页面的内容可能 3 个月就过期了，而一个产品页面的内容可能 5 年都不怎么变化。
+### 1.2 限制一：只能追加
 
-如果用关系型数据库来存储这些数据，会发生什么？
+HDFS 的写语义是 `create`、`append`、`hflush`、`hsync`，没有"打开文件、定位到第 N 字节、覆写两百字节"这种操作。DataNode 上的块是"一次写成、多次读取"的，块的校验和、副本同步、租约机制全都建立在"只追加"这个前提上。HDFS 对 append 的支持在早期版本里一度移除、后来又重新加回——但即便支持，语义也只是在文件尾部续写，而不是在任意位置修改。对一个需要"更新第 12345 号用户的余额"的系统来说，这条语义等于零。
 
-### 1.2 关系型数据库的扩展边界：不是 MySQL 不好，而是场景不对
+为什么"只能追加"会成为一个值得专门对策的硬限制？原因在磁盘的物理脾气上：机械盘每一次随机写都要付出寻道加旋转的延迟，折算下来每秒完成的次数停在百次量级；顺序写则能把带宽跑满，每秒搬运的数据量高出一个到三个数量级（示例量级，具体取决于介质与队列深度）。两者之间的差距不是靠加机器就能抹平的，因为它来自介质本身的工作方式。
 
-关系型数据库（RDBMS，如 MySQL、PostgreSQL、Oracle）是 20 世纪软件工程的伟大成就。它们解决了结构化数据的存储、事务、一致性和查询问题，支撑了整整一代企业级应用。但互联网的崛起将一批全新的工程挑战带到了数据库系统面前。
+HBase 的翻译很干脆：数据库语义里的"更新一行"，在物理上变成"追加一条新记录"。同一条逻辑单元格被写十次，磁盘上就有十条物理记录，靠 `(RowKey, Family, Qualifier, Timestamp, Type)` 这个五元组的排序与列族的版本数决定哪一条对读可见。删除也不是删除，而是追加一条墓碑（tombstone），等到 Compaction 时再把墓碑和它遮蔽的旧值一起丢掉。理解了这一点，才谈得上理解 HBase 为什么把 Compaction 看得比什么都重——它不是清理垃圾的保洁，它是这套"只追加"语义的必要收尾。
 
-**挑战一：数据规模的量变引发质变**
+一次 Put 从客户端到磁盘的完整路径如下，其中 WAL 的持久性级别、flush 的触发序列另有细账，见 [[大数据/HBase/05 HBase 写入链路深度解析——WAL、MemStore Flush 与持久性保证|写入链路]]。
 
-传统企业数据库的设计假设是"数据量在 GB 到 TB 级别，能够运行在单台或少数几台服务器上"。这个假设在 ERP、CRM、电商订单系统等场景下是成立的。但 Google 的网页爬虫数据是 PB 级别的，而且以每天数十亿次写入的速度持续增长。
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+flowchart TD
+    C["客户端发起 Put"] --> W["追加 WAL：HDFS 上的顺序写"]
+    W -->|"默认 SYNC_WAL，落盘后应答"| M["写入 MemStore：按 row/family/qualifier/ts 排序的跳表"]
+    M -->|"达到 memstore flush size"| F["Flush：整段有序写出一个 HFile"]
+    F --> L0["L0 上的 StoreFile"]
+    L0 -->|"store file 数超过 compactionThreshold"| K["Compaction：合并、丢弃墓碑与过期版本"]
+    K --> L1["更大的 StoreFile"]
+    L1 -->|"单 Store 超过 max filesize"| R["Region 分裂成两个行区间"]
+```
 
-关系型数据库在这个量级下会遇到一个根本性的瓶颈：**垂直扩展（Scale-Up）有上限，水平扩展（Scale-Out）极其复杂**。
+1. 客户端先用缓存的元数据定位 Region 所在的 RegionServer，RPC 到 `RSRpcServices.mutate`；
+2. RegionServer 把这条 Mutation 追加进 WAL（WAL 本身是 HDFS 上的文件，走 append 加 hflush/hsync），默认的 `SYNC_WAL` 要求写入到 DataNode 管线之后才向客户端确认；
+3. 同一条 Mutation 写进 MemStore，它的实现是一张按五元组排序的 `ConcurrentSkipListMap`（`CellSet`），以保证后续读能第一时间看到最新值；
+4. MemStore 的字节数超过阈值，触发一次 flush，把当前跳表整段有序写出成一个 HFile——这是一次纯顺序写，写完的文件此后不再修改；
+5. 后台 Compaction 把多个 HFile 合并成更大的 HFile，顺带兑现墓碑与 TTL。
 
-单台服务器的 CPU、内存、磁盘 I/O 能力是有上限的。当数据量超过单台机器的处理能力时，你必须把数据分散到多台机器上——这就是"分片"（Sharding）。但关系型数据库对分片的支持非常原始，所有的跨节点 JOIN、跨节点事务、分布式索引都需要应用层自己处理，工程复杂度极高。
+**代价一：写放大。** 一条记录从写入到最终被合并掉，至少要经历 WAL 一次、flush 一次，再被 Compaction 搬运若干次；HDFS 的三副本又把每一次物理写放大三倍。具体被重写几遍取决于合并策略与 Region 大小，在 L0 到 L1 的常规节奏下，个位数到十几次都算常见（示例量级，非实测数字）。LSM 的这笔账在 [[中间件/Leveldb/01 LevelDB 全局架构——LSM-Tree 的写优化设计|LevelDB 那一篇]] 里已经算得很细，此处的结论是：HBase 用磁盘带宽换写入吞吐，这笔账不会消失，只会在 Compaction 排队时以另一种形式回到你面前。
 
-Google 的工程师们在自己的业务中反复踩坑后，得出了一个痛苦的结论：**传统关系型数据库不是为水平扩展而设计的**。
+**代价二：读放大与空间放大。** 读一行要同时问 MemStore 与全部 HFile，文件越多，读越慢；墓碑与多版本占着磁盘空间等 Compaction 回收。这两笔账分别在 [[大数据/HBase/06 HBase 读取链路深度解析——BlockCache、Scanner 与多版本合并|读取链路]] 与 [[大数据/HBase/07 HBase Compaction 机制深度解析——Minor、Major 与写放大的三角关系|Compaction 机制]] 里展开。
 
-**挑战二：Schema 的刚性与业务的柔性之间的矛盾**
+**代价三：写不动的时候会拒绝。** MemStore 不是无底洞。单个 Region 的 MemStore 超过 `hbase.hregion.memstore.flush.size`（默认 128MB）的 4 倍（`hbase.hregion.memstore.block.multiplier` 默认 4），RegionServer 直接抛 `RegionTooBusyException`，日志里能搜到 `Blocking updates for 'Put' on region ... memstore size ... is >= than blocking` 这类字样；Store 的文件数超过 `hbase.hstore.blockingStoreFiles`（2.x 默认 16，1.x 为 10），flush 会阻塞写入最长 `hbase.hstore.blockingWaitTime`（默认 90000 毫秒）。这两条阈值是"顺序写折叠"策略的止血阀：宁可拒绝请求，也不能让 MemStore 撑爆堆。
 
-关系型数据库要求你在建表时预先定义好所有的列（Schema-on-Write）。这在业务逻辑稳定的企业系统中没有问题，但在互联网业务中，数据的形态往往随着产品需求快速变化。
+### 1.3 限制二：没有索引
 
-Google 的网页索引系统就是一个典型例子。随着 Google 不断升级其搜索算法，它需要为每个网页存储的特征维度会持续增加。每次增加一个新的特征维度，就需要对整个数亿行的表执行 `ALTER TABLE ADD COLUMN`——这在 RDBMS 中是一个极其耗时、甚至需要锁表的操作。
+HDFS 的索引只到块一级：给定文件名，它能告诉你第几块在哪台机器上；给定记录键，它一个字都说不上。关系型数据库之所以能毫秒级返回 `WHERE id = 12345`，靠的是 B+Tree 把"键的比较"落到"页的定位"上——每一层比较都把候选集缩小一个数量级。HBase 的答案是**索引即排序**：不额外造一棵树，而是让数据本身长期保持**行键全序**，于是"找某个键"退化成"在有序序列上二分"。
 
-更糟糕的是，在海量稀疏数据场景下，绝大多数行的新增列值为 `NULL`。在行存储模型中，`NULL` 值虽然不存储实际数据，但依然会占据一定的元数据空间，并且在查询时需要被跳过处理。
+这套索引是分四层落地的。
 
-**挑战三：随机读写的性能困境**
+| 层级 | 载体 | 记的是什么 | 定位粒度 |
+| :--- | :--- | :--- | :--- |
+| 第一层 | ZooKeeper 的 `/hbase/meta-region-server` | `hbase:meta` 这张表自己的 Region 在哪台机器 | 单点 |
+| 第二层 | `hbase:meta` 表 | 每张表的每个 Region 的起止行键与所在 RegionServer | Region |
+| 第三层 | Region 的 `[startKey, endKey)` 与 HFile 的块索引 | 键落在哪个 Region；落在哪份 HFile 的哪个数据块 | 数据块 |
+| 第四层 | 数据块内的 KeyValue 序列 | 五元组的精确顺序，二分或顺序扫 | 单元格 |
 
-这是理解 HBase 诞生最关键的一点，我们在后面专门用一章来讨论。
+第一层是 HBase 最容易被忽略的设计：`hbase:meta` 本身就是一张 HBase 表，也按行键排序、也会分裂、也归某个 RegionServer 管，那么"meta 在哪"这个问题就必须由 HBase 之外的东西回答——答案是 ZooKeeper 上的一个 znode。第二层的行键构造得相当讲究，形如 `<表名>,<Region 起止行键的编码>,<Region 名后缀>`，于是同一张表的所有 Region 在 meta 里是连续存放的，客户端一次前缀 Scan 就能取回整张表的路由表；2.x 去掉了 1.x 时代的 `-ROOT-` 表，把定位链路从四级压缩到三级。第三层是 HFile 的块索引（[[大数据/HBase/04 HBase 存储引擎深度解析——LSM-Tree、MemStore 与 HFile 的设计奥秘|04 存储引擎]]那一篇拆过 block 结构与索引编制方式），2.0 之后索引可以是多级的 root、intermediate、leaf，让一个上百 GB 的 HFile 也能在两次块读之内落到目标数据块。第四层才是真正的比较，数据块默认 64KB（列族属性 `BLOCKSIZE`），块内按五元组有序，二分即可。
 
-### 1.3 NoSQL 运动的兴起：不是抛弃 SQL，而是打破一统
+**代价：热点。** 排序的物理后果是"行键相邻即物理相邻，物理相邻即同一个 Region，同一个 Region 即同一台 RegionServer"。一旦行键是单调递增的（时间戳前缀、自增序列、按天递增的业务号），所有新写入就都压在表的最后一个 Region 上；集群有 50 台 RegionServer、5000 个 Region，承压的永远只有 1 台。这不是实现缺陷，而是"索引即排序"这个决策的必然后果——你要求有序，就得接受位置由键决定。缓解手段一抓一把：加盐前缀、反转、哈希、预分区，每一手都在削范围扫描的能力。加盐之后"取某用户一段时间的记录"这种 Scan 仍然成立（同一前缀内部依旧有序），而"取全局时间区间"则被彻底打散到所有 Region 上。
 
-理解上述背景之后，我们可以看到，2000 年代中期互联网公司集体面临的困境催生了"NoSQL"（Not Only SQL）运动。NoSQL 并不是一个统一的技术标准，而是一个松散的工程共识：
+顺带说清一个常被混淆的机制：`hbase.hregion.max.filesize` 在 2.x 的默认值是 10GB，配套的 `hbase.hregion.max.filesize.jitter` 默认 0.25，意思是分裂点在这个值上下浮动四分之一。它防的是"所有 Region 同时涨到 10GB、同时分裂"的分裂风暴，不是防热点；把 jitter 当成热点解药，是读文档时很容易犯的一次错。分裂点怎么选、分裂之后由谁负责把 Region 摊平，是另一套机制，见 [[大数据/HBase/08 HBase Region 分裂与负载均衡——水平扩展的工程底层|Region 分裂与负载均衡]]。
 
-> 对于特定类型的问题（海量数据、高并发写入、半结构化数据），传统 RDBMS 的强一致性事务和固定 Schema 是一种代价高昂的束缚，可以根据业务需求做出取舍，换取更好的可扩展性和灵活性。
+行键设计还有一层不可逆性：改动行键等于全表重写。所以"这张表能不能用 HBase"这个问题，在 schema 落地那天就已经被回答了一半；到了慢查询的阶段再来拯救，成本会高到多数团队选择重建。
 
-这一时期诞生了多种不同方向的 NoSQL 系统：
+### 1.4 限制三：不为低延迟随机读设计
 
-| 类型 | 代表系统 | 核心取舍 | 典型场景 |
-|------|----------|----------|----------|
-| **键值存储** | Redis、Memcached | 极简模型，极高吞吐 | 缓存、会话存储 |
-| **文档存储** | MongoDB、CouchDB | 灵活 Schema，支持嵌套文档 | 内容管理、用户配置 |
-| **列族存储** | HBase、Cassandra | 稀疏宽表，海量写入 | 时序数据、行为日志 |
-| **图数据库** | Neo4j、JanusGraph | 关系优先，图遍历高效 | 社交图谱、知识图谱 |
+HDFS 上一次读的固定开销是：向 NameNode 要块位置（本地有缓存），与 DataNode 建连接，磁盘寻道，传输。冷读几十毫秒起步是常态量级，对批处理是噪声，对 p99 敏感度高的在线接口就是灾难。HBase 的对策是三层接力，目标只有一个：让绝大多数点查永远不要走到 HDFS 的 open 流程上。
 
-HBase 属于"列族存储"（Column-Family Store）这一类，而它的直接设计来源，正是 Google 的 BigTable 论文。
+第一层是常驻的连接与偏移定位。RegionServer 启动时就把自己负责的每个 StoreFile 打开，持有 HFile reader、块索引、Bloom 块等元数据；读一个数据块时直接按偏移 seek，而不是走 HDFS 客户端的文件打开与块定位。开了 `dfs.client.read.shortcircuit` 之后，本地副本还可以短路读取，省掉 DataNode 协议与网络栈的开销。
+
+第二层是 BlockCache。`hfile.block.cache.size` 默认 0.4，表示堆内存的 40% 用来缓存 HFile 的块。实现上分两档：L1 是堆内的 `LruBlockCache`，按 single、multi、in-memory 三个队列管理热度；L2 是 `BucketCache`，可以落在 off-heap、普通文件或 mmap 文件上（`hbase.bucketcache.ioengine` 取 `offheap`、`file`、`mmap`，容量由 `hbase.bucketcache.size` 指定），两者组合成 `CombinedBlockCache`。索引块与 Bloom 块属于"必须常驻"，数据块按热度淘汰。
+
+第三层是 Bloom Filter。列族属性 `BLOOMFILTER` 取 `ROW`（默认）、`ROWCOL` 或 `NONE`，过滤器以 HFile 的 meta block 形式随文件存放，打开文件时整块加载进内存。查某个行键时先问每一份 HFile"我可能包含它吗"，一次比较就能把读放大从"文件数"砍到"可能命中的那一两份"。代价写在文件里：Bloom 块常驻内存，`ROWCOL` 的精度更高但体积更大。
+
+**代价：内存账。** RegionServer 的堆被三笔固定开销切走：BlockCache 0.4、MemStore 0.4，加起来 0.8，剩下 20% 要装 RPC 队列、Scanner 上下文、Cell 临时对象、GC 元数据，以及一切没预料到的东西。这个 0.8 是 HBase 容量规划里最硬的一条线：调大 BlockCache 必然挤 MemStore，flush 更频繁、写放大更大；调大 MemStore 必然挤 BlockCache，缓存命中率下降、读延迟上升。想突破 0.8 只有一条路，把 BlockCache 挪到 off-heap 的 BucketCache 上，代价是块在堆外是序列化存放的，命中时要反序列化回堆内，而且 bucket 尺寸与总容量要对齐，配置比堆内 LRU 复杂得多。
+
+**代价：低延迟是概率性的。** 缓存未命中时请求照样要落回 HDFS，所以 HBase 的延迟分布由"热数据占比加读放大"共同决定，没有任何一个参数能把它变成 Redis。工程上能做的，是让 BlockCache 里装的是索引与热点数据块，让 Bloom 把无关文件挡在门外，剩下的交给容量规划。
+
+### 1.5 三笔账合起来看
+
+把三条限制、三个对策与三份代价列在一张表里，HBase 的骨架就清楚了：它没有发明任何新能力，只是把 HDFS 缺的三件事各补了一次，每次补课都记了一笔账。
+
+| HDFS 的硬限制 | HBase 的对策 | 直接代价 | 运维可见的失效形态 |
+| :--- | :--- | :--- | :--- |
+| 只能追加，不能原地更新 | WAL 加 MemStore 缓冲，flush 成有序不可变 HFile | 写放大、Compaction 占用带宽、空间放大 | `RegionTooBusyException`、Store 文件数触顶导致写阻塞 |
+| 没有记录级索引 | 行键全序，`hbase:meta` 加 HFile 块索引 | 写入位置由键决定，单调键必然热点 | 单 Region 写入打满、`ScannerTimeoutException`、Region 数暴涨 |
+| 不为低延迟随机读设计 | 常驻 reader 加 BlockCache 加 Bloom Filter | 堆内固定 0.8 的内存账、off-heap 配置复杂度 | GC 停顿、缓存命中率骤降、BlockCache 与 MemStore 互相挤占 |
+
+表里最右边一列值得多看一眼，它是这三笔账在值班时的样子。写放大不会以"写放大"三个字的形态出现，它表现为 Compaction 队列积压、Store 文件数触顶、写入请求被阻塞几百毫秒后抛异常；热点的表现不是"排序不好"，而是某一台 RegionServer 的 CPU 与磁盘打满、其余机器闲着；内存账的表现不是"配置不对"，而是 GC 日志里 Full GC 越来越密、RPC 队列堆积、客户端开始超时。把机制与症状对上号，是读这类文章最有实际价值的部分——机制决定你能解释什么，症状决定你能救什么。
 
 ---
 
-## 第 2 章 HDFS 的能与不能：为什么批处理不等于一切
+## 第 2 章 BigTable 谱系：哪些是照搬，哪些是被逼的
 
-### 2.1 HDFS 的设计哲学：为大文件的顺序读写而生
+### 2.1 论文给的是一份契约，不是一份实现
 
-在理解 HBase 为什么在 HDFS 之上构建之前，我们需要非常清晰地理解 HDFS 自身的设计边界——它能做什么，更重要的，它不能做什么。
+2006 年 OSDI 上的 BigTable 论文开篇把目标写得很干脆：为结构化数据设计的分布式存储系统，要能扩到 PB 级、几千台廉价服务器。论文的结构值得留意，因为它恰好是"接口、依赖、实现、优化"四段式：先给数据模型与 API（含它明确只支持单行事务这一条），再讲依赖的两个基石（GFS 与 Chubby）与 SSTable 这种文件格式，然后是 tablet 的位置管理、tablet server 与 master 的分工，最后才是压缩、locality group、Bloom Filter 这些优化。
 
-HDFS（Hadoop Distributed File System）是 Google GFS 论文的开源实现。GFS 的设计论文明确写道，它的目标是服务于以下工作负载：
+HBase 取的是这份契约，而且取法相当忠实。2006 年底 Powerset 的工程师写下原型，2007 年进入 Hadoop 子项目，2010 年成为 Apache 顶级项目；把 HBase 2.x 的代码摊开对照论文，会发现论文里描述过的机制几乎都能找到对应实现。但"忠实"只到契约这一层，再往下就是分叉——凡论文里依赖 GFS 与 Chubby 特定能力的地方，HBase 都必须换一种写法，换法又反过来塑造了它今天的运维面貌。
 
-- 文件大小通常在 GB 到 TB 量级，存储数量在百万级别（而非十亿级别的小文件）
-- 主要的读操作是**大批量流式读取**，极少有随机读
-- 写入主要是**追加写**（Append），几乎不做随机位置的修改
-- 系统运行在廉价的商用服务器上，故障是常态而非例外
+### 2.2 一一对应的清单
 
-基于这些设计假设，HDFS 做出了一系列非常明确的工程选择：
+下表把两个系统的概念对齐，并标注每一对关系的性质：是照搬的契约，还是依赖替换之后被迫长出来的不同。
 
-**Block 大小极大（默认 128MB）**：减少元数据开销，优化大文件传输的网络利用率。但这也意味着，如果你有一亿条用户日志记录，每条只有几百字节，存成 HDFS 小文件会产生天文数字的 NameNode 元数据压力。
+| BigTable（2006） | HBase 2.x | 关系性质 | 差异的来由 |
+| :--- | :--- | :--- | :--- |
+| 稀疏、分布式、多维有序映射 | 同一套数据模型：行、列族、列限定符、时间戳 | 照搬 | 论文的核心契约，一字未改 |
+| 值是不解释的字节数组 | `byte[]`，类型解释留给应用 | 照搬 | 与 schema 自由度的取舍直接相关 |
+| 单行事务 | 单行原子（RowMutations、Increment、CheckAndMutate） | 照搬 | 论文 API 里就写明了只支持单行事务 |
+| Memtable 加 SSTable 加 Compaction | MemStore 加 HFile 加 Compaction | 照搬 | LSM 组织的标准形态 |
+| Tablet 加 Tablet Server | Region 加 RegionServer | 照搬 | 行区间切分加分裂的形态一致 |
+| GFS | HDFS | 被迫不同 | 依赖的开源替代，块大小与 append 语义不同 |
+| Chubby | ZooKeeper | 被迫不同 | 锁原语与 watch 语义不同，znode 容量有限 |
+| 根 tablet 加 METADATA 两级 | `hbase:meta` 单表，位置记在 ZooKeeper | 被迫不同 | 2.x 去掉 `-ROOT-`，定位链路从四级收敛到三级 |
+| master 负责分配、负载均衡、文件回收 | HMaster 负责分配、负载均衡、DDL，另加 procedure store | 被迫不同 | 状态要自己持久化，于是分配变成一个要运维的状态机 |
+| 托管服务，无参数可调 | 几百个配置项 | 被迫不同 | 软件与服务的形态差异，代价转移给运维 |
 
-**不支持随机写**：HDFS 文件一旦创建，只支持追加（Append），不支持在任意位置修改。这一限制极大地简化了 NameNode 的元数据管理和 DataNode 的数据一致性维护，但也彻底封死了"更新特定记录"这一操作。
+"照搬"这一栏也体现在 API 的形状上。把论文里的接口与 HBase 的客户端接口并排放，会发现两者连"哪些操作是原子的"都一致，这也是判断一个系统血缘关系最可靠的方式——数据模型的相似可以是巧合，原子性边界的相似不是。
 
-**高吞吐优先，低延迟不是目标**：HDFS 的设计明确指出，它优化的是数据吞吐量（Throughput），而不是访问延迟（Latency）。一次 HDFS 的 `open()` 操作需要和 NameNode 通信，再定位到 DataNode，延迟往往在数十毫秒量级。这对批处理任务毫无影响，但对需要毫秒级响应的在线查询而言，是灾难性的。
+| 能力 | BigTable 论文的接口 | HBase 的对应接口 | 语义是否一致 |
+| :--- | :--- | :--- | :--- |
+| 单行读 | `Read`，可指定行、列与版本条件 | `Get`，配 `maxVersions` 与 `TimeRange` | 一致 |
+| 单行写 | `Write`，单行原子 | `Put`，单行原子 | 一致 |
+| 行内读改写 | 论文明确列出单行事务与原子读改写 | `Increment`、`Append`、`CheckAndMutate` | 一致，落地成服务端行锁 |
+| 区间扫描 | `Scanner`，可指定行区间与列 | `Scan`，配起止行、`Filter`、`Caching` | 一致，HBase 另加过滤器下推与协处理器 |
+| 行内批量变更 | 未提供跨行原子接口 | `RowMutations`，仅限同一行 | 一致，仍然不跨行 |
+| 表管理 | `CreateTable`、`DeleteTable` | Admin API，经 Master 执行 | 一致，实现换成 ProcedureV2 |
 
-### 2.2 HDFS + MapReduce 的批处理模型：完美的离线世界
+可见"只支持单行事务"不是 HBase 暂时没做，而是从论文开始就写进契约的一条边界；理解了这一点，就不会再去等 HBase 的跨行事务补丁。
 
-HDFS 搭配 MapReduce（以及后来的 Apache Spark），构建了一套完美的大规模批处理解决方案。它能处理的问题有一个共同特征：
+### 2.3 被迫不同的那条链：从依赖替换到元数据分层
 
-**问题的输入是全量数据集，输出是计算结果，不需要针对单条记录进行随机访问。**
+把上表里"被迫不同"那几行串起来看，会发现它们不是四个孤立的差异，而是一条因果链。
 
-比如：
-- "统计过去一个月所有用户的 PV/UV" → 全量扫描日志文件，聚合计算 → 完全适合 MapReduce
-- "对 Web 索引数据集做 PageRank 计算" → 多轮迭代，每轮全量读取 → 适合 MapReduce/Spark
-- "ETL：把原始日志转换为结构化数仓表" → 全量变换 → 适合批处理
+第一环是文件系统。GFS 在论文里提供了"追加写"与"记录追加"两种语义，并且用租约（lease）保证多个副本上的追加顺序一致；HDFS 的 append 语义在早期版本里一度移除、后来又重新支持，即便今天的版本支持，HBase 也不敢把更新语义押在它身上。于是 HBase 的写只做两件事：往 WAL 追加，写全新的 HFile——**只追加**这一个动作，撑起了整个写路径。第二个后果更隐蔽——HFile 这种"每个 Store 每种情况一个文件"的组织方式，在 HDFS 上意味着大量小文件：每个 StoreFile 在 HDFS 侧是若干块加一个 INode，Compaction 有一部分价值就是在替 HDFS 收拾文件数，而不只是替 HBase 收拾读放大。
 
-但还有另一类问题，是 HDFS + MapReduce 无法回答的：
+第二环是协调服务。Chubby 提供的是粗粒度的锁与一致性小文件，配 cache 加 watch；ZooKeeper 提供的是临时节点、顺序节点与一次性触发的 watch。HBase 用 ZK 的方式很有代表性：把"谁在服务哪个 Region"表达成 `/hbase/rs/<hostname>` 这样的临时节点，把"谁是 active master"表达成 `/hbase/master`，把"`hbase:meta` 在哪台机器上"写进 `/hbase/meta-region-server`。这些都是 HBase 自己发明的协议，BigTable 论文里没有对应物，因为 Chubby 在论文里只被当作一个现成的锁与命名服务用。
 
-**问题的输入是一个"键"（比如用户 ID 或 URL），输出是该键对应的记录，需要在毫秒级完成响应。**
+第三环是元数据分层。ZK 的 znode 容量有限（单节点数据量在 1MB 量级，实际用起来只放几百字节的元数据），装不下"所有 Region 到 RegionServer 的映射"，所以这份映射必须放在一张 HBase 表里；而那张表自身也需要一个位置指针，只好再放回 ZK。三级结构由此形成：ZK 指针、`hbase:meta` 表、用户表。1.x 时代是四级（ZK 指 `-ROOT-`、`-ROOT-` 指 `.META.`、`.META.` 指用户 Region），2.x 砍掉 `-ROOT-` 之后收敛为三级。
 
-比如：
-- "查询用户 `user_12345` 最近 10 次的购买记录" → 随机点查 → MapReduce 无法完成
-- "实时更新某商品库存数量" → 随机更新 → HDFS 不支持
-- "根据订单 ID 查询订单状态" → 按主键查询 → HDFS 无法支持
+第四环是状态收敛的可见化。既然映射分散在 ZK、`hbase:meta` 与 RegionServer 的内存里，那么"把一个 Region 从 A 机器搬到 B 机器"就不再是一次函数调用，而是三处状态依次改写、任何一步都可能失败的分布式过程。这个过程有个专门的名字：Region 处于 transition（RIT）。**运维对象由此诞生。**
 
-这就是 HDFS 的盲区，也是 HBase 存在的根本理由。
+把 BigTable 的 tablet 交接比作路边换司机，车靠边停一下，方向盘递过去就完事；HBase 的 Region 交接更像给一辆行驶中的车换轮子，三处状态必须依次落定，任何一处卡住，车就得停下来等——等多久、谁来判定、卡住了怎么收场，全都变成了要写进值班手册的事。
 
-### 2.3 随机访问的本质：索引与局部性原理
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+flowchart TB
+    subgraph BT["BigTable：论文里的依赖栈"]
+        B1["表 / Tablet / Tablet Server"]
+        B2["SSTable + Memtable"]
+        B3["GFS：追加语义、租约、三副本"]
+        B4["Chubby：锁、命名、watch"]
+        B1 --> B2
+        B2 --> B3
+        B1 --> B4
+    end
+    subgraph HB["HBase 2.x：换成开源组件后的依赖栈"]
+        H1["表 / Region / RegionServer"]
+        H2["HFile + MemStore"]
+        H3["HDFS：块定位、append 的历史包袱"]
+        H4["ZooKeeper：临时节点、一次性 watch"]
+        H5["hbase:meta 表 + procedure store"]
+        H1 --> H2
+        H2 --> H3
+        H1 --> H4
+        H1 --> H5
+    end
+    B3 -. "同一角色，语义不同" .-> H3
+    B4 -. "同一角色，语义不同" .-> H4
+```
 
-为什么关系型数据库能做到随机读写，而 HDFS 不能？这需要从存储系统的基本原理出发来理解。
+### 2.4 Master 到底做什么：一句被简化过的话
 
-**随机访问的关键是索引（Index）**。关系型数据库之所以能在毫秒级返回 `SELECT * FROM orders WHERE id = 12345`，是因为它在磁盘上维护了一棵 B+树 索引。B+树 的每个节点对应磁盘上的一个固定大小的 Page（通常 4KB 或 16KB），根据键的大小比较，可以在 O(log N) 次磁盘 I/O 内定位到目标记录。
+流行说法是"BigTable 的单 Master 只做元数据，HBase 的 Master 还要做 Region 分配，于是引入了 assignment 的复杂性"。这句话的**结论对，前提不准确**。BigTable 论文里 master 的职责写得很清楚：给 tablet server 分配 tablet、检测 tablet server 的加入与过期、做负载均衡、回收 GFS 上的垃圾文件。也就是说，分配与均衡在 BigTable 里同样由 master 承担，HBase 并没有在这里新增职责。
 
-HDFS 没有这样的索引机制。它的元数据（NameNode 中的 FsImage）只记录了每个文件被切分成哪些 Block、每个 Block 在哪些 DataNode 上。要找到文件内某个特定位置的数据，你必须知道它的字节偏移量——而对于一个存储了海量记录的大文件，你根本不知道"用户 12345 的记录"在哪个字节偏移处，除非把文件全部扫描一遍。
+真正的差异在状态的存放方式与可见性。BigTable 把 tablet 的位置与归属收敛在 METADATA tablet 里，master 与 tablet server 之间的交接对客户端是一段不可见的内部过程；HBase 把同一件事拆成**三处持久状态**：ZK 里的 RegionServer 会话与 meta 位置，`hbase:meta` 表里的 `info:server`、`info:splitA`、`info:splitB` 等列，以及 2.x 引入的 procedure store（`MasterProcWALs` 目录下的过程日志）。三处状态的收敛过程必须以某种方式被描述、被恢复、被人工干预，于是 assignment 从一个函数变成了一套状态机，`RIT`、`PleaseHoldException`、assignment 超时这些概念才成为日常运维词汇。
 
-这正是 MapReduce 的工作方式：**全量扫描，然后筛选**。这种方式对于批处理绰绰有余，但对于在线服务而言，每次查询都触发一个全量扫描是完全无法接受的。
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+flowchart LR
+    A["Master 决定把 Region 分配给某台 RS"] --> B["写 hbase:meta 的 info:server"]
+    B --> C["RegionServer 打开 Region"]
+    C --> D["RS 向 Master 报告 open 完成"]
+    D --> E["三处状态一致，transition 结束"]
+    B -->|"RS 失联或打开失败"| F["重新分配，走另一个 RS"]
+    C -->|"open 超时"| F
+    F --> A
+```
 
-> [!info] 核心矛盾
-> **HDFS 擅长的：顺序读，大块传输，高吞吐。**
-> **在线服务需要的：随机读，小块定位，低延迟。**
-> 这两者在工程上是根本对立的。HBase 的出现，正是为了在 HDFS 之上，通过一套精妙的索引与缓存机制，弥合这个鸿沟。
+Master 与 RegionServer、ZooKeeper 三者的职责边界，在 [[大数据/HBase/03 HBase 整体架构——Master、RegionServer 与 ZooKeeper 的三角协作|整体架构]]那一篇里有逐项拆解。代价同样明确：Master 是所有管理动作的串行点。2.x 把建表、禁用、截断、分配、迁移、分裂、合并统统改写成 ProcedureV2 的过程（`CreateTableProcedure`、`AssignProcedure`、`MoveRegionProcedure`、`MergeTableRegionsProcedure` 等），每条过程有状态、有超时、可重放，持久化在 procedure store 里。可靠性因此提升——Master 换了进程，未完成的过程还能继续——但吞吐被这个串行点锁住：一次建几千张表要等，大批量 Region 迁移要排。这是 HBase 的一个真实上限，不是配置没调好。
 
-### 2.4 "构建在 HDFS 之上"意味着什么
+这条链在故障现场的表现值得单独记住。`PleaseHoldException: Master is initializing` 说明 master 刚起来，还在加载 meta 与恢复 RIT，客户端重试即可，此时重启 master 只会让恢复从头再来一遍；`Region in transition` 意味着某个 Region 的归属卡在中间态，先查它前一个宿主是否还在做 WAL split；`RegionServer is not online` 多数时候是客户端缓存的路由过期，触发一次 meta 重载就能恢复；真正麻烦的是 `hbase:meta` 不可用——它的 Region 也归某台 RegionServer 管，一旦那台机器出事，全集群的定位链路一起断，表现是所有客户端同时报 `NotServingRegionException` 或者直接连不上。处置顺序也因此固定：先确认 meta 的 Region 在线，再看 ZK 上的 rs 节点与 master 的 RIT 列表，最后才轮到离线工具。
 
-既然 HDFS 有如此多的限制，为什么 HBase 还要构建在它之上，而不是自己实现一套存储层？
+### 2.5 那句话该怎么说才准确
 
-这是一个非常关键的工程决策，背后的逻辑是：
+回到"HBase 是 BigTable 的开源实现"这句流传甚广的话。准确的说法是：HBase 复刻了 BigTable 的数据模型与 LSM 物理组织，把它移植到 Hadoop 的存储与协调设施上；凡是论文里依赖 GFS 与 Chubby 特定能力的地方，HBase 都做了替代实现，并在替代处引入了论文里根本不存在的运维对象——RIT、procedure store、meta 表自身的高可用、参数体系。
 
-**HDFS 解决了分布式存储的难题，HBase 不需要重复造轮子。**
-
-分布式存储系统面临的最大挑战不是如何存数据，而是如何处理节点故障、数据副本、网络分区、数据一致性这些问题。HDFS 已经用成熟的工程实践解决了这些问题：
-- 3 副本机制保证数据不丢
-- DataNode 心跳检测自动识别节点故障
-- NameNode 负责全局数据布局的元数据管理
-- 数据本地性感知优化计算效率
-
-HBase 将自身定位为 HDFS 之上的**随机访问层**：它不关心数据最终如何存储在磁盘集群上，那是 HDFS 的职责；它只负责在 HDFS 上构建高效的索引结构，让"按键随机访问"成为可能。
-
-这种分层设计是软件工程中的经典思想：每一层只做自己最擅长的事，通过标准接口组合出更强大的能力。
+这句话的实用价值在于划清边界：读 BigTable 论文能解释 HBase 为什么这样设计（为什么是宽表、为什么只有单行事务、为什么必须 Compaction），但不能解释 HBase 为什么这样运维（为什么要盯 RIT、为什么要给 meta 做副本、为什么升级要跑一遍 hbck）。把两者混为一谈，就会出现"论文里没有这个问题，所以是 HBase 实现得不好"的误判——多数情况下，那是依赖被替换之后必然要付的账。
 
 ---
 
-## 第 3 章 BigTable：一篇论文如何定义了一个时代
+## 第 3 章 CAP 与"它到底是什么一致性"
 
-### 3.1 Jeffrey Dean 与 Sanjay Ghemawat 的工程哲学
+### 3.1 CAP 在 HBase 里的落点：只有一个不变量
 
-Google BigTable 论文于 2006 年在 OSDI（操作系统设计与实现大会）上发表，作者包括 Fay Chang、Jeffrey Dean、Sanjay Ghemawat 等 Google 核心工程师。这篇论文的意义不仅在于描述了一个具体的系统，更在于它系统性地提出了"用于结构化数据的分布式存储系统"的设计思路。
+讨论 CAP 最容易滑向复述教科书，所以先把问题收窄到 HBase 实际要守住的那一条不变量：**单 Region 单写者**——一个 Region 在任一时刻最多被一台 RegionServer 打开并服务写入。守住它，单行原子就有依托；守不住，两个写者各自在内存里改同一行，谁也不知道对方存在，所谓一致性立刻归零。
 
-论文的开篇第一句话就直接点明了设计目标：
+建立与维持这条不变量的机制有三段。第一段是分配：Master 决定把某个 Region 给某台 RegionServer，写 `hbase:meta` 的 `info:server`，然后 RegionServer 在自己的进程里打开这个 Region；打开动作包含读取 StoreFile 列表、回放该 Region 未 flush 的 WAL、清理过期的 MVCC 记录，完成后向 Master 报告。第二段是心跳与会话：每台 RegionServer 在 ZooKeeper 上有一个临时节点，会话超时的时间由 `zookeeper.session.timeout` 决定，默认 90000 毫秒；节点消失，Master 就判定这台机器已死。第三段是善后：Master 启动 `ServerShutdownHandler`，把该死机器的 Region 重新分配，分配之前先做 WAL split——把那台 RegionServer 的 WAL 按 Region 切开，交还给各 Region 的新宿主去重放。
 
-> "Bigtable is a distributed storage system for managing structured data that is designed to scale to a very large size: petabytes of data across thousands of commodity servers."
+关键在于，这套机制在"分区还是可用"之间是明确选择了停。假设某台 RegionServer 遭遇长时间 Full GC 或者网络隔离，它与 ZK 的会话过期，Master 已经开始把它名下的 Region 分给别人；而那台机器实际上还活着，内存里还有未 flush 的数据，客户端可能还连得上它。HBase 的处理方式不是设法让两边共存，而是让旧主自杀：一旦 RegionServer 检测到自己的 ZK 会话过期，它会主动中止进程，日志关键字是 `Processing Fatal ZK session expiration` 一类，而不是继续服务。宁可让这个 Region 短暂不可服务，也绝不允许两台机器同时写同一份数据。
 
-注意这里的每一个词都经过精心选择：
-- **"structured data"（结构化数据）**：不是文档，不是纯 KV，而是有一定结构的数据
-- **"petabytes"**：PB 级别，这在 2006 年是一个令人震撼的数字
-- **"thousands of commodity servers"**：廉价商用服务器，而非 IBM 大型机
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+flowchart TD
+    A["RegionServer 与 ZK 的会话过期"] --> B["Master 判定该 RS 已死"]
+    B --> C["WAL split：按 Region 切开 WAL"]
+    C --> D["Region 重新分配给其他 RS"]
+    D --> E["新宿主重放 WAL，对外服务"]
+    A --> F["旧 RS 检测到会话过期，自行中止"]
+    F --> G["旧 RS 停止服务，杜绝双写"]
+    E --> H["不变量恢复：一个 Region 只有一个写者"]
+    G --> H
+```
 
-BigTable 被用于 Google 内部超过 60 个不同的产品，包括 Google Analytics、Google Finance、Orkut（Google 的社交网络）、Personalized Search，以及最核心的 Google Web Indexing（网页索引）。
+这也解释了 HBase 写路径的确认语义为什么设计成那样。默认的 `SYNC_WAL` 要求 WAL 写入 HDFS 的 DataNode 管线之后才向客户端返回成功，持久性（durability）级别还可以调到 `FSYNC_WAL`（连操作系统缓冲都要刷）、`ASYNC_WAL`（异步，机器崩溃会丢最后一段）或 `SKIP_WAL`（完全不写，只在可重建的数据上使用）。写 WAL 这一步看起来是在拿延迟换安全，实质上是在为"Region 可以在另一台机器上重建"这个承诺预付费用。
 
-这些产品的数据特征差异极大，但 BigTable 能够为它们提供统一的存储服务，这本身就说明它的设计具有极强的通用性和灵活性。
+### 3.2 可用性让位之后，缺口长什么样
 
-### 3.2 BigTable 的数据模型：三维稀疏有序映射
+CP 不是一个标签，它是一组具体的不可用窗口。把常见场景列出来，才能判断某个业务能不能接受 HBase。
 
-BigTable 论文对数据模型的定义非常精炼：
+| 故障场景 | HBase 的行为 | 可用性代价 | 一致性是否受损 |
+| :--- | :--- | :--- | :--- |
+| 单台 RegionServer 崩溃 | 会话超时后重新分配它名下的 Region，先 WAL split 再重放 | 该 RS 上所有 Region 在恢复完成前读写不可用，窗口约为会话超时加 split 加 open 的时间 | 不损，已确认的写都在 WAL 里 |
+| RegionServer 假死或网络分区 | 旧 RS 因 ZK 会话过期而自行中止 | 同上的不可用窗口，但可能更长，需要等旧 RS 进程真正退出 | 不损，靠自杀避免双写 |
+| ZooKeeper 失去多数派 | Master 与 RegionServer 都失去会话，无法确认归属 | 集群整体不可用，HBase 没有"ZK 降级模式" | 不损，但什么也做不了 |
+| Master 进程挂掉 | 数据面不受影响，读写照旧；DDL、分配、均衡停摆 | 管理面不可用，客户端可能收到 `PleaseHoldException` | 不影响数据，影响运维动作 |
+| HDFS 不可写（WAL 写不进去） | RegionServer 写失败并中止自己，避免产生无法恢复的内存状态 | 该 RS 上的写入失败，进而触发重新分配 | 不损，因为失败发生在应答之前 |
+| `hbase:meta` 所在 Region 不可用 | 客户端无法定位任何 Region | 全集群读写在客户端侧失败 | 不损，属于定位链路故障 |
 
-> "A Bigtable is a sparse, distributed, persistent multi-dimensional sorted map. The map is indexed by a row key, column key, and a timestamp; each value in the map is an uninterpreted array of bytes."
+这张表里最需要正视的是第一行：HBase 的故障恢复以"十秒到分钟"为量级，因为 `zookeeper.session.timeout` 默认就是 90 秒，加上 WAL split 与 Region open，一次单机故障的业务影响通常落在分钟这一档。这也正是这个参数最典型的权衡：
 
-翻译成中文：
+| 参数 | 默认 | 调大的代价 | 调小的代价 |
+| :--- | ---: | :--- | :--- |
+| `zookeeper.session.timeout` | 90000 毫秒 | 故障发现变慢，Region 不可用窗口被拉长；长时间 GC 不容易被误判为死亡 | GC 停顿或短暂网络抖动就被判死，触发不必要的重新分配，严重时形成"自杀—重分配—再自杀"的循环 |
+| `hbase.hstore.blockingWaitTime` | 90000 毫秒 | Store 文件数触顶后写阻塞时间变长，客户端先超时 | 阻塞提前放弃，返回 `RegionTooBusyException`，把压力推给上游重试 |
+| `hbase.client.retries.number` | 以对应版本文档为准 | 客户端重试更久，遇到真故障时用户等待更久，可能放大下游压力 | 提前失败，但对短暂的 Region 迁移不够宽容 |
 
-**BigTable 是一个稀疏的、分布式的、持久化的、多维有序映射表。** 这张表通过行键（Row Key）、列键（Column Key）和时间戳（Timestamp）进行索引；表中的每个值是一个不被解释的字节数组。
+### 3.3 精确表述：单行原子，跨行最终，跨表无事务
 
-这个定义极其简洁，但它蕴含了深刻的设计哲学。让我们逐一拆解：
+"HBase 是强一致"这句话如果不再往下拆，排障时一定会误导人。更准确的表述分四层，每层边界不同。
 
-**"稀疏（Sparse）"**：大多数行只填充少数几列，剩余列为空。与关系型数据库不同，空列不占用任何存储空间，不需要存储 `NULL` 占位符。这对于网页爬虫这类数据非常重要——不同 URL 拥有的特征维度差异极大。
+| 操作边界 | HBase 的保证 | 不保证什么 | 工程后果 |
+| :--- | :--- | :--- | :--- |
+| 单行内多列写（一次 Put 带多列、`RowMutations`） | 原子，要么全可见要么全不可见 | 不涉及其他行 | 可以把"必须一起对"的字段放进同一行 |
+| 单行内的 `Increment`、`Append`、`CheckAndMutate` | 原子，服务端持行锁完成读改写 | 条件是同一行，写也是同一行 | 行内状态机、行内计数器、行级乐观锁都可行 |
+| 同一张表的多行写 | 逐行原子，行与行之间无事务 | 任何跨行原子性；中途失败留下半成品 | 一致性只能由应用补偿，或把数据合并到同一行 |
+| 跨表写 | 无事务，也没有跨表原子写 | 任何跨表原子性 | 分表即分事务，需业务侧对账 |
+| 跨 Region 的 Scan | 每个 Region 建立自己的读点，读到的是"各自的"一致视图 | 全局快照；扫描期间可见到不同 Region 处于不同时间点 | 离线统计可接受，账务类统计不可接受 |
 
-**"多维（Multi-dimensional）"**：数据的坐标不是一维的行号或两维的（行，列），而是三维的（行键，列键，时间戳）。时间戳这个维度使得 BigTable 天然支持数据的多版本存储——同一个单元格可以保存历史上多个时间点的值，查询时可以指定读取最新版本还是特定历史版本。
+由此可以给出一句可以直接写进设计文档的定义：HBase 提供的是行级原子、读已提交、按行键有序的存储；Region 级单写者保证同一行不会被两个写者同时修改；跨行、跨表没有事务，跨 Region 的扫描不是全局快照。它既不是"全局强一致"，也不是"最终一致"，硬塞进任何一边，都会在故障复盘时给出错误的预期。多版本、时间戳与墓碑的读写语义见 [[大数据/HBase/02 HBase 数据模型深度解析——RowKey、列族、Cell 与多版本机制|数据模型]]；RegionServer 崩溃之后的重建流程见 [[大数据/HBase/09 HBase 高可用与容灾——崩溃恢复、备份与复制|高可用与容灾]]。
 
-**"有序（Sorted）"**：所有行按行键的字节序进行排序存储。这一点极其重要，它决定了如何设计行键。相邻行键的数据在物理存储上也相邻，这使得"范围扫描"（Scan）成为高效操作——只需要从起始行键顺序读取到终止行键即可。
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+flowchart TD
+    R["不变量：一个 Region 同一时刻只有一台 RegionServer 服务"] --> A["单行内多列写"]
+    A --> A2["原子 + 行锁 + MVCC"]
+    R --> B["同表跨行写"]
+    B --> B2["逐行原子，跨行无事务，靠应用补偿"]
+    R --> C["跨表写"]
+    C --> C2["无事务"]
+    R --> D["跨 Region 的 Scan"]
+    D --> D2["每 Region 独立读点，非全局快照"]
+```
 
-**"字节数组（Array of bytes）"**：值是无类型的字节序列，BigTable 不关心值的语义，类型解释完全由应用层负责。这种设计极大地简化了系统本身的复杂度，同时保留了极致的灵活性。
+### 3.4 CheckAndMutate 的能与不能
 
-### 3.3 BigTable 与 HBase 的传承关系
+`CheckAndMutate` 是 HBase 最接近"事务"的原语，也最容易被误用。它的服务端实现是在持有该行行锁的前提下，比较指定列的最新值与给定条件（`CompareOperator`，可以带 `TimeRange` 与版本约束），条件成立才执行写入；比较与写入落在同一个临界区里，中间插不进别的写。于是它能做三件真事：行内状态机流转（`status == 'PENDING'` 才改成 `RUNNING`）、行内乐观锁（用版本号或时间戳列做标记）、行内计数器（配合 `Increment` 的原子增减）。
 
-HBase 是 BigTable 的开源实现，两者在设计理念上高度对应，但在具体实现上由于依赖的基础设施不同而存在一些差异：
+它不能做的事，边界同样清楚。一次 `CheckAndMutate` 只作用于一行，两行就是两次独立操作，中间可以失败，可以超时，可以被别人插队。它也不能和外部副作用组成一个原子单元——条件成立、写入成功，但紧接着要发的消息没有发出去，这段缺口它管不了。所以用它实现跨行转账，得到的不是事务，而是"两个各自原子、整体不原子"的操作序列，中间任何一步失败都会留下半成品，只能靠幂等键与对账去补。
 
-| BigTable 概念 | HBase 对应概念 | 说明 |
-|---------------|----------------|------|
-| GFS | HDFS | 底层分布式文件系统 |
-| Chubby（分布式锁服务）| ZooKeeper | 协调服务 |
-| SSTable（Sorted String Table）| HFile | 磁盘上的有序不可变文件 |
-| Tablet | Region | 表的水平分片 |
-| Tablet Server | RegionServer | 负责若干 Region 的服务节点 |
-| Master | HMaster | 负责元数据管理的主节点 |
-| Memtable | MemStore | 内存中的写缓冲区 |
+真正管用的手法在另一边：把"必须一起原子"的数据塞进同一行。订单状态与库存占用写在同一行的两个列里，一次 `Put` 或一次 `RowMutations` 就能保证两者同时可见，代价是这一行会承担两个业务实体的写压力，也可能变成热点。这是用行键设计换事务能力的经典做法，也是 HBase 里"数据模型即事务边界"这句话的具体含义。
 
-HBase 于 2007 年作为 Apache Hadoop 的子项目启动，2010 年成为 Apache 顶级项目。它的核心贡献是将 BigTable 的设计思想与 Hadoop 生态无缝结合，使得大数据处理（HDFS + MapReduce）与在线随机访问（HBase）能够共享同一套基础设施。
+### 3.5 ProcedureV2 解决的是 DDL，不是 DML 事务
 
-> [!note] 设计哲学传承
-> BigTable 论文是 HBase 所有设计决策的"宪法"。当你对 HBase 的某个行为感到困惑时，回到 BigTable 论文中往往能找到答案——那里记录了 Google 工程师们面对真实业务问题时做出的艰难取舍。
+HBase 2.x 引入 `ProcedureV2` 之后，有一个流传很广的误解：既然有了过程框架、有了过程 WAL、有了状态机，HBase 是不是终于支持事务了。答案是否定的，`ProcedureV2` 的事务边界在 Master 的管理动作上，与用户的多行写没有关系。
+
+它解决的问题很具体：Master 上的每个管理动作都可能是多步的（建表要写 meta、要分配 Region、要更新表状态；迁移要关旧宿主、改 meta、开新宿主），任何一步失败或 Master 进程重启，都必须能从中间状态继续推进而不是留下半截。`ProcedureV2` 的做法是把这些动作建模成可重放的 Procedure，过程的每一步落进 `MasterProcedureStore`（HDFS 上的 `MasterProcWALs` 目录），恢复时扫描未完成的过程继续执行。`CreateTableProcedure`、`DisableTableProcedure`、`TruncateTableProcedure`、`AssignProcedure`、`UnassignProcedure`、`MoveRegionProcedure`、`MergeTableRegionsProcedure` 都是这个框架里的实现。
+
+它带来的收益是管理面的幂等与可恢复：Master 换进程不影响正在进行的建表，Region 迁移失败可以重试而不会重复执行。它的边界也在那里：这套框架从不介入客户端的一次 `Put`，也从不试图让两行写入变成一个不可分割的动作。分裂过程是理解这条边界的好例子——父 Region 关闭、子 Region 打开、meta 的 split 列更新，这几步由 Procedure 推进并保证最终完成，期间客户端可能看到短暂的不可用，但不会有"一半数据在新 Region、一半在旧 Region 且都声称自己完整"的状态。也就是说，Procedure 保证的是"管理动作最终完成"，不是"用户操作的跨行原子"。
 
 ---
 
-## 第 4 章 列族模型的设计哲学：在行存储与纯列存储之间找到平衡
+## 第 4 章 列族的物理真相：为什么通常只该建一个
 
-### 4.1 三种存储模型的本质差异
+### 4.1 一个列族就是一个 Store
 
-在进入列族模型的详细讨论之前，我们需要先理解三种基本的存储组织方式，以及它们各自的优势与局限。
+列族在逻辑上是 schema 的一个维度，在物理上是独立的存储单元。一张表的每个 Region 会为每个列族维护一个 Store，一个 Store 包含一个 MemStore、一组 StoreFile（HFile），以及一条独立于其他列族的读路径。
 
-**行存储（Row-Oriented Storage）**
-
-行存储是关系型数据库的传统模式。每行的所有列数据在磁盘上连续存放。
-
-```
--- 示意：行存储的物理布局
-[Row 1: user_id=001, name="Alice", age=28, city="Beijing", email="alice@xx.com"]
-[Row 2: user_id=002, name="Bob",   age=32, city="Shanghai",email="bob@xx.com"]
-[Row 3: user_id=003, name="Carol", age=25, city="Guangzhou",email="carol@xx.com"]
-```
-
-**优势**：读取整行数据时，一次顺序 I/O 可以获取该行的所有列，效率极高。写入一条完整记录时，也只需要一次顺序写。这使得行存储非常适合 OLTP（在线事务处理）场景——插入订单、更新用户信息、查询某条订单的全部详情。
-
-**劣势**：当只需要读取少数几列时（比如"统计所有用户的城市分布"，只需读 `city` 列），行存储必须读取整行的所有数据，绝大部分 I/O 都是无效的。在宽表（列数很多）的场景下，这种浪费非常严重。
-
-**列存储（Column-Oriented Storage）**
-
-列存储将同一列的所有行数据在磁盘上连续存放。
-
-```
--- 示意：列存储的物理布局
-[Column user_id: 001, 002, 003, ...]
-[Column name:    "Alice", "Bob", "Carol", ...]
-[Column age:     28, 32, 25, ...]
-[Column city:    "Beijing", "Shanghai", "Guangzhou", ...]
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+flowchart TD
+    T["一张表：N 个列族"] --> R1["Region A：一个行区间"]
+    T --> R2["Region B：另一个行区间"]
+    R1 --> S1["Store：列族 cf1"]
+    R1 --> S2["Store：列族 cf2"]
+    S1 --> M1["MemStore：独立的一份跳表"]
+    S1 --> F1["StoreFile（HFile）若干"]
+    S2 --> M2["MemStore：另一份跳表"]
+    S2 --> F2["StoreFile（HFile）若干"]
+    M1 -->|"达到阈值各自 flush"| F1
+    M2 -->|"达到阈值各自 flush"| F2
 ```
 
-**优势**：分析查询（OLAP）时，如果只需要读取少数几列，列存储可以精确地只读取这几列的数据，避免无效 I/O。同列数据类型相同，压缩率极高（如 `city` 列可能只有几十个不同的值，用字典压缩效果极佳）。这使得列存储非常适合数据仓库、OLAP 分析。
+这张图要读出的信息只有一句：MemStore 的分配粒度是 Store，不是 Region。这句话决定了列族数量的所有后果——多一个列族，就多一份 MemStore，多一条独立的 flush 触发线，多一组独立累积的 HFile，多一路独立的 Compaction 输入。
 
-**劣势**：读取完整一行需要访问多个不同的列文件，I/O 模式变得复杂。更糟糕的是，插入一行数据需要修改所有列的存储文件，写入开销极高。这使得纯列存储不适合高并发随机写入的场景。
+### 4.2 全局 memstore 预算被所有列族平分
 
-**列族存储（Column-Family Store）**
+RegionServer 上给 MemStore 的钱是一笔定额：`hbase.regionserver.global.memstore.size`，默认 0.4，含义是这台机器 JVM 堆的 40% 作为**所有列族、所有 Region 的 MemStore 之和**的上限。注意这句话里的三个"所有"：不是单表，不是单 Region，也不是单列族。
 
-列族存储是行存储和列存储的折中方案，也是 BigTable/HBase 的核心创新之一。
+围绕这笔定额有三个关键机制。其一是水位线：当全局 MemStore 用量达到上限的 95%（`hbase.regionserver.global.memstore.size.lower.limit` 默认 0.95）时，RegionServer 开始挑选最大的几个 Store 强制 flush；一旦真的顶到 100%，所有写入被阻塞，日志里会出现 `Blocking updates ... because global memstore size` 一类的信息。其二是单 Region 阈值：每个 Region 打开时会算一个 memstore flush size，取值是 `hbase.hregion.memstore.flush.size`（默认 128MB）与"全局预算分给这台机器上 Region 的那一份"之间的较小者，具体拆分逻辑以对应版本源码为准，但方向很明确——Region 越多，每个 Region 能分到的缓冲越小。其三是选择性 flush：多列族场景下，全局水位触发时不必把所有 Store 一起 flush，`FlushLargeStoresPolicy` 只挑超过"下限"的那些，下限取 `flush.size ÷ 列族数`，且不低于 `hbase.hregion.percolumnfamilyflush.size.lower.bound.min`（默认 16777216 字节，即 16MB）。
 
-其基本思想是：**将列分组为若干"列族"（Column Family），同一列族内的列用行存储的方式组织，不同列族之间用列存储的方式隔离。**
+这笔预算好比一间公共厨房里唯一的一口灶，列族数就是把灶眼分成几份来用，分得越细，每一份都烧不开一锅水。
 
-```
--- 示意：列族存储的物理布局
--- Column Family "info"（存储基本信息）
-[Row 001: info:name="Alice", info:age=28]
-[Row 002: info:name="Bob",   info:age=32]
+第三条机制直接给出了列族数量的一个反直觉后果：列族越多，选择性 flush 的门槛越低（128MB 除以 10 是 12.8MB，被 16MB 托底），于是全局水位一到，被选中的 Store 更多、单次 flush 出去的数据更少。攒批这件事被切碎了。
 
--- Column Family "address"（存储地址信息）
-[Row 001: address:city="Beijing",  address:zip="100000"]
-[Row 002: address:city="Shanghai", address:zip="200000"]
-```
+### 4.3 一次算账：把 10 个列族摊开
 
-这种设计的精妙之处在于：
+设一台 RegionServer 的堆是 16GB，`hbase.regionserver.global.memstore.size` 取默认 0.4，于是全局 MemStore 预算约 6.4GB；这台机器上有 200 个 Region，每个 Region 一个列族。
 
-- 同一列族内的数据存储在同一个 HFile 中，读取列族内的多列时无需跨文件 I/O
-- 不同列族物理隔离，查询时可以只读取相关列族，避免加载不需要的数据
-- 每个列族可以独立配置压缩算法、TTL、版本数等属性
-- 稀疏列不占用存储空间
+- 单列族：每个 Region 的 flush 阈值约是 `min(128MB, 6.4GB ÷ 200 ≈ 32.8MB)`，也就是 32.8MB 左右。写满一个 Region 的 32.8MB 就落一个 HFile，一轮下来 200 个 HFile，每个都不小。
+- 十个列族：Region 数不变，Store 数变成 2000，每个 Store 的预算被摊到 3.28MB 左右。每个 Store 各自判断是否 flush，一次写入风暴下来，产出的 HFile 数量是单列族场景的十倍量级，而且每个文件都只有几 MB。
+- 连锁反应：Store 的文件数按列分头累积，`hbase.hstore.blockingStoreFiles`（2.x 默认 16）更快被触到，写入开始阻塞；Compaction 的输入从"几个大文件"变成"一堆小文件"，合并频率上升，写放大跟着上升；HDFS 上小文件变多，NameNode 的元数据压力同步变大。
 
-### 4.2 为什么不直接用纯列存储：写入的代价
+这些数字是示例推算，真实环境还要叠加写倾斜、Region 分布与合并策略的影响，但量级关系是可靠的：列族数进入的是乘法项，它同时乘了 Store 数、flush 次数与 HFile 数量。更本质的一层在于——顺序写的收益来自攒批，把缓冲池切成十份，每一份都攒不到能抵消一次落盘开销的体量，LSM 的红利就被自己吃掉了。
 
-理解列族模型的关键，在于理解 HBase 的核心场景是**高并发随机写入 + 随机点查**，而不是 OLAP 分析查询。
+### 4.4 判据：通常只建一个列族
 
-纯列存储（如 Apache Parquet、Apache ORC）为什么不适合 HBase 的场景？
+**通常只建一个列族。** 这不是风格建议，是 4.2 与 4.3 两节推出来的结论。多列族要成立，必须有"单列族做不到"的硬理由，而现实中站得住的只有两类。
 
-**问题根源：纯列存储的不可变性**
+第一类是生命周期完全不同。列族的 TTL、`VERSIONS`、`MIN_VERSIONS`、`KEEP_DELETED_CELLS`、压缩算法、`DATA_BLOCK_ENCODING` 都是列族级属性，无法按列限定符单独设置。会话数据七天后要清、用户画像要永久保留，两条数据放进同一个列族，就只能取最长的 TTL，让过期数据留在磁盘上靠应用层过滤，或者靠定期重写整表来清理。这种情况下分族是正当的。
 
-以 Parquet 为例，它将每列数据存储在独立的 Column Chunk 中，每个 Column Chunk 按页（Page，通常 1MB）组织。当你需要更新某行某列的值时，你不能只修改该列的某个字节——因为列数据是压缩存储的，一旦修改就需要重新压缩整个 Page，然后更新该 Column Chunk，这个代价极高。
+第二类是访问模式完全不同，尤其是大小字段混在一张表里。把网页原文、二进制附件这类大字段与状态、时间戳这类小字段分到两个列族，读小字段时就不会把大字段的数据块带进 BlockCache，缓存的经济性立刻不同。这一条在真实生产里反复成立，也是最常见的第二种正当理由。
 
-更严重的问题是：纯列存储格式通常是批量写入的，它假设数据是一批一批地被写入（如每天的 ETL 任务），而不是每秒数十万次的随机单行写入。
+除此之外的理由大多站不住。按业务维度分（用户、订单、日志、画像各一个）、按字段数量分、按"看起来整齐"分，都是把逻辑分组当成了物理优化。真正需要按业务切开的，应该切成两张表——表级别才有多套 Region 分布、独立的预分区、独立的配额与限流。
 
-HBase 的 LSM-Tree 存储引擎（将在第 04 篇文章中详细讲解）通过将随机写入转化为顺序写入，解决了高并发写入的问题。但这套机制与纯列存储格式是不兼容的——LSM-Tree 的核心是 MemStore（内存中的写缓冲）和 HFile（磁盘上的有序不可变文件），而 HFile 的基本组织单位正是列族（Column Family）。
+列族数量与后果之间的关系可以列得更直白一些。
 
-### 4.3 列族设计的工程约束：为什么列族数量不能太多
+| 列族数 | 每 Region 的 Store 数 | 典型后果 | 建议 |
+| ---: | ---: | :--- | :--- |
+| 1 | 1 | 缓冲集中，攒批效率最好，HFile 数量最少 | 默认选择 |
+| 2 至 3 | 2 至 3 | 内存被切成两三份，flush 更零碎，但尚可控 | 仅在 TTL 或大小字段确实需要隔离时使用 |
+| 5 以上 | 5 以上 | 每 Store 的缓冲被摊薄，HFile 数量与合并压力成倍上升，`blockingStoreFiles` 更易触顶 | 基本可以判定设计有问题，考虑换表或改列限定符 |
+| 10 以上 | 10 以上 | 缓冲几乎攒不起来，flush 频繁、写放大显著、Region 打开变慢 | 必然返工 |
 
-这是一个 HBase 生产实践中非常重要的约束，也是理解列族模型物理本质的好入口。
+### 4.5 相关参数与各自的代价
 
-**每个列族在 RegionServer 上对应一个独立的 Store**，每个 Store 包含：
-- 一个 MemStore（内存写缓冲，默认 128MB）
-- 若干个 HFile（磁盘上的有序文件）
+列族设计与内存参数是一体的，把参数与代价放在一张表里，比背默认值有用得多；这些参数之间的联动关系与整体调整顺序，见 [[大数据/HBase/10 HBase 生产调优实战——从诊断到落地的系统方法论|生产调优]]。默认值以 HBase 2.5 的 `hbase-default.xml` 为准，跨版本升级时应当重新核对。
 
-如果一张表有 3 个列族，那么该表的每个 Region 在 RegionServer 上就会有 3 个 Store，对应 3 个 MemStore，占用 3 × 128MB = 384MB 的内存。如果你有 100 个 Region，就是 3 × 100 × 128MB = 38.4GB 的 MemStore 内存占用。
-
-这就是为什么 **HBase 官方文档强烈建议列族数量不超过 3 个，绝大多数场景下 1 个列族足够**——过多的列族会导致内存爆炸，同时增加 Flush 和 Compaction 的复杂度（将在后续文章中详细讨论）。
-
-> [!warning] 生产避坑
-> **列族数量直接影响内存消耗和 Compaction 压力。** 如果你发现自己想要创建 5 个以上的列族，大概率是设计思路出了问题——这些"列族"更可能应该是不同的表（Table），而不是同一张表的不同列族。
-
-### 4.4 列族内的"列"：真正的稀疏灵活性
-
-理解列族的另一个关键点：在 HBase 中，**列族（Column Family）在建表时预先定义，但列族内的列限定符（Column Qualifier）可以在运行时动态添加，数量无限制**。
-
-这与关系型数据库的 `ALTER TABLE ADD COLUMN` 有本质区别：
-
-```
--- HBase 伪代码：动态添加列，无需 Schema 变更
-put 'user_table', 'row_001', 'info:name', 'Alice'    -- 添加 info:name 列
-put 'user_table', 'row_001', 'info:new_feature', '42' -- 随时添加新列，无需 DDL
-
--- 不同行可以有完全不同的列，不影响彼此
-put 'user_table', 'row_002', 'info:age', '28'         -- row_002 没有 name，有 age
-put 'user_table', 'row_002', 'info:location', 'SH'    -- row_002 有 location，row_001 没有
-```
-
-这种设计被称为**"稀疏列"**。在 HBase 的物理存储中，不存在的列不占用任何空间——它们根本就不在 HFile 中。这与关系型数据库的 `NULL` 值有本质区别：RDBMS 的 `NULL` 在某些情况下仍会占据元数据空间，而 HBase 的缺失列是真正的"不存在"。
-
-这个特性使得 HBase 非常适合以下场景：
-
-- **用户行为矩阵**：数亿用户 × 数百万商品的点击/购买矩阵，绝大多数用户只与极少数商品有交互，稀疏度极高
-- **动态标签系统**：每个用户可以被打上任意多的标签，标签以列限定符形式存储，标签名就是列名
-- **网页特征存储**：不同 URL 有不同的特征维度，不需要为所有 URL 预分配所有可能的特征列
+| 参数 | 默认值 | 作用 | 调大的代价 | 调小的代价 |
+| :--- | ---: | :--- | :--- | :--- |
+| `hbase.regionserver.global.memstore.size` | 0.4 | 全 RS 所有 Store 的 MemStore 之和上限 | 与 BlockCache 抢堆，GC 压力上升，极端时频繁 Full GC | flush 更频繁、写放大上升，写吞吐下降 |
+| `hfile.block.cache.size` | 0.4 | BlockCache 占堆比例 | 挤占 MemStore，写入更容易被阻塞 | 缓存命中率下降，读延迟上升，索引块也可能被淘汰 |
+| `hbase.hregion.memstore.flush.size` | 128MB | 单 Store 的 flush 触发阈值 | 单次 flush 更重，恢复时 WAL 回放更久，峰值内存更高 | flush 更频繁，HFile 更小更多，合并压力上升 |
+| `hbase.hregion.memstore.block.multiplier` | 4 | 单 Region MemStore 超过 flush size 多少倍就拒绝写入 | 允许更大缓冲，堆风险上升 | 更早抛 `RegionTooBusyException`，上游需要更强的重试与背压 |
+| `hbase.hstore.blockingStoreFiles` | 16（2.x） | Store 文件数超过此值则阻塞写入等待合并 | 合并压力大时容忍更多文件，但读放大与打开耗时上升 | 更早阻塞写入，吞吐出现尖刺式下跌 |
+| `hbase.hstore.compactionThreshold` | 3 | Store 文件数达到该值触发一次 minor compaction | 合并更少更大，写放大降低，但读放大与空间占用上升 | 合并更频繁，写放大与 CPU 消耗上升 |
+| `hbase.hregion.max.filesize` | 10GB | 单 Store 大小达到该值触发 Region 分裂 | Region 更大，分裂更少，但单 Region 恢复与合并更慢 | Region 更多，元数据与打开开销上升，小 Region 问题凸显 |
+| `hbase.hregion.max.filesize.jitter` | 0.25 | 分裂点的随机抖动比例 | 分裂点更分散，单 Region 大小更不均匀 | 抖动不足，容易出现同一批 Region 同时分裂 |
 
 ---
 
-## 第 5 章 数据如何组织：从概念视图到物理存储的映射
+## 第 5 章 边界：HBase 不适合什么
 
-### 5.1 HBase 的概念视图：一张逻辑上的宽表
+前面的推演都是"它为什么这样"，这一章换成"它因此做不到什么"。这个转换很重要，因为 HBase 的每一个短板都能在前面的某一笔账里找到出处——它不是没做好，而是选了另一边。
 
-让我们以 Google BigTable 论文中的经典例子——网页存储表——来理解 HBase 的数据视图。
+### 5.1 没有行键前缀的二级索引查询
 
-假设我们有一张存储网页信息的 HBase 表，表名为 `webtable`，包含两个列族：
-- `contents`：存储页面的 HTML 内容
-- `anchor`：存储指向该页面的锚文本（每个外链是一列）
+HBase **只有一种索引**：行键的全序。任何查询只要能映射成"行键等值"或"行键前缀范围"，就已经落在 B+Tree 那一类索引的效率上；任何查询只要过滤条件里包含不属于行键前缀的列，代价就是全表 Scan。
 
-在概念视图上，这张表看起来像这样：
+这不是"慢一点"的问题，而是"规模一大就无法接受"的问题。粗算一下，一张 10 亿行的表做一次全表 Scan，即便每台机器每秒能扫 10 万行，也要几十台机器跑上几分钟，而且这段时间 BlockCache 会被彻底冲掉，连带把正常的点查延迟一起拉高。所以凡是想在 HBase 上做"按状态查订单""按城市查用户""按商品查评价"的需求，工程上只有三条路，每条都有自己的价。
 
-```
-行键                列族:列限定符              时间戳       值
--------------------------------------------------------------------
-com.cnn.www        contents:html            t9          "<html>..."
-com.cnn.www        contents:html            t8          "<html>..."（旧版本）
-com.cnn.www        anchor:cnnsi.com         t9          "CNN"
-com.cnn.www        anchor:my.look.ca        t8          "CNN.com"
-com.example.www    contents:html            t5          "<html>..."
-```
+第一条是另建一张索引表，把查询列当行键、把主键当列值，由应用在写入时双写。代价是双写的一致性完全没有保障（除非用 Procedure 或外部事务协调），并且索引表本身还要处理热点与分裂。第二条是用 Phoenix 的二级索引，本质仍然是索引表加协处理器维护，好处是 SQL 层把这层复杂度收了进去，代价是索引维护带来额外的写放大，全局索引的写入路径也更重。第三条是把这类查询交给 Elasticsearch 之类的检索系统，HBase 只保留主键查询，两边靠消息或批同步保持一致，代价是引入了第二个存储系统与一条最终一致的链路。
 
-这里有几个关键的观察：
-1. `com.cnn.www` 这一行有 `anchor:cnnsi.com` 和 `anchor:my.look.ca` 两个列，而 `com.example.www` 没有任何 anchor 列——稀疏性体现
-2. `contents:html` 存储了两个版本（时间戳 t9 和 t8）——多版本机制体现
-3. 行键采用了反转域名格式（`com.cnn.www` 而不是 `www.cnn.com`），这样所有 CNN 旗下的 URL 在按字节序排序时会聚集在一起——行键设计原则体现
+HBase 的查询能力像一把只有一个齿的钥匙，那个齿就是行键，能开哪扇门在打这把钥匙的时候就定了。
 
-### 5.2 行键排序的物理意义：范围扫描的效率来源
+判据可以写得很直白：把线上查询按条件拆开，如果过滤条件里落不到行键前缀上的比例超过一半，HBase 就不是这张表该用的存储。
 
-HBase 中所有行都按行键的**字节序**排序存储。这意味着：
+### 5.2 跨行事务
 
-- `user_00001` 存储在 `user_00002` 之前
-- `user_00002` 存储在 `user_00010` 之前（字典序，而不是数值序）
-- `zz_user` 存储在所有 `a_user`、`b_user` 之后
+第 3 章已经把边界划清楚了，这里只补工程上的实际感受。HBase 不给跨行事务，意味着所有"要么一起成功、要么一起失败"的业务语义都要从存储层上移到应用层，而应用层的补偿很难做到无懈可击：扣了库存没建订单，要靠对账把库存补回去；建了订单没扣库存，要靠定时任务发现并撤销。补偿逻辑本身要幂等，要能处理重复投递，要能应对补偿也失败的情况——这些都是真金白银的代码量。
 
-这个排序特性对查询效率有深远的影响：
+有些业务确实可以在模型上绕开：把库存占用与订单状态放进同一行（同一个订单号做行键），用一次 `RowMutations` 完成；把账户余额的变更做成一条流水记录追加，用余额快照加流水重算来代替原地扣减。这些手法成立的共同前提是"参与原子变更的数据能塞进一行"。塞不进去的，就不该指望 HBase。
 
-**范围扫描（Scan）是高效的**：如果你想查询所有 UID 在 `user_10000` 到 `user_20000` 之间的用户数据，HBase 只需要定位到 `user_10000` 所在的 Region，然后顺序读取，直到 `user_20000`——这是一次顺序 I/O，非常高效。
+### 5.3 复杂聚合与多表关联
 
-**点查（Get）也是高效的**：定位特定行键时，HBase 利用 Region 的起止行键范围和 HFile 的 Block 索引，通过 O(log N) 次索引查找定位到目标行。
+HBase 没有查询优化器，没有下推的聚合算子，没有 JOIN。`Scan` 支持过滤器（`PrefixFilter`、`SingleColumnValueFilter`、`FilterList`），但这些过滤器默认在服务端逐行判断，减少的是网络传输，不是扫描量；真正意义上的"只读需要的块"，要么靠行键设计，要么靠 `Coprocessor` 的 Endpoint 自己写聚合代码。连行数统计都没有元数据捷径，`RowCounter` 这类工具本质上仍是扫全表，只是把扫描分摊到了计算框架上。
 
-**行键设计决定数据局部性**：如果你把用户的所有行为记录都用 `user_id + timestamp` 作为行键，那么同一用户的所有数据在物理上是相邻的，读取某用户的历史记录只需要一次短距离的范围扫描。
+所以聚合与关联应当放在计算层：Spark 或 Flink 读 HBase 做批量计算，结果写回 HBase 或另一个分析型存储。把 HBase 当成明细层而不是分析层，是这套生态里最常见的分工。
 
-这一点与关系型数据库的聚簇索引（Clustered Index）思想完全一致——但在 HBase 中，行键就是唯一的聚簇维度，没有第二选择。
+### 5.4 小数据量与运维成本门槛
 
-> [!warning] 生产避坑
-> **行键设计是 HBase 最重要的 Schema 设计决策**，重要性远超列族设计。一旦表建好并写入数据，修改行键需要全表重写，代价极高。在设计阶段，必须充分考虑：什么是最常见的访问模式（点查还是范围扫描）？如何避免热点（单调递增的行键会导致所有写入集中到最后一个 Region）？
+HBase 有一个容易被低估的成本：它是三套分布式系统的组合。HDFS 要有 NameNode 高可用与 JournalNode 仲裁，ZooKeeper 至少要三个节点才能容忍一台故障，HBase 自己要 Master 高可用与至少两三台 RegionServer，再加上监控、备份、升级窗口。这一套下来的机器数量与人力投入，对几十 GB 的数据量是完全不划算的——同样的问题 PostgreSQL 单机就能解，还附带事务与 SQL。
 
-### 5.3 物理存储视图：列族的物理隔离
+HBase 的经济性来自规模效应：Region 数足够多，BlockCache 才能装下足够比例的热数据，Compaction 的摊薄成本才合理，RegionServer 的故障切换才有其他机器接手。数据规模与并发量都上不去的时候，引入 HBase 得到的不是扩展性，而是一套需要长期照看的分布式系统。
 
-在物理存储层面，上面的概念视图实际上被分成了两个独立的存储单元：
+### 5.5 判据清单
 
-**Column Family "contents" 的 HFile 内容：**
-```
-com.cnn.www/contents:html/t9  →  "<html>..."（HTML 内容）
-com.cnn.www/contents:html/t8  →  "<html>..."（HTML 旧版本）
-com.example.www/contents:html/t5 →  "<html>..."
-```
+把上面几条收成一张表，用来在方案评审上快速判断。
 
-**Column Family "anchor" 的 HFile 内容：**
-```
-com.cnn.www/anchor:cnnsi.com/t9  →  "CNN"
-com.cnn.www/anchor:my.look.ca/t8 →  "CNN.com"
-```
+| 需求特征 | HBase 是否合适 | 更合适的选择 | 判据一句话 |
+| :--- | :--- | :--- | :--- |
+| 按主键或主键前缀做点查、范围扫描，数据量 TB 到 PB | 合适 | HBase | 这正是行键索引的甜蜜区 |
+| 写入量大、以追加为主、需要按时间或用户回查明细 | 合适 | HBase | 写入路径是顺序写，天然扛高吞吐 |
+| 稀疏宽表，列随业务增长，不同行差异极大 | 合适 | HBase | 不存在的列不占空间，无需 DDL |
+| 按非行键列做等值查询或分页 | 不合适 | 索引表、Phoenix、Elasticsearch | 没有行键前缀就是全表扫描 |
+| 需要跨行原子写（转账、扣库存加建单） | 不合适 | 关系型数据库、支持分布式事务的 NewSQL | HBase 只有单行原子 |
+| 需要多表 JOIN、复杂聚合、报表 | 不合适 | 数仓、ClickHouse、Spark SQL | 没有优化器也没有 JOIN |
+| 需要二级索引且不想引入第二个系统 | 不合适 | 原生支持二级索引的数据库 | HBase 的二级索引都要自己搭 |
+| 数据量几十 GB、并发不高、团队没有大数据运维 | 不合适 | 单机关系型数据库 | 运维成本远超收益 |
 
-注意：`com.example.www` 在 "anchor" 的 HFile 中**不存在任何记录**——没有占位符，没有 NULL，就是物理上不存在。这就是"稀疏"的真正含义。
+### 5.6 选型前先回答的三个问题
 
-如果你只查询 "anchor" 列族，HBase 完全不需要读取 "contents" 列族的 HFile，I/O 完全隔离。
+上面这张表是结论，落到具体项目上还需要三个前置问题，它们决定的是"能不能改模型"而不只是"要不要用 HBase"。
+
+第一个问题：查询能不能落回行键或行键前缀。把业务方近半年的查询清单拉出来，逐条标出过滤条件，凡是只能落在非行键列上的，数一数占比。这个比例决定了索引方案要额外投入多少，也决定了 HBase 是不是在替一个本该用检索系统的需求背锅。
+
+第二个问题：需要原子性的数据能不能塞进同一行。转账、扣库存、状态流转，先问参与者能不能共享一个行键。能，就用 `RowMutations` 或一次 `Put` 解决；不能，就得预备补偿与对账的预算。很多项目在选型阶段觉得"事务以后再说"，实际结果是这笔技术债在业务量上来之后集中爆发。
+
+第三个问题：团队能不能长期养这三套系统。HBase 的日常开销不在写代码，而在升级、Region 治理、Compaction 调优、故障演练、备份恢复演练。没有专职的人，集群会以一种慢性病的方式退化：小文件越来越多、RIT 偶发、Region 数失控，直到某次写入风暴把问题一次性暴露出来。
+
+三个问题的答案如果都不乐观，那么正确的选择往往不是"用 HBase 但要小心"，而是"换一个存储系统"。选型讨论里最贵的一句话是"先上，不行再换"——数据一旦按行键组织好，迁移成本会高到没人愿意启动第二次。
 
 ---
 
-## 第 6 章 HBase 与同类系统的横向对比：找到正确的使用场景
+## 第 6 章 三个反例
 
-### 6.1 HBase vs. Cassandra：同根异枝的架构分歧
+### 6.1 反例一：按业务维度建十个列族
 
-Apache Cassandra 同样是受 BigTable 启发的列族存储系统（还受 Amazon Dynamo 论文影响），但两者在架构上有根本性的差异：
+这个错误的起点往往是善意的：设计者看到"列族可以独立配置 TTL 与压缩"，于是按业务维度把用户表拆成基础信息、扩展属性、标签、行为统计、设备信息、风控标记等十个列族，觉得边界清晰、各管一摊，将来改一个列族的 TTL 也不影响别人。
 
-| 维度 | HBase | Cassandra |
-|------|-------|-----------|
-| **一致性模型** | 强一致性（单行操作） | 最终一致性（可调节一致性级别） |
-| **架构模式** | 主从架构（HMaster + RegionServer） | 无中心对等架构（所有节点对等） |
-| **数据分布** | 基于行键范围分片（Region） | 基于一致性哈希环分片 |
-| **底层存储** | 依赖 HDFS（外部文件系统） | 自管理本地磁盘存储 |
-| **顺序扫描** | 天然支持，按行键范围高效扫描 | 支持但效率较低（哈希打散了顺序性） |
-| **写入延迟** | 稍高（需要写 WAL 到 HDFS） | 较低（直接写本地磁盘） |
-| **运维依赖** | 重（依赖 ZooKeeper + HDFS） | 轻（自包含，依赖少） |
-| **适合场景** | Hadoop 生态，需要与 MapReduce/Spark 集成 | 纯在线服务，多数据中心，高可用优先 |
+上线初期的症状并不明显，数据量小的时候一切正常。等到写入量上去，问题开始成串出现：写入延迟出现尖刺，日志里时不时冒出 `RegionTooBusyException`；Compaction 队列长期非空，`blockingStoreFiles` 偶发触顶导致写入被阻塞一段时间；Region 打开变慢，RegionServer 重启后的恢复时间被拉长；HDFS 上的文件数增长得比数据量快得多，NameNode 的元数据压力同步上升。
 
-HBase 选择强一致性和主从架构，牺牲了部分可用性（HMaster 故障期间无法执行 DDL），换来了简单的一致性模型（不需要处理写入冲突）和对范围扫描的天然支持。Cassandra 选择最终一致性和对等架构，获得了更高的写入可用性和更低的运维复杂度，但放弃了行键的顺序性。
+根因就在 4.3 节那笔账里：十个列族把每个 Store 的 MemStore 预算摊到不足原来的十分之一，缓冲区攒不到足够的数据就必须落盘，顺序写的红利被自己抵消；HFile 数量按列族成倍增加，合并压力与读放大一起上升。所谓"边界清晰"在物理层没有对应收益——列族之间不会因为业务不同就减少互相干扰，它们共享同一个堆、同一条 HDFS、同一批磁盘。
 
-**选择建议**：如果你的系统已经在 Hadoop 生态中，需要 HBase 数据与 Spark/MapReduce 作业无缝对接，选 HBase。如果你是纯在线服务，不依赖 Hadoop，需要多数据中心复制，选 Cassandra。
+处置方式有两种：把十个列族合并成一个，用列限定符（qualifier）区分业务语义，因为限定符不是 Store，不额外占缓冲；确实需要不同 TTL 或不同压缩策略的部分，单独拆成另一张表，而不是同一张表的另一个列族。
 
-### 6.2 HBase vs. Redis：不同抽象层次的存储系统
+### 6.2 反例二：用 HBase 承担需要二级索引的查询
 
-有工程师会问：HBase 和 Redis 都能做随机键值查询，为什么不用 Redis 来替代 HBase？
+典型场景是订单系统：行键设计成 `订单号`，因为写入时需要按订单号做幂等，点查也以订单号为主。业务上线后运营提出需求——"查一下某用户最近的订单""查一下所有待支付的订单""按时间段导出订单"。前一个需求可以在行键里加用户 ID 前缀（代价是幂等键与查询键分离，需要两张表或两套行键规则），后两个需求则完全落在行键之外。
 
-这是一个对两个系统的定位有根本性误解的问题：
+工程上常见的应对是硬扫：客户端起一个 `Scan`，加 `SingleColumnValueFilter` 过滤状态，然后分页取。数据量到千万级时这个问题还不明显，到十亿级时 `Scan` 会持续占满 RegionServer 的读线程与 BlockCache，把正常的订单点查一起拖慢，客户端侧则表现为 `ScannerTimeoutException` 或者干脆 RPC 超时。更麻烦的是这类查询往往来自运营后台，没有流量治理，一次导出就能把在线集群打垮。
 
-| 维度 | HBase | Redis |
-|------|-------|-------|
-| **数据规模** | PB 级 | GB 到 TB 级（受内存限制） |
-| **存储介质** | 磁盘（HDFS），内存只是缓存 | 主要在内存中 |
-| **数据持久化** | 天然持久化（HDFS + WAL） | 需要配置 RDB/AOF |
-| **数据结构** | 稀疏宽表，多版本 | 丰富数据结构（Hash、List、Set...） |
-| **查询能力** | 支持范围扫描（Scan） | 不支持范围扫描（除有序集合外） |
-| **延迟** | 毫秒级 | 微秒级 |
-| **成本** | 低（磁盘廉价） | 高（内存昂贵） |
+根因还是那句话：没有行键前缀的过滤等于全表扫描。处置上，短期可以给这类查询加限流与独立集群（`rsgroup` 把运营查询隔到一组机器上），中期建索引表或接 Elasticsearch，长期则要在模型上重新设计——把"按状态查"变成"状态加时间做行键前缀"的索引表，让查询落回行键范围。
 
-Redis 是内存数据库，适合缓存、实时计数、排行榜等对延迟要求极高（微秒级）但数据量不超过内存容量的场景。HBase 是磁盘数据库，适合 PB 级海量历史数据的随机访问，延迟在毫秒级。
+### 6.3 反例三：以为 HBase 支持跨行事务
 
-在实际生产架构中，Redis 和 HBase 往往是**配合使用**而不是竞争关系：Redis 作为 HBase 的热数据缓存层，承接高频访问的热点数据；HBase 作为持久化存储层，存储全量历史数据。
+这个误解最常见于从关系型数据库迁过来的团队。业务逻辑写得很自然：先读库存行，判断足够，扣减；再写订单行；最后写流水行。开发阶段一切正常，因为失败很少发生。上线之后，超时、Region 迁移、RegionServer 重启都会打断中间某一步，于是库里出现扣了库存没有订单、或者有订单没有流水的数据，对账任务每天都能捞出一批。
 
-### 6.3 HBase vs. 关系型数据库：何时不应该用 HBase
-
-HBase 不是万能的，以下场景中，传统 RDBMS 是更好的选择：
-
-**场景 1：需要复杂 SQL 查询和多表 JOIN**
-
-HBase 没有 SQL 引擎（虽然有 Apache Phoenix 这个 SQL 层），不支持多表 JOIN，不支持聚合函数的实时计算（需要 MapReduce 离线处理）。如果你的业务逻辑依赖复杂的关联查询，RDBMS 是更合适的选择。
-
-**场景 2：需要 ACID 多行事务**
-
-HBase 只保证单行操作的原子性（行级 ACID），不支持跨行事务。如果你需要"扣减库存同时新建订单"这样的多行原子操作，HBase 无法满足。
-
-**场景 3：数据量在 TB 以下且增长缓慢**
-
-HBase 的运维成本较高，依赖 HDFS + ZooKeeper，需要一定的运维门槛。如果数据量不是特别大，RDBMS 配合读写分离就能很好地解决问题，引入 HBase 会增加不必要的复杂度。
-
-**场景 4：需要二级索引**
-
-HBase 的唯一内置索引是行键（主键）。如果你需要按非行键列进行查询（比如"查询所有 `city='Beijing'` 的用户"），HBase 需要全表扫描，代价极高。这种情况下，要么用 Elasticsearch 等搜索引擎作为二级索引，要么选择原生支持二级索引的数据库。
-
-> [!info] 核心使用场景总结
-> HBase 的甜蜜区间是：**数据量在 TB 到 PB 级别、需要按行键（或行键前缀）进行随机点查和范围扫描、写入量大（每秒数万到百万级别）、数据是稀疏宽表或需要多版本存储**。典型场景包括：消息系统的历史消息存储、用户行为日志的存档与查询、时序数据存储（如监控指标）、网页爬虫数据存储。
+根因是第 3 章那条边界：原子性的边界只到单行。要修，先要在模型上想办法——把参与原子变更的数据合并进同一行，用一次 `RowMutations` 完成；合并不了的，就得在应用层设计补偿：每一步都带幂等键，失败时按相反顺序回滚，再配一个定期对账把不一致捞出来。这两条路都比直接写事务代码贵，这也是"选型阶段就要想清楚"的原因——等到业务跑起来再补一致性，成本会翻好几倍。
 
 ---
 
-## 第 7 章 HBase 的生态位：在大数据架构中的精准定位
+## 第 7 章 结语
 
-### 7.1 Lambda 架构中的 HBase
+把全文收束成一条主线：HBase 的所有关键设计，都是被"随机读写"这一个需求逼出来的，而每一个对策都附带着明确的代价。随机写被折叠成顺序写，账单是写放大与 Compaction；无索引被换成行键全序，账单是热点与行键不可改；低延迟读被换成缓存与过滤器，账单是堆内存里那 0.8 的固定开销；列族被当成物理隔离单元，账单是 MemStore 预算被摊薄。这些代价没有一个能被参数抹平，参数只能在几笔账之间挪动份额，这正是任何一次调优都在做的事。
 
-Lambda 架构 是大数据领域经典的架构模式，它将数据处理分为三层：
+谱系那一章要留下的判断是：HBase 忠实继承的是 BigTable 的数据模型与 LSM 组织，被迫分叉的是依赖替换之后长出来的运维形态。RIT、procedure store、meta 表自身的可用性、几百个参数，这些在论文里找不到，因为 BigTable 是服务而 HBase 是软件。读论文能读懂设计，读 `hbase-default.xml` 才能读懂日常。
 
-- **批处理层（Batch Layer）**：用 MapReduce/Spark 对全量历史数据进行离线计算，结果准确但延迟高（小时级）
-- **速度层（Speed Layer）**：用 Storm/Flink 对实时增量数据进行流计算，延迟低（秒级）但数据不完整
-- **服务层（Serving Layer）**：将批处理和流计算的结果合并，对外提供低延迟查询服务
+一致性那一章要留下的判断是：把 HBase 归入 CP 是对的，但 CP 只描述了"分区时选择停"这一件事；真正落到代码里的，是**四条边界**——单行原子、跨行无事务、跨表无事务、跨 Region 扫描非全局快照。它们决定了一张表的数据模型该怎么切，也决定了哪些业务从一开始就不该放在这里。
 
-在这个架构中，HBase 通常扮演**服务层**的角色，原因很简单：
-
-1. 批处理层（Spark）的计算结果可以直接通过 Spark-HBase 连接器写入 HBase
-2. 速度层（Flink）的实时结果也可以通过 HBase 客户端增量更新到 HBase
-3. 服务层的在线查询直接读取 HBase，延迟在毫秒级
-
-HBase 同时支持大批量写入（用于批处理层的结果写入）和随机读写（用于在线查询），是服务层的理想载体。
-
-### 7.2 实时 OLAP 架构中的 HBase
-
-随着业务对数据时效性要求的提高，Kappa 架构 逐渐替代 Lambda 架构，HBase 在其中的角色也随之演化。
-
-在实时数仓场景中，常见的技术栈是：
-
-```
-Kafka（消息队列）→ Flink（实时计算）→ HBase（实时明细存储）
-                                    ↘ ClickHouse（实时聚合分析）
-```
-
-HBase 在这里负责存储**明细数据**（比如每一条用户行为记录），提供按用户 ID 快速查询历史行为的能力。ClickHouse 负责**聚合分析**（比如统计某商品的总点击量），提供 OLAP 查询能力。两者互补，分工明确。
-
-### 7.3 HBase 在互联网大厂的真实应用
-
-HBase 在国内外互联网大厂中有着广泛的生产应用：
-
-**阿里巴巴**：阿里云 HBase 服务支撑了阿里内部交易、日志、用户画像等众多业务。据阿里 2019 年的技术分享，其 HBase 集群总规模超过 100PB，日写入量超过 100 万亿条记录。
-
-**Facebook（Meta）**：Facebook 的消息系统使用了类 HBase 的系统（实际上是 Facebook 自研的 Apache Cassandra，但底层思想与 HBase 相同），存储数千亿条消息记录。
-
-**小米**：小米的用户行为数据平台使用 HBase 存储用户行为日志，支撑了小米 Push 推送系统的个性化推荐能力。
-
-**滴滴**：滴滴的行程记录、司机评分等核心数据使用 HBase 存储，数据量在 PB 级别。
-
-这些案例共同印证了 HBase 在海量数据、高并发读写场景下的工程价值。
+架构不是发明出来的，是在约束下演进出来的。HBase 今天的长处与短处，几乎都能追到 2003 到 2006 年间那几篇论文里的一段取舍，以及开源替代品与原版之间那几处语义差异。下一次翻开 HBase 的配置文档时，不妨先问一句：这个参数是在替哪一笔账付钱，付给谁，又向谁转移。
 
 ---
 
-## 第 8 章 设计哲学的统一：HBase 到底在解决什么问题
+## 参考资料
 
-### 8.1 三个核心问题的回答
-
-现在我们可以系统地回答本文开头提出的三个核心问题。
-
-**问题一：大规模互联网数据遇到了什么样的存储危机？**
-
-互联网数据的核心特征是：**规模超大（PB 级）、结构稀疏（不同实体属性差异大）、写入频繁（每秒百万级写入）、访问模式既有批量分析又有随机查询**。关系型数据库无法水平扩展，无法高效存储稀疏数据，在高并发写入下性能急剧退化。HDFS 解决了批量存储问题，但无法提供随机访问能力。这个空缺正是 HBase 要填补的。
-
-**问题二：为什么 HDFS + MapReduce 无法解决随机访问问题？**
-
-HDFS 的设计哲学是"大文件、顺序读写、高吞吐"，没有任何按记录键快速定位的索引机制。MapReduce 的执行模式是"全量扫描 + 筛选"，每次查询的代价是扫描整个数据集。这两者的结合天然不支持毫秒级的随机点查，而在线服务恰恰需要毫秒级响应。
-
-**问题三：列族模型相较于行存储、纯列存储做了哪些取舍？**
-
-列族模型放弃了纯列存储的极致压缩比和分析查询性能（不适合全列扫描的 OLAP 分析），也放弃了行存储的全行 I/O 效率（不适合频繁读取完整宽行）。但它在两者之间找到了甜蜜点：通过列族内聚、列族间隔离，在支持稀疏宽表的同时保持合理的 I/O 效率；通过 MemStore + HFile 的 LSM 架构，在 HDFS 之上实现了高并发随机写入。
-
-### 8.2 "不够用"的辩证理解：没有银弹
-
-理解了上述背景，我们可以更准确地理解本文标题"为什么 HDFS 不够用"——这里的"不够"不是说 HDFS 设计得不好，而是说**特定业务场景超出了 HDFS 的设计边界**。
-
-软件系统的设计本质上是在约束条件下做出取舍（Tradeoff）。HDFS 的设计取舍是：**牺牲随机访问能力，换取高吞吐的批量顺序读写能力**。这个取舍在批处理场景下是完全正确的。
-
-HBase 在 HDFS 之上引入了自己的取舍：**通过 MemStore 缓冲随机写入，通过 HFile 的 Block 索引支持随机读，通过 WAL 保证持久性**——这套机制给随机访问能力带来了代价：写入放大（Write Amplification，同一份数据被写多次）、读取放大（Read Amplification，可能需要读取多个 HFile）、空间放大（Space Amplification，需要额外空间进行 Compaction）。这些代价是 HBase 选择 LSM-Tree 这一存储引擎时必须接受的。
-
-> [!note] 设计哲学
-> 理解一个技术系统，最重要的不是记住它的 API 和配置参数，而是理解它的设计取舍（Tradeoffs）：**它优化了什么，为此付出了什么代价，在什么场景下这种取舍是值得的**。这是贯穿整个 HBase 专栏的核心思维框架。
-
-### 8.3 后续文章的铺垫：逐层揭开 HBase 的面纱
-
-经过本文的讨论，我们建立了理解 HBase 的基本框架：
-
-- **HBase 是什么**：HDFS 之上的随机读写层，受 BigTable 启发，采用列族存储模型
-- **HBase 为什么出现**：填补 HDFS 批处理能力与在线随机访问需求之间的空缺
-- **列族模型的核心逻辑**：行存储与列存储的工程折中，稀疏列的物理实现，列族的物理隔离
-- **HBase 的适用场景**：海量、稀疏、高并发写入、按行键随机点查/范围扫描
-
-在接下来的文章中，我们将逐步深入：
-
-- **第 02 篇**：精确理解 HBase 的四维坐标模型（RowKey/CF/Qualifier/Timestamp），以及多版本机制的工程实现
-- **第 03 篇**：理解 Master、RegionServer、ZooKeeper 三个组件如何分工协作
-- **第 04 篇**：深入 LSM-Tree 存储引擎，理解 MemStore 和 HFile 的设计逻辑
-- **后续**：读写链路、Compaction、Region 管理、高可用与生产调优
-
-每一层都会回答一个关键问题：**这个设计选择是为了解决什么问题，如果不这样设计会怎样**。
+1. Chang, F., Dean, J., Ghemawat, S., et al. *Bigtable: A Distributed Storage System for Structured Data*. OSDI 2006. [PDF](https://static.googleusercontent.com/media/research.google.com/en//archive/bigtable-osdi06.pdf)
+2. Ghemawat, S., Gobioff, H., Leung, S.-T. *The Google File System*. SOSP 2003. [PDF](https://static.googleusercontent.com/media/research.google.com/en//archive/gfs-sosp2003.pdf)
+3. Burrows, M. *The Chubby Lock Service for Loosely-Coupled Distributed Systems*. OSDI 2006. [PDF](https://static.googleusercontent.com/media/research.google.com/en//archive/chubby-osdi06.pdf)
+4. Hunt, P., Konar, M., Junqueira, F., Reed, B. *ZooKeeper: Wait-free Coordination for Internet-scale Systems*. USENIX ATC 2010. [PDF](https://www.usenix.org/legacy/events/usenix10/tech/full_papers/Hunt.pdf)
+5. Apache HBase. *Apache HBase Reference Guide*. [https://hbase.apache.org/book.html](https://hbase.apache.org/book.html)
+6. Apache HBase. `hbase-default.xml`（各参数默认值的唯一权威来源）. [GitHub](https://github.com/apache/hbase/blob/master/hbase-common/src/main/resources/hbase-default.xml)
+7. Apache HBase JIRA. *HBASE-15324: Jitter may cause desiredMaxFileSize overflow in ConstantSizeRegionSplitPolicy*（`hbase.hregion.max.filesize.jitter` 的由来）. [JIRA](https://issues.apache.org/jira/browse/HBASE-15324)
+8. George, L. *HBase: The Definitive Guide*. O'Reilly Media, 2011.
 
 ---
 
 > [!note] 思考题
-> 1. HBase 的列族（Column Family）设计要求在建表时预先定义，但列限定符（Column Qualifier）可以动态添加，数量没有上限。这种"半结构化"设计在存储层是如何实现的？如果一张表有 100 万个不同的列限定符，HBase 的存储效率与关系型数据库相比有何优劣？
-> 2. HBase 不支持跨行事务，每次操作只保证单行的原子性。在需要多行原子操作的业务场景（如转账：扣减 A 行余额，增加 B 行余额），通常的工程解法是什么？HBase 的 `checkAndPut` 和 `checkAndDelete` 提供了条件写入，它能否用来实现乐观锁模式的多行事务？
-> 3. BigTable 论文提出了列族存储的思想，HBase 是它的开源实现。但 BigTable 的底层存储是 GFS，HBase 的底层是 HDFS。HDFS 是为大文件顺序读写优化的，而 HBase 需要支持随机读写。HBase 是如何通过 MemStore + LSM-Tree 的设计，在 HDFS 这个"不支持随机写"的文件系统上实现高效随机写入的？
-
-## 参考资料
-
-- [1] Chang, F., et al. "Bigtable: A Distributed Storage System for Structured Data." OSDI, 2006.
-- [2] Ghemawat, S., Gobioff, H., & Leung, S. T. "The Google File System." SOSP, 2003.
-- [3] Dean, J., & Ghemawat, S. "MapReduce: Simplified Data Processing on Large Clusters." OSDI, 2004.
-- [4] Apache HBase Reference Guide: https://hbase.apache.org/book.html
-- [5] Lars George. "HBase: The Definitive Guide." O'Reilly Media, 2011.
-- [6] Stonebraker, M. "SQL Databases v. NoSQL Databases." Communications of the ACM, 2010.
+> 1. 如果把 `hfile.block.cache.size` 从 0.4 调到 0.6，写路径会在哪一个环节先出问题？请沿着 MemStore 的 flush 触发条件往下推。
+> 2. HBase 的行键全序带来范围扫描能力，也带来热点。加盐前缀解决了热点，代价落在哪一个具体操作上？
+> 3. 假设一个 Region 在迁移过程中，旧宿主与新宿主的 ZK 会话状态不一致，HBase 靠什么机制保证不会出现双写？
+> 4. `CheckAndMutate` 能做行内乐观锁，却不能做跨行事务。如果把两行业务数据强行合并成一行来换取原子性，会引入哪些新的问题？
+> 5. 同样是受 BigTable 启发，Cassandra 放弃了行键全序换取对等架构。如果一个业务既需要范围扫描又需要写高可用，有没有第三条路？

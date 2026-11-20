@@ -1,16 +1,16 @@
 ---
 title: "Java NIO基础——Channel、Buffer、Selector三大组件"
-date: 2026-09-07
-tags: [Java]
+date: 2026-11-19
+tags: [Java, Netty, 网络]
 keywords: [Buffer, Channel, NIO, Selector, 多路复用, 非阻塞IO]
-aliases: [Java NIO, NIO三大组件, Channel Buffer Selector]
+aliases: []
 ---
 
 # Java NIO基础——Channel、Buffer、Selector三大组件
 
 **摘要：**
 
-2002 年，JDK 1.4 引入了 New I/O（NIO），这是 Java 平台自诞生以来对网络编程模型做出的最重要的一次修正。在 NIO 出现之前的七年里，Java 的网络编程一直被 BIO（Blocking I/O）模型所统治——一个连接对应一个线程，线程在等待数据时被操作系统挂起，什么也做不了。这套模型在连接数以百计的年代尚可应付，但当互联网的并发连接数从百级跨越到万级、十万级时，它的缺陷便暴露无遗。NIO 用三个核心组件回应了这场挑战：Channel 取代了单向的 Stream，Buffer 取代了直接读写字节的裸操作，Selector 则将"一个线程监控多个连接"的多路复用能力带入了 Java 平台。本文从 BIO 的根本性困境出发，追溯 I/O 多路复用在操作系统层面的演进脉络，逐一剖析 Channel、Buffer、Selector 三大组件的设计原理与使用细节，最后用一个完整的 NIO 服务器示例串联所有组件，并指出 NIO 编程固有的复杂性痛点——这些痛点正是 Netty 诞生的理由。
+2002 年，JDK 1.4 引入了 New I/O（NIO），这是 Java 平台自诞生以来对网络编程模型做出的最重要的一次修正。在 NIO 出现之前的七年里，Java 的网络编程一直被 BIO（Blocking I/O）模型所统治——一个连接对应一个线程，线程在等待数据时被操作系统挂起，什么也做不了。这套模型在连接数以百计的年代尚可应付，但当互联网的并发连接数从百级跨越到万级、十万级时，它的缺陷便暴露无遗。NIO 用三个核心组件回应了这场挑战：Channel 取代了单向的 Stream，Buffer 取代了直接读写字节的裸操作，Selector 则将"一个线程监控多个连接"的多路复用能力带入了 Java 平台。本文从 BIO 的根本性困境出发，追溯 I/O 多路复用在操作系统层面的演进脉络，逐一剖析 Channel、Buffer、Selector 三大组件的设计原理与使用细节，最后用一个完整的 NIO 服务器示例串联所有组件，并指出 NIO 编程固有的复杂性痛点——这些痛点正是 Netty 诞生的理由。文中还会落到几处容易被含糊带过的实现细节：`select`、`selectNow` 与带超时的 `select` 在语义上的差别，`read()` 返回 0 的两种不同含义，直接内存受 `-XX:MaxDirectMemorySize` 约束的分配路径，以及 Netty 空轮询检测在 4.1 前后判断依据的变化。这些细节不改变 NIO 的组件划分，却决定了手写服务器能否在线上环境里稳定运行。
 
 ---
 
@@ -109,6 +109,26 @@ System.out.println(new String(dst));    // 输出 "Hello, NIO!"
 buffer.clear();                         // 重置为写模式：position=0, limit=capacity
 ```
 
+三个方法对 `position`、`limit` 的改动可以用一张状态图概括。图中的箭头不是 Buffer 自己的状态迁移，而是三个方法各自施加的指针变换——理解这张图，比记住"写完 flip、读完 clear"这句口诀更有用，因为 `compact()` 的落点并不在"清空"而在于"搬运"。
+
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+stateDiagram-v2
+    state "写模式 position=0, limit=capacity" as W
+    state "写满或写了 n 字节 position=n, limit=capacity" as W2
+    state "读模式 position=0, limit=n" as R
+    state "读了 m 字节 position=m, limit=n" as R2
+    state "压缩后 position=n-m, limit=capacity" as C
+
+    [*] --> W
+    W --> W2: put() 递增 position
+    W2 --> R: flip() 令 limit=position, position=0
+    R --> R2: get() 递增 position
+    R2 --> W: clear() 令 position=0, limit=capacity
+    R2 --> C: compact() 未读数据搬到头部
+    C --> W2: 继续 put()
+```
+
 除了 `flip()` 和 `clear()`，Buffer 还提供了一个 `compact()` 方法用于"压缩"——将未读的数据移到 Buffer 头部，`position` 指向未读数据末尾，然后可以继续追加写入。`compact()` 在"读了一部分、还剩一部分、想继续写"的场景下很有用，譬如在实现协议解析器时，上一次读取的数据只解析了半条消息，剩余部分需要保留到与下次读取的数据拼接在一起。如果用 `clear()`，未读的半条消息就被"逻辑清除"了（虽然数据还在内存中，但 `position` 归零后下次写入会覆盖它）；用 `compact()` 则把未读数据移到头部，`position` 指向其后，新数据可以安全追加。
 
 `rewind()` 是另一个常用方法，它把 `position` 归零但保持 `limit` 不变——和 `flip()` 的区别是 `rewind()` 不修改 `limit`。`rewind()` 用于"我想重新读一遍刚才读过的数据"的场景，譬如读完数据做了一次校验发现不通过，想重新读一遍重新处理。
@@ -166,6 +186,21 @@ Scatter/Gather 的价值在于减少数据拷贝——传统做法需要先把�
 ### 2.6 Buffer 的类型体系
 
 `Buffer` 是抽象基类，NIO 为 Java 的每种基本类型都提供了对应实现：`ByteBuffer` 对应 byte，`CharBuffer` 对应 char，`ShortBuffer`、`IntBuffer`、`LongBuffer`、`FloatBuffer`、`DoubleBuffer` 分别对应各自的基本类型。网络编程中几乎只用到 `ByteBuffer`，因为网络传输的基本单位是字节，但 `ByteBuffer` 额外提供了 `getInt()`、`getLong()`、`putLong()` 等便捷方法，可以直接按指定字节序读写多字节的基本类型。字节序通过 `order()` 方法设置，默认是大端序（Big-Endian），这与网络字节序（Network Byte Order）一致——TCP/IP 协议规定网络传输使用大端序，所以 `ByteBuffer` 的默认值省去了程序员手动转换的麻烦。如果需要和小端序的系统交互（如 x86 架构的某些二进制协议），可以调用 `buffer.order(ByteOrder.LITTLE_ENDIAN)` 切换。
+
+### 2.7 直接内存的分配路径与回收边界
+
+`ByteBuffer.allocateDirect()` 这一行调用背后藏着一条不短的路径，理解它有助于解释后面几类"明明没有泄漏、RSS 却一直涨"的现象。调用先进 `Bits.reserveMemory(size, cap)`：它把本次申请量累加到 `Bits.totalCapacity`，与 `-XX:MaxDirectMemorySize` 算出的上限比较，超限就主动触发一次 `System.gc()` 试图让已废弃的 `DirectByteBuffer` 的 `Cleaner` 跑起来，回收仍不够才抛 `OutOfMemoryError: Direct buffer memory`。这个参数不显式设置时，默认值与最大堆（`-Xmx`）相同，很多人以为堆外是"额外赠送的内存"，实际上它和堆共享同一个预算口径，堆外申请越多，留给堆的余量越少。
+
+真正分配内存的是 `Unsafe.allocateMemory()`，随后构造的 `DirectByteBuffer` 对象才在堆上注册一个 `Cleaner`。这条链路决定了回收的语义：能触发释放的只有 `DirectByteBuffer` 对象被 GC 判定为不可达，所以"堆内对象还活着"和"堆外内存还被占着"是同一件事的两面。把 `DirectByteBuffer` 塞进一个长生命周期的容器（缓存、静态字段、未关闭的连接上下文），堆外内存就会跟着一直不还。实践中还有两个容易踩的边界：`-XX:+DisableExplicitGC` 会让上面那次兜底的 `System.gc()` 变成空操作，于是异常路径直接抛 OOM 而不是先尝试回收；`MappedByteBuffer` 由 `FileChannel.map()` 产生，它的 `Cleaner` 与文件映射绑定，在 Windows 上未释放映射时文件无法删除或重命名，JDK 也没有提供公开的 unmap 接口——JDK 9 起可以用 `Unsafe.invokeCleaner()` 显式触发，JDK 8 只能靠反射或等待 GC，具体可用性以对应版本文档为准。
+
+| 现象 | 直接内存的成因 | 判断手段 |
+| --- | --- | --- |
+| 堆使用正常、RSS 持续上涨 | 废弃的 `DirectByteBuffer` 尚未被 GC，`Cleaner` 未执行 | `-XX:NativeMemoryTracking=summary` 配合 `jcmd VM.native_memory`，或 `pmap` 观察 anon 段 |
+| 抛 `OutOfMemoryError: Direct buffer memory` | `Bits.totalCapacity` 触及 `MaxDirectMemorySize`，兜底 GC 也回收不出空间 | 打印 `MaxDirectMemorySize` 实际值，排查是否有长生命周期的直接缓冲区 |
+| 显式 GC 被禁用后 OOM 更频繁 | `-XX:+DisableExplicitGC` 让兜底回收失效 | 对比开启前后的 OOM 频率，改用池化分配器而不是依赖 GC |
+| 文件删除或重命名失败 | `MappedByteBuffer` 未 unmap，句柄仍被占用 | 在对应平台上检查映射生命周期，必要时改为普通读写 |
+
+这也解释了一个常见误解：直接内存"不受 GC 管理"并不等于"和 GC 无关"。它的分配受堆参数约束，它的释放依赖 GC 触发对象不可达，只是释放动作本身由 `Cleaner` 在 JVM 之外执行。Netty 之所以要另起一套引用计数，正是为了绕开这条"依赖 GC 才回收"的间接链路，把释放时机拿回应用手里。
 
 ---
 
@@ -241,6 +276,23 @@ if (!connected) {
 }
 ```
 
+连接建立阶段的这三种状态，在真实服务器里通常不是靠 `finishConnect()` 轮询，而是注册 `OP_CONNECT` 交给 Selector 通知。下图把客户端从 `connect()` 返回到连接可写的过程画出来，注意 `finishConnect()` 返回 false 并不是错误，只是"握手还没走完"。
+
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+graph TD
+    A["connect(addr)"] --> B{"返回值"}
+    B -->|true| C["已连接，可直接 write"]
+    B -->|false| D["握手进行中，channel 处于 pending"]
+    D --> E["register(selector, OP_CONNECT)"]
+    E --> F["select() 返回 OP_CONNECT 就绪"]
+    F --> G{"finishConnect()"}
+    G -->|true| C
+    G -->|false| H["继续等待，必要时重试"]
+    H --> F
+    G -->|抛出 IOException| I["连接失败，关闭 channel"]
+```
+
 非阻塞模式带来一个编程范式上的转变：应用层必须正确处理"读了 0 字节"的情况。在 BIO 中，`read()` 返回 0 几乎不会发生（要么阻塞等待到有数据，要么返回 -1 表示连接关闭）；在 NIO 中，`read()` 返回 0 是常态——它只是告诉你"现在没有数据可读，过会儿再来看看"。这正是 Selector 存在的意义：与其让线程不断轮询每个 Channel 调用 `read()` 碰运气，不如让 Selector 告诉你"哪个 Channel 现在有数据可读"，只在有数据的时候才调用 `read()`，避免无效的空读。
 
 ### 3.4 FileChannel 的零拷贝能力
@@ -259,6 +311,24 @@ long transferred = fileChannel.transferTo(0, fileChannel.size(), socketChannel);
 传统文件发送路径需要四次数据拷贝：磁盘经 DMA 到内核读缓冲区，CPU 拷贝到用户态缓冲区，CPU 拷贝到内核写缓冲区（socket 缓冲区），DMA 到网卡。`transferTo()` 路径只需要两次 DMA 拷贝：磁盘到内核读缓冲区，内核读缓冲区到网卡——两次 CPU 参与的内存拷贝被完全消除。对于大文件传输场景（视频流、文件下载），这个优化带来的性能提升非常显著。Kafka 的零拷贝消息投递正是基于 `FileChannel.transferTo()` 实现的——Broker 把日志段文件中的消息直接通过 `transferTo()` 发送给消费者，全程不经过 JVM 堆，这也是 Kafka 高吞吐的关键技术之一。
 
 `FileChannel` 还支持 `map()` 方法，它将文件映射到堆外内存（通过 `mmap` 系统调用），返回一个 `MappedByteBuffer`。映射后的 Buffer 读写操作直接作用于文件，无需额外的 `read()`/`write()` 系统调用——修改 Buffer 中的数据就等于修改文件内容，操作系统会在合适的时机将脏页刷回磁盘。`MappedByteBuffer` 适合处理大文件的随机读写（如数据库的索引文件），但有一个陷阱：`MappedByteBuffer` 的释放不受 GC 控制，`Cleaner` 的延迟回收可能导致文件句柄长时间不释放，在 Windows 上这会导致文件无法被删除。
+
+### 3.5 非阻塞读写的返回语义
+
+非阻塞模式下 `read()` 与 `write()` 的返回值比阻塞模式复杂得多，把返回值与就绪事件混为一谈，是手写 NIO 服务器最常见的空转来源。对 `SocketChannel.read(ByteBuffer dst)` 来说，返回 0 有两种完全不同的含义：一种是内核接收缓冲区里确实没有数据，另一种是目标 Buffer 的 `remaining()` 已经是 0，此时即使内核有数据也一个字节都装不进去。后一种情况如果发生在"注册了 `OP_READ` 的 Channel"上，就会形成稳定的空转——Selector 反复报告可读，`read()` 反复返回 0，CPU 被一个逻辑错误吃满。防御办法很直接：每次 `read()` 之前确认 `dst.hasRemaining()`，读完把 `position` 通过 `flip()` 转成可读区间再把数据取走。
+
+`write()` 的返回值同样不能当作"写完"的信号。非阻塞写入只保证写出去一部分，返回值和 `buffer.remaining()` 的比较才说明是否写完；返回 0 表示内核发送缓冲区已满，正确的反应是保留剩余的 `ByteBuffer`、注册 `OP_WRITE`、等下一次就绪再继续，而不是原地重试。阻塞模式下 `write()` 要么写完整个缓冲区要么抛异常，这段"部分写 + 续写"的逻辑被 JDK 隐藏了，切到非阻塞模式后必须由应用层自己补上。
+
+| 调用 | 返回值 | 含义 | 正确反应 |
+| --- | --- | --- | --- |
+| `read(dst)` | `> 0` | 读到 n 字节 | 解析 dst，处理完后继续读 |
+| `read(dst)` | `0` | 无数据可读，或 `dst.remaining() == 0` | 确认 dst 有剩余空间，未注册 `OP_READ` 时补注册 |
+| `read(dst)` | `-1` | 对端关闭或半关闭的写方向 | 处理完剩余数据后关闭 Channel，不要再读 |
+| `write(src)` | `> 0` | 写出 n 字节 | 检查 `src.hasRemaining()`，未完则保留并注册 `OP_WRITE` |
+| `write(src)` | `0` | 发送缓冲区满 | 保留 src，注册 `OP_WRITE`，禁止忙等 |
+| `accept()` | `null` | 当前没有待接受的连接 | 正常现象，等下一次 `OP_ACCEPT` |
+| `finishConnect()` | `false` | 握手未完成 | 继续等 `OP_CONNECT`，不要当作失败 |
+
+还有一个容易被忽略的细节是"读到 `-1` 之后"。TCP 的半关闭让对端可以只关写方向而保留读方向，`read()` 返回 `-1` 表示不会再有新数据，但本端仍然可以继续 `write()`；只有本端也调用了 `shutdownOutput()` 或 `close()`，连接才会彻底结束。`SocketChannel` 本身不会因为读到 `-1` 就自动关闭，要不要关、什么时候关由应用决定，这个决定权的空缺正是半关闭场景容易出错的地方。Netty 把这件事做成了配置：`ALLOW_HALF_CLOSURE` 为 true 时，输入方向的 EOF 只触发 `ChannelInputShutdownEvent` 而不立刻关闭 Channel，应用可以先把响应写完再主动关闭——这也是 Netty 把"连接关闭"拆成 `channelInactive`、`userEventTriggered(ChannelInputShutdownEvent)` 等多个事件的原因。
 
 ---
 
@@ -317,9 +387,35 @@ while (true) {
 }
 ```
 
-这段代码有一个容易忽略的细节：`iter.remove()`。`selector.selectedKeys()` 返回的就绪事件集合是 Selector 内部维护的集合的引用，而非副本——如果你处理完一个事件不从集合中移除它，下一轮 `select()` 返回时这个事件还在集合里，你会重复处理同一个事件。这是 NIO 编程的常见 bug 之一，Netty 在内部通过自己的 `SelectedSelectionKeySet` 实现规避了这个问题——它用数组替代了 `Set`，避免了 `Iterator` 的开销和 `remove()` 的遗忘风险。
+这段代码有一个容易忽略的细节：`iter.remove()`。`selector.selectedKeys()` 返回的就绪事件集合是 Selector 内部维护的集合的引用，而非副本——如果你处理完一个事件不从集合中移除它，下一轮 `select()` 返回时这个事件还在集合里，你会重复处理同一个事件。这是 NIO 编程的常见 bug 之一，Netty 的规避方式比"记得 remove"更彻底：它在 `openSelector()` 里把 JDK `SelectorImpl` 的 `selectedKeys` 与 `publicSelectedKeys` 两个字段整体替换成自己的 `SelectedSelectionKeySet`，后者用 `SelectionKey[]` 加一个 `size` 计数实现，初始容量 1024，扩容时翻倍。这个实现故意让 `remove()` 直接返回 false、`iterator().remove()` 抛 `UnsupportedOperationException`——它压根不支持在迭代中删除，而是由 `SelectedSelectionKeySetSelector` 在每次 `select`、`selectNow`、`select(timeout)` 之前调用 `reset()` 把数组整体清空。于是"忘记 remove"这个错误在新结构下无从发生，代价是 Netty 必须保证在 `select` 返回后、下一次 `select` 之前把本轮 key 处理完。
 
-`select()` 有三个重载版本：无参的 `select()` 无限期阻塞直到有事件就绪；`select(long timeoutMillis)` 最多阻塞指定毫秒数；`selectNow()` 立即返回不阻塞。还有一个 `wakeup()` 方法可以从另一个线程唤醒正在阻塞的 `select()`——`wakeup()` 内部通过向 epoll 实例的管道写一个字节来触发就绪事件，使得 `select()` 立即返回。这个机制在需要从外部线程向 Selector 提交任务时非常关键，Netty 的 `EventLoop` 正是用 `wakeup()` 来实现跨线程任务提交的。
+这层替换不是无条件生效的。`io.netty.noKeySetOptimization` 为 true 时直接跳过；JDK 9 及以上通过 `Unsafe` 写字段偏移完成替换，拿不到偏移才退回反射，再失败就保留原生 `Set`。替换之后的遍历也换成了下标循环：`processSelectedKeysOptimized()` 逐个取 `selectedKeys.keys[i]` 并把槽位置为 null 让 key 可以被回收，处理中若发现 `needsToSelectAgain` 就把剩余槽位清掉重新 select——这套"数组 + 计数 + 显式重置"的组合，比用 `HashSet` 加迭代器省掉了一轮哈希与迭代器对象分配，在每秒数万次事件循环里是实打实的收益。
+
+### 4.6 select 的三个变体与唤醒语义
+
+`select()`、`select(long timeout)`、`selectNow()` 三者的差别不只是"阻塞多久"，它们对已就绪集合、唤醒标记和调用线程的影响并不相同，混用会写出难以复现的时序 bug。
+
+`select()` 无参阻塞，直到至少一个 Channel 就绪、`wakeup()` 被调用或当前线程被中断。`select(long timeout)` 在超时后返回，返回值可能是 0——这只表示"这段时间内没有事件"，是正常结果，不是错误。`selectNow()` 不阻塞，立即返回当前就绪数量，典型用途是在"有任务待处理"时先快速探一次，没有事件就转去执行任务。Netty 的 `DefaultSelectStrategy.calculateStrategy()` 就是这么一个判断：任务队列非空时调用 `selectNowSupplier.get()`，返回值大于 0 就处理 I/O，否则直接执行任务；队列为空才走阻塞的 `SELECT`。
+
+`wakeup()` 的语义更容易被误解。它让"当前或下一次"的 `select` 立即返回，但如果调用 `wakeup()` 时没有线程阻塞在 `select` 上，这个标记会被保留下来，让紧接着的那次 `select`（包括 `selectNow()`）立刻返回并消耗掉标记。也就是说 `wakeup()` 不会丢失，但也不会累积——连续调用两次只等同于一次。跨线程提交任务时这个性质正好合用：提交方先入队再 `wakeup()`，EventLoop 线程无论处在"正在 select"还是"即将 select"的状态，都能及时看到任务。反过来，如果 EventLoop 线程自己调用 `wakeup()`，随后又立即 `select()`，那次 `select` 会因为残留标记立即返回一次，看起来像"空轮询"，实际上是唤醒标记没被消费干净。
+
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+sequenceDiagram
+    participant T as 业务线程
+    participant Q as taskQueue
+    participant S as Selector
+    participant E as EventLoop 线程
+
+    E->>S: select(timeout) 阻塞
+    T->>Q: offer(task)
+    T->>S: wakeup() 设置唤醒标记
+    S-->>E: select 返回 0
+    E->>Q: poll 取出 task 执行
+    Note over S,E: 若 EventLoop 自己 wakeup 后再 select<br/>残留标记会让 select 立即返回一次
+```
+
+还有一个时序边界：`SelectionKey.interestOps()` 允许在任意时刻调用，但如果 Selector 此刻正阻塞在 `select()` 上，这次修改既不会唤醒它，也不能保证它下一轮就用上新值——JDK 文档只说"修改可能被本次选择操作看到，也可能看不到"。所以稳妥的写法要么是"先改 interestOps 再 `wakeup()`"，要么干脆把修改放到 Selector 所属线程上执行。Netty 选择后者：`AbstractNioChannel` 的所有 `interestOps` 变更都发生在 EventLoop 线程，这样它就能和 Channel 的注册/注销、`OP_WRITE` 的按需注册排在同一条串行队列里，不需要额外的跨线程同步。
 
 ### 4.3 四种 I/O 事件
 
@@ -434,13 +530,13 @@ public class NioEchoServer {
 
 这段代码能工作，但仔细审视会发现很多令人不舒服的地方，每一个都是 Netty 存在的理由。
 
-**痛点一：粘包与拆包完全没有处理。** TCP 是流协议，`read()` 一次可能读到半条消息，也可能读到两条消息粘在一起。Echo 服务器对此无所谓——原样返回即可——但真实业务协议（HTTP、自定义二进制协议）必须正确处理消息边界，这需要应用层自己维护一个累积缓冲区和解析状态机。这个问题的复杂度足以单独成篇：你需要处理"半条消息"（继续等更多数据）、"一条半消息"（先处理第一条，保留半条等下次拼接）、"消息长度字段本身不完整"（连长度字段都还没读全）等各种边界情况。Netty 用 `ByteToMessageDecoder` 体系给出了标准化的解决方案，内置了 `LengthFieldBasedFrameDecoder`、`LineBasedFrameDecoder` 等常用帧解码器。
+**痛点一**：粘包与拆包完全没有处理。 TCP 是流协议，`read()` 一次可能读到半条消息，也可能读到两条消息粘在一起。Echo 服务器对此无所谓——原样返回即可——但真实业务协议（HTTP、自定义二进制协议）必须正确处理消息边界，这需要应用层自己维护一个累积缓冲区和解析状态机。这个问题的复杂度足以单独成篇：你需要处理"半条消息"（继续等更多数据）、"一条半消息"（先处理第一条，保留半条等下次拼接）、"消息长度字段本身不完整"（连长度字段都还没读全）等各种边界情况。Netty 用 `ByteToMessageDecoder` 体系给出了标准化的解决方案，内置了 `LengthFieldBasedFrameDecoder`、`LineBasedFrameDecoder` 等常用帧解码器。
 
 **痛点二：每次连接都要分配新 Buffer。** `ByteBuffer.allocate(1024)` 为每个连接分配独立的缓冲区，连接多了内存占用不可控，且没有池化复用，频繁分配带来 GC 压力。更麻烦的是，Buffer 的大小不好定——太小则大消息需要多次读取，太大则小连接浪费内存。Netty 的 `PooledByteBufAllocator` 用 jemalloc 算法池化内存块，按需分配不同大小的 `ByteBuf`，解决了这个问题。
 
-**痛点三：事件处理都在同一线程。** 所有的 `handleAccept`、`handleRead`、`handleWrite` 都在同一个线程中执行。如果某个 `handleRead` 中有耗时操作（数据库查询、远程调用），会阻塞整个 Selector 循环，影响所有连接的响应速度。把耗时操作丢到线程池里说起来简单，但跨线程传递 Buffer 的线程安全问题、异步回写时如何安全地注册 `OP_WRITE`、异步结果如何通知 EventLoop，这些都是非平凡的工程问题。Netty 的 `EventLoopGroup` 和 `DefaultEventExecutorGroup` 给出了系统性的答案。
+**痛点三**：事件处理都在同一线程。 所有的 `handleAccept`、`handleRead`、`handleWrite` 都在同一个线程中执行。如果某个 `handleRead` 中有耗时操作（数据库查询、远程调用），会阻塞整个 Selector 循环，影响所有连接的响应速度。把耗时操作丢到线程池里说起来简单，但跨线程传递 Buffer 的线程安全问题、异步回写时如何安全地注册 `OP_WRITE`、异步结果如何通知 EventLoop，这些都是非平凡的工程问题。Netty 的 `EventLoopGroup` 和 `DefaultEventExecutorGroup` 给出了系统性的答案。
 
-**痛点四：异常处理和连接管理粗糙。** 连接的创建、关闭、超时、半关闭（客户端关了写但读还开着）等边界情况处理起来极其繁琐。`read()` 返回 -1 是正常关闭，`IOException` 是异常关闭，`SocketException: Connection reset` 是对端 RST——每种情况的处理路径不同，漏掉一种就是 bug。还有连接超时（连接建立后长时间没有数据）、空闲检测（需要心跳机制）、半关闭（对端调用了 `shutdownWrite()` 但 `read()` 还能返回数据）等场景，每一个都需要单独处理。Netty 的 `ChannelHandler` 生命周期回调（`channelActive`/`channelInactive`/`exceptionCaught`）和 `IdleStateHandler` 把这些边界情况封装成了清晰的事件。
+**痛点四**：异常处理和连接管理粗糙。 连接的创建、关闭、超时、半关闭（客户端关了写但读还开着）等边界情况处理起来极其繁琐。`read()` 返回 -1 是正常关闭，`IOException` 是异常关闭，`SocketException: Connection reset` 是对端 RST——每种情况的处理路径不同，漏掉一种就是 bug。还有连接超时（连接建立后长时间没有数据）、空闲检测（需要心跳机制）、半关闭（对端调用了 `shutdownWrite()` 但 `read()` 还能返回数据）等场景，每一个都需要单独处理。Netty 的 `ChannelHandler` 生命周期回调（`channelActive`/`channelInactive`/`exceptionCaught`）和 `IdleStateHandler` 把这些边界情况封装成了清晰的事件。
 
 **痛点五：`OP_WRITE` 的管理容易出错。** 如前所述，`OP_WRITE` 的注册和注销时机需要小心处理，稍有不慎就会导致 Selector 空转。NIO 编程中"Selector 空转导致 CPU 100%"是一个经典 bug，Netty 的空轮询检测机制就是为此专门设计的。
 
@@ -497,6 +593,16 @@ while (true) {
 
 空轮询 Bug 的存在也说明了一个更深层的道理：操作系统的系统调用接口并非完美无缺的抽象层，Java 的跨平台封装也并非滴水不漏。当你在 NIO 之上构建生产级服务时，你面对的不仅是 API 的正确使用，还有平台缺陷的工程规避。Netty 的价值不仅在于"让 NIO 更好用"，更在于"让 NIO 更可靠"——它把无数个像空轮询 Bug 这样的平台缺陷和边界情况，封装成了程序员无需感知的内部细节。
 
+### 6.3 检测判据的真实版本差异
+
+前面那段伪代码把"`select()` 返回 0 且耗时远小于超时"当作空轮询的判据，这是 4.1 早期版本的做法；较新的 4.1.x 已经改成另一套更简单的计数逻辑，理解这个差异可以避免照着旧博客改源码。
+
+现在 `NioEventLoop.run()` 的判定是：本轮 `select` 返回的就绪数（`strategy`）不大于 0，且本轮没执行到任何任务（`ranTasks == false`），就把 `selectCnt` 加一并交给 `unexpectedSelectorWakeup(selectCnt)` 判断；只要执行了任务或出现了就绪事件，计数立刻清零。这里的关键在于 `ioRatio` 不为 100 的分支里调用的 `runAllTasks(0)` 并不是"什么都不做"——它至少会把已到期的定时任务从 `scheduledTaskQueue` 搬到 `taskQueue` 并执行一条，于是 `ranTasks` 为真，计数自然归零。也就是说，等待定时任务而返回 0 的 `select` 不会被误判为空轮询，这才是新版不再比较 `select` 耗时的原因。
+
+阈值来自 `io.netty.selectorAutoRebuildThreshold`，默认 512；值小于 3（`MIN_PREMATURE_SELECTOR_RETURNS`）时会被改写成 0，等于关闭自动重建。重建走 `rebuildSelector0()`：先 `openSelector()` 开一个新的 Selector，遍历旧 Selector 的 `keys()`，跳过已失效或已在新 Selector 上注册的 key，对每个有效的 key 记下 `interestOps` 与 attachment，`cancel()` 旧 key，再用 `channel.register(newSelector, interestOps, attachment)` 重新注册；如果 attachment 是 `AbstractNioChannel`，顺手把它的 `selectionKey` 字段指向新 key，注册失败的 Channel 直接关闭而不是留在半死不活的状态。旧 Selector 在所有 key 迁移完成后才关闭，最终日志会打印迁移了多少个 Channel。
+
+这套流程有两个容易被忽略的边界。其一，`select` 抛 `IOException` 时 Netty 不等计数达标，直接重建 Selector 再重试——连接还在，Selector 已经不可用了，这是唯一合理的处理。其二，`Thread.interrupted()` 为真时也会让计数归零并跳过重建：JDK 的 `select` 被中断时会提前返回，如果不清掉中断标记就会进入忙循环，所以 Netty 在这一步消费掉中断标记，并把"别用 interrupt 关 EventLoop、请用 `shutdownGracefully()`"写进调试日志。
+
 ---
 
 ## 总结
@@ -517,6 +623,7 @@ Java NIO 的三大组件各司其职，共同构建了非阻塞 I/O 的完整体
 4. Linux man pages: `epoll_create(2)`, `epoll_ctl(2)`, `epoll_wait(2)`, `sendfile(2)`
 5. Java SE Documentation: `java.nio` package summary. <https://docs.oracle.com/javase/8/docs/api/java/nio/package-summary.html>
 6. Jonathan Corbet. *Epoll, the API that powers Linux's event loop*. LWN.net, 2002
+7. Netty 4.1 源码：`io.netty.channel.nio.NioEventLoop`、`SelectedSelectionKeySet`、`AbstractNioChannel`
 
 ---
 
@@ -524,3 +631,4 @@ Java NIO 的三大组件各司其职，共同构建了非阻塞 I/O 的完整体
 > 1. Java NIO 的 `Selector` 在 Linux 上底层使用 `epoll`，在 macOS 上使用 `kqueue`。`epoll` 默认是水平触发（Level Triggered），`kqueue` 支持边缘触发（Edge Triggered）。Java NIO 的 `Selector` 封装了这些差异，但这种封装是否在某些极端场景下丢失了平台特性？譬如边缘触发要求"必须读到 `EAGAIN` 才能停止"，而水平触发"只要还有数据就持续通知"——Netty 在选择底层实现时是否考虑过这个差异？
 > 2. `ByteBuffer` 的 `flip()` 方法将 Buffer 从写模式切换到读模式，忘记调用 `flip()` 是 NIO 初学者最常见的错误。为什么 Java NIO 不设计一个自动管理读写模式的 Buffer？Netty 的 `ByteBuf` 用 `readerIndex` 和 `writerIndex` 两个独立指针解决了这个问题——这种设计的代价是什么？如果代价只是多几个字节的元数据，为什么 JDK 自己不这样做？
 > 3. NIO 的 `Channel` 是双向的，而 BIO 的 `InputStream`/`OutputStream` 是单向的。在 Socket 通信中，双向 Channel 意味着同一个 Channel 的 `read()` 和 `write()` 可以在不同线程中并发执行吗？如果两个线程同时调用同一个 `SocketChannel` 的 `read()` 和 `write()`，会发生什么？Netty 的 EventLoop 模型是如何避免这个问题的？
+> 4. `SocketChannel.read()` 返回 0 既可能是"确实没有数据"，也可能是"传入的 `ByteBuffer` 已经写满"。如果你维护一个每连接一个读缓冲区的 NIO 服务器，第二种情况会以什么形态暴露？只注册 `OP_READ` 能否避免它？

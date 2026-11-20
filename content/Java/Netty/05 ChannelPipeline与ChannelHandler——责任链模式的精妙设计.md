@@ -1,16 +1,16 @@
 ---
 title: "ChannelPipeline与ChannelHandler——责任链模式的精妙设计"
-date: 2026-09-07
-tags: [Java, Netty]
+date: 2026-11-19
+tags: [Java, Netty, 软件架构]
 keywords: [ChannelHandler, ChannelHandlerContext, ChannelPipeline, InboundHandler, OutboundHandler, Sharable, 责任链模式]
-aliases: [ChannelPipeline, ChannelHandler, Netty责任链, Pipeline设计]
+aliases: []
 ---
 
 # ChannelPipeline与ChannelHandler——责任链模式的精妙设计
 
 **摘要：**
 
-`ChannelPipeline` 是 Netty 中数据处理逻辑的"主干道"——每一个到达的字节流、每一条发出的消息，都必须经过 `ChannelPipeline` 中的 Handler 链路处理。它是责任链（Chain of Responsibility）设计模式在网络编程中的极致应用：将解码、业务逻辑、编码、日志、限流等关注点分解为独立的 `ChannelHandler`，通过 Pipeline 将它们串联为一条有序的处理流水线，每个 Handler 只专注于自己的职责，对上下游透明。本文从责任链模式的理论基础出发，深入剖析 `DefaultChannelPipeline` 的双向链表结构与 `ChannelHandlerContext` 的角色、入站和出站事件的传播方向与截断机制、`executionMask` 位掩码对传播路径的优化、`@Sharable` 注解的线程安全含义、异常在 Pipeline 中的传播规则，以及动态修改 Pipeline 支持协议切换的设计。最后讨论 `ctx.write()` 与 `channel.write()` 的根本差异——这个看似细微的区别是 Netty 开发中最容易引发 Bug 的知识点。
+`ChannelPipeline` 是 Netty 中数据处理逻辑的主干道：每一个到达的字节流、每一条发出的消息，都要经过 Pipeline 中 Handler 链路的处理。它是责任链（Chain of Responsibility）模式在网络编程中的一次彻底工程化——把解码、鉴权、业务、编码、限流拆成独立的 `ChannelHandler`，用一条有序链表把关注点串起来，每个 Handler 只对自己那一段负责，对上下游保持无知。本文从责任链模式的历史与局限讲起，剖析 `DefaultChannelPipeline` 的双向链表结构、`HeadContext` 与 `TailContext` 两个哨兵节点的双重职责、`addLast` 落位时的指针改写与 `handlerAdded` 回调的延迟机制；随后沿 `next` 与 `prev` 两个方向分别拆解入站事件的传播、截断与出站操作的起点语义，说明 `executionMask` 位掩码如何把传播复杂度从 O(n) 压到 O(k)，以及 `findContextInbound` 与 `findContextOutbound` 只在扫描方向上有一行之差；再讨论 `@Sharable` 的线程安全承诺与三种典型误用形态、异常在 Pipeline 中的传播规则、动态修改 Pipeline 支持协议切换的收益与陷阱。最后落到 `ctx.write()` 与 `channel.write()` 的根本差异——这个看似细微的区别，是 Netty 开发中最容易引发 Bug 的知识点。
 
 ---
 
@@ -127,6 +127,57 @@ final class TailContext extends AbstractChannelHandlerContext
 
 真正需要关注的是 Handler 持有的状态内存。解码器（如 `ByteToMessageDecoder`）的累积缓冲区会随数据量增长，如果连接空闲但缓冲区未清理，会浪费内存。`IdleStateHandler` 在连接空闲时会触发事件，但不会自动清理缓冲区——你需要在自己的 Handler 中响应空闲事件并释放资源。理解 Pipeline 的内存模型，有助于在连接数极多的场景下优化内存使用——譬如为低频连接配置更小的初始缓冲区，或在空闲时清理 Handler 状态。
 
+### 2.4 addLast 的落位过程与 handlerAdded 的延迟
+
+`pipeline.addLast(handler)` 是一串动作的入口，它最终收敛到 `addLast(EventExecutorGroup, String, ChannelHandler)` 这个重载上：先解析执行器（未显式指定 `EventExecutorGroup` 时取 Channel 绑定的 `EventLoop`），再为 handler 造一个 `DefaultChannelHandlerContext` 节点，随后改写指针把节点挂进链表，最后触发 `handlerAdded` 回调。指针改写只有四步，没有任何分支判断，也不做容量检查，所以插入本身是严格的 O(1)：
+
+```java
+private AbstractChannelHandlerContext newContext(
+        EventExecutorGroup group, String name, ChannelHandler handler) {
+    return new DefaultChannelHandlerContext(this, childExecutor(group), name, handler);
+}
+
+private void addLast0(AbstractChannelHandlerContext newCtx) {
+    AbstractChannelHandlerContext prev = tail.prev;
+    newCtx.prev = prev;
+    newCtx.next = tail;
+    prev.next = newCtx;
+    tail.prev = newCtx;
+}
+```
+
+这段代码的用意值得说开：它把 `head` 与 `tail` 当成了两条不承载业务的哨兵边：`head` 永远是出站方向的终点，`tail` 永远是入站方向的终点，所有用户 Handler 都夹在两者之间。哨兵的好处是插入与删除不必判断边界——无论 Pipeline 里有没有用户 Handler，`tail.prev` 都是合法的前驱，`head.next` 都是合法的后继。代价是每条 Pipeline 固定多出两个节点对象，在十万连接的规模下也就是二十万个轻量对象，与它换来的分支消除相比可以接受。
+
+节点落位之后是回调。`handlerAdded` 的触发时机取决于 Channel 是否已经注册到 EventLoop：若尚未注册（典型场景是在 `ChannelInitializer.initChannel` 里批量 `addLast`），回调不会立即执行，而是被挂进 Pipeline 内部一条待执行链表，等 `register0` 完成后再由 `callHandlerAddedForAllHandlers()` 统一触发；若已经注册，则立即调用，并且当前线程不在 EventLoop 时会把调用打包成任务提交进去。这个设计让"Handler 被添加"与"Handler 看到事件"严格保持先后顺序，避免出现 `handlerAdded` 还没跑、`channelRead` 已经进来的交错。
+
+命名是这条链路上另一个容易踩空的地方。每个 ctx 在 Pipeline 内必须唯一的名字，显式传入的重名会被拒绝，自动命名则以 Handler 的类名为基础并追加序号。重名检查与 `name2ctx` 映射的读写共用同一把 Pipeline 内部锁，所以并发添加不会产生两个同名节点；但反过来说，在 EventLoop 之外并发添加 Handler 会在这把锁上排队，批量配置 Pipeline 时应尽量在 `initChannel` 里一次做完，不要分散到运行期。
+
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+graph LR
+    H["HeadContext<br/>出站终点 / 入站起点"]
+    A["ctx A<br/>SslHandler"]
+    B["ctx B<br/>HttpServerCodec"]
+    C["ctx C<br/>业务 Handler"]
+    T["TailContext<br/>入站终点 / 出站起点"]
+
+    H <-->|next / prev| A
+    A <-->|next / prev| B
+    B <-->|next / prev| C
+    C <-->|next / prev| T
+
+    classDef default fill:#282a36,stroke:#bd93f9,stroke-width:2px,color:#f8f8f2;
+    classDef sentinel fill:#44475a,stroke:#50fa7b,stroke-width:2px,color:#50fa7b;
+    class H,T sentinel;
+```
+
+| 操作 | 定位方式 | 指针代价 | 触发的回调 |
+| :--- | :--- | :--- | :--- |
+| `addFirst` / `addLast` | 以 `head.next` / `tail.prev` 为锚点 | 四步指针改写 | `handlerAdded` |
+| `addBefore` / `addAfter` | 以指定 ctx 的 `prev` / `next` 为锚点 | 四步指针改写 | `handlerAdded` |
+| `remove` | 摘除目标节点并修复两侧指针 | 四步指针改写 | `handlerRemoved` |
+| `replace` | 先插入新节点，再摘除旧节点 | 两次四步改写 | 新旧各一次 |
+
 ---
 
 ## 第 3 章 入站事件的传播机制
@@ -199,6 +250,60 @@ private AbstractChannelHandlerContext findContextInbound(int mask) {
 
 当 Handler 配置了独立的 `EventExecutorGroup` 时，事件传播会涉及线程切换——从 `EventLoop` 线程切换到 `EventExecutor` 线程，处理完后再切换回来。这个切换通过任务队列实现，有上下文切换的开销。但它的好处是 Handler 中的阻塞操作不会影响 `EventLoop` 线程——`EventLoop` 线程把事件"扔"给 `EventExecutor` 后立即返回，继续处理其他 Channel 的 I/O 事件。这是 Netty 处理"业务逻辑耗时"的标准方案：解码在 `EventLoop` 线程（快速），业务逻辑在 `EventExecutor` 线程池（允许阻塞），编码写回 `EventLoop` 线程（快速）。
 
+### 3.6 findContextInbound 与 findContextOutbound 的方向性
+
+入站与出站共用同一条链表，却走向相反的两端，这一点在实现上被压缩成了两个几乎一样的方法。把 3.3 节给出的 `findContextInbound` 与出站版本并排放在一起，两者只差扫描指针与掩码常量：
+
+```java
+private AbstractChannelHandlerContext findContextInbound(int mask) {
+    AbstractChannelHandlerContext ctx = this;
+    do {
+        ctx = ctx.next;
+    } while ((ctx.executionMask & mask) == 0);
+    return ctx;
+}
+
+private AbstractChannelHandlerContext findContextOutbound(int mask) {
+    AbstractChannelHandlerContext ctx = this;
+    do {
+        ctx = ctx.prev;
+    } while ((ctx.executionMask & mask) == 0);
+    return ctx;
+}
+```
+
+`findContextInbound` 沿 `next` 一路向 tail，`findContextOutbound` 沿 `prev` 一路向 head，循环条件完全相同：目标 Handler 的 `executionMask` 中对应位为 0 就跳过。这个循环没有边界判断，靠的正是两个哨兵节点兜底——`HeadContext` 与 `TailContext` 对所有事件位都置了 1，循环必然在抵达哨兵时终止。如果把 `executionMask` 的生成逻辑改坏，最直接的后果不是效率下降，而是循环跳过哨兵后落到 `null` 上抛空指针，这一点在自定义 Handler 时值得记一笔。
+
+掩码本身由 `ChannelHandlerMask.mask(handler.getClass())` 在 Handler 添加时反射算出，只算一次，之后每次传播只做一次按位与。判断依据是方法是否被该 Handler 类覆写：只写了 `ctx.fireChannelRead(msg)` 转发的中间层 Handler 会被判为"未实现"，从而在传播时被跳过。Netty 还为此提供了一个 `@ChannelHandlerMask.Skip` 注解，允许开发者显式声明"这个方法虽然重写了但只是转发，可以跳过"，适用于那些为了记录日志而包一层转发的装饰性 Handler。
+
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+sequenceDiagram
+    autonumber
+    participant EL as NioEventLoop
+    participant HP as DefaultChannelPipeline
+    participant H as HeadContext
+    participant D as 业务 Decoder
+    participant T as TailContext
+
+    EL->>HP: fireChannelRead(byteBuf)
+    HP->>H: invokeChannelRead(head, msg)
+    H->>D: findContextInbound(MASK_CHANNEL_READ) 跳过未实现者
+    D->>D: decode 并产出业务对象
+    D->>T: ctx.fireChannelRead(obj) 继续向 tail
+    Note over T: 若始终无人消费，记录警告并 release ByteBuf
+```
+
+| 动作 | 起点 | 扫描方向 | 终点 | 终点行为 |
+| :--- | :--- | :--- | :--- | :--- |
+| `fireChannelRead` | 当前 ctx | `next`（head → tail） | `TailContext` | 记录未消费消息并释放 |
+| `fireChannelActive` | `HeadContext` | `next`（head → tail） | `TailContext` | 空实现，无副作用 |
+| `write` | 当前 ctx | `prev`（tail → head） | `HeadContext` | `unsafe.write()` 写入出站缓冲 |
+| `flush` | 当前 ctx | `prev`（tail → head） | `HeadContext` | `unsafe.flush()` 触发系统调用 |
+| `read` | 当前 ctx | `prev`（tail → head） | `HeadContext` | `unsafe.beginRead()` 注册读事件 |
+
+关于版本，Netty 4.1 到 4.2 的演进集中在 I/O 多路复用层（4.2 把平台相关的 `Unsafe`、`NioEventLoop` 一类实现换成了 `IoHandler`/`IoEventLoop` 体系），Pipeline 的双向链表、`executionMask` 掩码与 ctx 的传播语义没有改动，本文的结论对两个大版本都成立；具体类名与迁移细节以对应版本文档为准。
+
 ---
 
 ## 第 4 章 出站事件的传播机制
@@ -225,12 +330,28 @@ private AbstractChannelHandlerContext findContextInbound(int mask) {
 // 经过 TrafficMonitorHandler（流量统计）、HttpEncoder（编码）、SslHandler（加密）
 ```
 
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+graph TD
+    subgraph W1["ctx.writeAndFlush()：从当前 Handler 向 head 传播"]
+        A1["MyBusinessHandler"] --> A2["HttpEncoder"] --> A3["SslHandler"] --> A4["HeadContext 写网卡"]
+    end
+
+    subgraph W2["channel.writeAndFlush()：从 tail 向 head 传播"]
+        B1["TailContext"] --> B2["TrafficMonitorHandler"] --> B3["HttpEncoder"] --> B4["SslHandler"] --> B5["HeadContext 写网卡"]
+    end
+
+    classDef default fill:#282a36,stroke:#bd93f9,stroke-width:2px,color:#f8f8f2;
+    classDef diff fill:#44475a,stroke:#ff79c6,stroke-width:2px,color:#ff79c6;
+    class B2 diff;
+```
+
 方式一跳过了 `TrafficMonitorHandler`（因为它在 `MyBusinessHandler` 之后，更靠近 tail），方式二经过了所有出站 Handler。如果你的 `TrafficMonitorHandler` 负责统计出站流量，方式一会导致流量统计不准确——响应数据没有被统计。
 
 > [!warning] 出站操作起点的选择规则
 > - **在业务 Handler 内发送响应**：用 `ctx.writeAndFlush()`（从当前位置向前传播，经过编码器、SSL 等）；
-> - **在 Pipeline 外部（如定时任务）发送消息**：用 `channel.writeAndFlush()`（从 tail 开始，经过所有出站 Handler）；
-> - **在某个 Handler 中需要绕过部分 Handler 直接发送**：用 `ctx.pipeline().context(HandlerClass.class).writeAndFlush()`（指定起始位置）。
+> - 在 Pipeline 外部（如定时任务）发送消息：用 `channel.writeAndFlush()`（从 tail 开始，经过所有出站 Handler）；
+> - 在某个 Handler 中需要绕过部分 Handler 直接发送：用 `ctx.pipeline().context(HandlerClass.class).writeAndFlush()`（指定起始位置）。
 
 ### 4.3 为什么默认推荐 ctx.write()
 
@@ -258,6 +379,15 @@ public void channelWritabilityChanged(ChannelHandlerContext ctx) {
 ```
 
 这个背压机制在流式传输场景中尤为重要——如文件下载、视频流推送，发送方不能比接收方快太多，否则缓冲区会溢出。Netty 的背压通过 `autoRead` 和水位线联动实现：`autoRead=false` 时 Netty 不从网络读取数据，相当于"暂停"了接收端，让发送方减速。
+
+水位线与 Pipeline 规模这两类旋钮在调参时方向相反，摊开来看各自都有代价：
+
+| 旋钮 | 常见取值 | 调大的代价 | 调小的代价 |
+| :--- | :--- | :--- | :--- |
+| `WRITE_BUFFER_HIGH_WATER_MARK` | 64KB | 单个连接可积压更多待发数据，堆外内存占用上升，积压问题暴露得更晚 | 频繁进入不可写状态，`channelWritabilityChanged` 抖动 |
+| `WRITE_BUFFER_LOW_WATER_MARK` | 32KB | 与高水位的回差收窄，可写状态来回翻转 | 恢复可写滞后，写吞吐被压平 |
+| Pipeline 内用户 Handler 数量 | 5-10 个 | 单事件传播路径变长，动态增删的维护成本上升 | 关注点拆不开，Handler 无法复用 |
+| 独立 `EventExecutorGroup` 线程数 | 0（复用 EventLoop） | 线程切换与任务排队开销增加 | 阻塞任务退回 EventLoop，I/O 延迟抖动 |
 
 ### 4.5 ChannelOutboundBuffer 的内部结构
 
@@ -316,6 +446,46 @@ Handler 的状态管理是 Pipeline 编程的核心难点。有状态 Handler（
 动态 Pipeline 的一个高级用法是"Handler 热替换"——在不中断连接的前提下，用新 Handler 替换旧 Handler。这在"配置热更新"场景中很有用：譬如限流规则变更后，用新的限流 Handler 替换旧的，无需重启服务或断开连接。`pipeline.replace(oldHandler, "newHandler", newHandler)` 实现了这个功能——它先添加新 Handler，调用新 Handler 的 `handlerAdded`，然后移除旧 Handler，调用旧 Handler 的 `handlerRemoved`。
 
 热替换的陷阱在于状态迁移——如果旧 Handler 持有状态（如计数器、缓冲区），新 Handler 需要继承这些状态，否则状态丢失。在限流 Handler 的热替换中，新 Handler 应该继承旧 Handler 的当前计数器值，否则限流统计会重置。状态迁移通常通过在 `handlerRemoved` 中把状态保存到 `Channel.attr()`，在 `handlerAdded` 中从 `Channel.attr()` 读取来实现。这个模式虽然可行，但增加了代码复杂度，需要谨慎使用。
+
+### 5.5 @Sharable 的三种误用形态
+
+`@Sharable` 只是开发者向 Netty 提交的一纸声明，框架在添加 Handler 时做的检查仅限于注解存在与否，它没有办法验证实例字段是否真的线程安全。检查落在 `ChannelHandlerAdapter.isSharable()`：读注解，返回真或假；`checkMultiplicity` 再依据这个返回值决定"同一实例能否进入多条 Pipeline"。换言之，注解让检查通过，剩下的正确性全靠开发者自己承担。三种误用形态在实践中反复出现。
+
+其一，把持有累积缓冲区的解码器标成可共享。`ByteToMessageDecoder` 的 `cumulation` 是连接级状态，两个连接同时到达数据时，A 连接残留的半帧会和 B 连接的字节拼进同一个缓冲区，解出的消息于是串线。错误不在解码器，而在共享了本不该共享的状态；这类 Bug 的典型表现是"业务偶尔收到不认识的请求参数"，排查成本极高。
+
+其二，把看起来无状态的 Handler 标成可共享，却在 `handlerAdded` 里把 `ctx` 存进实例字段的集合。实例字段从"没有"变成了"有一个跨连接共享的容器"，容器里的 `ctx` 又是连接级的，于是每次遍历都在操作别人的连接。这种写法常以"统一管理所有连接"的名义出现，实际把连接生命周期与 Handler 生命周期绑死了。
+
+其三，为节省对象分配把 Handler 写成静态单例，内部却持有 `SimpleDateFormat`、`HashMap` 这类非线程安全对象。它们与连接无关，但会被多个 EventLoop 线程并发访问。无状态不等于线程安全——判断标准是"所有可写状态要么不存在，要么其自身的并发控制足够"。
+
+还有一处边界容易忽略：同一个未标 `@Sharable` 的 Handler 实例被第二次加入 Pipeline 时，Netty 会直接抛 `ChannelPipelineException`，异常消息里会说明该 Handler 不是 `@Sharable`；而把同一个标了 `@Sharable` 的实例反复加入同一条 Pipeline 不会报错，只会让链上出现两个引用同一对象的节点——事件会经过它两次，计数、限流一类的逻辑被悄悄放大。
+
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+flowchart TD
+    Start(["准备把 Handler 实例声明为 static final"]) --> HasField{"有实例字段吗"}
+    HasField -- 无 --> Safe["可以 @Sharable<br/>多个 Channel 共享同一实例"]
+    HasField -- 有 --> ConnLevel{"字段是连接级状态吗<br/>cumulation / 握手 / 会话"}
+    ConnLevel -- 是 --> Forbid["禁止 @Sharable<br/>每连接一个实例"]
+    ConnLevel -- 否 --> ThreadSafe{"字段自身线程安全吗"}
+    ThreadSafe -- 是 --> Safe
+    ThreadSafe -- 否 --> Forbid
+    Forbid --> Attr["需要跨 Handler 传状态时<br/>改用 Channel.attr()"]
+
+    classDef default fill:#282a36,stroke:#bd93f9,stroke-width:2px,color:#f8f8f2;
+    classDef ok fill:#44475a,stroke:#50fa7b,stroke-width:2px,color:#50fa7b;
+    classDef bad fill:#44475a,stroke:#ff5555,stroke-width:2px,color:#ff5555;
+    class Safe,Attr ok;
+    class Forbid bad;
+```
+
+| Handler 持有的状态 | 典型例子 | 能否 `@Sharable` | 误用后的表现 |
+| :--- | :--- | :--- | :--- |
+| 无实例字段 | 透传日志、纯计算编码器 | 可以 | 无 |
+| 线程安全且无连接语义 | `LongAdder` 全局计数 | 可以 | 计数是全局的，不能当单连接指标 |
+| 连接级可变状态 | `cumulation`、握手阶段标记 | 禁止 | 帧串线、状态互相覆盖 |
+| 非线程安全对象 | `SimpleDateFormat`、`HashMap` | 不可以 | 并发下抛异常或数据错乱 |
+
+把状态从 Handler 实例挪到 `Channel.attr()` 是更稳妥的折中：Handler 本身无状态因而可共享，连接级数据挂在 Channel 上，随 Channel 一起回收。代价是每次访问要做一次属性查找，热路径上比实例字段慢，但对绝大多数业务 Handler 而言这点开销可以忽略。
 
 ---
 
@@ -426,7 +596,21 @@ public class WebSocketUpgradeHandler extends SimpleChannelInboundHandler<FullHtt
 }
 ```
 
-**场景二：SSL/TLS 握手完成后的 Pipeline 重配置。** `SslHandler` 在 TLS 握手完成后会触发 `SslHandshakeCompletionEvent`，可以在这个事件中检查客户端证书，决定是否允许连接并添加应用层协议处理器。
+握手前后 Pipeline 的形态变化可以画成一张状态图，移除与添加都发生在同一个 EventLoop 线程里，因此对握手请求本身是原子的：
+
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+stateDiagram-v2
+    [*] --> HTTP_Pipeline : 连接建立，挂载 HttpServerCodec
+    HTTP_Pipeline --> HANDSHAKING : 读到 Upgrade 请求
+    HANDSHAKING --> WS_Pipeline : 握手成功<br/>移除 HTTP 编解码器与聚合器
+    HANDSHAKING --> HTTP_Pipeline : 不是 Upgrade 请求<br/>fireChannelRead 转发
+    WS_Pipeline --> [*] : 连接关闭
+
+    note right of WS_Pipeline : WebSocketFrameHandler 接管，后续帧不再经过 HTTP 解码器
+```
+
+场景二：SSL/TLS 握手完成后的 Pipeline 重配置。 `SslHandler` 在 TLS 握手完成后会触发 `SslHandshakeCompletionEvent`，可以在这个事件中检查客户端证书，决定是否允许连接并添加应用层协议处理器。
 
 动态 Pipeline 的价值在于"按需配置"——不同阶段需要不同的 Handler，握手阶段需要握手 Handler，数据传输阶段需要业务 Handler。如果 Pipeline 是静态的，所有 Handler 都要预先添加，握手 Handler 在数据传输阶段会成为多余的跳转节点。动态 Pipeline 让 Handler 的存在与连接的状态匹配，既节省了传播开销，又保持了逻辑的清晰。
 
@@ -490,9 +674,7 @@ Pipeline 的设计体现了几个工程哲学。第一是"关注点分离"——
 
 Pipeline 的设计也反映了 Netty 对"可组合性"的追求。每个 Handler 是一个独立的、可复用的组件，通过 Pipeline 的链式组合形成完整的处理逻辑。这种"组合优于继承"的设计哲学让 Netty 的功能扩展非常灵活——你需要 HTTP 支持？加 `HttpServerCodec`。你需要 SSL？加 `SslHandler`。你需要空闲检测？加 `IdleStateHandler`。每个功能都是一个可插拔的 Handler，无需修改框架核心代码。这种可组合性是 Netty 生态繁荣的基础——社区贡献了大量的 Handler 实现，从协议编解码到监控埋点，从流量整形到访问控制，几乎覆盖了网络编程的所有常见需求。
 
-但可组合性也有代价——Handler 之间的隐式依赖（顺序、类型、状态）增加了配置的复杂度。一个错误的 Pipeline 配置可能导致消息类型不匹配（解码器输出的类型不是业务 Handler 期望的）、顺序错误（编码器在业务 Handler 之后导致 `ctx.write()` 不经过编码器）、状态丢失（动态移除 Handler 时缓冲区被丢弃）。这些代价是可组合性的固有挑战，Netty 通过 `ChannelInitializer` 的集中配置、文档约定、`@Sharable` 的显式声明等机制来缓解，但最终仍需要程序员对 Pipeline 的行为有清晰的理解。架构即权衡，可组合性换来了灵活性，也带来了配置复杂度——这是责任链模式在网络编程中落地的必然代价。理解这些代价，才能在实践中扬长避短，既享受 Pipeline 的灵活组合能力，又通过清晰的配置约定和文档降低隐式依赖带来的风险。没有银弹，只有因地制宜——Pipeline 的可组合性在简单场景下是优势，在复杂场景下需要额外的约定和文档来驾驭。这正是架构权衡的本质：每一个设计决策都是利弊并存，关键在于根据实际场景选择合适的方案，而非盲目追求某种"最佳实践"。Netty 的 Pipeline 设计为我们提供了一个优秀的范本——它不是完美的，但它在灵活性和可控性之间找到了一个适合大多数网络编程场景的平衡点，这正是优秀架构设计的标志。
-
-下一篇深入 Netty 的编解码器体系——TCP 粘包/拆包是网络编程的根本难题，`ByteToMessageDecoder`、`LengthFieldBasedFrameDecoder` 如何彻底解决它：[[06 编解码器——LengthFieldBasedFrameDecoder与自定义协议]]。
+但可组合性也有代价——Handler 之间的隐式依赖（顺序、类型、状态）增加了配置的复杂度。一个错误的 Pipeline 配置可能导致消息类型不匹配（解码器输出的类型不是业务 Handler 期望的）、顺序错误（编码器在业务 Handler 之后导致 `ctx.write()` 不经过编码器）、状态丢失（动态移除 Handler 时缓冲区被丢弃）。这些代价是可组合性的固有挑战，Netty 通过 `ChannelInitializer` 的集中配置、文档约定、`@Sharable` 的显式声明等机制来缓解，但最终仍需要配置者对 Pipeline 的行为有清晰的理解。组合带来的灵活性并非免费，它把"正确"的责任从框架转交给了使用者的约定。
 
 ---
 
@@ -504,6 +686,8 @@ Pipeline 的设计也反映了 Netty 对"可组合性"的追求。每个 Handler
 4. `io.netty.channel.AbstractChannelHandlerContext` 源码
 5. `io.netty.channel.ChannelHandlerContext` 接口源码
 6. `io.netty.channel.ChannelHandler.Sharable` 注解源码
+7. `io.netty.channel.ChannelHandlerMask` 源码（executionMask 与 @Skip 的实现）
+8. Netty 4.1 API 文档：ChannelPipeline <https://netty.io/4.1/api/io/netty/channel/ChannelPipeline.html>
 
 ---
 
@@ -511,3 +695,4 @@ Pipeline 的设计也反映了 Netty 对"可组合性"的追求。每个 Handler
 > 1. `ChannelPipeline` 中的 InboundHandler 从 Head 到 Tail 正序执行，OutboundHandler 从 Tail 到 Head 逆序执行。如果在 Pipeline 中先添加 InboundHandler A，再添加 InboundHandler B，入站数据的处理顺序是 A 到 B。但如果 A 中调用了 `ctx.fireChannelRead(msg)` 和 `ctx.channel().writeAndFlush(resp)`，后者会从 Tail 开始还是从 A 的位置开始执行出站 Handler？这两种调用方式的差异在什么场景下会导致 Bug？
 > 2. `@Sharable` 注解标记的 Handler 可以被多个 Channel 的 Pipeline 共享。如果你标注了一个有状态的 Handler 为 `@Sharable`（譬如它有一个实例变量 `ByteBuffer cumulation` 用于累积解码数据），多个连接同时使用这个 Handler 时会发生什么？Netty 会在运行时检测到这种错误吗，还是只能等到数据错乱时才发现？
 > 3. Netty 允许在运行时动态添加和移除 ChannelHandler（如 SSL HandshakeHandler 在握手完成后移除自己）。如果在 Pipeline 修改期间有数据正在流经 Pipeline，是否存在并发安全问题？Netty 是如何保证 Pipeline 修改的线程安全性的？如果你从外部线程（非 EventLoop 线程）调用 `pipeline.remove(handler)`，修改何时生效？
+> 4. `findContextInbound` 与 `executionMask` 的配合依赖哨兵节点终止扫描。如果自定义 Handler 的 `handlerAdded` 里动态移除了 `TailContext` 这样的事故在 Netty 中会发生吗？由此反推，动态修改 Pipeline 时哪些节点与回调是框架保留、不应触碰的？

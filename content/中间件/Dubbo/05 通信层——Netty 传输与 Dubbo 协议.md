@@ -1,8 +1,8 @@
 ---
 title: "05 通信层——Netty 传输与 Dubbo 协议"
 date: 2026-03-04
-tags: [Dubbo, 序列化]
-keywords: [通信层, 协议, 心跳]
+tags: [Dubbo]
+keywords: [通信层, 协议, 心跳, 序列化]
 aliases: []
 ---
 

@@ -1,422 +1,444 @@
 ---
 title: "Sort Shuffle 的崛起：统一写出模型"
-date: 2026-02-27
-tags: [Shuffle, Spark]
-keywords: [BypassMergeSortShuffleWriter, SortShuffleManager, SortShuffleWriter, UnsafeShuffleWriter]
+date: 2026-11-19
+tags: [Shuffle, Spark, 性能优化, 大数据]
+keywords: [BypassMergeSortShuffleWriter, SortShuffleWriter, UnsafeShuffleWriter, 索引文件, bypassMergeThreshold]
 aliases: []
 ---
 
 # 03 Sort Shuffle 的崛起：统一写出模型
 
-## 摘要
+**摘要：**
 
-Sort Shuffle 的出现是对 Hash Shuffle "文件数爆炸"问题的根本性回应。它用一个极其简洁的思路解决了核心矛盾：**每个 Map Task 只写出一个数据文件和一个索引文件**，将文件数从 M × R 降至 M × 2。然而，在这个统一的外壳下，`SortShuffleManager` 内部藏着三种截然不同的写出策略：当 Reduce 分区数较小且不需要 Map 端聚合时，使用 `BypassMergeSortShuffleWriter` 的无排序哈希分组路径；当数据不需要 key 排序且分区数不超过 16M 时，使用 `UnsafeShuffleWriter` 的堆外内存排序路径；其余情况则使用 `SortShuffleWriter` 的基于 `ExternalSorter` 的通用路径。本文深入解析这三种策略的设计动机、适用条件和核心机制，以及 `SortShuffleManager` 如何在运行时做出智能选择。
-
----
-
-## 第 1 章 统一写出模型：一个约束，三种实现
-
-### 1.1 Sort Shuffle 的核心约束
-
-从第 02 篇的分析中，我们得出了一个关键结论：要控制文件数，每个 Map Task 就必须只写出一个文件；要让 Reduce Task 能从这一个文件中找到自己的数据，就必须对数据做某种**有序化处理**，使同一分区的数据在文件中连续存放，并通过索引文件记录每个分区的起止偏移量。
-
-这就是 Sort Shuffle 的核心约束，也是其名称中"Sort"的来源——以某种形式的"排序"（或等价的有序化操作）换取文件数的大幅减少。
-
-但"排序"并非铁板一块。根据计算需求的不同，"有序化"的程度也不同：
-
-- **最弱的有序化需求**：数据只需要按**分区 ID** 聚组（同一分区的数据放在一起），分区内部的数据顺序无所谓。这是大多数聚合操作（`reduceByKey`、`groupByKey`）的需求。
-- **较强的有序化需求**：数据需要按**分区 ID + key** 排序，分区内部的数据也按 key 有序。这是 `sortByKey` 等需要有序输出的操作的需求。
-
-Sort Shuffle 的三种 Writer 策略，本质上就是在不同的约束条件下，用**代价最低的有序化方式**满足上述需求。
-
-### 1.2 `.data` 文件 + `.index` 文件：统一的存储格式
-
-无论采用哪种 Writer 策略，Sort Shuffle 最终产生的文件格式是统一的：
-
-**数据文件（`.data`）**：将所有 R 个分区的数据按分区 ID 从小到大顺序拼接，每个分区的数据块连续存放。文件路径格式为：`{shuffleId}/{mapId}.data`。
-
-**索引文件（`.index`）**：包含 R+1 个 Long 型偏移量值，记录每个分区在数据文件中的起始位置。第 0 个值是 0（文件开头），第 i 个值是分区 i 数据块在文件中的结束位置（也是分区 i+1 的起始位置）。通过相邻两个偏移量的差值，可以计算每个分区的数据长度。文件路径格式为：`{shuffleId}/{mapId}.index`。
-
-```mermaid
-%%{init: {"theme": "dracula", "themeVariables": {"primaryColor": "#6272a4", "primaryTextColor": "#f8f8f2", "primaryBorderColor": "#bd93f9", "lineColor": "#ff79c6", "secondaryColor": "#44475a", "tertiaryColor": "#282a36"}}}%%
-graph TD
-    subgraph "Map Task i 的输出文件"
-        DATA["mapId_i.data</br></br>[分区0的数据块]</br>[分区1的数据块]</br>[分区2的数据块]</br>...</br>[分区R-1的数据块]"]
-        INDEX["mapId_i.index</br></br>偏移量0: 0</br>偏移量1: len(分区0)</br>偏移量2: len(分区0+1)</br>...</br>偏移量R: 文件总长"]
-    end
-
-    subgraph "Reduce Task j 读取"
-        R["Reduce Task j</br>读取分区 j 的数据"] --> |"查询 index 文件</br>得到 start=offset[j]</br>end=offset[j+1]"| INDEX
-        R --> |"seek 到 start</br>读取 end-start 字节"| DATA
-    end
-
-    classDef file fill:#6272a4,stroke:#bd93f9,color:#f8f8f2
-    classDef reduce fill:#44475a,stroke:#50fa7b,color:#f8f8f2
-
-    class DATA,INDEX file
-    class R reduce
-```
-
-这个格式设计非常精妙：
-- **Reduce Task 的读取代价极低**：只需一次 index 文件读取（定位偏移量），然后对 data 文件做一次顺序读取，没有任何随机 I/O。
-- **文件数完全受控**：无论 R 有多大，每个 Map Task 始终只有 2 个文件，总文件数是 `M × 2`。
-- **支持随机访问**：Reduce Task j 可以直接跳转到自己数据的起始位置，不需要扫描整个文件。
-
-### 1.3 SortShuffleManager 的 Writer 选择逻辑
-
-`SortShuffleManager` 在 `registerShuffle` 阶段（而非 `getWriter` 阶段）就决定了使用哪种 `ShuffleHandle`，进而决定了 Writer 类型。这个决策基于三个维度的判断：
-
-```scala
-// org.apache.spark.shuffle.sort.SortShuffleManager
-override def registerShuffle[K, V, C](
-    shuffleId: Int,
-    dependency: ShuffleDependency[K, V, C]): ShuffleHandle = {
-
-  // 条件一：检查是否满足 Bypass 条件
-  // 需要同时满足：无 Map 端聚合 + 分区数 <= bypassMergeThreshold
-  if (SortShuffleWriter.shouldBypassMergeSort(dependency.partitioner.numPartitions,
-      dependency.mapSideCombine, conf)) {
-    new BypassMergeSortShuffleHandle[K, V](shuffleId, dependency)
-
-  // 条件二：检查是否满足 Unsafe 条件
-  // 需要同时满足：序列化器支持对象重定位 + 无 Map 端聚合 + 分区数 <= MAX_SHUFFLE_OUTPUT_PARTITIONS_FOR_SERIALIZED_MODE
-  } else if (canUseSerializedShuffle(dependency)) {
-    new SerializedShuffleHandle[K, V](shuffleId, dependency)
-
-  // 条件三：默认使用标准 SortShuffleWriter
-  } else {
-    new BaseShuffleHandle(shuffleId, dependency)
-  }
-}
-```
-
-三种 Handle 对应三种 Writer，选择优先级从高到低：`BypassMergeSortShuffleWriter` → `UnsafeShuffleWriter` → `SortShuffleWriter`。
-
-下表是三种策略的完整对比：
-
-| 维度 | BypassMergeSortShuffleWriter | UnsafeShuffleWriter | SortShuffleWriter |
-|------|------------------------------|--------------------|--------------------|
-| **触发条件** | 无 Map 端聚合 + R ≤ 200（可配） | 无 Map 端聚合 + 序列化支持重定位 + R ≤ 16M | 其他所有情况 |
-| **内存数据结构** | 无（直接写文件） | `ShuffleInMemorySorter`（堆外） | `PartitionedAppendOnlyMap` 或 `PartitionedPairBuffer` |
-| **排序方式** | 无排序 | 按分区 ID 基数排序 | 按分区 ID (+ key) 比较排序 |
-| **序列化时机** | 写临时文件时序列化 | 立即序列化（写入堆外内存） | 写 Spill 文件或最终合并时序列化 |
-| **Spill 支持** | 无（临时文件即最终文件） | 支持（堆外内存满时 Spill） | 支持（内存数据结构满时 Spill） |
-| **Map 端聚合** | 不支持 | 不支持 | 支持 |
-| **输出有序性** | 按分区 ID 有序（分区内无序） | 按分区 ID 有序（分区内无序） | 按分区 ID + key 有序（如需要） |
+写侧的统一是 Spark 1.2 之后最容易被当成「已经解决」的一件事：一个 map 任务只交出一个数据文件和一个索引文件，文件数从 M×R 落到 2M，与分区数脱钩。这一篇把这句话当成一份合同来读，先写清它承诺了什么（数量级的文件数、磁盘上的索引、与进程无关的定位依据），再写清它在什么条件下不成立——旁路路径先把数据写进 R 个临时文件，溢写让运行期多出 k 个中间文件，失败重试留下多份 attempt 的产物，流水线式管理器根本不产出完整的可寻址双文件。合同成立的前提是一次按分区号的归组，归组要一段内存；内存不够就溢写，溢写再归并，代价从 CPU 转移到磁盘与句柄上。全文按运维口径组织：三条写路径的触发条件与产物形状、阈值 200 背后的资源账（R 取 200 到 2000 的缓冲与句柄，示例推算）、溢写次数与磁盘峰值的量级、4.x 的现状口径（`tungsten-sort` 只是别名、hash 路径已移除、管理器的两个槽位），最后落到六类现场的分诊表与四个反例。机制推导不在本篇展开，按各章路由去内核系列。
 
 ---
 
-## 第 2 章 BypassMergeSortShuffleWriter：无排序的极简路径
+## 第 1 章 一句承诺，四条边界
 
-### 2.1 设计动机：为什么小 R 时不需要排序
+### 1.1 承诺的原文
 
-在第 02 篇中，我们介绍了 File Consolidation——它允许同一 Executor 上的 Map Task 复用文件。`BypassMergeSortShuffleWriter` 可以看作是这一思想在 Sort Shuffle 框架内的"合法重生"：在 R 较小的情况下，为每个分区创建一个临时文件，写完后再合并成一个最终文件。
+4.x 的排序式 Shuffle 对写侧的承诺只有一句：一个 map 任务结束时，本地盘上只多出两个文件，一个装数据，一个装索引。数据文件里 R 个分区的字节首尾相接、按分区号升序排列；索引文件里每个分区占一个定长条目，记着该分区在数据文件里的起点与长度。总文件数是 M 的两倍，R 取多少都不影响这个数字。
 
-为什么限制 R 必须较小（默认 ≤ 200）？因为这个策略的内存消耗与 R 成正比——每个分区需要一个 `DiskBlockObjectWriter`（含 32KB 缓冲区）。当 R = 200 时，单个 Task 的写缓冲区内存约为 6MB，完全可以接受；但如果 R = 10,000，就需要 312MB 的写缓冲区，这会对 Executor 的内存造成巨大压力。
+这句话的分量不在「少」，在「脱钩」。M 由输入数据量与切分方式决定，通常几百到几万，作业作者改不动；R 是并行度旋钮，被人反复调大调小，是集群里最活跃的那个变量。把 R 从文件数的乘法里拿掉，等于把一个最不稳定的量移出了稳定性方程。至于 M×R 与 2M 之间那几级量级的差距如何算出来、三代实现各自付出了什么，属于演进史的口径，见内核 [[大数据/Spark/读书笔记-spark内核/05_Shuffle核心机制/3. Spark_Shuffle框架演进与架构|Shuffle 框架演进与架构]]。
 
-不需要 Map 端聚合（`mapSideCombine = false`）的限制也很自然：如果需要 Map 端聚合，就需要在内存中维护一个按 key 分组的聚合状态（比如 `PartitionedAppendOnlyMap`），这已经超出了 `BypassMergeSortShuffleWriter` 的设计范围。
+承诺的第二层是定位依据的位置。要找到「某个 reduce 分区的那批数据」，只需要读磁盘上的那份索引，不需要任何进程内的状态；于是「数据是谁写出来的」不再重要，外部 Shuffle 服务可以代读，Executor 可以在 Shuffle 完成之后被回收。这一层比第一层更长命：文件数是运维能看见的账，定位依据的位置决定了弹性伸缩能不能做。
 
-### 2.2 执行流程详解
+### 1.2 承诺是一个条件命题
 
-`BypassMergeSortShuffleWriter` 的执行分为两个阶段：
+这句话在四种条件下不成立，四种都是模型的组成部分，但现场表现完全不同，混起来会把排查引向错误的方向。
 
-**阶段一：哈希分组写临时文件**
+第一种是旁路。当一次 Shuffle 没有 map 端聚合、且分区数不超过 `spark.shuffle.sort.bypassMergeThreshold`（缺省 200）时，写侧会先为每个分区各开一个临时文件、按分区号直接追加，全部写完之后再把 R 个临时文件首尾拼进一个数据文件，补一份索引。承诺的「两个文件」在任务结束那一刻成立，**在任务执行期间不成立**：那段时间里磁盘上真实存在的是 R 个临时文件。
 
-对每个输入记录 `(key, value)`：
-1. 计算 `partitionId = partitioner.getPartition(key)`
-2. 将 `(key, value)` 序列化后写入 `partitionWriters[partitionId]` 对应的 `DiskBlockObjectWriter`
+第二种是溢写。排序路径先在内存里攒记录，攒不下就把当前这批按分区号排好、写进一个中间文件，再接着攒。中间文件的个数由溢写次数 k 决定，任务结束时被归并成一个数据文件。于是「两个文件」是终局形态，不是过程中的形态。
 
-这个过程完全没有排序，和 Hash Shuffle 的 `HashShuffleWriter` 一模一样。所有记录处理完毕后，每个分区对应一个临时文件（路径格式：`temp_shuffle_{uuid}`）。
+第三种是重试。任务失败会被重跑，同一分区号下会先后存在多个 attempt 的输出目录；旧 attempt 的产物要等清理阶段才消失，两个 attempt 之间隔着的可能正是「本地盘写满」的现场。
 
-**阶段二：合并临时文件，生成最终文件**
+第四种是流水线式管理器。4.x 把 Shuffle 分成阻塞式与流水线式两支，后者一边写一边被读，产物不是一份完整的、可寻址的双文件；承诺在那里被换成了另一套契约，块的位置信息退化为占位值。「一个数据文件加一个索引文件」**只对阻塞式那一支成立**，这是本篇认为最需要先说清的一条边界。
 
-所有分区的临时文件写完后，执行合并：
-1. 创建最终的 `.data` 文件
-2. 按分区 ID 从 0 到 R-1，依次将每个临时文件的内容追加拷贝（`transferTo`，利用操作系统的零拷贝能力）到 `.data` 文件
-3. 记录每个分区在 `.data` 文件中的偏移量
-4. 将偏移量数组写入 `.index` 文件
-5. 删除所有临时文件
+把这四条并排放：
+
+| 边界 | 触发条件 | 运行期真实文件数 | 何时消失 | 现场判据 |
+| :--- | :--- | :--- | :--- | :--- |
+| 旁路临时文件 | 无 map 端聚合且 R ≤ 阈值 | 2M 之外再加 R × 并发任务数 | 任务结束、拼接完成即删除 | Shuffle 目录出现 R 个带 UUID 后缀的临时文件，随任务结束消失 |
+| 溢写中间文件 | 执行内存不足 | 2M 之外再加 k × 并发任务数 | 归并完成即删除 | Stage 页 Spill (disk) 非零；日志有 `Spilling in-memory map` 行 |
+| 失败 attempt 残留 | 任务失败重跑 | 每个旧 attempt 各一套 | 清理阶段，或应用结束时 | 同一 shuffleId 下的 attempt 目录多于当前并发数 |
+| 流水线式产物 | `spark.shuffle.manager.incremental` 生效 | 不是完整双文件 | 随流结束 | 块位置信息不全，Red 端按增量流边写边读 |
+
+表里前两行是运维日常会撞上的，后两行是「数字对不上」时的解释项。
+
+四条边界落在同一个任务的生命周期上，画出来就是下面这张图：终局的那份承诺只有一行，过程中却并着三条支路，每一条都在本地盘上留下过文件。
 
 ```mermaid
-%%{init: {"theme": "dracula", "themeVariables": {"primaryColor": "#6272a4", "primaryTextColor": "#f8f8f2", "primaryBorderColor": "#bd93f9", "lineColor": "#ff79c6", "secondaryColor": "#44475a", "tertiaryColor": "#282a36"}}}%%
-sequenceDiagram
-    participant T as "BypassMergeSort Writer"
-    participant TF0 as "temp_part_0"
-    participant TF1 as "temp_part_1"
-    participant TFR as "temp_part_{R-1}"
-    participant DF as "mapId.data"
-    participant IF as "mapId.index"
-
-    Note over T: "阶段一：哈希分组写临时文件"
-    T->>TF0: "写入分区0的所有记录"
-    T->>TF1: "写入分区1的所有记录"
-    T->>TFR: "写入分区R-1的所有记录"
-
-    Note over T: "阶段二：合并临时文件"
-    T->>DF: "transferTo(temp_part_0) → 记录 offset[1]"
-    T->>DF: "transferTo(temp_part_1) → 记录 offset[2]"
-    T->>DF: "transferTo(temp_part_{R-1}) → 记录 offset[R]"
-    T->>IF: "写入 offset[0..R] 数组"
-    T->>TF0: "删除临时文件"
-    T->>TF1: "删除临时文件"
-    T->>TFR: "删除临时文件"
+%%{init: {'theme': 'dracula'}}%%
+flowchart LR
+    S["任务开始"] --> A{"有 map 端聚合<br/>或 R 大于阈值"}
+    A -- "没有聚合<br/>且 R ≤ 阈值" --> B["旁路：R 个临时文件"]
+    B --> C["拼接临时文件<br/>写索引"]
+    C --> D["终局：数据 + 索引"]
+    A -- "有，或 R 太大" --> E["内存归组"]
+    E --> F["溢写：k 个中间文件"]
+    F --> G["归并<br/>写索引"]
+    G --> D
+    H["任务失败重跑"] -.->|"每个 attempt 各留一套"| F
+    classDef start fill:#6272a4,stroke:#bd93f9,color:#f8f8f2
+    classDef mid fill:#44475a,stroke:#ff79c6,color:#f8f8f2
+    classDef endn fill:#50fa7b,stroke:#282a36,color:#282a36
+    class S,A start
+    class B,C,E,F,G,H mid
+    class D endn
 ```
 
-### 2.3 零拷贝合并：transferTo 的性能优势
+图里虚线那一步是解释「文件数对不上」的关键：失败重跑的 attempt 各自留过一套过程文件，它们不在任何一张总表里，只在本地目录里。
 
-合并阶段使用的 `transferTo` 是 Java NIO 的 `FileChannel.transferTo` 方法，它底层调用了操作系统的 `sendfile` 系统调用（或类似机制）。这个方法的特点是**零拷贝**：数据直接在内核空间从源文件传输到目标文件，不需要先拷贝到 JVM 的用户态内存，再从用户态内存写入目标文件。
+### 1.3 被忽略的那半个承诺：索引
 
-传统文件拷贝的数据路径：磁盘 → 内核页缓存 → 用户态内存 → 内核页缓存 → 磁盘（4次数据拷贝，2次内核态/用户态切换）。
+人们记住的总是「一个数据文件」，索引往往被当成附属品。但索引是这份承诺里唯一与 R 挂钩的部分：每个 reduce 分区占一个 8 字节条目，R 取 2000 时一个索引约 16 KB，R 取 10000 时约 80 KB；M 个 map 任务各交一份，总量就是 M 乘这个数。
 
-`transferTo` 的数据路径：磁盘 → 内核页缓存 → 磁盘（2次数据拷贝，0次内核态/用户态切换，在现代内核上甚至可以做到 DMA 直传）。
+这笔开销的特别之处在于它的分母是分区数而不是数据量。一次分区数调到两千、数据量却只有几十 MB 的 Shuffle，索引可能比数据文件还大；反过来，一次分区数只有两百、数据量上 TB 的 Shuffle，索引可以忽略不计。空分区不会让索引变小——某个分区在这个 map 输出里一条记录都没有，它照样占一个条目，读侧拿到长度 0 直接跳过。所以「用大分区数换并行度」这个动作，第一笔可预见的代价不是网络也不是磁盘，而是索引、`MapStatus` 与拉取请求数三者一起按 R 放大。
 
-对于 `BypassMergeSortShuffleWriter` 来说，合并阶段需要将 R 个临时文件依次拷贝到最终文件。如果 R = 200，每个临时文件平均 5MB（Map Task 总输出 1GB 的情况），合并阶段就需要拷贝 1GB 数据。零拷贝在这里的性能优势非常显著——它不仅减少了 CPU 开销，还减少了 JVM 堆内存的压力（不需要分配大块的拷贝缓冲区）。
+### 1.4 本篇的边界
 
-> [!info] 核心概念
-> **零拷贝（Zero-Copy）** 是操作系统层面的优化技术，通过让数据在内核空间直接流转（不经过用户态内存），减少数据拷贝次数和系统调用开销。在 Spark 的 Shuffle 场景中，大量的文件合并操作如果不使用零拷贝，会消耗大量 CPU 和 JVM 内存。`FileChannel.transferTo` 是 Java 中利用零拷贝的标准方式，Spark 的 Shuffle 文件合并和网络传输都大量使用了这个机制。
+机制层的推导不再重复，三处路由写给需要补课的人：接口怎么分层、句柄如何随任务发走、writer 的选择在哪个方法里做，见内核 [[大数据/Spark/读书笔记-spark内核/05_Shuffle核心机制/2. Spark_Shuffle框架设计与实现|Shuffle 框架：接口分层与读写契约]]；三条路径的判据、bypass 阈值的由来与 `tungsten-sort` 的身份，见内核 [[大数据/Spark/读书笔记-spark内核/05_Shuffle核心机制/3. Spark_Shuffle框架演进与架构|Shuffle 框架演进与架构]]；归组用的两张内存表、溢写之后的归并细节，见内核 [[大数据/Spark/读书笔记-spark内核/05_Shuffle核心机制/6. Spark_Shuffle聚合与排序结构|Shuffle 聚合与排序结构]]。
 
-### 2.4 BypassMergeSortShuffleWriter 的适用边界
-
-**最适合的场景**：
-- R 较小（≤ 200）的 `groupByKey`、`join`、`repartition` 操作
-- 数据无需 Map 端聚合的任意重分区操作
-- 数据量不大，内存充足，不担心临时文件占用磁盘空间
-
-**不适合的场景**：
-- 需要 Map 端聚合（`reduceByKey`、`aggregateByKey` with `mapSideCombine`）——必须使用 `SortShuffleWriter`
-- R 很大（> 200）——临时文件数和写缓冲区内存压力过大，应该使用 `UnsafeShuffleWriter` 或 `SortShuffleWriter`
+本篇只做四件事：说清承诺的边界、对照三条写路径、换算阈值与溢写的代价、给出症状到判据的分诊表。
 
 ---
 
-## 第 3 章 UnsafeShuffleWriter：绕过 JVM 的极速路径
+## 第 2 章 承诺的代价是一段内存
 
-### 3.1 为什么需要一个"Unsafe"的 Writer
+### 2.1 归组：把 R 个目的地压进一个文件
 
-`BypassMergeSortShuffleWriter` 的限制是 R ≤ 200。当 R 更大时，如果数据依然不需要 Map 端聚合，也不需要 key 有序输出，能否有一个比 `SortShuffleWriter` 更高效的实现？
+同一个分区的字节要在文件里连续，写侧就必须在落盘之前「知道」每条记录属于哪个分区，并且把它们攒到一起。攒的动作发生在内存里，这是整个模型唯一的硬约束：一个数据文件是外部排序的结果，**不是流式追加的结果**。
 
-`UnsafeShuffleWriter`（在早期也叫做 Tungsten-Sort Writer）就是为这个场景设计的。它的核心优化思路来自 Tungsten 项目的两个关键洞察：
+与之相对的形状是流式追加：来一条记录，直接写进它该去的位置——这正是旁路路径的做法，代价是那个「该去的位置」需要一个独立文件。两种形状的分水岭就在这里：要么在内存里攒，要么在磁盘上开 R 个口子。
 
-**洞察一：JVM 对象模型对排序来说太昂贵**
+攒的记录越多、内存越紧，落盘的次数就越多，归并的规模也越大；攒不下时不能丢数据，只能把这一批排好序交出去。于是「两个文件」这个终局形态背后，是一段「内存—磁盘—归并」的反复。
 
-`SortShuffleWriter` 在内存中维护的是一个 `PartitionedPairBuffer`——一个存储 `(partitionId, key, value)` Java 对象的数组。每个对象都有 JVM 对象头开销（16 字节），对象引用在 64 位 JVM 下占 8 字节，加上实际数据内容，一条记录的内存占用可能是其原始数据大小的 3-5 倍。对这些对象做比较排序（Merge Sort），还需要频繁地跟随指针访问，缓存命中率极差。
+### 2.2 排序键是分区号，比较本身不贵
 
-**洞察二：如果只按分区 ID 排序，不需要比较 key**
+这里有一个常被高估的成本项。排序式 Shuffle 归组时用的键是分区号，不是业务键；分区号是一个整数，比较它不需要反序列化 key、不需要触碰记录内容。只有在 `sortByKey` 这类要求分区内有序的算子里，依赖才会带上 `keyOrdering`，归组之后再加一趟按业务键的排序（这条区分见内核 3 的第 4 章与内核 6 的第 4 章）。
 
-当不需要 key 有序输出时，排序的目标只是让同一分区的记录聚集在一起——这只需要按 `partitionId`（一个整数）排序，完全不需要访问 key 的内容。
+这个事实改变了对成本的归因。一条「排序式 Shuffle 的 CPU 花在排序上」的判断，在 `reduceByKey` 型的作业里基本不成立：比较次数与记录数同阶，单次比较是一次整数比较，摊到每条记录上是纳秒级；真正吃掉 CPU 的是序列化、对象化与 GC，以及溢写带来的磁盘往返。把归因搞对，才能解释一个常见现象——某个作业把分区数从 200 调到 2000 之后写侧变慢了，慢的地方并不是「多排了十倍的序」，而是记录被序列化了更多次、溢写更碎。
 
-如果我们能把所有记录先序列化成二进制格式，然后只记录每条序列化记录的**内存地址**和**分区 ID**，就可以只对这个 `(partitionId, memoryAddress)` 的轻量级索引数组做排序，完全不需要移动实际的序列化数据。排序完成后，按排序后的顺序依次读取每条序列化记录写出到文件即可。
+### 2.3 三段流水线
 
-这就是 `UnsafeShuffleWriter` 的核心思路：**先序列化，再对序列化数据的引用排序，最后顺序写出**。
-
-### 3.2 关键数据结构：ShuffleInMemorySorter
-
-`UnsafeShuffleWriter` 的核心数据结构是 `ShuffleInMemorySorter`。它维护一个 `LongArray`（`long[]` 型数组），每个元素存储一条记录的**编码指针**：
-
-```
-高 24 位：partitionId（分区 ID）
-低 40 位：recordAddress（记录的堆外内存地址，Unsafe 指针）
-```
-
-注意，这两部分被编码进一个 `long` 值中！这个编码设计非常精妙：
-- 整个排序键就是这个 `long` 值本身，无需任何比较器（`Comparator`）——直接比较 `long` 值大小就等效于"先按 partitionId 排序，partitionId 相同时按地址排序"
-- `LongArray` 是一个紧凑的基本类型数组，完全没有 JVM 对象头开销，CPU 缓存友好
-- 由于 partitionId 占高 24 位，排序结果天然是先按 partitionId、再按地址排列，满足"同分区数据聚集"的需求
-
-> [!info] 核心概念
-> **高 24 位存 partitionId 的限制**：由于 partitionId 只有 24 位，最大值为 2^24 - 1 = 16,777,215，这就是 `UnsafeShuffleWriter` 的分区数上限（约 1600 万）。虽然这个上限在实践中极少触及，但它是 `UnsafeShuffleWriter` 触发条件之一，理解这个设计有助于理解为什么会有这个约束。
-
-### 3.3 序列化器支持对象重定位的要求
-
-`UnsafeShuffleWriter` 要求序列化器必须支持**对象重定位**（Serializer Relocation），即序列化器能够将一个已经序列化的对象字节流，**不反序列化直接拷贝**到另一个内存位置，而不破坏其语义。
-
-为什么需要这个条件？在 `UnsafeShuffleWriter` 的合并阶段，需要将多个 Spill 文件的内容合并成最终的 `.data` 文件。合并时，Spill 文件中的序列化记录需要被读取并追加到最终文件。如果序列化器不支持重定位（例如序列化内容中包含了绝对内存地址），就无法安全地做这种直接字节拷贝。
-
-Java 原生序列化不支持重定位（因为 Java 对象流可能包含类型信息和引用关系），但 Kryo 序列化天然支持重定位（序列化结果是纯数据字节流，不含内存地址）。这也是为什么生产环境几乎所有 Spark 集群都配置了 Kryo 序列化器——它不仅更快、更紧凑，还解锁了 `UnsafeShuffleWriter` 的使用。
-
-### 3.4 UnsafeShuffleWriter 的完整执行流程
+把写侧摊成三段，每段的输入输出与失败形态都不同，这也是后面所有判据的底图：
 
 ```mermaid
-%%{init: {"theme": "dracula", "themeVariables": {"primaryColor": "#6272a4", "primaryTextColor": "#f8f8f2", "primaryBorderColor": "#bd93f9", "lineColor": "#ff79c6", "secondaryColor": "#44475a", "tertiaryColor": "#282a36"}}}%%
-graph TD
-    A["输入记录</br>(key, value)"] --> B["序列化为字节流</br>写入堆外内存 MemoryBlock"]
-    B --> C["计算 partitionId</br>编码 (partitionId << 40 | address)</br>插入 ShuffleInMemorySorter"]
-    C --> D{"堆外内存</br>是否足够?"}
-    D -- "是" --> C
-    D -- "否" --> E["触发 Spill</br>对 LongArray 基数排序</br>按排序顺序写临时 Spill 文件</br>每个分区连续存放"]
+%%{init: {'theme': 'dracula'}}%%
+flowchart LR
+    A["记录流<br/>（key, value）"] --> B["第一段：内存归组<br/>按分区号攒进内存表"]
+    B --> C{"这一批装得下吗"}
+    C -- "装得下" --> D["继续攒"]
+    D --> C
+    C -- "装不下" --> E["第二段：溢写<br/>按分区号排好<br/>写一个中间文件<br/>清空内存再攒"]
     E --> C
-    C --> F["所有记录处理完毕"]
-    F --> G{"是否有</br>多个 Spill 文件?"}
-    G -- "否（无 Spill）" --> H["直接对 LongArray 基数排序</br>按顺序写最终 .data 文件"]
-    G -- "是" --> I["多路归并排序</br>合并所有 Spill 文件</br>写入最终 .data 文件"]
-    H --> J["写入 .index 文件"]
-    I --> J
-
-    classDef input fill:#6272a4,stroke:#bd93f9,color:#f8f8f2
-    classDef process fill:#44475a,stroke:#50fa7b,color:#f8f8f2
-    classDef output fill:#282a36,stroke:#ff79c6,color:#f8f8f2
-    classDef decision fill:#282a36,stroke:#ff79c6,color:#ff79c6
-
-    class A input
-    class B,C,E,H,I process
-    class J output
-    class D,F,G decision
+    C -- "输入耗尽" --> F["第三段：归并<br/>k 个中间文件 + 内存余量<br/>流式归并"]
+    F --> G["数据文件 M 个<br/>索引文件 M 个"]
+    classDef stage fill:#6272a4,stroke:#bd93f9,color:#f8f8f2
+    classDef gate fill:#44475a,stroke:#ff79c6,color:#f8f8f2
+    classDef out fill:#50fa7b,stroke:#282a36,color:#282a36
+    class B,E,F,G stage
+    class C stage
+    class A,D gate
 ```
 
-**排序算法的选择**：`ShuffleInMemorySorter` 使用**基数排序**（Radix Sort）对 `LongArray` 排序，而不是传统的比较排序（如 TimSort）。基数排序的时间复杂度是 O(n × k)（k 是位数），对于固定位宽的整数（这里是 64 位 `long`），比 O(n log n) 的比较排序更快，且完全不需要比较器对象，进一步减少了 GC 压力。
+三段各自对应一组可观测的量：第一段的瓶颈是执行内存，第二段的瓶颈是磁盘写入带宽，第三段的瓶颈是流的条数与随机读的粒度。三段的失败现场也各不相同：
 
-### 3.5 UnsafeShuffleWriter 与 SortShuffleWriter 的性能对比
+| 阶段 | 在做什么 | 资源瓶颈 | 失败或劣化的现场 |
+| :--- | :--- | :--- | :--- |
+| 内存归组 | 把记录攒进一张按分区号索引的表 | 执行内存池的份额 | 溢写次数上升；任务变慢但 CPU 不高；GC 时间不升反降（数据已落盘） |
+| 溢写 | 排好序写中间文件 | 本地盘写入带宽与容量 | `spark.local.dir` 空间吃紧；磁盘 util 高而吞吐饱和 |
+| 归并 | k 路流式归并成终局文件 | 打开的文件数与读缓冲 | 归并阶段耗时占比高；`Too many open files`；小粒度读把带宽换成寻道 |
 
-为什么说 `UnsafeShuffleWriter` 比 `SortShuffleWriter` 更快？从以下几个维度量化：
+注意第一段的失败表现：它不体现在 CPU 上，也不体现在 GC 上，而是体现为「磁盘写得多、任务跑得慢」，这与数据倾斜的现场很像，区别在于倾斜会让少数任务的数据量远大于其他任务，而执行内存不足会让同一 Stage 内几乎所有任务都出现溢写。
 
-**内存效率**：`SortShuffleWriter` 的 `PartitionedPairBuffer` 存储的是 Java 对象引用，每条记录有对象头开销 + 引用开销；`UnsafeShuffleWriter` 的 `LongArray` 每条记录只有 8 字节（一个 `long`），序列化数据在堆外内存以紧凑格式存储，内存使用量约减少 50%-70%。
+### 2.4 代价落到哪三笔
 
-**排序速度**：比较排序的最优时间复杂度是 O(n log n)，每次比较需要访问 key 对象（可能有缓存 miss）；`UnsafeShuffleWriter` 的基数排序是 O(n)，且全部在紧凑的 `LongArray` 上操作，缓存命中率极高。
-
-**GC 压力**：`SortShuffleWriter` 的内存操作全在 JVM 堆上，大量对象的创建和销毁会给 JVM GC 带来显著压力，可能导致 GC 停顿影响 Task 执行；`UnsafeShuffleWriter` 的主要内存操作在堆外，几乎不触发 GC。
-
----
-
-## 第 4 章 SortShuffleWriter：通用路径的万能选手
-
-### 4.1 什么情况下必须用 SortShuffleWriter
-
-当以下任一条件成立时，只能使用 `SortShuffleWriter`：
-1. **需要 Map 端聚合**：`dependency.mapSideCombine = true`，即使用了 `reduceByKey`、`aggregateByKey`、`combineByKey` 等带有 Map 端合并器的算子
-2. **R 超过 16,777,215**：超过了 `UnsafeShuffleWriter` 的分区数上限（实践中极少遇到）
-3. **序列化器不支持对象重定位**：使用了 Java 原生序列化
-
-可以看出，在配置了 Kryo 序列化器、且 R 不极端的情况下，`SortShuffleWriter` 主要服务于**有 Map 端聚合需求**的场景。这也是它与前两种 Writer 最本质的差异。
-
-### 4.2 ExternalSorter：SortShuffleWriter 的核心引擎
-
-`SortShuffleWriter` 将所有实际工作委托给 `ExternalSorter` 完成。`ExternalSorter` 是 Sort Shuffle 中最复杂也最核心的组件，第 04 篇会对其做专门的深度解析。这里只介绍其工作模式的概要。
-
-`ExternalSorter` 有两种内部数据结构，根据是否需要聚合来选择：
-
-**有聚合时**：使用 `PartitionedAppendOnlyMap`——一个按 `(partitionId, key)` 组合键存储聚合值的哈希映射。当新记录到来时，直接在 Map 中更新对应 key 的聚合值（如累加），天然实现了 Map 端的局部聚合。
-
-**无聚合时**（但 R > 16M 或序列化器不支持重定位而无法用 UnsafeShuffleWriter）：使用 `PartitionedPairBuffer`——一个简单的 `(partitionId, key, value)` 三元组数组，按插入顺序存储，不做任何聚合。
-
-两种数据结构都有一个共同的行为：当内存不足时，触发 **Spill**——将内存中当前的数据按 `(partitionId, key)` 排序后写入临时磁盘文件，然后清空内存继续接收新数据。Map Task 结束时，进行最终的 **Merge**——将所有 Spill 临时文件和内存中剩余数据进行多路归并排序，生成最终的 `.data` 文件和 `.index` 文件。
-
-### 4.3 为什么 Map 端聚合对文件格式没有影响
-
-有一个常见的误解：有 Map 端聚合的 Shuffle 和没有聚合的 Shuffle，写出的文件格式不同。实际上它们的文件格式完全相同，都是 `.data` + `.index` 双文件格式。
-
-Map 端聚合的"聚合"发生在内存数据结构（`PartitionedAppendOnlyMap`）中，是写出文件之前的内存操作。聚合的结果是：写入文件的记录数量减少了（相同 key 被合并为一条记录），但文件格式没有任何变化。
-
-这意味着，对 Reduce Task 来说，它完全不需要知道 Map Task 是否做了 Map 端聚合——它只需要按照标准的 `.index` + `.data` 格式读取数据即可。Map 端聚合只是一个优化手段，减少了 Shuffle 的数据量（更少的数据需要写磁盘和传输网络），但不影响协议层面的兼容性。
+代价归成三笔：排序与比较（单次便宜，总量随记录数）、对象化与序列化（每条记录一到两次）、溢写与归并（字节级磁盘往返加流级元数据开销）。在不做 map 端聚合的作业里，前两笔是净支出，第三笔取决于内存是否够用——这正是旁路存在的理由。
 
 ---
 
-## 第 5 章 三种 Writer 的参数调优指南
+## 第 3 章 三条写路径：判据、产物与代价
 
-### 5.1 关键参数汇总
+### 3.1 判据在注册期，一次定死
 
-理解了三种 Writer 的选择逻辑，就能对症下药地调整参数：
+选择发生在 Driver 端注册 Shuffle 的那一刻，判断依据只有三样静态属性：依赖里有没有 map 端聚合、分区器会产出多少分区、序列化器是否支持把已序列化的字节原样搬走。判断的结果不是换一个管理器，而是换一个句柄，句柄再决定 Executor 上用哪个 writer。运行期看到的所有差异——溢写多少、句柄多少、临时文件多少——**都是这个静态判断的下游结果**。
 
-| 参数 | 默认值 | 影响的 Writer | 含义与调优建议 |
-|------|--------|-------------|--------------|
-| `spark.shuffle.sort.bypassMergeThreshold` | 200 | BypassMergeSort | Reduce 分区数的 Bypass 阈值。如果集群内存充足、典型作业的 R 在 200-500 之间，可以适当调大以跳过排序 |
-| `spark.shuffle.file.buffer` | 32KB | 所有 Writer | 写缓冲区大小。在内存充足时调大（如 64KB-128KB）可减少 flush 次数，但 BypassMergeSort 的内存消耗与 R × buffer_size 成正比 |
-| `spark.shuffle.spill.compress` | true | SortShuffle / Unsafe | 是否压缩 Spill 文件。启用压缩减少磁盘 I/O 和空间占用，代价是 CPU 开销 |
-| `spark.shuffle.compress` | true | 所有 Writer | 是否压缩最终的 Shuffle 数据文件。建议保持开启，网络传输收益明显 |
-| `spark.shuffle.unsafe.fastMergeEnabled` | true | UnsafeShuffleWriter | 是否在合并时使用快速路径（直接字节拷贝，不反序列化）。依赖序列化器支持重定位，Kryo 下应保持开启 |
-| `spark.serializer` | Java | 影响 Unsafe 触发 | 强烈建议设置为 `org.apache.spark.serializer.KryoSerializer`，解锁 UnsafeShuffleWriter |
+这一点对运维的意义是：作业跑起来之后，参数已经无法改变写路径；想改变写路径，只能改计划（分区数）、改算子形状（有无 map 端聚合）、改序列化器，然后重跑。看到「同一个作业两次运行写路径不同」，答案通常在两次的分区数或序列化器不同，而不在运行期的自适应。
 
-### 5.2 如何在 Spark UI 中判断当前使用了哪种 Writer
+### 3.2 路径一：序列化排序
 
-Spark UI 没有直接显示"使用了哪种 ShuffleWriter"的信息，但可以通过间接指标判断：
+条件是三条同时成立：序列化器支持对象重定位，依赖没有 map 端聚合，分区数不超过 2^24（16,777,216）。满足时记录一进来就被序列化成字节，排序排的是「分区号 + 地址」压成的 8 字节指针，落盘时把字节按指针顺序搬出去。
 
-- **Shuffle Spill (Memory)**：`SortShuffleWriter` 和 `UnsafeShuffleWriter` 都会 Spill，`BypassMergeSortShuffleWriter` 不会 Spill（它没有内存数据结构）。如果 "Shuffle Spill (Memory)" 为 0，且 "Shuffle Write" 指标正常，通常说明使用了 `BypassMergeSortShuffleWriter`。
-- **Task Metrics 中的 Serialization Time**：`UnsafeShuffleWriter` 在写入时立即序列化，序列化时间分散在整个 Task 执行过程中；`SortShuffleWriter` 的序列化集中在 Spill 和最终 Merge 阶段。
+对运维而言，这条路径的判据是「序列化器的种类」，而不是「有没有打开某个开关」。4.x 的缺省 `spark.serializer` 是 `JavaSerializer`，它不支持重定位，于是 RDD 作业在缺省配置下几乎命中不了这条路径；SQL 侧的行本身就是 `UnsafeRow`，序列化不构成障碍，判据就只剩分区数与有无 map 端聚合两条。同一个集群上，DataFrame 与 RDD 写出形状不同、溢写特征不同，源头常常在这里。
 
-更可靠的判断方式是查看 **Executor 日志**中的 DEBUG 级别日志（需要调整日志级别），`SortShuffleManager.getWriter` 方法会记录选择了哪种 ShuffleHandle。
+还有一条隐性的长度上限：单条记录要能被指针里的位偏移表达，超出范围（量级在百 MB 以上）的记录会让这条路径失效，退回普通排序——宽行、大数组、整块二进制字段是它的典型触发者。
 
-> [!warning] 生产避坑
-> 生产环境中，如果你发现一个 `groupByKey` 或 `join` 作业（理应触发 `BypassMergeSortShuffleWriter`）的 Task 出现了大量 Shuffle Spill，说明这个作业实际上走了 `SortShuffleWriter` 路径。可能的原因：分区数 R 超过了 `bypassMergeThreshold`（默认 200），或者算子被框架识别为需要 Map 端聚合（某些 DataFrame 操作会自动插入聚合器）。此时应检查 `explain()` 的物理计划，确认 Shuffle 的实际实现路径。
+两处容易混淆的上限要分开记：这条路径的上限是 2^24 个分区，来自指针里分区号的位宽；`spark.shuffle.sort.bypassMergeThreshold` 管的是旁路那条路径，与序列化排序没有关系。把两者当成同一个阈值，会得出「把阈值调到 2000 就能让序列化路径生效」这类错误结论。
 
-### 5.3 一张决策树厘清三种 Writer
+### 3.3 路径二：普通排序
+
+其余情况都落到这条路径：有 map 端聚合的作业（`reduceByKey`、`aggregateByKey`、SQL 的聚合），序列化器不支持重定位的 RDD 作业，分区数超过 2^24 的极端场景。它把所有工作交给排序器：有聚合时用一张按「分区号 + 键」组织的内存表边收边合并，没有聚合时用一个定长记录数组；内存不够就溢写，最后归并出双文件。
+
+这条路径的能力最全：只有它能做 map 端聚合，也只有它能在需要时让分区内按业务键有序。代价是对象化与溢写两笔支出同时存在，所以在「不需要聚合、分区数又不大」的场景里，它是三条路径中最慢的一条。
+
+### 3.4 路径三：旁路
+
+两个条件：没有 map 端聚合，分区数不超过阈值（缺省 200）。做法在形状上回到了哈希时代——为每个分区开一个写入器，记录直接序列化进对应文件——但结尾多了一步：把这 R 个临时文件按分区号顺序拼进一个数据文件，再写索引。**它用哈希的写法产出了排序的形态**，这是它能在排序框架里存活的原因。
+
+旁路不排序，这件事不违反任何语义。`sortByKey` 这类需要分区内有序的算子，其有序性由读侧补齐：读侧拿到 `keyOrdering` 之后会对合并后的流再排一次，写侧排不排都不影响结果。这一点值得说清，因为「旁路会破坏排序语义」是一个流传很广的误判，它让不少人把阈值压在 200 以下，白白付了排序的钱。
+
+### 3.5 三条路径对照
+
+| 判据维度 | 旁路（BypassMergeSort） | 序列化排序（UnsafeShuffleWriter） | 普通排序（SortShuffleWriter） |
+| :--- | :--- | :--- | :--- |
+| 必须同时满足 | 无 map 端聚合；R ≤ 阈值（缺省 200） | 序列化器可重定位；无聚合；R ≤ 16,777,216 | 其余所有情况 |
+| 内存里的记录形态 | 不攒，直接序列化写临时文件 | 序列化字节 + 8 字节指针 | 对象或定长记录 |
+| 分区内按键有序 | 否 | 否 | 仅当依赖带 `keyOrdering` |
+| 单任务同时打开的文件 | R 个临时文件 | 1 个（另有溢写文件） | 1 个（另有溢写文件） |
+| 是否可能溢写 | 不会 | 会 | 会 |
+| 终局产物 | 数据 + 索引 | 数据 + 索引 | 数据 + 索引 |
+| 主要成本 | R 份写缓冲、R 个句柄、一遍额外拷贝 | 四条硬约束、序列化器绑定 | 对象化、比较、溢写与归并 |
+| 典型算子 | `repartition`、分区数不大的 `groupByKey` | SQL 纯重分区、Kryo 序列化的 RDD 作业 | `reduceByKey`、`sortByKey`、聚合类 SQL |
+
+### 3.6 一张决策树
+
+把判据按实际判断顺序画出来，三条路径的分叉点与两条上限就不会混：
 
 ```mermaid
-%%{init: {"theme": "dracula", "themeVariables": {"primaryColor": "#6272a4", "primaryTextColor": "#f8f8f2", "primaryBorderColor": "#bd93f9", "lineColor": "#ff79c6", "secondaryColor": "#44475a", "tertiaryColor": "#282a36"}}}%%
-graph TD
-    Start["ShuffleDependency 注册"] --> Q1{"mapSideCombine</br>= true?"}
-    Q1 -- "是" --> SW["SortShuffleWriter</br>使用 ExternalSorter</br>支持 Map 端聚合"]
-    Q1 -- "否" --> Q2{"R <=</br>bypassMergeThreshold</br>(默认200)?"}
-    Q2 -- "是" --> BW["BypassMergeSortShuffleWriter</br>无排序</br>临时文件 + 合并"]
-    Q2 -- "否" --> Q3{"序列化器支持</br>对象重定位?</br>(Kryo = 是)"}
-    Q3 -- "否" --> SW
-    Q3 -- "是" --> Q4{"R <=</br>16,777,215?"}
-    Q4 -- "否" --> SW
-    Q4 -- "是" --> UW["UnsafeShuffleWriter</br>堆外内存</br>基数排序</br>序列化二进制格式"]
+%%{init: {'theme': 'dracula'}}%%
+flowchart TD
+    S["registerShuffle"] --> Q1{"依赖里有<br/>map 端聚合吗"}
+    Q1 -- "有" --> P3["普通排序<br/>排序器负责聚合与归并"]
+    Q1 -- "没有" --> Q2{"R ≤ bypassMergeThreshold<br/>（缺省 200）吗"}
+    Q2 -- "是" --> P1["旁路<br/>R 个临时文件 + 拼接 + 索引"]
+    Q2 -- "否" --> Q3{"序列化器支持<br/>对象重定位吗"}
+    Q3 -- "否" --> P3
+    Q3 -- "是" --> Q4{"R ≤ 16,777,216<br/>且单条记录不超大"}
+    Q4 -- "否" --> P3
+    Q4 -- "是" --> P2["序列化排序<br/>排 8 字节指针"]
+    classDef pick fill:#50fa7b,stroke:#282a36,color:#282a36
+    classDef gate fill:#6272a4,stroke:#bd93f9,color:#f8f8f2
+    classDef conf fill:#44475a,stroke:#ff79c6,color:#f8f8f2
+    class P1,P2,P3 pick
+    class Q1,Q2,Q3,Q4 gate
+    class S conf
+```
 
-    classDef writer fill:#6272a4,stroke:#bd93f9,color:#f8f8f2
-    classDef decision fill:#44475a,stroke:#50fa7b,color:#f8f8f2
-    classDef start fill:#282a36,stroke:#ff79c6,color:#f8f8f2
+树上唯一一个能靠调参改变的分叉是 Q2，其余三条都要改计划、改序列化器或改记录结构。这解释了运维现场的一个不对称：绝大多数「调这个参数试试」的动作，实际只能动到旁路那一支；而旁路恰好是最容易把资源问题引进来的一支。
 
-    class BW,UW,SW writer
-    class Q1,Q2,Q3,Q4 decision
-    class Start start
+---
+
+## 第 4 章 阈值 200 的账
+
+### 4.1 省下来的两段
+
+旁路省掉的第一个动作是归组：记录被序列化一次就直接落到目标分区的临时文件里，没有对象化、没有比较、没有内存表。第二个动作是溢写：旁路没有内存结构，也就没有「装不下」这回事，任务不论读进多少数据都不会触发溢写。
+
+但更值得写清的是它没有省掉的东西——拼接。R 个临时文件要按分区号顺序读出来，再写进最终的数据文件，这是一遍完整的读加一遍完整的写。设单任务输出 S 字节，旁路的磁盘流量约是 3S：写临时文件 S，拼接时读回 S，写最终文件 S。而一次不溢写的排序路径只有 S 的写。旁路用这两遍额外的字节搬运，**换掉的是排序与对象化**，这笔交换在数据量小、CPU 紧张时是赚的，在数据量大、磁盘带宽紧张时未必。
+
+### 4.2 付出的三项
+
+第一项是 R 个写入器同时打开，每个带一块写缓冲，缓冲大小由 `spark.shuffle.file.buffer` 决定（缺省 32 KB）。R 等于 200 时单任务 6.4 MB，R 等于 2000 时 64 MB。这块内存落在堆里，与执行内存争同一片空间。
+
+第二项是 R 个文件句柄。句柄的上限由容器与宿主机决定，Spark 自己不改它；单任务的峰值是 R，一个 Executor 上并发八任务，峰值就是 8R。R 等于 200 时 1600 个，已经越过许多容器缺省的 1024；R 等于 2000 时 16000 个，靠 `ulimit -n` 硬撑。
+
+第三项是拼接期间两份数据并存：临时文件与最终文件在同一时刻都占着本地盘，峰值空间约 2S，与「溢写过一次的排序路径」同量级。
+
+把这三项按 R 排开（缓冲与句柄是示例推算，依据是公式而非测量）：
+
+| R | 单任务写缓冲（32 KB × R） | 八并发单 Executor 缓冲 | 单任务句柄 | 八并发句柄峰值 | 额外拷贝字节 |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| 200 | 6.4 MB | 51.2 MB | 200 | 1,600 | 2S |
+| 500 | 16 MB | 128 MB | 500 | 4,000 | 2S |
+| 1,000 | 32 MB | 256 MB | 1,000 | 8,000 | 2S |
+| 2,000 | 64 MB | 512 MB | 2,000 | 16,000 | 2S |
+
+最后两列的分母不同，这是这张表最该被记住的地方：缓冲与句柄只随 R 变化，额外拷贝只随数据量变化。**调阈值不会让拷贝量少一个字节**。一个分区数很大、单分区数据量也很大的作业，把阈值调大之后最可能的结果是句柄先出问题，磁盘流量一分不少。
+
+### 4.3 三条路径的成本对照
+
+| 成本项 | 旁路 | 序列化排序（无溢写） | 普通排序（无溢写） | 普通排序（溢写 k 次） |
+| :--- | :--- | :--- | :--- | :--- |
+| 排序 CPU | 无 | 排指针（线性级） | 按分区号归组（线性级比较） | 同左，另有归并 |
+| 对象化与 GC | 无（一次序列化） | 无 | 有 | 有 |
+| 磁盘写入 | 2S（临时 + 最终） | S | S | 2S（中间 + 最终） |
+| 磁盘读入 | S（拼接） | 0（无溢写） | 0 | S（归并） |
+| 本地盘峰值 | 2S | S | S | 2S |
+| 句柄峰值 | R × 并发 | 常数 | 常数 | (k+1) × 并发 |
+| 堆内缓冲 | R × 32 KB × 并发 | 极小 | 执行内存份额 | 执行内存份额 |
+
+表里浮现出一个不直观的结论：旁路的磁盘流量与「溢写过一次的排序路径」完全一样，差别只在 CPU 与句柄。所以判断该不该走旁路，不该问「能不能不排序」，而该问两件事——排序的 CPU 在这个作业里是不是瓶颈，R 乘并发是否在句柄与堆缓冲的承受范围内。
+
+### 4.4 阈值该不该动
+
+笔者的判断顺序是：先算 R × 并发任务数，与容器句柄上限比；再算 R × 32 KB × 并发任务数，与单 Executor 的堆比；两项都留有余量，且写侧 CPU 确实是瓶颈，才谈调大。R 大于 500 之后，第二项通常会先撞墙，因为一个作业的并发任务数往往不止八个。
+
+反过来，把阈值调小是「用排序换资源」：句柄与缓冲立刻降下来，代价是写侧多一次归组。这个方向在两类现场有用——容器句柄上限被压得很低的多租户集群，以及 R 介于 200 到 400 之间、写侧又频繁 `Too many open files` 的作业。
+
+### 4.5 旋钮与它们的代价
+
+本篇涉及的旋钮并到一张表里，右两列是调大与调小各自买到什么、付出什么。表里没有一行是「调大就快」的：每个旋钮同时牵动两笔账，一笔在内存或句柄上，一笔在磁盘或 CPU 上。
+
+| 参数 | 缺省 | 决定什么 | 调大的代价 | 调小的代价 |
+| :--- | :--- | :--- | :--- | :--- |
+| `spark.shuffle.sort.bypassMergeThreshold` | 200 | 分区数不超过它且无聚合时走旁路 | 单任务句柄与写缓冲按 R 线性放大，先撞 `ulimit -n` 与堆上限 | 更多 Shuffle 退回归组排序，多一次对象化与比较 |
+| `spark.shuffle.file.buffer` | 32 KB | 每条分区输出流的写缓冲 | 旁路下堆内存按「R × 并发」放大，R=200、八并发即 51 MB | 写入的系统调用次数上升，拼接读的粒度变碎 |
+| `spark.shuffle.compress` | true | 终局数据文件是否压缩 | CPU 换磁盘与网络，压缩比低的格式收益有限 | 磁盘占用与拉取流量一起上升 |
+| `spark.shuffle.spill.compress` | true | 溢写中间文件是否压缩 | 溢写与归并各多一次压缩与解压开销 | 中间文件变大，本地盘峰值抬高 |
+| `spark.memory.fraction` | 0.6 | 执行与存储共享池占堆的比例 | 池子变大、溢写变少，但留给对象与框架的内存变少，OOM 风险上升 | 执行内存更紧，溢写次数上升 |
+| `spark.memory.storageFraction` | 0.5 | 池子里存储侧的名义份额 | 缓存保得更久，执行侧可借的空间被压缩 | 缓存更早被驱逐，重算增多 |
+| `spark.sql.shuffle.partitions` | 200 | SQL 侧初始分区数，也是旁路判据的输入 | 索引、`MapStatus` 与拉取请求数按 R 放大；越过 200 就离开旁路 | 单分区数据量变大，溢写与落盘峰值一起上升 |
+| `spark.serializer` | `JavaSerializer` | 是否满足序列化排序的可重定位条件 | 换 Kryo 解锁序列化路径，但要注册类型、处理与旧数据的兼容 | 留在 Java 序列化上，写路径停在对象路径，CPU 与 GC 更重 |
+
+最后一行不是数值旋钮，只有换与不换，而这一换决定第 3 章树上 Q3 的走向。前七行都有一条不可见的止损线——句柄、堆、本地盘容量——越过之后不是变慢，是直接失败。
+
+---
+
+## 第 5 章 溢写：代价结构、指标与判据
+
+### 5.1 触发条件是执行内存，不是数据量
+
+排序路径在申请内存时被拒绝，就会把当前这批交出去；拒绝的原因永远是执行内存池里没有余量，而这个池子的大小由内存管理模型决定，任务之间还要分摊。于是同一个作业，在数据量不变的情况下，只要并发任务数上升、单条记录变大、或者缓存占走了更多空间，溢写次数就会上升。**溢写是「攒不下」，不是「超过阈值」**。
+
+这条判据解释了两个常见困惑：一是同样的数据换个集群溢写次数差很多（内存配置与并发不同）；二是调大 Executor 内存之后溢写没有明显减少（并发也上去了，分摊到每个任务上的额度未必增加）。
+
+### 5.2 三笔代价，分母各不相同
+
+第一笔是字节级的磁盘往返。溢写把 S 字节写一遍，归并再读一遍、写一遍终局文件，总流量约 3S，与溢写次数无关——不论分成两次还是十次写完，字节总量都是同一批。这一点常被误解成「溢写次数越多磁盘写得越多」，实际发生的是下面两笔。
+
+第二笔是流级的开销。归并要同时打开 k 个中间文件，k 越大，句柄、读缓冲与「从 k 路里取最小」的比较次数一起上升；每个中间文件内部又是一段一段按分区切片写的，k 大意味着读的粒度更碎，机械盘上换成寻道，SSD 上换成随机读的延迟。
+
+第三笔是峰值空间。中间文件在归并完成之前不会删除，与终局文件并存，峰值约 2S。这一笔与溢写次数无关，只与单任务输出量有关，但它是「本地盘写满」这个现场的直接成因。
+
+按单任务输出 S = 1 GB 估算（示例推算，只比较量级）：
+
+| 单任务可用执行内存 | 估算溢写次数 | 溢写写入总量 | 归并读入总量 | 终局写入 | 本地盘峰值 | 归并同时打开的文件数 |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| 512 MB | 2 | 1 GB | 1 GB | 1 GB | 约 2 GB | 2 |
+| 256 MB | 4 | 1 GB | 1 GB | 1 GB | 约 2 GB | 4 |
+| 128 MB | 8 | 1 GB | 1 GB | 1 GB | 约 2 GB | 8 |
+| 64 MB | 16 | 1 GB | 1 GB | 1 GB | 约 2 GB | 16 |
+
+表里真正随内存额度变化的是第二列与最后一列，写盘、读盘与峰值这几列几乎不动。这正是溢写的成本结构：**字节账固定，流账随次数上升**。极端内存压力下若归并阶段再次落盘，账单才按层数叠加，那属于另一种形状的故障。
+
+### 5.3 指标在哪读
+
+Stage 页的任务表有两列：Shuffle Spill (memory) 与 Shuffle Spill (disk)，前者是溢写前在内存里占用的峰值字节，后者是落到磁盘的字节。REST 接口里对应的字段是 `memoryBytesSpilled` 与 `diskBytesSpilled`，按 stage 与 task 两级都能取。日志里则有一行更直接的话：`Spilling in-memory map ... (N times so far)`，其中 N 就是当前任务的溢写次数，用它判断「次数」比用字节列更省事。
+
+这里要纠正一个流传很广的口径：`spark.shuffle.spill` 既不是指标名，也不是今天还能用的开关。它在 1.6.0 之后就不再被读取，4.0.0 起被显式标记为无操作配置，显式设置它会打印一条弃用警告（SPARK-50482）。照旧资料把它设成 false 想「关掉溢写」，得到的只是一条警告和一个照旧溢写的任务。
+
+### 5.4 溢写是症状，不是病因
+
+看到溢写就调内存，是最常见的一步错棋。溢写上升的可能原因至少有四种：执行内存份额太小（调内存或降并发）、单任务数据量太大（提高分区数，或改切分方式）、记录太大（窄化行、去掉无用列、改序列化）、数据倾斜（少数任务数据量远高于其他任务）。四种的处置方向完全不同，而它们的现场差别很明显：前三种在 Stage 内是「所有任务都有溢写」，倾斜是「少数任务溢写特别多、耗时长出一个数量级」。
+
+分诊的第一步因此不是看溢写总量，而是看溢写的分布。
+
+---
+
+## 第 6 章 4.x 的现状
+
+### 6.1 `tungsten-sort` 是别名，不是实现
+
+4.x 的短名解析认三个名字：`sort`、`tungsten-sort`、`streaming`。前两个映射到同一个类，接上之后没有任何行为差异。把 `spark.shuffle.manager` 从 `sort` 改成 `tungsten-sort`，唯一的作用是把缺省值又写了一遍；真正决定走哪条写路径的，是第 3 章那三条判据。判断依据在日志里的 writer 选择记录与 Stage 页的溢写特征上，不在配置里。
+
+`hash` 则完全不在短名表里，而且不只是名字不在——对应的包与类在 4.x 都不存在，写上去的后果是启动阶段按类名加载失败，作业连第一个 Stage 都进不去。这一条与上面那条的区别很重要：一个是无效动作，一个是启动失败。
+
+### 6.2 两支管理器
+
+4.x 把 Shuffle 管理拆成阻塞式（`BlockingShuffleManager`）与流水线式（`PipelinedShuffleManager`）两支：`spark.shuffle.manager` 只接受前者（内置即 `sort`），流水线式由 `spark.shuffle.manager.incremental` 指定、缺省 `streaming`。这一支的产物不是完整的可寻址双文件，写侧一边写、读侧一边增量读，下游不必等上游全部完成。
+
+对本篇的命题来说，这意味着「统一写出模型」的适用范围要加一个限定：它描述的是阻塞式那一支的产物形状。在流水线式那一支上问「这次 Shuffle 产生了几个文件」，问的是一个不适用的问题；那边该问的是「增量流什么时候能开始读、失败之后要重放多少」。
+
+| 符号或配置 | 4.3.0 的状态 | 对写路径的影响 | 判据 |
+| :--- | :--- | :--- | :--- |
+| `spark.shuffle.manager=sort` | 有效，缺省 | 阻塞式，双文件产物 | 索引存在、可按偏移读 |
+| `spark.shuffle.manager=tungsten-sort` | 有效，等价于 `sort` | 无影响 | 改了配置但写路径不变，属正常 |
+| `spark.shuffle.manager=hash` | 已移除 | 启动即失败 | 类加载错误，错误信息里带 `hash` |
+| `spark.shuffle.manager.incremental` | 缺省 `streaming` | 流水线式，无完整双文件 | 块位置信息不全，读侧按增量流 |
+| `spark.shuffle.sort.bypassMergeThreshold` | 有效，缺省 200 | 决定旁路是否生效 | 分区数 ≤ 阈值时看临时文件是否出现 |
+| `spark.shuffle.spill` | 无操作（4.0.0 起显式弃用） | 无影响 | 设置后只有一条警告 |
+| `spark.shuffle.consolidateFiles` | 已删除 | 无影响 | 写了等于没写，无任何信号 |
+
+### 6.3 一条容易被忽略的联动
+
+SQL 侧初始分区数的缺省值 200，正好压在旁路阈值的缺省值上。这意味着很多 DataFrame 作业在缺省配置下走的是旁路；把分区数调到 201，写路径就在没有任何提示的情况下换了一条，CPU 与内存特征随之改变。调参的人如果只盯着「并行度变高」这一面，会把随之而来的写侧变慢误判成数据量问题。这件事在自适应查询执行（Adaptive Query Execution，AQE）下还多一层：自适应会按实际数据量合并读侧分区，但写路径在注册期就已经定死，调整发生在读取端，不会让写侧改口（决策时点的问题见内核 2 第 8 章）。
+
+---
+
+## 第 7 章 症状到判据
+
+### 7.1 六类现场
+
+| 现场 | 先看哪里 | 判据 | 属于本层还是下一层 |
+| :--- | :--- | :--- | :--- |
+| `spark.local.dir` 写满，报 `No space left on device`，但整机磁盘还有余量 | 该目录的 `df -h`、Stage 页 Spill (disk)、并发任务数 | 中间文件与终局文件并存，峰值约 2S × 并发 | 本层：写侧空间，先看单任务输出量与并发 |
+| 写侧任务耗时翻倍，CPU 利用率不高 | 日志 `Spilling in-memory map ... (N times so far)`、Spill 两列 | N 明显大于 1，且 Stage 内普遍存在 | 本层：执行内存与单任务数据量 |
+| 写侧报 `Too many open files` | Environment 页确认阈值、Stage 页分区数、并发任务数 | 分区数 ≤ 阈值且旁路生效；句柄峰值 = R × 并发 | 本层：阈值与句柄上限 |
+| 写侧变慢，磁盘 util 高但吞吐上不去 | 终局数据文件大小与 R、分区数 | 每分区数据量小、文件多，随机写比重高 | 本层：分区数与数据量的匹配 |
+| 同一作业换了分区数后写侧行为突变 | Environment 页确认 `spark.sql.shuffle.partitions` 与阈值 | 分区数越过阈值，旁路开关翻转 | 本层：判据在计划的分区数 |
+| 终局文件数远多于 2M | Shuffle 目录的 attempt 子目录、应用是否重试 | 失败重试留下多份 attempt 产物 | 本层：失败重试与清理，不是写模型变了 |
+
+第三行是最容易被误判的一行：句柄问题的表面症状是「取数失败」或「任务失败」，而根因在写侧同时打开了 R 个文件，排查方向很容易被带到网络层。
+
+### 7.2 两个页面加一行日志
+
+Stage 页看三样：Shuffle Write Size（这次 Shuffle 的总字节）、Shuffle Spill 两列（溢写的字节）、任务表里最长与中位耗时的差（倾斜的分辨）。Environment 页看三样：`spark.shuffle.sort.bypassMergeThreshold`、`spark.sql.shuffle.partitions`、`spark.serializer` 各自的实际生效值——三个值一起决定了这次 Shuffle 走哪条路径。日志则只 grep 一个词：`Spilling`，它能把溢写的时间点与任务对应起来。
+
+这三样的关系是：Stage 页告诉你「哪里慢」，Environment 页告诉你「为什么是这条路径」，日志告诉你「慢在哪个阶段」。缺一个都会把判断推向猜测。
+
+### 7.3 分诊路径
+
+把上面六类现场串成一条判断链，顺序上先问空间、再问句柄、再问溢写的分布，最后才回到路径本身：
+
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+flowchart TD
+    A["写侧异常"] --> B{"是空间问题吗"}
+    B -- "是" --> B1["查本地盘：df -h、目录文件数、单任务输出量"]
+    B -- "否" --> C{"是句柄或打开失败吗"}
+    C -- "是" --> C1["算 R × 并发；查阈值是否让旁路生效"]
+    C -- "否" --> D{"溢写次数多吗"}
+    D -- "是，且普遍" --> D1["查执行内存份额、单任务数据量、记录宽度"]
+    D -- "是，但少数任务" --> D2["查倾斜，不是写模型"]
+    D -- "否" --> E{"写路径与预期不符吗"}
+    E -- "是" --> E1["Environment 页三个值：阈值、分区数、序列化器"]
+    E -- "否" --> F["查终局文件数与 attempt 残留"]
+    classDef q fill:#6272a4,stroke:#bd93f9,color:#f8f8f2
+    classDef act fill:#44475a,stroke:#50fa7b,color:#f8f8f2
+    class A q
+    class B,C,D,E q
+    class B1,C1,D1,D2,E1,F act
 ```
 
 ---
 
-## 第 6 章 统一写出模型的工程价值
+## 第 8 章 反例与落点
 
-### 6.1 对文件数的根本控制
+### 8.1 把阈值调到几千
 
-Sort Shuffle 统一写出模型的最直接价值是文件数的彻底受控。将文件数从 M × R 降至 M × 2，意味着：
+这个动作的动机通常是「少排一次序」。后果有三层：单任务同时打开几千个文件，句柄先撞容器上限；单任务堆缓冲升到几十甚至几百 MB，与执行内存争同一片空间；拼接阶段要读几千个临时文件，读的粒度变碎。而被省下的只是归组，数据量大的时候磁盘流量一分不少——如第 4 章那张表所示，额外拷贝与 R 无关。
 
-- **文件系统元数据压力线性降低**：从百万量级降到数千量级
-- **inode 耗尽问题消失**：文件数与 R 完全解耦
-- **文件描述符压力大幅降低**：Reduce Task 不再需要为每个 Map Task 的每个分区维护一个 FD
-- **读取 I/O 从随机变顺序**：每个 Reduce Task 只需对每个 Map Task 做一次顺序读取（seek 到起始偏移量，然后顺序读 N 字节），不再是 N 次随机小文件读取
+更常见的一种误解是「调大阈值能减少文件数」。终局文件数只由 M 决定，阈值不影响它；阈值放大的是运行期的临时文件数与句柄峰值，以及失败残留的规模。
 
-### 6.2 "统一格式"带来的系统级好处
+### 8.2 只看耗时，不看溢写
 
-三种 Writer 虽然写出机制各不相同，但最终产物完全一致（`.data` + `.index` 双文件）。这个"统一格式"的好处远不止文件数控制：
+溢写多带来的慢是渐进的，容易被归因到「数据量涨了」。但溢写的分布能回答更具体的问题：全 Stage 普遍溢写，是内存或分区切分的问题；少数任务溢写多，是倾斜。两种处置方向相反，一个要增大内存或减小单任务数据量，一个要先处理键的分布。在倾斜场景下直接调内存通常无效，数据本身没被均分，调大之后照样溢写。
 
-**独立的 ExternalShuffleService**：由于文件格式统一，可以在节点上运行独立的 `ExternalShuffleService`（ESS）守护进程，专门负责 Shuffle 文件的服务。Executor 完成写出后即可退出（或被回收），Reduce Task 的 Shuffle Read 请求由 ESS 处理，不再依赖写出 Executor 的存活。这是 Dynamic Resource Allocation（动态资源分配）功能的基础——没有统一格式的 ESS，Executor 就无法在 Shuffle 完成前被回收。
+### 8.3 以为 `tungsten-sort` 是独立实现
 
-**格式版本化与演进**：统一格式使得 Shuffle 存储层可以独立演进。例如，未来可以在不改变 Writer/Reader 接口的情况下，切换到更高效的文件格式（如列式存储的 Shuffle 块），只要格式升级在 `IndexShuffleBlockResolver` 层处理即可。
+代价不是失败，而是无效：改了配置、跑了压测、没看到变化，于是得出「这条优化没用」的结论。真正的判据是写侧走了哪条路径，那由算子形状、分区数、序列化器决定。这里还藏着一个更实际的坑：以为只要写了这个短名就解锁了序列化排序，于是完全不去检查 `spark.serializer`；在缺省 `JavaSerializer` 的 RDD 作业上，序列化排序根本没被选中过。
 
-**Remote Shuffle Service 的基础**：第 11 篇将介绍的 RSS，本质上是将"写 `.data`/`.index` 到本地磁盘"改为"写到远程的 RSS 服务"。这个改造之所以相对干净，就是因为 Sort Shuffle 的统一格式提供了一个清晰的边界：只需改变 `IndexShuffleBlockResolver` 的存储目标，Writer 和 Reader 的主体逻辑不需要大幅修改。
+### 8.4 把自适应查询执行当成「换写路径」的开关
 
-### 6.3 三种 Writer 并存的哲学
+自适应在 Shuffle 之后合并小分区、拆分倾斜分区，改变的是读侧读几个分区、从哪几个 map 读，不触碰写侧。写路径在注册期就定了，那时还没有任何运行时统计。于是「开了自适应就会用更合适的 writer」是一个误解，而「自适应把分区数合并了，所以这次不会走旁路」是同一类误解的另一种说法——旁路判定用的是计划里的分区数。
 
-三种 Writer 并存，并通过运行时条件选择最优路径，体现了 Spark 在性能与通用性之间寻求平衡的工程哲学：
+### 8.5 落点
 
-- **`BypassMergeSortShuffleWriter`**：极致简单，代价最低，但场景最受限（小 R + 无聚合）
-- **`UnsafeShuffleWriter`**：性能最优（堆外内存 + 基数排序 + 零 GC），但需要 Kryo 且不支持聚合
-- **`SortShuffleWriter`**：最通用，支持任意场景，但性能相对较低
+统一写出模型的真正价值，不在于「文件变少了」，而在于把写侧的形态固定成了两个可预期的产物，从而使定位依据与进程解耦、使文件数与分区数解耦。但固定下来的只是终局形态，过程中仍有三种形状会回来：旁路的 R 个临时文件、溢写的 k 个中间文件、重试的多份 attempt。
 
-这三种策略形成了一个"快慢通道"体系：Spark 首先尝试走最快的通道，条件不满足时逐级降到更通用但更慢的通道。这种"分层降级"的设计模式在高性能系统中极为常见——Nginx 的事件处理（epoll → poll → select）、Linux 的内存分配（SLAB → SLUB → kmalloc）都有类似的思路。
+所以运维面对一次 Shuffle 的写侧，实际要问的是三个问题：这次走的是哪条路径（由计划与序列化器决定）、这一层的资源上限被谁按住（句柄、执行内存、本地盘）、溢写与拷贝的字节落在哪里（临时文件、终局文件、还是两者并存）。三个问题里没有一个能靠改一个参数解决，这也正是这套模型的性质——它把「文件数」这个最刺眼的量消掉之后，把账转移到了内存与句柄上，而这两笔账的分母是分区数与并发数，恰恰是最容易被「调大一点」的那两个数。
 
 ---
-
-## 小结
-
-Sort Shuffle 的统一写出模型，是 Spark Shuffle 演进中最重要的架构决策之一：
-
-- **统一约束**：每个 Map Task 只写一个 `.data` 文件和一个 `.index` 文件，将文件数从 M × R 降至 M × 2
-- **三种策略**：`BypassMergeSortShuffleWriter`（无排序，小 R）→ `UnsafeShuffleWriter`（堆外基数排序，大 R 无聚合）→ `SortShuffleWriter`（通用，支持聚合）
-- **选择逻辑**：在 `registerShuffle` 阶段根据 `mapSideCombine`、`numPartitions` 和序列化器能力三个维度决定
-- **工程价值**：统一格式支撑了 ExternalShuffleService 和 Dynamic Resource Allocation，也为 Remote Shuffle Service 奠定了基础
-
-第 04 篇将深入 Shuffle Write 的最核心组件——`ExternalSorter`，解析其 Spill 触发机制、Spill 文件格式和最终 Merge 的完整流程。
-
----
-
-> [!note] 思考题
-> 1. Sort Shuffle 的"统一写出模型"要求每个 Mapper 最终只产生一个 `.data` 文件和一个 `.index` 文件。这个"统一"是如何实现的？如果一个 Mapper 在写出过程中发生了多次 Spill（溢写到磁盘），最终的单文件是通过什么机制合并的？
-> 2. `SortShuffleManager` 会根据条件选择三种 Writer：`BypassMergeSortShuffleWriter`、`UnsafeShuffleWriter`、`SortShuffleWriter`。其中 `UnsafeShuffleWriter` 要求 Serializer 支持对象重定位（`supportsRelocationOfSerializedObjects`）。这个条件为什么存在？如果不满足这个条件强行用 Unsafe 路径会有什么问题？
-> 3. Sort Shuffle 在 Map 端对数据按 `(partitionId, key)` 排序。这个排序对 Reducer 端的行为有什么影响？在 `reduceByKey` 场景下，Reducer 是否还需要在内存中维护一个完整的 HashMap？
 
 ## 参考资料
 
-- [Spark Shuffle 机制详细源码解析](https://www.cnblogs.com/jordan95225/p/13967000.html)
-- [Spark UnsafeShuffleWriter 原理](https://zhmin.github.io/posts/spark-unsafe-shuffle-writer/)
-- Apache Spark 源码：`org.apache.spark.shuffle.sort.SortShuffleManager`
-- Apache Spark 源码：`org.apache.spark.shuffle.sort.BypassMergeSortShuffleWriter`
-- Apache Spark 源码：`org.apache.spark.shuffle.sort.UnsafeShuffleWriter`
+1. Apache Spark 4.3.0 Configuration：`spark.shuffle.sort.bypassMergeThreshold`、`spark.shuffle.file.buffer`、`spark.shuffle.spill.*`、`spark.shuffle.manager`、`spark.shuffle.manager.incremental` 的缺省值。https://spark.apache.org/docs/4.3.0/configuration.html
+2. Apache Spark 4.3.0 Tuning Guide：Shuffle 写侧的调优项与序列化器建议。https://spark.apache.org/docs/4.3.0/tuning.html
+3. Apache Spark 4.3.0 Job Scheduling：外部 Shuffle 服务与动态分配的前置条件。https://spark.apache.org/docs/4.3.0/job-scheduling.html
+4. Apache Spark 源码（4.3.0）：`core/src/main/scala/org/apache/spark/shuffle/sort/SortShuffleManager.scala`，注册期的三条判据与句柄选择。https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/shuffle/sort/SortShuffleManager.scala
+5. Apache Spark 源码（4.3.0）：`core/src/main/java/org/apache/spark/shuffle/sort/BypassMergeSortShuffleWriter.java`，每分区一个写入器与末尾拼接。https://github.com/apache/spark/blob/v4.3.0/core/src/main/java/org/apache/spark/shuffle/sort/BypassMergeSortShuffleWriter.java
+6. Apache Spark 源码（4.3.0）：`core/src/main/java/org/apache/spark/shuffle/sort/UnsafeShuffleWriter.java`，序列化字节与指针排序的落盘路径。https://github.com/apache/spark/blob/v4.3.0/core/src/main/java/org/apache/spark/shuffle/sort/UnsafeShuffleWriter.java
+7. Apache Spark 源码（4.3.0）：`core/src/main/scala/org/apache/spark/util/collection/ExternalSorter.scala`，溢写触发、溢写文件命名与归并写出的实现。https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/util/collection/ExternalSorter.scala
+8. Apache Spark JIRA：SPARK-50482（4.0.0 将 `spark.shuffle.spill` 显式标记为无操作配置）。https://issues.apache.org/jira/browse/SPARK-50482
+9. Apache Spark JIRA：SPARK-4550（引入旁路写法的优化，1.6.0）。https://issues.apache.org/jira/browse/SPARK-4550
+10. Apache Spark JIRA：SPARK-10708（把 Tungsten 排序与排序管理器合并，`tungsten-sort` 成为别名，1.6.0）。https://issues.apache.org/jira/browse/SPARK-10708
+
+> [!note] 思考题
+> 1. 你的集群容器里 `ulimit -n` 是多少？把它除以并发任务数，得到的就是这个集群能安全承受的分区数上限，它与你当前的分区数相比如何？
+> 2. 一个作业把 `spark.sql.shuffle.partitions` 从 200 调到 201，写路径可能整条换掉。若你只能看三个地方来判断它换了没有，会选哪三个？
+> 3. 旁路的磁盘流量与「溢写过一次的排序路径」相同，那么在选择旁路时，你认为省下的到底是什么，这部分在什么数据形状下值得省？
+> 4. 溢写次数翻倍但溢写字节不变，慢会体现在哪里？如果溢写字节翻倍而次数不变，慢又体现在哪里？
+> 5. 若一次 Shuffle 的终局文件数远多于 2M，你会先怀疑写模型变了，还是先怀疑别的什么？列出你的排查顺序。

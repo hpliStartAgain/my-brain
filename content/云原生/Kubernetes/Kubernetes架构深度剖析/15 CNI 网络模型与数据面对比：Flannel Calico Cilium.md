@@ -1,8 +1,8 @@
 ---
 title: "CNI 网络模型与数据面对比：Flannel/Calico/Cilium"
 date: 2026-11-19
-tags: [Kubernetes, CNI, Cilium, eBPF]
-keywords: [Flannel, Calico, VXLAN, host-gw, BGP, Route Reflector, conflist, IPAM, identity, MTU, NetworkPolicy]
+tags: [Kubernetes, CNI, eBPF]
+keywords: [Flannel, Calico, VXLAN, host-gw, BGP, Route Reflector, conflist, IPAM, identity, MTU, NetworkPolicy, Cilium]
 aliases: [CNI, Flannel, Calico, Cilium, K8s 网络, VXLAN, BGP, eBPF 数据面, NetworkPolicy]
 ---
 

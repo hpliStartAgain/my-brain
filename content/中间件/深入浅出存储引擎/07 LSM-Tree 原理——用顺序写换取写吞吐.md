@@ -1,7 +1,8 @@
 ---
 title: "07 LSM-Tree 原理——用顺序写换取写吞吐"
 date: 2026-10-24
-tags: [LSM-Tree, 存储引擎, 数据库, 中间件, 读写放大, Compaction]
+tags: [LSM-Tree, 存储引擎, 数据库, 中间件, Compaction]
+keywords: [读写放大]
 aliases: []
 ---
 

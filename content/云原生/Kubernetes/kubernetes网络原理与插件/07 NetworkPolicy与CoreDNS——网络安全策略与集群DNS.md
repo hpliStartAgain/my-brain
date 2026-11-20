@@ -1,16 +1,16 @@
 ---
 title: "NetworkPolicy与CoreDNS——网络安全策略与集群DNS"
-date: 2026-03-05
+date: 2026-11-19
 tags: [Kubernetes, 云原生, 服务发现]
 keywords: [CoreDNS, DNS, ndots, 网络安全, iptables, NetworkPolicy]
-aliases: [NetworkPolicy与CoreDNS, 集群DNS]
+aliases: []
 ---
 
 # NetworkPolicy与CoreDNS——网络安全策略与集群DNS
 
 **摘要：**
 
-这是专栏的最后一篇，处理两个看似无关、实则同属"收尾层"的组件：NetworkPolicy 决定"谁可以通"，CoreDNS 决定"名字叫谁"。前六篇把 Pod 网络、CNI、Flannel/Calico/Cilium、kube-proxy 逐层拆完，回答的都是"流量如何到达"；本篇回答剩下的两个问题——"到达之前是否被允许"与"到达之前如何找到地址"。NetworkPolicy 部分把白名单模型、选择器的 AND/OR 陷阱、policyTypes 语义、以及它在 Calico iptables 与 Cilium eBPF 两种数据面上的不同落地讲透；CoreDNS 部分沿 KubeDNS→CoreDNS 的演进史展开，拆插件链架构与 Corefile，然后把 `ndots:5` 这个默认值的放大效应推演到字节级，并给出 FQDN、降 ndots、autopath、NodeLocal DNSCache 四档解法。文末附一张覆盖全专栏的联合排障矩阵，作为七篇的收官索引。
+这是专栏的最后一篇，处理两个看似无关、实则同属"收尾层"的组件：NetworkPolicy 决定"谁可以通"，CoreDNS 决定"名字叫谁"。前六篇把 Pod 网络、CNI、Flannel/Calico/Cilium、kube-proxy 逐层拆完，回答的都是"流量如何到达"；本篇回答剩下的两个问题——"到达之前是否被允许"与"到达之前如何找到地址"。NetworkPolicy 部分把白名单模型、选择器的 AND/OR 陷阱、`policyTypes` 的三态语义与它的版本来历、并集模型的治理后果、以及 AdminNetworkPolicy 补上的分级评估逐一讲透，并对照 Calico 的 iptables 链与 Cilium 的 eBPF Map 两种落地形态；CoreDNS 部分沿 KubeDNS→CoreDNS 的演进史展开，先纠正一个高频误会——插件链的执行顺序来自编译期的 `plugin.cfg`，不是 Corefile 的书写位置，再把 `ndots:5` 这个默认值的放大效应推演到字节级，最后给出 FQDN、降 ndots、autopath、NodeLocal DNSCache 四档解法。两部分的排障动作最终收进一张按"客户端层、传输层、CoreDNS 层、上游层"分层的可证伪清单。读完之后，你应该能对任意一个"不通"的工单先判断该怀疑策略还是该怀疑 DNS，再按层取证。文末附一张覆盖全专栏的联合排障矩阵，作为七篇的收官索引。
 
 ---
 
@@ -22,7 +22,7 @@ aliases: [NetworkPolicy与CoreDNS, 集群DNS]
 
 理解它们各自"管哪一段"是排障的第一步：NetworkPolicy 作用在**报文进入/离开 Pod 的那一刻**（filter 层），CoreDNS 作用在**连接建立之前的寻址环节**（应用层语义）。两者没有数据路径上的交集，但共同定义了"一次通信在语义上是否成立"。把它们并置的另一个好处是能看到 Kubernetes 声明式 API 的两个极端：NetworkPolicy 是"声明意图、由各 CNI 自由实现"的弱规范（语义有实现差异），CoreDNS 则是"功能强收敛、行为高度确定"的强实现——同一个"声明式"哲学，在两个组件上走出了完全不同的形态。
 
-排障时还有一个更朴素的定位顺序值得先立起来：**凡是"服务名不通"，先怀疑 DNS；凡是"IP 通但特定端口/方向不通"，先怀疑策略；凡是"所有 Pod 都不通"，先怀疑 CNI 数据面**。这条口诀把本篇与前六篇的分工压缩成一句话——拿到一个"不通"的工单，先用它把嫌疑域砍到一层，再进对应章节的细排。
+排障时还有一个更朴素的定位顺序值得先立起来：凡是"服务名不通"，先怀疑 DNS；凡是"IP 通但特定端口/方向不通"，先怀疑策略；凡是"所有 Pod 都不通"，先怀疑 CNI 数据面。这条口诀把本篇与前六篇的分工压缩成一句话——拿到一个"不通"的工单，先用它把嫌疑域砍到一层，再进对应章节的细排。
 
 ---
 
@@ -34,7 +34,7 @@ Kubernetes 的 Pod 网络有一条贯穿始终的默认假设：**任意 Pod 可
 
 这个"默认全通"不是疏忽，而是有意的选择：Kubernetes 把"连通性"定义为基线保障，把"隔离"留给了可选的策略层。这个选择的历史背景是早期容器网络的首要难题是"让 Pod 互通"本身，安全是后话；但它留下了一个至今仍在的默认暴露面——绝大多数中小集群的所有 Pod，至今仍在白名单之外裸奔。
 
-NetworkPolicy 给出的答案是**白名单模型**：一个 Pod 一旦被某条策略的 `podSelector` 选中，它就进入受保护状态——只允许被显式声明的流量，其余一律拒绝。没被任何策略选中的 Pod 则维持默认的全连通。这个"声明即生效"的语义是整个模型的轴心：**NetworkPolicy 里没有"拒绝"这个动词，只有"允许"——拒绝是白名单模型的默认余量**。这一条语义是整个机制里最反直觉、也最容易写错的地方，后面会反复回到它。
+NetworkPolicy 给出的答案是**白名单模型**：一个 Pod 一旦被某条策略的 `podSelector` 选中，它就进入受保护状态——只允许被显式声明的流量，其余一律拒绝。没被任何策略选中的 Pod 则维持默认的全连通。这个"声明即生效"的语义是整个模型的轴心：**NetworkPolicy 里没有"拒绝"这个动词**，只有"允许"——拒绝是白名单模型的默认余量。这一条语义是整个机制里最反直觉、也最容易写错的地方，后面会反复回到它。
 
 从安全架构的视角看，NetworkPolicy 是纵深防御里"网络层"的那一道——它与应用层的 mTLS、鉴权、审计不是替代关系而是叠加关系：应用层管"调用是否合法"，网络层管"连接是否被允许存在"。一个被攻陷的容器即使绕过了应用层鉴权，Egress 策略仍能挡住它向外部 C2 服务器的回连——这就是"网络层兜底"在攻击链上的真实价值。
 
@@ -105,7 +105,30 @@ from:
 
 当多个 NetworkPolicy 同时选中同一个 Pod 时，它们的规则不是"就近覆盖"也不是"按优先级合并"——而是**所有规则的允许集合取并集**。三条策略分别放行 A、B、C，最终效果就是放行 A∪B∪C；白名单的"默认拒绝"只在并集之外的余量上生效。
 
-这个"取并集"语义有一个重要的治理含义：**你无法用一条更严格的策略去收紧另一条更宽松的策略**。一旦某条策略放行了某流量，任何其他策略都不能撤销它——想收紧只能修改或删除那条宽松策略本身。这与防火墙"第一条命中即终止"的规则模型截然不同：NetworkPolicy 里没有"顺序"，只有"并集"，运维上的含义是把权限下放给各团队时要明白——任何团队加进白名单的流量，管理员都无法用另一条 NetworkPolicy 收回（这正是 AdminNetworkPolicy 要补的洞）。
+这个"取并集"语义有一个重要的治理含义：你无法用一条更严格的策略去收紧另一条更宽松的策略。一旦某条策略放行了某流量，任何其他策略都不能撤销它——想收紧只能修改或删除那条宽松策略本身。这与防火墙"第一条命中即终止"的规则模型截然不同：NetworkPolicy 里没有"顺序"，只有"并集"，运维上的含义是把权限下放给各团队时要明白——任何团队加进白名单的流量，管理员都无法用另一条 NetworkPolicy 收回（这正是 AdminNetworkPolicy 要补的洞）。
+
+把多条策略的合并过程画成一条判决流，比读定义省力：
+
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+graph LR
+    classDef q fill:#ff79c6,stroke:#ff79c6,color:#282a36
+    classDef mid fill:#6272a4,stroke:#8be9fd,color:#f8f8f2
+    classDef ok fill:#50fa7b,stroke:#50fa7b,color:#282a36
+    classDef bad fill:#ff5555,stroke:#ff5555,color:#f8f8f2
+
+    PKT["一个报文"] --> SEL{"目的 Pod 被任一策略选中？"}
+    SEL -->|"否"| OPEN["维持默认全连通"]
+    SEL -->|"是"| UNION["各策略允许项取并集"]
+    UNION --> MATCH{"命中并集中的某一项？"}
+    MATCH -->|"是"| PASS["放行"]
+    MATCH -->|"否"| DROP["丢弃（白名单余量）"]
+
+    class PKT,SEL q
+    class UNION,MATCH mid
+    class OPEN,PASS ok
+    class DROP bad
+```
 
 ### 2.5 policyTypes 的隐式陷阱
 
@@ -121,7 +144,11 @@ spec:
   # 没有 egress 字段 = 该 Pod 的所有出站一律拒绝
 ```
 
-这个陷阱的隐蔽性在于它"看起来没写错"——YAML 合法、语义自洽、意图里"我只管入站"的设想却在声明 `Egress` 的那一刻被推翻。**`policyTypes` 写不写、写什么，永远比 `ingress`/`egress` 写了什么更早决定行为**。
+这个陷阱的隐蔽性在于它"看起来没写错"——YAML 合法、语义自洽、意图里"我只管入站"的设想却在声明 `Egress` 的那一刻被推翻。`policyTypes` 写不写、写什么，永远比 `ingress`/`egress` 写了什么更早决定行为。
+
+`policyTypes` 的三态语义值得单独列清，因为它是这套 API 里唯一一个"用元数据描述控制面行为"的字段。只写 `[Ingress]`、或只在 `ingress` 里给规则，等于只在入站方向装门；只写 `[Egress]`，等于只在出站方向装门；两个方向都写，才算双向白名单。按规则体反推的那份便利，在改写既有策略时反而是陷阱——给一条只有 `ingress` 的策略补一行空的 `egress: []`，推断结果就从"只管入站"变成"双向都管、出站全拒"。
+
+这个字段是后来补上的。NetworkPolicy 进入 API 时只有入站一侧，出站规则要到 1.8 才进入 beta（版本节奏以对应版本文档为准），在那之前"想限制出站"在声明层无从表达。也正因如此，`policyTypes` 被做成一个可省略的独立字段：旧对象不必改写就能被新语义解释，新对象则可用显式声明把两个方向的管理状态钉死。而各家 CNI 对出站方向的实现普遍晚于入站，于是很长一段时间里集群中存在一种假象——策略在 Ingress 上拦得干净利落，同一份策略的 Egress 段其实什么也没拦。
 
 ### 2.6 ipBlock 与 named ports 的边界
 
@@ -217,6 +244,30 @@ spec:
 
 什么情况下该认真考虑 ANP 而不是继续堆 NetworkPolicy：当你需要"集群级默认规则"（如全集群拒绝到 kube-system、全集群放行监控抓取）且不想在每个命名空间重复维护同一份 YAML 时；当你需要"先设全局 Deny、再让各命名空间自行放行"的两级治理时；或者当多个团队的 NetworkPolicy 并集已经开始失控、需要管理员能从上往下再画一条边时。这三类信号出现任何一个，ANP 的引入成本就该被认真算一次。
 
+把三类资源的评估次序画出来，"先圈边界、再开窗口、最后兜底"的三级结构就一目了然：
+
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+graph TD
+    classDef anp fill:#ff79c6,stroke:#ff79c6,color:#282a36
+    classDef np fill:#6272a4,stroke:#8be9fd,color:#f8f8f2
+    classDef banp fill:#44475a,stroke:#50fa7b,color:#f8f8f2
+    classDef tail fill:#282a36,stroke:#bd93f9,color:#f8f8f2
+
+    REQ["进出受管 Pod 的报文"] --> ANP["AdminNetworkPolicy<br/>按 priority 由小到大评估"]
+    ANP -->|"Deny / Allow 命中"| VERDICT["立即判决并终止"]
+    ANP -->|"Pass 或未命中"| NP["命名空间 NetworkPolicy<br/>各策略允许集取并集"]
+    NP -->|"命中允许项"| PASS["放行"]
+    NP -->|"未命中"| BANP["BaselineAdminNetworkPolicy<br/>兜底规则"]
+    BANP -->|"命中"| BV["按 BANP 动作判决"]
+    BANP -->|"未命中"| DENY["隐式拒绝"]
+
+    class ANP anp
+    class NP np
+    class BANP banp
+    class REQ,VERDICT,PASS,BV,DENY tail
+```
+
 ---
 
 ## 第 4 章 三个典型隔离场景
@@ -249,7 +300,7 @@ spec:
 
 `kubernetes.io/metadata.name` 这个标签自 1.22 起由系统自动附加到每个 Namespace，值就是命名空间名——它是"按名字选命名空间"的官方锚点，比自建标签更可靠。这套"先兜底拒绝、再点名放行"的两段式，是任何安全模型落地的标准起手式。
 
-这两段的配合逻辑值得单独看一遍：第一条 `default-deny-ingress` 把整个 ns 的入站全部置于白名单之下（允许集为空 = 全部拒绝），第二条 `allow-same-namespace` 再把"本 ns 内部"这一个子集加回白名单。它们是两条独立策略、按并集合并——你不需要在 default-deny 里写例外，因为它根本没有"写例外"的语法；你想放的东西由另一条策略去"加回来"。**这就是并集模型在工程上的正确用法：default-deny 负责画边界，放行策略负责在边界内开窗口**。
+这两段的配合逻辑值得单独看一遍：第一条 `default-deny-ingress` 把整个 ns 的入站全部置于白名单之下（允许集为空 = 全部拒绝），第二条 `allow-same-namespace` 再把"本 ns 内部"这一个子集加回白名单。它们是两条独立策略、按并集合并——你不需要在 default-deny 里写例外，因为它根本没有"写例外"的语法；你想放的东西由另一条策略去"加回来"。这就是并集模型在工程上的正确用法：default-deny 负责画边界，放行策略负责在边界内开窗口。
 
 ### 4.2 三层架构的最小权限
 
@@ -296,7 +347,7 @@ spec:
 
 frontend 那一层没有展开，因为它的策略形态取决于入口从哪来——如果流量经 Ingress Controller 进来，ingress 规则放行的是 ingress 命名空间的 Pod；如果是 NodePort 直接进节点，来源是外部 ipBlock；这两种形态的差异本身就是"入口路径决定策略形态"的一个实例。
 
-这类策略的模板意义大于示例意义——真正要记住的是**每个方向的规则集合都要能回答"谁、什么端口、为什么需要"三个问题**，答不上来的允许项就是该删的项。写出"全放行"的规则时，多半意味着边界没想清。
+这类策略的模板意义大于示例意义——真正要记住的是每个方向的规则集合都要能回答"谁、什么端口、为什么需要"三个问题，答不上来的允许项就是该删的项。写出"全放行"的规则时，多半意味着边界没想清。
 
 ### 4.3 策略上线的工程节奏
 
@@ -369,29 +420,29 @@ spec:
 
 ### 5.3 插件链：一次查询的旅程
 
-CoreDNS 把"一次 DNS 查询"处理成一条插件管道——链上每一站都可以决定就地应答、放行给下一站、或在回程上动点手脚。注意插件链的顺序就是 Corefile 里书写的顺序：把 `cache` 写在 `kubernetes` 之前会让集群内查询也走缓存，把 `forward` 写在 `kubernetes` 之前会让 cluster.local 先被外包——Corefile 不是声明清单，而是执行顺序的直接定义。全貌：
+CoreDNS 把"一次 DNS 查询"处理成一条插件管道——链上每一站都可以决定就地应答、放行给下一站、或在回程上动点手脚。这里有一个几乎人人都踩过的误会：插件链的执行顺序并不是 Corefile 里书写的顺序。CoreDNS 官方手册写得很直白，Corefile 中各插件的先后不决定链序，真正的顺序由源码根目录的 `plugin.cfg` 决定——那份清单在编译期被展开成指令数组，链序由此固定；Corefile 决定的是"这条服务器块启用哪些插件、参数给成什么"，调换书写位置不改变任何执行次序。
+
+`plugin.cfg` 的顺序为什么重要，看它在标准发行版里的排布就明白：`cache` 排在 `kubernetes` 与 `forward` 之前，集群内解析结果因此同样进缓存；`loop` 排在 `forward` 之前，才能在转发自环出现的第一时间察觉并让进程退出；`kubernetes` 必须排在 `forward` 之前，否则 `cluster.local` 的查询会被整体外包给上游。顺序排错的故障是静默的——进程不报错、配置语法合法，只是某些域名被送去问了不该问的人。想把自己的插件（域名黑名单、应答改写）插进链路，正确姿势是改 `plugin.cfg` 后重新编译，让它落在需要观察的那一站之前；只往 Corefile 里加一行，站位由 `plugin.cfg` 说了算。
+
+剩下的才是 Corefile 真正决定的事：哪些插件参与这条链、参数怎么给，以及同一个插件多次出现时各自的匹配范围。全貌：
 
 ```mermaid
 %%{init: {'theme': 'dracula'}}%%
 graph TD
-    classDef pod fill:#6272a4,stroke:#8be9fd,color:#f8f8f2
-    classDef plugin fill:#44475a,stroke:#50fa7b,color:#f8f8f2
-    classDef ext fill:#282a36,stroke:#ff79c6,color:#f8f8f2
+    classDef compile fill:#ff79c6,stroke:#ff79c6,color:#282a36
+    classDef runtime fill:#44475a,stroke:#50fa7b,color:#f8f8f2
+    classDef chain fill:#6272a4,stroke:#8be9fd,color:#f8f8f2
 
-    Client["Pod（DNS 客户端）"] -->|"UDP/TCP 53"| Core["CoreDNS"]
-    subgraph "Corefile 插件链（按声明顺序）"
-        errors["errors"] --> health["health"] --> ready["ready"]
-        ready --> k8s["kubernetes（cluster.local）"]
-        k8s --> prom["prometheus :9153"]
-        prom --> fwd["forward（上游转发）"]
-        fwd --> cache["cache 30s"]
-    end
-    k8s -->|"查 Service/EndpointSlice"| API["Kubernetes API"]
-    fwd -->|"非集群域名"| Up["上游 DNS"]
+    CFG["plugin.cfg（源码里的插件清单）"] --> GEN["编译期展开为指令数组"]
+    GEN --> ORDER["固定链序<br/>cache → kubernetes → loop → forward"]
+    CORE["Corefile（运行期配置）"] -->|"只决定启用哪些插件与参数"| SERVER["本条服务器块的插件链"]
+    ORDER --> SERVER
+    SERVER --> QT["查询按固定链序过站"]
+    SERVER --> RT["应答沿原链回程<br/>cache 在此截获"]
 
-    class Client pod
-    class errors,health,ready,k8s,prom,fwd,cache plugin
-    class API,Up ext
+    class CFG,GEN compile
+    class CORE,ORDER runtime
+    class SERVER,QT,RT chain
 ```
 
 一条查询进 CoreDNS 后按插件链顺序过站：`kubernetes` 插件识别 `cluster.local` 域就就地应答；不认识的域名交给 `forward` 转上游；`cache` 在返回路径上按 TTL 留存结果；`prometheus` 全程埋点。链路里每个插件都是可替换的零件——要换缓存策略、换上游、换记录来源，都只是改 Corefile 的一行。
@@ -435,15 +486,15 @@ CoreDNS 在集群里的部署形态是一套标准的"关键基础设施"配置�
 
 三行各自的职责边界值得划清：`nameserver` 决定"问谁"，`search` 决定"短名补全成什么"，`options` 决定"什么样的名字算短名"——前两个是寻址的素材，第三个是判别的规则。ndots 之所以能成为性能陷阱，正是因为它悄悄改写了"哪些名字要走 search 域"这个判别——它把"绝大多数真实域名"都误分类成了"需要补全的短名"。
 
-search 域的完整拼接顺序值得一提：对 `my-service`（0 个点）这个短名，glibc resolver 会依次尝试 `my-service.default.svc.cluster.local` → `my-service.svc.cluster.local` → `my-service.cluster.local`，命中即停。这个顺序意味着"同命名空间的服务用最短名字就能解析"，但也意味着**任何一次短名查询都预设了最多三次候选**——解析一个内部服务名时客户端实际发起的 DNS 次数，远比直觉多。
+search 域的完整拼接顺序值得一提：对 `my-service`（0 个点）这个短名，glibc resolver 会依次尝试 `my-service.default.svc.cluster.local` → `my-service.svc.cluster.local` → `my-service.cluster.local`，命中即停。这个顺序意味着"同命名空间的服务用最短名字就能解析"，但也意味着任何一次短名查询都预设了**最多三次候选**——解析一个内部服务名时客户端实际发起的 DNS 次数，远比直觉多。
 
-`ndots` 的语义：域名里的 `.` 数量**少于** ndots 时，被当作"相对名"——先逐个拼接 search 域尝试，全部 NXDOMAIN 后才按绝对名查询。这个设计的初衷是好的：`backend-service`（0 个点）能被自动补全成 `backend-service.default.svc.cluster.local`。副作用是灾难性的：**任何少于 5 个点的名字都要先付 N 次无效查询的学费**。
+`ndots` 的语义：域名里的 `.` 数量**少于** ndots 时，被当作"相对名"——先逐个拼接 search 域尝试，全部 NXDOMAIN 后才按绝对名查询。这个设计的初衷是好的：`backend-service`（0 个点）能被自动补全成 `backend-service.default.svc.cluster.local`。副作用是灾难性的：任何少于 5 个点的名字都要先付 N 次无效查询的学费。
 
 为什么是 5 而不是更小的数——这背后是 Kubernetes 的 FQDN 层级：`service.ns.svc.cluster.local` 最多四级，为了让 `service.ns.svc`（3 个点）这种"写了大半的短名"仍能走 search 补全，ndots 必须大于最长可用短名的点数。于是"4 个点以下都算短名"这个保守默认被写进了每个 Pod——代价是所有常见的外部域名（通常 2-3 个点）全部被误伤为"相对名"。这个默认值本质上是"集群内名字的便利"压过了"集群外名字的效率"的一次取舍——它假设你查的更多是内部服务名，这个假设在外部调用密集的现代微服务集群里越来越站不住脚。
 
 ### 6.2 放大效应的推演
 
-`google.com` 有 1 个点 < 5，于是一次解析变成 4 次往返：`google.com.default.svc.cluster.local`（NXDOMAIN）→ `google.com.svc.cluster.local`（NXDOMAIN）→ `google.com.cluster.local`（NXDOMAIN）→ `google.com`（转发上游，成功）。`s3.amazonaws.com` 有 2 个点，同样中枪——**每一次对外的服务调用都要先让 CoreDNS 白查三遍**。
+`google.com` 有 1 个点 < 5，于是一次解析变成 4 次往返：`google.com.default.svc.cluster.local`（NXDOMAIN）→ `google.com.svc.cluster.local`（NXDOMAIN）→ `google.com.cluster.local`（NXDOMAIN）→ `google.com`（转发上游，成功）。`s3.amazonaws.com` 有 2 个点，同样中枪——每一次对外的服务调用都要先让 CoreDNS **白查三遍**。
 
 把这笔账乘上规模：100 个 Pod × 每秒 10 次外部调用 × 3 次无效查询 = 每秒 3000 次纯浪费的 DNS 往返。CoreDNS 的 CPU、上游 DNS 的 QPS、conntrack 里的 UDP 伪流（第 6 篇提过它们默认活 180 秒）全被这笔学费吃掉——大集群里"DNS 慢"的工单，十有八九先在 `ndots` 上找答案。
 
@@ -510,7 +561,7 @@ spec:
 
 大集群里 CoreDNS 的标准减压件是 **NodeLocal DNSCache**：每个节点跑一个本地 DNS 缓存 DaemonSet，Pod 的 `nameserver` 改指向节点本地地址（`169.254.20.10`），命中即返、未命中才上行到集群 CoreDNS。它一石三鸟：削掉跨节点 DNS 跳数、摊平 CoreDNS 副本压力、规避 conntrack 在跨节点 UDP 上的伪流累积。它不是默认组件（需显式部署），但在节点数过百的集群里基本是标配。
 
-它还有一个不那么显眼但同样重要的收益：**升级 CoreDNS 时不会再有"集群范围 DNS 闪断"**——本地缓存把节点上的查询与中心 CoreDNS 解耦，CoreDNS 滚动重启期间存量节点仍能命中本地缓存应答。这个"把关键依赖从中心下沉到节点"的手法，与本专栏反复出现的"把热路径留在本机/内核"是同一哲学。
+它还有一个不那么显眼但同样重要的收益：升级 CoreDNS 时**不会再有"集群范围 DNS 闪断"**——本地缓存把节点上的查询与中心 CoreDNS 解耦，CoreDNS 滚动重启期间存量节点仍能命中本地缓存应答。这个"把关键依赖从中心下沉到节点"的手法，与本专栏反复出现的"把热路径留在本机/内核"是同一哲学。
 
 NodeLocal 的实现细节值得记一笔：它在节点上监听一个 link-local 地址（`169.254.20.10`），kubelet 把 Pod 的 nameserver 指到它，未命中时走节点本地的 iptables 规则或直接 socket 上行到 CoreDNS 的 ClusterIP——因为本地缓存就是节点上的普通进程，它上行查询 CoreDNS 时同样走 Service 的 DNAT 链路，这意味着 NodeLocal 与 kube-proxy 是同一条转发链路上的两个相邻环节，排查"DNS 偶发慢"时两者要一起看。
 
@@ -611,7 +662,7 @@ curl localhost:9153/metrics | grep coredns_dns_requests_total
 - **06** 在 Pod 网络之上叠加了 Service 的虚拟入口与负载均衡，回答"易变的 Pod 集合如何对外呈现稳定入口"；
 - **本篇**补上最后两块语义：NetworkPolicy 的"该不该通"与 CoreDNS 的"名字叫谁"——一个是边界，一个是寻址。
 
-一条贯穿全专栏的主线至此可以收束：**Kubernetes 网络的每一层都是"声明式 API + 用户态控制器 + 内核数据面"的三段式**，变的只是内核那段的载体——从 iptables 规则、到 BGP 路由、到 BPF Map。理解了这条主线，任何新的网络组件进来，你都能用同一把尺子量它：它声明什么、谁在投影、内核里落成什么。
+一条贯穿全专栏的主线至此可以收束：Kubernetes 网络的每一层都是"声明式 API + 用户态控制器 + 内核数据面"的三段式，变的只是内核那段的载体——从 iptables 规则、到 BGP 路由、到 BPF Map。理解了这条主线，任何新的网络组件进来，你都能用同一把尺子量它：它声明什么、谁在投影、内核里落成什么。
 
 这条主线的另一个副产品是把"性能瓶颈"的可预期位置标了出来：投影层（控制器）的开销随 Watch 变更频率走，内核层的开销随规则数据结构的查找效率走——前者是 Felix/kube-proxy/cilium-agent 各自的 Watch 与重算成本，后者是 iptables 链长、IPVS 哈希、BPF Map 各自的查找复杂度。下次再有新的 CNI 或代理出现时，先用这把尺子估它的两端成本，比跑 benchmark 更能预判它在你的规模上的表现。
 
@@ -619,7 +670,7 @@ curl localhost:9153/metrics | grep coredns_dns_requests_total
 
 NetworkPolicy 的边界在 L4——它管"谁连谁的哪个端口"，管不了 HTTP 方法、路径、gRPC method；那一层是服务网格（Envoy/Istio）的地盘，本专栏相邻的[[01 服务网格概述——从微服务治理痛点到Sidecar模式|服务网格专栏]]是它的自然续篇。CoreDNS 的边界在"集群内"——它不解公网域名的权威、不做 DNSSEC 验证，集群外的名字一律靠 `forward` 交还给上游。两篇之内若还想深挖，eBPF 数据面的细节在[[05 基础设施可观测性：eBPF 的崛起与内核级洞察|eBPF 可观测性]]一文有专门展开。
 
-专栏的句号落在这里，但有一条更长的脉络值得最后点一次：从 01 的 Linux 原语到本篇的 DNS 与策略，Kubernetes 网络解决的其实一直是同一个问题——**"让一堆易变的、分布式的、需要被发现与隔离的进程，能像单机进程间通信一样可靠地找到彼此"**。所有机制都是这句话的不同切面：netns/veth 解决"隔离出独立的网络世界"，CNI/IPAM 解决"给每个世界发地址"，Flannel/Calico/Cilium 解决"把世界连起来"，Service 解决"给集合起个稳定的名字"，NetworkPolicy 解决"决定谁可以说话"，CoreDNS 解决"名字怎么翻译成地址"。这个专栏的全部内容，就是这个句子在七个层面上的展开。
+专栏的句号落在这里，但有一条更长的脉络值得最后点一次：从 01 的 Linux 原语到本篇的 DNS 与策略，Kubernetes 网络解决的其实一直是同一个问题——"让一堆易变的、分布式的、需要被发现与隔离的进程，能像单机进程间通信一样可靠地找到彼此"。所有机制都是这句话的不同切面：netns/veth 解决"隔离出独立的网络世界"，CNI/IPAM 解决"给每个世界发地址"，Flannel/Calico/Cilium 解决"把世界连起来"，Service 解决"给集合起个稳定的名字"，NetworkPolicy 解决"决定谁可以说话"，CoreDNS 解决"名字怎么翻译成地址"。这个专栏的全部内容，就是这个句子在七个层面上的展开。
 
 ---
 

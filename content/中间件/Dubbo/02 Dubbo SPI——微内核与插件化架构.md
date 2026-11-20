@@ -1,8 +1,8 @@
 ---
 title: "02 Dubbo SPI——微内核与插件化架构"
 date: 2026-03-04
-tags: [Dubbo, 依赖注入]
-keywords: [SPI, 插件化, 扩展机制]
+tags: [Dubbo]
+keywords: [SPI, 插件化, 扩展机制, 依赖注入]
 aliases: []
 ---
 

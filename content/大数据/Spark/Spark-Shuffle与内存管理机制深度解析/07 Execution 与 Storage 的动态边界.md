@@ -1,405 +1,479 @@
 ---
 title: "Execution 与 Storage 的动态边界"
-date: 2026-02-27
-tags: [Spark, 内存管理]
-keywords: [Execution Memory, RDD Cache, Storage Memory, UnifiedMemoryManager, 动态借用]
+date: 2026-11-19
+tags: [Spark, 大数据, 性能优化, 容错]
+keywords: [Fraction Cached, storageFraction, BlockEviction, StorageLevel, unpersist, InMemoryRelation]
 aliases: []
 ---
 
 # 07 Execution 与 Storage 的动态边界
 
-## 摘要
+**摘要：**
 
-`UnifiedMemoryManager` 最核心的设计是执行内存（Execution Memory）与存储内存（Storage Memory）之间的**动态边界**机制。两者共享同一个内存池，在运行时通过互相借用来适应负载变化。但"动态"背后隐藏着严格的不对称规则：执行内存可以主动驱逐存储内存（强制淘汰 RDD 缓存），而存储内存只能借用空闲的执行内存，不能强制驱逐正在使用的执行内存。本文深入剖析这套借用与驱逐机制的完整逻辑链路，揭示 `spark.memory.storageFraction` 的真实语义（它不是固定边界，而是"存储内存的保护下限"），并通过多个典型场景推演，帮助你理解在不同负载组合下内存边界的实际行为。
-
----
-
-## 第 1 章 为什么边界必须是动态的
-
-### 1.1 静态边界的两类浪费
-
-在 `StaticMemoryManager` 时代，执行内存和存储内存的边界是硬性的、固定的。这造成了两类典型的资源浪费，每一类都非常常见：
-
-**第一类：Shuffle 密集型作业中存储内存大量闲置**
-
-想象一个 ETL 作业：从 HDFS 读取 1TB 原始数据，经过多次 Shuffle（join、groupBy、sort），最终写入结果。这个作业几乎不需要缓存任何 RDD（数据只经过一次，不重复使用），存储内存从头到尾接近空置。但是，Shuffle 密集的多阶段 Merge Sort 需要大量执行内存来存储 `ExternalSorter` 的中间数据——执行内存严重不足，频繁触发 Spill。
-
-此时，大量闲置的存储内存就在旁边"看热闹"，却无法参与救援。
-
-**第二类：缓存密集型作业中执行内存大量闲置**
-
-另一个场景：一个机器学习训练作业，将训练数据集 `persist(MEMORY_ONLY)` 后反复迭代（每次迭代都是轻量级的 map 操作，无 Shuffle）。数据缓存需要大量存储内存，但每次迭代的执行内存消耗极小。
-
-此时，大量闲置的执行内存"守着空房子"，而存储内存因为放不下完整的训练集，不得不将部分 RDD 分区 drop 掉（触发 StorageLevel 降级或直接丢弃），导致每次迭代都要重新从磁盘读取被丢弃的分区，性能下降严重。
-
-`UnifiedMemoryManager` 的动态边界正是为了解决这两类浪费——让内存资源随实际负载流动，而不是静态固化在某一侧。
-
-### 1.2 动态边界的设计原则
-
-动态借用需要遵循一些基本原则，否则会带来新的问题：
-
-**原则一：执行内存具有更高优先级**
-
-Shuffle、Sort、Aggregation 等执行操作是当前计算任务的核心，不能中途中断。如果执行内存不足，必须有强制手段腾出空间——驱逐 RDD 缓存是可行的，因为 RDD 可以通过重新计算恢复（这正是 Lineage 血缘机制的价值），但正在执行的 Shuffle 中间状态无法简单重建。
-
-**原则二：存储内存有保护下限**
-
-如果存储内存完全没有保护，执行内存可以将其压榨到零，所有 RDD 缓存都会被驱逐。这会导致依赖 RDD Cache 的迭代式算法（机器学习、图计算）性能急剧退化。`spark.memory.storageFraction` 参数定义了存储内存的"保护区"——在这个边界之上的缓存数据，执行内存**不能**驱逐。
-
-**原则三：空闲资源可以自由借用**
-
-如果执行内存完全空闲（没有 Task 在运行），存储内存可以借用这部分空间；反之亦然。借用是临时性的——当原始"所有者"需要时，借用者必须归还（对于存储内存借用执行内存的情况，归还方式是驱逐缓存；对于执行内存借用存储内存的情况，归还方式是执行内存直接占用该空间）。
+`cache()` 之后作业没有变快，是 Spark 运维里最常见的一句"配置了但没效果"。它底下压着两类成因，处置方向正好相反：缓存的块真的没了，或者块还在、只是没被读。本篇把这两类问题收成一条判据主线。先按借用规则的两个方向给结论——存储借执行只有使用权、没有产权，执行借存储借到手就不还——于是执行压力一上来，越过保护区的缓存必然被驱逐。再把 cached 数据消失的三种形态拆开：执行内存抢占、`BlockManager` 的 LRU 淘汰、executor 丢失，各自给出 `Storage` 页与 `Executors` 页上的可观察特征与首查位置。核心交付是"cache 了却没生效"的五个判据：`Fraction Cached` 是否到 100%、目标 Stage 的 `Input Size` 是否真的变小、`cache` 之后有没有 action、是否每次 action 都重建了对象、`cache` 之后有没有动过血缘或计划。后半篇谈选型：六个存储级别的内存与 CPU 兑换率、带副本的容错代价、4.x 里 `df.cache()` 与 `rdd.cache()` 默认级别不同带来的量级差距，以及 `unpersist` 为什么必须写进代码规范。机制推导按章路由到内核系列，本篇只回答哪里看、怎么判、先改哪个。
 
 ---
 
-## 第 2 章 storageFraction 的真实语义
+## 第 1 章 缓存建了，作业却没快
 
-### 2.1 常见的误解
+一个作业加上 `cache()` 之后变慢，比不加更让人困惑。参数没改错，算子没写错，日志里也没有异常，唯独耗时上去了。这类现场几乎都能被两个页面解释清楚：`Storage` 页告诉你块到底在不在，`Stages` 页告诉你块到底有没有被读。
 
-许多 Spark 用户对 `spark.memory.storageFraction`（默认 0.5）的理解是：存储内存和执行内存各占统一内存池的 50%，这是一个固定的分割线。
+### 1.1 现场：Fraction Cached 21%
 
-这个理解是**不准确的**。
+某个夜间批处理作业 `dim_enrich` 从按天分区的明细表读 1.8 TB，与两张维表 join，产出一份约 200 GB 的宽表，随后在同一个作业里循环跑六个维度聚合，每一次都要把这 200 GB 重读一遍。有人加了一行 `df.rdd.cache()`，理由是"RDD 接口更熟"。
 
-`spark.memory.storageFraction` 定义的是**存储内存的保护下限**，而不是存储内存的固定上限。它的精确语义是：
+结果与预期相反。`Storage` 页上这份缓存确实有，但 `Fraction Cached` 停在 21%，`Size in Memory` 约 84 GB，没有磁盘那一列——因为 `RDD.cache()` 的默认级别是 `MEMORY_ONLY`，放不下的分区直接丢弃，没有第二落脚点。`Stages` 页上，六个聚合 Stage 的 `Input Size` 从 1.8 TB 只降到 1.4 TB，说明命中的只有那两成；同期的 shuffle spill 与 GC 时间都涨了一截。
 
-**存储内存的保护区 = 统一内存池 × `spark.memory.storageFraction`**
+这一段现场里同时出现了本篇要分的两类问题。第一类是**缓存消失**：另外 79% 的分区从来没有被缓上，或者缓上之后被赶走了。第二类是**缓存没生效**：`Input Size` 没按比例往下掉，说明即使那 21% 真的躺在那儿，六个聚合里也只有少数分区的源扫描被省掉。
 
-在保护区之内的缓存数据（即当存储内存已用量 ≤ 保护区大小时），**执行内存无法强制驱逐**。只有当存储内存的已用量超过保护区大小时，执行内存才能驱逐超出部分。
+换成 `df.cache()` 之后，同一份结果以列式压缩形态驻留约 60 GB，`Fraction Cached` 到 100%，六个聚合的 `Input Size` 归零，作业时间回到基准值以下（以上体积均为示例推算）。同一份数据、同一个集群、同一个作业，差别只在存储级别与内存形态，这是第 7 章要算的账。
 
-这意味着：
-- 存储内存可以使用超过保护区大小的空间（借用空闲的执行内存）
-- 但超出保护区的那部分缓存，随时可能被执行内存驱逐
-- 保护区之内的缓存，只要内存足够，就不会被执行内存驱逐
+### 1.2 两类问题，一条判据主线
 
-> [!info] 核心概念
-> `spark.memory.storageFraction = 0.5` 的直白含义是：**存储内存永远保有至少 50% 的统一内存池**（除非存储本身主动释放）。执行内存可以使用超过 50% 的统一内存池，但前提是存储内存已用量不超过 50%（即存储内存有空闲）。这是一个"下限保护"，而不是"固定分割"。
+排查顺序不能颠倒。缓存没生效时，先假设它还在，去看命中；缓存消失时，先假设它没被用，去看容量与生命周期。顺序颠倒的代价是把"没触发 action"误判成"内存不够"，于是加内存、调比例，最后什么都没变。
 
-### 2.2 storageFraction 与 memoryFraction 的组合效果
+判据主线只有三步。第一步看 `Storage` 页，确认这条缓存条目在不在、`Fraction Cached` 是多少、内存与磁盘各占多少，这一步回答"有没有、在哪"。第二步看 `Stages` 页与 SQL 页，确认目标 Stage 的 `Input Size` 与扫描节点类型有没有变，这一步回答"有没有被读"。第三步才回到代码，确认 `cache` 的调用位置、被缓存的对象、消费的对象是不是同一个，这一步回答"为什么没被读"。
 
-`spark.memory.storageFraction` 决定的是存储内存的保护区大小：
+### 1.3 一个贯穿全篇的作业
 
-```
-存储内存保护区 = (spark.executor.memory - 300MB) × spark.memory.fraction × spark.memory.storageFraction
-```
+后面的量化都用这座集群与这个作业。集群 300 台节点，跑一条每天两千个作业的共享队列，每台节点的内存切成若干 4 核 16 GB 的 executor；`dim_enrich` 在夜间高峰只分到 40 个 executor，这是动态分配的实际授予量，不是集群总量。
 
-以 8GB Executor（`memory.fraction = 0.6`, `storageFraction = 0.5`）为例：
-- 统一内存池 ≈ 4735MB
-- 存储内存保护区 ≈ 2368MB
-- 执行内存最大可占用 ≈ 4735MB（理论上限，当存储内存完全空闲时）
-- 存储内存最大可占用 ≈ 4735MB（理论上限，当执行内存完全空闲时）
+按默认 `spark.memory.fraction = 0.6`、`spark.memory.storageFraction = 0.5` 算，单台 executor 的统一内存池约为 `(16384 - 300) × 0.6 ≈ 9,650 MB`，即 9.4 GB 上下，存储保护区约 4.7 GB。40 台合计，池子上限 376 GB，保护区合计 188 GB。这两个数字后面会反复用到：376 GB 是存储侧在理想情况下能吃到的天花板，188 GB 是执行侧不能碰的那一段。
 
-两者都可以使用几乎全部的统一内存池——关键在于谁先占用。
+宽表 200 GB 指的是行式原始字节。列式缓存压缩后落到 60 GB 量级，反序列化成 Java 对象则是 400 GB 到 1 TB 量级，两端相差接近一个量级，具体倍数取决于字段宽度与对象头占比（示例推算）。这组数字解释了 1.1 里那个 21%：`MEMORY_ONLY` 要把 400 GB 以上的对象塞进 376 GB 的池子，塞不满是必然结果。
+
+### 1.4 本篇的边界
+
+内存池的记账口径、`M` 与 `R` 的两处减法、`1/N` 的并发摊薄，内核系列已经推到源码级，本篇只引用结论，见 [[大数据/Spark/读书笔记-spark内核/04_存储与容错机制/2. Spark内存管理模型深度解析|统一内存池的两个视图与借用不对称]] 第 2 章与第 5 章。缓存块的写入、读取、驱逐与 `unpersist` 的完整路径，见 [[大数据/Spark/读书笔记-spark内核/04_存储与容错机制/3. Spark_数据缓存机制|数据缓存机制]] 第 4 章到第 7 章。四本账的切分与归因，见 [[大数据/Spark/读书笔记-spark内核/04_存储与容错机制/1. Spark内存管理机制|Executor 的四本账]] 第 1 章。本篇只回答三个问题：缓存为什么会消失，缓存为什么没生效，以及先改哪个参数。
 
 ---
 
-## 第 3 章 借用机制的完整逻辑
+## 第 2 章 借用规则的两个方向
 
-### 3.1 执行内存借用存储内存：驱逐 RDD 缓存
+两个方向的规则各用一句话就能说完，值得记住的是这两句话的不对称：一边是可以随时收回的使用权，一边是借走就不还的所有权。
 
-当执行内存申请失败（池内空间不足）时，`UnifiedMemoryManager.acquireExecutionMemory()` 会尝试从存储内存借用空间。借用的方式是**驱逐可驱逐的 RDD 缓存**。
+### 2.1 存储借执行：有使用权，没有产权
 
-"可驱逐"的判断条件：存储内存当前已用量超过了保护区大小（`storageFraction` 设定的下限）。如果存储内存已用量恰好等于或低于保护区，执行内存不能强制驱逐任何缓存。
+存储侧可以占用执行池当前空闲的额度，但这部分额度没有产权，执行侧一旦需要，越过保护区的那部分缓存会被连块带内存一起收回去。
 
-驱逐的执行由 `MemoryStore.evictBlocksToFreeSpace()` 完成：
-1. 按照 LRU（Least Recently Used，最近最少使用）顺序选择待驱逐的 RDD 分区块
-2. 将选中的块从 `MemoryStore` 中移除（内存释放）
-3. 如果块的 `StorageLevel` 包含磁盘（如 `MEMORY_AND_DISK`），先将块写入磁盘再释放内存；否则直接丢弃（下次访问时重新计算）
-4. 将释放的内存空间从存储内存池转移给执行内存池
+这句话里"当前空闲"是全部关键。存储能吃满整个池子，前提是执行侧此刻闲着；它不是容量承诺，而是一张随时可能被赎回的短期借据。所以"`storageFraction` 留在 0.5，存储就该有一半池子是稳的"这个推论在两种情况下都落空：缓存没到保护区时，没用掉的保护区执行直接拿去用；缓存超过保护区时，超出那一截执行随时收走。保护区护住的是已经放进 R 之内的块，不是 R 这块空地。
+
+### 2.2 执行借存储：借到手就不还
+
+执行侧扩张的办法是驱逐，驱逐之后额度划进执行池，在持有它的 Task 或 `MemoryConsumer` 主动释放之前，存储侧没有任何手段把它拿回来。
+
+这就是不对称的落点。回收方向只有一个：执行要内存时能驱逐存储，存储要内存时只能去借执行的空闲，借不到就只能落盘或者放弃。一次执行高峰过去之后，存储侧也不会自动恢复——要等那些 Task 跑完、释放额度，缓存才有机会在下一轮 action 里重新填回去。中间那段时间里，任何读这份缓存的算子都会走重算或读盘。
+
+| 方向 | 谁发起 | 需要对方同意吗 | 归还方式 | 现场后果 |
+|---|---|---|---|---|
+| 存储借执行 | 新块要写缓存 | 不需要，只借空闲 | 执行一要就收回，收回时驱逐越界的块 | 执行忙碌期缓存退回保护区水位 |
+| 执行借存储 | Task 要排序或聚合 | 不需要，直接驱逐 | Task 释放时才还，不提前归还 | 执行高峰一过，缓存已经不在了 |
+
+这张表能解释一类反复出现的争论：看到缓存被赶，第一反应是"是不是 `storageFraction` 太小"，而真正的触发条件往往是执行侧在同一时刻要了内存。比例只决定可驱逐的范围，决定"会不会驱逐"的是需求峰值。
+
+### 2.3 单向性的三个现场
+
+第一个现场是执行压力大时缓存被驱逐，这是第 3 章的主题，也是最常见的一类。
+
+第二个现场是缓存看似能涨满、实际在执行忙碌期退回保护区，表现为存储用量曲线在作业中段被压回 4.7 GB 附近，而作业开始与结束时能到 8 GB 以上。
+
+第三个现场是缓存与 Shuffle 互相踩成锯齿：执行扩张、缓存让位、重算推高执行需求、再次扩张。这条闭环见 [[大数据/Spark/读书笔记-spark内核/04_存储与容错机制/2. Spark内存管理模型深度解析|统一内存池]] 第 6 章。
 
 ```mermaid
-%%{init: {"theme": "dracula", "themeVariables": {"primaryColor": "#6272a4", "primaryTextColor": "#f8f8f2", "primaryBorderColor": "#bd93f9", "lineColor": "#ff79c6", "secondaryColor": "#44475a", "tertiaryColor": "#282a36"}}}%%
+%%{init: {'theme': 'dracula'}}%%
+flowchart LR
+    subgraph M["统一池：堆 × memory.fraction"]
+        E["执行侧<br/>排序器 · 聚合表 · 在途缓冲"]
+        S["存储侧<br/>缓存块 · 广播块"]
+        R["保护区 R<br/>= 池 × storageFraction"]
+    end
+    E -->|"空闲额度划给存储<br/>执行一忙就收回"| S
+    S -->|"越过 R 的块被执行驱逐<br/>收走不还"| E
+    S -.->|"被驱逐的块"| X["落盘或丢弃<br/>下次访问读盘或重算"]
+    R -.->|"只保护已用部分"| S
+    classDef mem fill:#6272a4,stroke:#bd93f9,color:#f8f8f2
+    classDef prot fill:#ff79c6,stroke:#282a36,color:#f8f8f2
+    classDef bad fill:#282a36,stroke:#ff79c6,color:#f8f8f2
+    class E,S mem
+    class R prot
+    class X bad
+```
+
+这张图里没有反向箭头：从存储指向执行的那条是"驱逐"，不是"借用"。两条边的方向决定了缓存只能被赶、不能被留。
+
+---
+
+## 第 3 章 消失之一：执行内存抢占
+
+### 3.1 storageFraction 是下限，不是上限
+
+`spark.memory.storageFraction`（默认 0.5）定义的是**免于驱逐的下限**，不是存储内存的天花板。存储可以长到接近整个池子，但只有落在保护区之内的那部分块是安全的；越出去的那一截，只要有执行请求到来就会被赶走。
+
+文档里的措辞是免于驱逐（immune to eviction），不是为存储预留（reserved for storage），两个词组的差别就是本章全部结论的来源。推导见 [[大数据/Spark/读书笔记-spark内核/04_存储与容错机制/2. Spark内存管理模型深度解析|统一内存池]] 第 2 章，这里只记结论：调大它，缓存活得更久、执行更容易溢写；调小它，执行拿得到更多额度、缓存更容易被赶；它不改变池子总量。
+
+### 3.2 判据：存储已用量与 R 的距离
+
+执行抢占的判据不是"缓存变少了"，而是三个条件同时成立。
+
+第一，存储已用量曾经超过 R。R 是 4.7 GB，如果这台 executor 的存储用量从来没到过这条线，驱逐就不可能发生，没有越界的块可赶。
+
+第二，`Size in Memory` 单调下滑而 `Size on Disk` 同步上升（`MEMORY_AND_DISK` 系列），或者两者同时下滑（`MEMORY_ONLY` 系列）。前者是块换介质，后者是块真没了。
+
+第三，同一时间窗内，这台 executor 的 shuffle spill 与 GC 时间明显抬高。执行侧要内存才有驱逐，需求峰值一定会留下别的痕迹，三条同时成立才叫执行抢占。
+
+要按 executor 逐台看，不能只看全局。假设全局 `Fraction Cached` 从 100% 掉到 97%（示例推算），UI 上几乎看不出来；但热点 executor 上落了十几块大分区，一赶就掉两成。全局口径会把局部问题稀释到看不见。
+
+还有一个时间维度上的陷阱：`Storage` 页只有当前快照，没有历史曲线。看到"缓存没了"时页面已经被覆盖，看不到它曾经在。要判断"消失"这件事本身，得靠 `Executors` 页的 `Storage Memory` 列定期采样。
+
+### 3.3 参数表
+
+和这条规则相关的参数只有五六个，每个都带代价：
+
+| 参数 | 默认值（4.3.0） | 决定什么 | 调大的代价 | 调小的代价 |
+|---|---|---|---|---|
+| `spark.memory.fraction` | `0.6` | 统一池占堆的比例，是池子的分子 | 用户对象可用堆被压缩，GC 压力与 OOM 风险上移 | 池子绝对量下降，缓存与执行同时更早落盘 |
+| `spark.memory.storageFraction` | `0.5` | 保护区 R 的大小 | 执行可驱逐空间变小，Shuffle 更早 spill | 缓存更早被驱逐，`Fraction Cached` 掉得快 |
+| `spark.executor.memory` | `1g` | 堆总量，池子的分母 | 单 executor GC 停顿变长，节点上可放 executor 数变少 | 池子变小，同一份缓存放不下 |
+| `spark.memory.offHeap.enabled` / `size` | `false` / `0` | 堆外池，与堆内互不相通 | 需另配 `memoryOverhead`，堆外 OOM 排查更难 | 执行与存储继续在堆内互抢 |
+| `spark.storage.unrollMemoryThreshold` | `1m` | 展开分区时的初始申请量 | 大分区预申请更多，存储峰值上移 | 展开过程追加申请更频繁，次数与开销上升 |
+
+表里有两行容易被误用。`spark.executor.memory` 调大并不总是改善缓存命中：池子变大、单 Task 可用的执行内存也变大，`1/N` 摊薄出来的峰值随之抬高，Shuffle 吃得更狠，越过 R 的缓存被赶得更快——"加内存反而更容易丢缓存"这条反直觉的推论在内核系列 5.6 节有推导，现场确实存在。`unrollMemoryThreshold` 几乎从不该动。
+
+### 3.4 一个常见误判
+
+"没有缓存的时候调小 `storageFraction` 能不能多给执行内存"，答案是不能。没有缓存意味着没有越界的块可驱逐，执行本来就能用满整个池子，R 在这里没有约束作用。真正能给执行腾出空间的只有两个动作：把缓存本身缩小，或者把池子做大。
+
+---
+
+## 第 4 章 消失之二：BlockManager 的淘汰
+
+### 4.1 触发方不同，症状也不同
+
+第 3 章的驱逐由执行侧发起，这一章的淘汰由缓存侧发起：一个新的分区要写进存储池，池子里没有空间，`MemoryStore` 按最近最少使用（LRU）的次序挑别的块赶走，给新块腾位置。
+
+两者用的是同一条驱逐路径，触发方不同，现场形态差别很大。执行发起的驱逐一定伴随执行压力，表现为 spill 与 GC 上升；缓存发起的淘汰更安静——没有 spill，没有 OOM，只是某一份之前还在的缓存悄悄消失，新的那份顶了上来。这种情况下看 `Storage` 页，会看到总量稳定、条目在换。所以判据是总量与条目结构，而不是总量本身：总量稳定说明池子满着，怀疑对象不该是内存不足，而是"谁在抢谁的位置"。
+
+### 4.2 两个例外造成的偏心
+
+`MemoryStore` 的 LRU 不是纯粹的最久未用优先，有两条例外决定了现场形态的偏心。
+
+第一条是同一 RDD 的块不互相驱逐。新块要进来时，候选里会排除同属一个 RDD 的块。这条规则的本意是避免"一个 RDD 的块互相踩踏"造成的抖动，副作用是**大 RDD 会清场**：一个分区特别大的 RDD 要写缓存时，它赶不走自己的块，只能把别人的块赶光，然后自己也未必放得下。1.1 里那份宽表就是这个形态——它把同池里的广播变量与其他中间缓存赶掉，自己还只放进了两成。
+
+第二条是正在被读取的块不驱逐。有 Task 持着某个块的迭代器在读，这个块在这段时间里是安全的。这条规则让"边缓存边计算"的作业有了局部稳定性，也意味着驱逐候选集比想象的小：正在被大量任务读的缓存最稳，冷下来的那份最先走。
+
+### 4.3 判据：介质比值与卡住不动
+
+第一个数值形态是**介质比值**。`MEMORY_AND_DISK` 系列在淘汰时先把块写盘再释放内存，所以痕迹是 `Size in Memory` 降、`Size on Disk` 升，两者之和稳定。看到这个形态，问题不是"缓存没了"，而是"缓存变慢了"——数据还在，只是下次读取要走本地磁盘并反序列化。
+
+第二个是**卡住不动**。`Fraction Cached` 爬到某个数值就再也不涨，同时内存与磁盘两列都稳住了，这是展开（unroll）失败的特征：分区在展开过程中申请不到足够内存，按存储级别回退，带磁盘的落盘，不带磁盘的直接放弃。带磁盘的级别会表现为 `Size on Disk` 缓慢上涨、`Fraction Cached` 最终能到 100%；`MEMORY_ONLY` 则永久卡住。所以看到卡住，先看磁盘列有没有在涨，这一眼就能分出"放不下但落盘了"与"放不下且丢了"。
+
+### 4.4 三种"块没了"的分诊
+
+| 现场形态 | 触发者 | `Storage` 页样子 | 相邻证据 | 处置方向 |
+|---|---|---|---|---|
+| 执行抢占 | Task 排序或聚合要内存 | `Size in Memory` 下滑，磁盘列同步上涨 | 同窗口 spill 与 GC 抬升 | 缩小缓存、加大池子、必要时调大 R |
+| 缓存淘汰 | 新分区写入要位置 | 总量稳定，条目在换，老缓存下滑 | 同池有别的缓存在增长 | 减少同时存活的条目，按用途分级 |
+| 展开失败 | 单个分区在写缓存 | `Fraction Cached` 卡住不涨 | `Size on Disk` 是否在涨 | 换 `MEMORY_AND_DISK`，或减小分区 |
+
+三行的处置互相冲突：执行抢占要减缓存，缓存淘汰要减条目，展开失败要减分区。混在一起看，就只能得出"内存不够"这个无法动作的结论。
+
+---
+
+## 第 5 章 消失之三：executor 丢失
+
+### 5.1 块是整机资产
+
+前两种消失还能在 `Storage` 页上看到介质变化，第三种什么都不会留下：executor 一没，它上面所有的缓存块同时消失，对应行直接没了。
+
+`Fraction Cached` 会立刻反映这件事——分母是分区总数，分子是当前还能找到的块，一台 executor 消失就等于掉几个百分点。但这个数字出来得比事故晚：心跳超时默认要走 `spark.network.timeout`（默认 120 秒）这一档，任务失败上报、executor 标记移除、块账本更新各自还有延迟。也就是说，块在物理上早就没了，UI 上还要过几分钟才承认。先看 UI 再看日志，时间线会对不上，容易把"缓存消失"误判成"缓存从未建立"。
+
+### 5.2 本地盘不是 HDFS
+
+`MEMORY_AND_DISK` 提供的"不丢"有一个容易忽略的前提：那份备份在同一台机器的本地盘上，而本地盘的生命周期等于 executor 的生命周期。磁盘级别写的是 `spark.local.dir` 下的块文件，不是 HDFS，也没有三副本。
+
+所以"用了 `MEMORY_AND_DISK`，缓存丢不了"只在进程内成立。容器被杀、节点宕机、磁盘卷被回收，内存那份与磁盘那份一起没。更隐蔽的是磁盘写满：块写不下去时退回"只有内存一份"，此后任何一次驱逐都让它彻底消失。判据上有一处区分：`Size on Disk` 归零而 executor 还在，去看磁盘容量；executor 整行消失，去看退出码。
+
+### 5.3 副本的语义
+
+存储级别里的 `_2` 后缀加的是跨 executor 的第二份副本，这是唯一能在单机故障下活下来的形态。它复制的是什么，要看清楚：
+
+| 级别 | 内存里放什么 | 第二份在哪 | 单台 executor 消失后 | 代价 |
+|---|---|---|---|---|
+| `MEMORY_ONLY` | 反序列化对象 | 无 | 全部消失，逐个分区重算 | 内存占用最大 |
+| `MEMORY_ONLY_SER` | 序列化字节 | 无 | 全部消失，重算并再付一次反序列化 | 内存小、CPU 高 |
+| `MEMORY_AND_DISK` | 内存加本地盘 | 同机本地盘 | 内存与盘一起消失 | 磁盘 I/O 与容量 |
+| `DISK_ONLY` | 不使用存储池 | 同机本地盘 | 消失 | 读取最慢 |
+| `MEMORY_AND_DISK_2` | 内存加本地盘 | 另一台 executor 的内存 | 剩一份，可继续读 | 内存占用翻倍 |
+| `DISK_ONLY_2` | 不使用存储池 | 另一台 executor 的本地盘 | 剩一份 | 磁盘容量翻倍 |
+
+这张表用排除法：先问"这台机器消失时能不能容忍重算"，能容忍就不必上副本；不能容忍再问"代价是内存翻倍还是磁盘翻倍"，内存贵就选磁盘副本。副本不改变本地盘的性质，它只是把第二份放到了另一台机器上。
+
+### 5.4 两个能搬走的例外
+
+缓存块默认跟着 executor 生灭，只有两条路径例外，边界都很窄。
+
+第一条是优雅下线时的块迁移。decommission 流程里有一档专门搬 RDD 块（`spark.storage.decommission.rddBlocks.enabled`，3.1 起默认开启），前提是集群确实走了 decommission，且目标 executor 还有空位。
+
+第二条是动态分配的 shuffle tracking（`spark.dynamicAllocation.shuffleTracking.enabled`，默认开启）。它保的是 shuffle 输出，让正在被需要的 Shuffle 文件不随 executor 回收而消失；**它不保缓存块**。这一条经常被误解成"开了动态分配也不会丢缓存"，实际两者管的是不同资产，缓存块在动态分配回收面前没有任何保护。
+
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+flowchart TD
+    A["Storage 页：某条缓存掉了一截"] --> B{"Size on Disk 涨了吗"}
+    B -->|"涨了"| C["块换介质：还在，只是读盘"]
+    B -->|"没涨"| D{"同窗口有 spill 或 GC 抬升吗"}
+    D -->|"有"| E["执行抢占：越过 R 的块被驱逐"]
+    D -->|"没有"| F{"Executors 页少了行吗"}
+    F -->|"少了"| G["executor 丢失：整机块消失"]
+    F -->|"没少"| H["缓存淘汰或展开失败"]
+    C --> I["判据：读盘代价与重算代价之比"]
+    E --> J["判据：存储已用与 R 的距离"]
+    G --> K["判据：退出码 137/143、副本数、有无 decommission"]
+    H --> L["判据：总量稳定而条目在换"]
+    classDef q fill:#282a36,stroke:#ff79c6,color:#f8f8f2
+    classDef act fill:#44475a,stroke:#50fa7b,color:#f8f8f2
+    class A,B,D,F q
+    class C,E,G,H,I,J,K,L act
+```
+
+### 5.5 首查位置
+
+executor 丢失的判据全在 Spark 之外和 Spark 的边缘，四条按成本从低到高：`Executors` 页看移除记录与时间点，与任务失败时间对齐；Driver 日志搜 `ExecutorLostFailure` 与移除原因；资源管理器看容器退出码，137 是 SIGKILL（超内存被杀最常见），143 是 SIGTERM（多为回收或主动 kill），其余非零码通常指向进程崩溃；最后看节点系统日志与 OOM killer 记录。
+
+处置分两半。被资源管理器因超内存杀掉时，开副本也救不了同时被打掉的另一台，能做的只有把内存修好：降并发、查堆外、看用户对象。被动态分配回收时，问题在缓存的寿命不该跨过 executor 的寿命：让复用落在单个 executor 之内，或者接受重算。
+
+---
+
+## 第 6 章 五个判据：cache 了却没生效
+
+这一章是全文的交付。`cache` 无效有五种典型形态，每种都能在几秒到几分钟内被证伪或证实，不需要打开堆转储。
+
+先做一次前置确认：缓存方与消费方必须在同一个 application 里。`BlockManager` 是应用内的组件，缓存块不对其他应用可见。所以"作业 A 缓存了宽表，六个下游作业去读"这种设计从根上不成立——缓存的语义是应用内复用，跨作业复用只能靠物化中间表。很多"cache 了没用"的第一现场，问题出在把跨作业复用当成了缓存能解决的事。
+
+### 6.1 判据一：Fraction Cached 是否到 100%
+
+看 `Storage` 页每一行的 `Fraction Cached`。它按分区计数算，不是按字节占比——未缓存的分区把比例拉下来，至于每个分区缓存了多少字节，它不告诉你。
+
+读法有三层。低于 100% 说明有分区一份都没有，进入第 3、4、5 章的分诊；等于 100% 也不等于全在内存，要看 `Size in Memory` 与 `Size on Disk` 的比例；`Size in Memory` 稳定而比例缓慢下跌，说明有 executor 在退场。
+
+典型误判是把 100% 当成"命中快"。`MEMORY_AND_DISK` 在内存不够时会全量落盘，`Fraction Cached` 依然是 100%，而每个分区的读取都变成一次本地磁盘随机读加反序列化，对小的点查型作业，这比重新算一遍还慢。
+
+### 6.2 判据二：Stage 的 Input Size 是否真的变小
+
+看 `Stages` 页目标 Stage 的 `Input Size`，以及 SQL 页执行计划里扫描节点的类型。
+
+命中缓存时，数据来自缓存块而不是数据源扫描，所以原来被标为 1.8 TB 的那个 Stage，`Input Size` 会归零或降到很小，执行计划里出现 `InMemoryTableScan` 之类的内存扫描节点，`InMemoryRelation` 那一行还会给出缓存数据的字节数。没命中时，`Input Size` 与加缓存之前一模一样。
+
+这条判据的价值在于它是**端到端**的：它不问你缓存建没建，只问这一次执行有没有省掉源扫描。1.1 里 `Input Size` 从 1.8 TB 只降到 1.4 TB，一眼就能算出命中率只有两成左右，与 `Fraction Cached` 的 21% 相互印证。
+
+误判有两个方向。一是把 `Input Size` 归零当成"作业变快"，其实那只是换了数据来源；二是拿缓存之后的数字与缓存之前的比，而不是与同一 Stage 的基线比——分区数或过滤条件变过之后，两个数字本来就不可比。
+
+### 6.3 判据三：cache 之后有没有 action
+
+`cache()` 与 `persist()` 只做一件事：把 `StorageLevel` 记在这个对象上。块是在第一个 action 触发计算时才写进去的。没有 action，`Storage` 页上根本不会有这条缓存。
+
+这条判据的验证成本最低，也最容易被跳过：代码里 `cache()` 写完之后，紧接着是一个 `if` 分支、一次提前返回、一个被注释掉的 `count()`，缓存就永远停在"已登记、未物化"的状态。
+
+| 观察点 | 缓存已物化 | 只登记未物化 |
+|---|---|---|
+| `Storage` 页 | 有条目，`Fraction Cached` 有值 | 什么都没有 |
+| SQL 页 | 出现 `InMemoryRelation` 节点 | 不出现 |
+| 耗时 | 第一个 action 明显变长 | 与未加缓存时一致 |
+
+处置是在 `cache()` 之后立刻跟一个能触发全量计算的轻量 action，`count()` 是最常用的一个。代价要认清：`count()` 会把整条血缘跑一遍，如果血缘很长，这一步的时间不亚于一次正式计算，它买到的只是"缓存确定存在"。
+
+### 6.4 判据四：是不是每次 action 都重建了对象
+
+缓存挂在具体对象上，不挂在"这段逻辑"上。RDD 侧最直白：`rdd.cache()` 缓的是那个 RDD 实例，另一次 `sc.textFile` 得到的是新实例，血缘相同、缓存无关。
+
+DataFrame 与 SQL 侧多了一层匹配：`cache()` 把逻辑计划登记进缓存管理器，后续执行按规范化后的计划结构去找对应条目。这让"同一个 DataFrame 上的不同派生查询"能共享缓存，`df.filter(A).count()` 与 `df.filter(B).count()` 都吃同一份；但它挡不住"每次 action 之前重新读一次源"这种写法——重新 `spark.read` 出来的数据源关系是新实例，计划结构对不上，缓存管理器匹配不到，只能重新扫描。
+
+| 写法 | 是否命中 | 原因 |
+|---|---|---|
+| `val df = read(...); df.cache(); df.count(); df.groupBy(...).count()` | 命中 | 同一个对象、同一份计划 |
+| `def get() = read(...); get().cache(); get().count()` | 不命中 | 两次 `get()` 是两个实例，缓存登记在前一个上 |
+| `catalog.cacheTable("t")` 之后 `sql("select * from t")` | 命中 | 表级缓存按名称登记，与对象无关 |
+
+第三行给了一条稳定的解法：能按名称登记，就不要按对象登记。表级缓存（`spark.catalog.cacheTable`、SQL 的 `CACHE TABLE`）在同一个应用内可见，不依赖调用方手里的那个变量，在多段代码共享一个 `SparkSession` 的长驻服务里尤其重要。
+
+### 6.5 判据五：cache 之后有没有动过血缘或计划
+
+前四条都成立、`Fraction Cached` 100%、`Input Size` 也降了，但作业还是慢，那要看缓存落在哪一层。
+
+最常见的形态是**缓存层级错位**：把源表缓存了，而每次 action 真正昂贵的部分是那两次 join 与聚合。命中确实发生了，源扫描也确实省了，但 join 每次都重跑。判据很直接：`Storage` 页有缓存、`Input Size` 归零，而每一次 action 的 shuffle read 与 shuffle write 都按原量级重来。处置是把缓存点上移，缓存被复用的那一步的结果，而不是它的输入。
+
+第二种形态是**换了实体**：缓存之后又把结果写回表再读回来，后续计算用的是新数据源，与缓存毫无关系。这种写法本身未必错——物化中间表在跨作业复用时是正确做法——但它不叫缓存生效，别把两者的收益记在同一笔账上。
+
+第三种形态是**计划被清掉**：共享 `SparkSession` 的长驻服务里，另一段代码调了 `spark.catalog.clearCache()`，把不属于自己的缓存一起清了。特征是同一次调用在单测里有效、在服务里无效，判据是复现时间点与另一次调用对齐。
+
+### 6.6 五判据分诊
+
+| 判据 | 看哪里 | 命中长什么样 | 不命中长什么样 | 处置 |
+|---|---|---|---|---|
+| 一：`Fraction Cached` | `Storage` 页每行 | 100%，且内存占比合理 | 低于 100%，或磁盘列远大于内存列 | 换存储级别、加池子、减缓存量 |
+| 二：`Input Size` | `Stages` 页、SQL 页计划 | 源扫描归零，出现内存扫描节点 | 与加缓存前一致 | 查消费方是否同一对象 |
+| 三：有没有 action | `Storage` 页有无条目 | 有条目 | 一条都没有 | `cache()` 后补 `count()` |
+| 四：有没有重建对象 | 代码里 `cache` 与读取的位置 | 同一个变量 | 每次 action 前重新读源 | 提升为单例，或改表级缓存 |
+| 五：层级与计划 | `Storage` 页条目数、shuffle 量 | 缓存点在复用点上 | 缓存点在输入侧，或计划被 `clearCache` 清掉 | 上移缓存点、保护缓存不被误清 |
+
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+flowchart TD
+    A["怀疑 cache 没生效"] --> B{"同一个 application 吗"}
+    B -->|"否"| C["跨作业复用不是缓存的语义<br/>改物化中间表"]
+    B -->|"是"| D{"Storage 页有这条缓存吗"}
+    D -->|"没有"| E["判据三：没触发 action<br/>或 cache 作用在别的对象上"]
+    D -->|"有"| F{"Fraction Cached = 100% 吗"}
+    F -->|"否"| G["判据一：没放下<br/>缺内存或缺磁盘落脚点"]
+    F -->|"是"| H{"目标 Stage 的 Input Size 降了吗"}
+    H -->|"没降"| I["判据二：没命中<br/>消费的不是被缓存的对象"]
+    H -->|"降了"| J{"每次 action 都重新读源吗"}
+    J -->|"是"| K["判据四：重建了对象<br/>缓存挂在旧实例上"]
+    J -->|"否"| L{"缓存点在复用点上吗"}
+    L -->|"否"| M["判据五：层级错位或计划被清"]
+    L -->|"是"| N["命中正常，慢在别处"]
+    classDef q fill:#282a36,stroke:#ff79c6,color:#f8f8f2
+    classDef act fill:#44475a,stroke:#50fa7b,color:#f8f8f2
+    class A,B,D,F,H,J,L q
+    class C,E,G,I,K,M,N act
+```
+
+---
+
+## 第 7 章 persist 级别怎么选
+
+### 7.1 级别回答的是"内存之外还有没有落脚点"
+
+六个存储级别由四个布尔位与一个整数组合出来：是否用内存、是否用磁盘、是否序列化、是否堆外、副本数。做选型不需要记位，只需要问三个问题：内存里以什么形态驻留、内存之外有没有第二落脚点、这个第二落脚点值不值那个代价。
+
+| 级别 | 内存里放什么 | 内存之外的落脚点 | 换来什么 | 代价 |
+|---|---|---|---|---|
+| `MEMORY_ONLY` | 反序列化对象 | 无 | 读取最快，零反序列化 | 占用最大，放不下就丢，下次重算 |
+| `MEMORY_ONLY_SER` | 序列化字节 | 无 | 占用约为前者的三分之一到二分之一（示例推算） | 每次访问付一次反序列化 |
+| `MEMORY_AND_DISK` | 反序列化对象 | 同机本地盘 | 放不下也不丢，退化为读盘 | 磁盘 I/O、`spark.local.dir` 容量 |
+| `MEMORY_AND_DISK_SER` | 序列化字节 | 同机本地盘 | 省内存且不丢 | 读盘与反序列化双重成本 |
+| `DISK_ONLY` | 不使用存储池 | 同机本地盘 | 几乎不占内存，适合超大数据集 | 每次访问都读盘，最慢 |
+| 带 `_2` 的任意级别 | 同基础级别 | 另一台 executor | 单机故障下不丢 | 内存或磁盘占用翻倍 |
+
+`_SER` 的兑换率值得单独说一句：序列化后体积通常是反序列化的三分之一到二分之一（示例推算），省下来的内存直接变成能多放下的分区数；代价是每次访问都要反序列化，而反序列化是纯 CPU 操作，与记录数成正比。对"读得少、放得大"的缓存（例如被反复扫描的维表），`_SER` 通常划算；对"读得极频繁、每条记录都要遍历"的缓存，反序列化的累加成本会超过省下的内存收益。
+
+### 7.2 带副本是容错，不是性能
+
+`_2` 的收益只在一种情况下兑现：一台 executor 消失时，另一台上还有一份。它买的是可用性，不是速度——副本不参与读分摊，读仍然走本地的块。
+
+代价是双份存储，而对 1.3 那个池子来说，双份往往意味着从放得下变成放不下。所以副本的适用范围很窄：血缘极长或数据不可重算（从消息队列消费、从已删除的源表读）、作业时长跨越节点故障常态、池子还有余量。三个条件缺一个，就该回到"接受重算"这条路上。
+
+### 7.3 4.x 的两个默认级别不同
+
+这是最容易吃亏的一处差异，因为它不写在任何一行业务代码里。
+
+`RDD.cache()` 的默认级别是 `MEMORY_ONLY`；`Dataset.cache()` 的默认级别是 `MEMORY_AND_DISK`，4.x 起这个默认值可以用 `spark.sql.defaultCacheStorageLevel` 改（该配置由 SPARK-45451 引入）。两个默认值背后的理由是列式缓存的重算成本远高于行式：数据以列批（CachedBatch）形式驻留，丢了要重算整条血缘并重建列批，代价比 RDD 丢一个分区高得多。
+
+| 维度 | `df.cache()` | `rdd.cache()` |
+|---|---|---|
+| 默认级别 | `MEMORY_AND_DISK` | `MEMORY_ONLY` |
+| 内存形态 | 序列化列批，默认压缩 | 反序列化 Java 对象 |
+| 放不下时 | 落本地盘，不丢 | 分区直接丢弃，下次重算 |
+| 单份占用（200 GB 原始行式，示例推算） | 约 40 GB 到 100 GB | 约 400 GB 到 1000 GB |
+| 命中读取代价 | 反序列化并做列裁剪 | 直接给对象 |
+| 受影响参数 | `spark.sql.inMemoryColumnarStorage.compressed`、`batchSize` | 无同类开关 |
+
+`单份占用` 那一行的量级差是 1.1 现场的根：同一份 200 GB 结果，`rdd.cache()` 要把它变成 400 GB 到 1 TB 的对象，`df.cache()` 只要 40 GB 到 100 GB。两个 API 都叫 `cache`，做的是两件量级不同的事。
+
+### 7.4 选型的三条判据
+
+血缘深度决定值不值得：只有一两步窄依赖时重算几乎免费，`MEMORY_ONLY` 就够；含有 join 与聚合时重算要跑整个 Shuffle，才值得上带磁盘的级别。复用次数决定划不划算：一次不必缓存，五次以上基本都值得，前提是每次复用真的走到同一个对象上（回到 6.4）。数据能不能重算决定敢不敢只留一份：源表被覆盖、消息队列已消费、上游不可重放，就只能靠磁盘或副本兜住。
+
+---
+
+## 第 8 章 unpersist 与缓存预算
+
+### 8.1 不释放就一直占着
+
+缓存块不会因为"这个 DataFrame 用完了"而自己消失。它会一直占着存储池，直到三件事之一发生：被执行内存驱逐、被新块淘汰、随 executor 消失。前两件都是被动的，第三件最贵。
+
+Dataset 侧的情况更硬。缓存管理器用一张强引用列表持有所有已缓存条目，只要 `SparkSession` 还活着、缓存没被显式清掉，这些条目就一直占着内存或磁盘。长驻服务里"忘了 `unpersist`"是真实会积累的问题。
+
+### 8.2 两条兜底路径，边界不同
+
+RDD 侧有兜底。`persist` 时注册的清理任务持的是弱引用，用户代码丢掉最后一个强引用之后，一次 GC 会把弱引用放进队列，清道夫线程接到任务去删块。这条路径还配了周期性 GC（`spark.cleaner.periodicGC.interval`，默认 30 分钟），所以"忘了 `unpersist` 过一阵自己好了"是常见现象，但它的时机由 GC 决定，不由你决定。
+
+Dataset 侧没有这条兜底，强引用挡住了弱引用回收。机制细节见 [[大数据/Spark/读书笔记-spark内核/04_存储与容错机制/3. Spark_数据缓存机制|数据缓存机制]] 第 7 章，运维上只需要记一句：RDD 缓存漏了会自己好，**Dataset 缓存漏了不会**。
+
+### 8.3 判据与时机
+
+判据落在两处。`Storage` 页的条目数只增不减，且每个条目的 `Size in Memory` 都稳定，说明没有驱逐压力，只是没人清；`Executors` 页的 `Storage Memory` 列呈台阶状上升、从不回落，一段代码上线后整体台阶抬高，那就是新增的缓存没有配对应的释放。
+
+`unpersist(blocking = false)` 是默认形态，调用立即返回，删除在后台做完；需要立刻腾出内存给下一步时用 `blocking = true`，它等所有 executor 应答再返回。两者都不保证"以后不再占内存"——只要还有 action 在读同一个对象，它会重新算、重新写。
+
+三个时机值得写进代码规范：跨作业复用的最后一轮结束之后；数据已被下游结果完全替代之后；长驻服务里按预算清理，把缓存总量当成一个有上限的资源来管。反过来，在第一个 action 之前 `unpersist`，或在循环体内反复 `persist` 与 `unpersist`，都等于没缓存。缓存的一生可以画成一条时间线：
+
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
 sequenceDiagram
-    participant ES as "ExternalSorter</br>(MemoryConsumer)"
-    participant TMM as "TaskMemoryManager"
-    participant UMM as "UnifiedMemoryManager"
-    participant SP as "StorageMemoryPool"
-    participant MS as "MemoryStore</br>(RDD Cache)"
-
-    ES->>TMM: "acquireExecutionMemory(500MB)"
-    TMM->>UMM: "acquireExecutionMemory(500MB)"
-    UMM->>UMM: "执行内存池剩余 100MB，不足"
-    UMM->>SP: "storagePool.memoryUsed > 保护区?"
-    SP-->>UMM: "是：memoryUsed=3000MB > 保护区2368MB</br>可驱逐 632MB"
-    UMM->>MS: "evictBlocksToFreeSpace(400MB)"
-    MS->>MS: "按 LRU 顺序选择 RDD 块驱逐"
-    MS-->>UMM: "成功释放 420MB"
-    UMM->>UMM: "将 420MB 从存储池转入执行池"
-    UMM-->>TMM: "返回 500MB（执行池原有100MB + 转入420MB 不够，返回520MB）"
-    TMM-->>ES: "返回实际获得量"
+    autonumber
+    participant U as "用户代码"
+    participant Q as "查询或 RDD 计划"
+    participant B as "BlockManager"
+    participant E as "executor 存储池"
+    U->>Q: cache() 或 persist()
+    Note over Q: 只登记存储级别，没有任何块
+    U->>Q: 第一个 action
+    Q->>B: 逐分区写入
+    B->>E: 申请存储内存
+    E-->>B: 分配成功，或落盘，或丢弃
+    Q-->>U: 返回结果
+    Note over E: 后续大 Shuffle 到来
+    Q->>E: 执行内存申请
+    E->>B: 驱逐越过保护区的块
+    B-->>Q: 下次访问读盘或重算
+    U->>B: unpersist（默认非阻塞）
+    B->>E: 删除块并回账
 ```
 
-### 3.2 存储内存借用执行内存：占用空闲区
+---
 
-当 `BlockManager` 需要缓存一个新的 RDD 分区，但存储内存池空间不足时，`UnifiedMemoryManager.acquireStorageMemory()` 会尝试借用执行内存的**空闲部分**（即执行内存池的已分配容量减去已使用量的差值）。
+## 第 9 章 反例与落点
 
-关键约束：**存储内存只能借用空闲的执行内存，不能强制驱逐正在被 Task 使用的执行内存**。
+### 9.1 四个反例
 
-这个约束的合理性在于：
-- 执行内存是 Task 的活跃工作区，强制夺走会导致 Task 立即失败（`OutOfMemoryError` 或数据不一致）
-- 相比之下，驱逐存储内存只是让 RDD 缓存失效，下次访问时重新计算，代价可控
+**没有 action**：最常见，也最容易自查。`cache()` 只是一个标记，没有触发计算就没有块，判据是 `Storage` 页一片空白，处置是补一个 `count()`。
 
-```scala
-// UnifiedMemoryManager.acquireStorageMemory 核心逻辑（简化）
-override def acquireStorageMemory(blockId: BlockId, numBytes: Long, memoryMode: MemoryMode): Boolean = {
-  val (executionPool, storagePool, maxMemory) = memoryMode match {
-    case MemoryMode.ON_HEAP => 
-      (onHeapExecutionMemoryPool, onHeapStorageMemoryPool, maxOnHeapMemory)
-    case MemoryMode.OFF_HEAP => 
-      (offHeapExecutionMemoryPool, offHeapStorageMemoryPool, maxOffHeapMemory)
-  }
+**对象重建**：缓存登记在前一个实例上，后一个匹配不到。这类代码往往长得很正常——一个 `load()` 函数，每次返回新对象，缓存加在函数返回值上。判据是 `Storage` 页有条目，但 `Input Size` 一次都没降。
 
-  // 存储内存申请不能超过总内存上限
-  if (numBytes > maxMemory) return false
+**缓存过大**：200 GB 的结果用 `MEMORY_ONLY` 缓存，四分之三的分区没进内存，反而把同池的广播变量与其他缓存挤掉，作业比不缓存更慢。判据是 `Fraction Cached` 长期低位、spill 上升；处置不是加内存，而是换级别或改缓存点。
 
-  // 存储池当前剩余量
-  val storagePoolFree = storagePool.memoryFree
-  
-  // 如果存储池不足，尝试借用执行内存的空闲部分
-  if (numBytes > storagePoolFree) {
-    val memoryBorrowedFromExecution = Math.min(
-      executionPool.memoryFree,          // 执行内存的空闲量（未被任何 Task 申请）
-      numBytes - storagePoolFree         // 需要借用的量
-    )
-    // 将执行池的空闲部分转移给存储池
-    executionPool.decrementPoolSize(memoryBorrowedFromExecution)
-    storagePool.incrementPoolSize(memoryBorrowedFromExecution)
-  }
-  
-  // 最终尝试从存储池分配
-  storagePool.acquireMemory(blockId, numBytes)
-}
-```
+**不 unpersist**：长驻服务里缓存条目越积越多，`Executors` 页的存储占用台阶式抬升，直到某次执行高峰把缓存全部赶走，再之后又慢慢长回来。整个过程没有任何异常，只有越来越慢。
 
-### 3.3 执行内存归还被借用的空间
+### 9.2 落点
 
-当存储内存借用了执行内存的空闲区后，如果后续有 Task 开始运行并需要执行内存，会发生什么？
+这条边界值得单独写一篇，是因为它把两个方向相反的诉求放在了同一块内存上：执行侧要随要随有，存储侧要放进去就别动。动态边界没有消除这个矛盾，只是把解决方式定成了单向——执行优先，缓存让步。
 
-此时执行内存池的"实际容量"（`_poolSize`）已经被减小了（对应被存储内存借走的部分）。Task 申请内存时会发现执行内存池容量不足，触发第 06 篇中描述的三步申请逻辑：
+由此得到的运维姿态只有一条：缓存的收益要按**命中率乘上单次重算成本**来算，而不是按"我 cache 了"来算。 命中率由 `Fraction Cached` 与 `Input Size` 两个数字共同给出，单次重算成本由血缘深度决定。两个乘数里任何一个接近零，这笔投入都是负收益，因为它同时还占掉了执行侧的空间。
 
-1. 尝试从执行内存池直接获取 → 不足
-2. 尝试驱逐存储内存 → 如果存储内存已用量 > 保护区，驱逐超出部分
-
-第二步中，驱逐存储内存的操作会将被借用的空间"收回"：
-- `MemoryStore.evictBlocksToFreeSpace()` 驱逐 LRU 缓存块
-- 存储池缩小，对应的空间转回执行池
-- 执行 Task 拿到所需内存
-
-这个过程是**自动的、透明的**——不需要 Task 主动向存储内存"要回"空间，`UnifiedMemoryManager` 在驱逐存储块的同时自动调整两个池的 `_poolSize`。
-
-> [!note] 设计哲学
-> 动态边界的本质是一个**零和游戏**：执行内存和存储内存的容量之和永远等于统一内存池的总量。所谓"借用"，不过是在同一个总量内，两个池的 `_poolSize` 计数器的此消彼长。`_poolSize` 的调整（增减）与真实内存的物理分配/释放是**解耦的**——计数器的调整仅影响后续申请的"可用上限"，不直接移动任何字节的数据。真正的内存释放（缓存块驱逐）和分配（Task 的 Unsafe 申请）是由各自的消费者独立完成的。
+同理，调参在缓存问题上的作用面比想象中窄。`storageFraction` 决定缓存被赶的范围，`memory.fraction` 决定池子大小，存储级别决定放不下时的退路；三者能改变的是"同样一份缓存在同样压力下能活多久"，改变不了"它到底有没有被读到"。后者是代码与计划层面的问题，参数表上没有对应旋钮。
 
 ---
 
-## 第 4 章 典型场景推演
-
-通过几个具体场景来直观感受动态边界的行为，数字以 8GB Executor（统一内存池 ≈ 4735MB，保护区 ≈ 2368MB）为例。
-
-### 4.1 场景一：执行内存逼近满载，逐步驱逐缓存
-
-**初始状态**：
-- 已缓存 3000MB RDD 数据（存储内存已用 3000MB，其中 2368MB 在保护区内，632MB 超出保护区）
-- 执行内存已用 500MB（有 4735MB - 3000MB - 500MB = 1235MB 空闲）
-
-**发生**：一个大型 Shuffle Sort 开始，需要 2000MB 执行内存
-
-**动态边界响应**：
-1. 执行内存池剩余 1235MB，不足 2000MB
-2. 检查存储内存是否可驱逐：`storageMemoryUsed(3000MB) > 保护区(2368MB)`，可驱逐 632MB
-3. 驱逐 632MB 的 LRU RDD 缓存，释放到执行内存池
-4. 执行内存池现有 1235MB + 632MB = 1867MB，仍不足 2000MB
-5. 再次检查：`storageMemoryUsed(2368MB) = 保护区(2368MB)`，不可再驱逐
-6. 执行内存只能获得 1867MB，无法满足 2000MB 的全量请求
-7. `ExternalSorter` 收到 1867MB（小于请求量），触发更频繁的 Spill
-
-**结论**：存储内存保护区有效保护了 2368MB 的 RDD 缓存不被驱逐，代价是执行内存无法得到全量内存，触发额外 Spill。
-
-### 4.2 场景二：无缓存时执行内存独享全部资源
-
-**初始状态**：
-- 无任何 RDD 缓存（存储内存已用 0MB）
-- 执行内存已用 0MB
-
-**发生**：大型 Shuffle 需要 4000MB 执行内存
-
-**动态边界响应**：
-1. 执行内存池初始容量 = 统一池 × (1 - storageFraction) = 4735 × 0.5 = 2368MB
-2. 申请 4000MB，超出执行池容量
-3. 尝试驱逐存储内存：`storageMemoryUsed(0MB) ≤ 保护区(2368MB)`，**无可驱逐内容**
-4. 但存储内存有空闲（storagePool.memoryFree = 2368MB），执行内存可以"借用"...
-
-等等，这里有个微妙点：**执行内存从存储内存借用的方向**，实际上是通过驱逐缓存来实现的，而不是直接移动 poolSize。当存储内存完全空闲时，存储内存没有任何可驱逐的块，但存储内存池的 `_poolSize` 仍然是 2368MB——执行内存无法通过"驱逐"来拿到这块空间。
-
-然而，在 `UnifiedMemoryManager` 的实现中，执行内存实际上**可以**使用超过自己初始 poolSize 的空间，只要总量不超过统一内存池：
-
-```scala
-// 执行内存申请的总量上限不是 executionPool._poolSize，
-// 而是 maxMemory（统一内存池总量） - storagePool.memoryUsed
-val maxExecutionMemory = maxMemory - storagePool.memoryUsed
-```
-
-当存储内存已用量为 0 时，`maxExecutionMemory = 4735MB - 0MB = 4735MB`，执行内存可以申请到几乎全部的统一内存池！
-
-**结论**：没有 RDD 缓存时，执行内存可以扩展到几乎整个统一内存池，不受 `storageFraction` 限制。这就是"动态"的威力——单纯的 Shuffle 计算作业能充分利用所有可用内存。
-
-### 4.3 场景三：存储内存借用执行内存空闲区
-
-**初始状态**：
-- 存储内存已用 1000MB（低于保护区 2368MB）
-- 执行内存空闲（没有 Task 运行）
-
-**发生**：`persist()` 操作需要缓存新的 RDD 分区，需要 2000MB
-
-**动态边界响应**：
-1. 存储内存池剩余 = `_poolSize`(2368MB) - `_used`(1000MB) = 1368MB，不足 2000MB
-2. 尝试借用执行内存空闲区：`executionPool.memoryFree = _poolSize(2368MB) - _used(0MB) = 2368MB`
-3. 需要借用 = 2000MB - 1368MB = 632MB，执行池有足够空闲
-4. 从执行池转移 632MB 给存储池：`executionPool._poolSize -= 632MB`，`storagePool._poolSize += 632MB`
-5. 存储池现有容量 3000MB，可以容纳新的 2000MB 缓存
-6. 缓存成功，存储内存总计已用 3000MB（超过保护区 2368MB 的部分是借来的）
-
-**关键后续**：如果此时有 Task 开始运行需要执行内存：
-- 执行池 `_poolSize` 只剩 1736MB
-- Task 申请执行内存，池内不足，触发驱逐存储内存
-- `storageMemoryUsed(3000MB) > 保护区(2368MB)`，可驱逐 632MB
-- 驱逐后，执行池恢复到 2368MB，Task 获得所需内存
-
-**结论**：存储内存借用的执行内存是"临时"的，一旦有 Task 需要执行内存，借用部分会被驱逐归还。
-
-### 4.4 场景四：存储内存无法借用（执行内存已满载）
-
-**初始状态**：
-- 执行内存已用 2000MB（Task 正在运行）
-- 存储内存已用 1000MB
-
-**发生**：`persist()` 操作需要缓存 1000MB
-
-**动态边界响应**：
-1. 存储内存池剩余 1368MB，足够 1000MB
-2. 直接从存储池分配，缓存成功
-
-**另一个发生**：`persist()` 需要缓存 2000MB（存储池只剩 1368MB）
-
-**动态边界响应**：
-1. 存储内存池剩余 1368MB，不足 2000MB
-2. 尝试借用执行内存空闲：`executionPool.memoryFree = 2368MB - 2000MB = 368MB`，空闲量不足 632MB（需要借 2000-1368=632MB）
-3. 只能借到 368MB，存储池扩展到 2736MB
-4. 存储池实际只能缓存 2736MB - 1000MB(已用) = 1736MB，而不是所需的 2000MB
-5. 缓存失败（缓存不了完整的 2000MB 分区）——具体行为取决于 StorageLevel：
-   - `MEMORY_ONLY`：该分区不被缓存，直接丢弃
-   - `MEMORY_AND_DISK`：写入磁盘，内存中不保存
-
-**结论**：当执行内存已满载时，存储内存无法获得足够空间，大分区缓存会失败或降级。
-
----
-
-## 第 5 章 动态边界的设计权衡与边界案例
-
-### 5.1 执行优先的设计导致的缓存抖动
-
-执行内存优先（可以驱逐存储内存）的设计在某些场景下会引起缓存抖动（Cache Thrashing）问题：
-
-**场景**：一个迭代式机器学习作业，每轮迭代都 cache 训练数据（约 2.5GB），然后进行 Shuffle（需要约 2GB 执行内存）。统一内存池 4.7GB，保护区 2.35GB。
-
-- 迭代开始：缓存 2.5GB 训练数据，存储内存用 2.5GB（超出保护区 150MB）
-- Shuffle 阶段：执行内存需要 2GB，当前执行内存池 = 4.7 - 2.5 = 2.2GB（不足 2GB？不对，还需要计算保护区驱逐...）
-- 实际：执行内存可驱逐超出保护区的 150MB，获得执行内存池 = 2.2 + 0.15 = 2.35GB，勉强够 2GB
-- 如果 Shuffle 数据量增大到 2.4GB：驱逐 150MB 后仍不足，被迫使用 2.35GB，更频繁 Spill
-
-**缓解方案**：
-1. 调大 `spark.executor.memory`，增大总内存
-2. 调大 `spark.memory.storageFraction`（如 0.6），给存储内存更多保护空间
-3. 使用 `MEMORY_AND_DISK` 而非 `MEMORY_ONLY`，让被驱逐的缓存 fall back 到磁盘而不是丢失
-4. 考虑启用堆外内存，将 Shuffle 执行内存挪到堆外，与堆内的存储内存不再竞争
-
-### 5.2 storageFraction 调优的方向判断
-
-| 作业特征 | 推荐的 storageFraction 方向 |
-|---------|---------------------------|
-| 无 RDD 缓存、大量 Shuffle | 调小（如 0.3）：减少存储保护区，给执行内存更大空间 |
-| 大量 RDD 缓存、轻量计算 | 调大（如 0.6-0.7）：给缓存更多保护区，防止被执行驱逐 |
-| 混合负载（既有 Shuffle 又有缓存） | 保持默认（0.5），让动态机制自适应 |
-| 迭代式机器学习（每轮都需重用缓存） | 调大（如 0.6）+ 使用 `MEMORY_AND_DISK`，保护缓存不被驱逐 |
-
-> [!warning] 生产避坑
-> 调小 `storageFraction` 并不直接增大执行内存的"最小保证量"——它减少的是存储内存的保护区，使得执行内存在需要时可以驱逐更多缓存。但如果根本没有缓存数据，调小 `storageFraction` 对执行内存没有任何改善。真正能增大执行内存的方式是：减少存储内存的实际占用（少 cache 数据），或者增大 `spark.executor.memory`（扩大总池）。
-
-### 5.3 动态边界不能解决的问题
-
-动态边界机制虽然大幅提升了内存利用率，但它不是万能的。以下情况仍然会导致 OOM：
-
-**问题一：User Memory 区域的膨胀**
-
-用户代码在 `mapPartitions` 中创建大型数据结构（如 `HashMap`、`Array`），这些对象分配在 JVM 堆上，位于 User Memory 区域，Spark 不做任何管理。当 User Memory 膨胀时，会直接压缩 JVM 堆的剩余空间，即使统一内存池看起来还有空余，实际的 JVM 堆可用量也可能已经不足，触发 GC 甚至 OOM。
-
-**问题二：单个 Task 的峰值需求超过可用量**
-
-动态边界只能在多个 Task 之间调配，但单个 Task 内的峰值内存需求是固定的。如果一个 Task 处理的数据分区特别大（数据倾斜），它的 `ExternalSorter` 需要大量内存，即使系统努力驱逐所有可驱逐的缓存，也可能无法满足需求。此时唯一的出路是增加分区数（减小每个 Task 的数据量）。
-
-**问题三：Execution Memory 的 Task 间公平性失衡**
-
-在极端情况下，如果某个 Task 大量申请内存并持有不释放（比如一个很慢的 Task 持续占用大量 `ExternalSorter` 内存），其他 Task 的执行内存申请可能长期被压缩。`UnifiedMemoryManager` 的 Task 公平分配机制（单 Task 最多 1/N 的执行内存）可以缓解但不能完全解决这个问题。
-
----
-
-## 第 6 章 RDD 缓存的存储内存管理细节
-
-### 6.1 MemoryStore 的块管理
-
-`MemoryStore` 是 `BlockManager` 中负责内存级缓存的组件。它维护一个 `LinkedHashMap<BlockId, MemoryEntry>`（基于访问顺序，即 LRU 顺序），每个 `MemoryEntry` 对应一个缓存块。
-
-**缓存块的三种存储形式**：
-
-1. **`DeserializedMemoryEntry`**：将 RDD 分区数据以 Java 对象数组形式（`Array[T]`）存在内存中，访问时无需反序列化，速度最快。对应 `StorageLevel.MEMORY_ONLY` 或 `MEMORY_AND_DISK`。
-
-2. **`SerializedMemoryEntry`**：将 RDD 分区数据以序列化字节流（`ByteBuffer`）形式存在内存中，占用空间更小（序列化后通常比对象占用小），但访问时需要反序列化。对应 `StorageLevel.MEMORY_ONLY_SER` 等。
-
-3. 磁盘存储（不在 MemoryStore 中）：`StorageLevel.DISK_ONLY` 等仅磁盘级别，完全不使用 MemoryStore。
-
-### 6.2 Unroll：缓存前的"试探"机制
-
-将一个 RDD 分区放入内存缓存之前，Spark 需要先"展开"（Unroll）这个分区——即将 RDD 的迭代器（Iterator）转化为具体的数组，才能放入 `MemoryStore`。但在展开完成之前，不知道展开后需要多少内存。
-
-为了解决这个"先有鸡还是先有蛋"的问题，`MemoryStore` 实现了一个**渐进式 Unroll + 内存申请**机制：
-
-1. 开始展开，申请一小块初始内存（约 1MB）
-2. 迭代地消费 RDD 的 Iterator，将每个元素放入数组
-3. 每隔 `MemoryStore.UNROLL_MEMORY_CHECK_PERIOD`（默认 16 个元素）估算一次当前已用内存
-4. 如果估算大小超过当前已申请的内存，向 `MemoryManager` 申请更多内存
-5. 如果申请失败（内存不足），Unroll 失败：
-   - 如果 `StorageLevel` 包含磁盘，将分区写入磁盘存储
-   - 否则，缓存失败，该分区不被缓存
-
-这个渐进式机制避免了"提前预分配大块内存"的浪费，也避免了 Unroll 到一半内存不足导致的不完整缓存状态。
-
-> [!info] 核心概念
-> Unroll 内存申请的量来自存储内存池，但 Unroll 过程中申请的内存和最终缓存块占用的内存记账方式不同：Unroll 过程中的内存是"临时性"的（`unrollMemoryMap` 中追踪），Unroll 完成后转化为正式的缓存块内存。如果多个 Task 同时 Unroll 同一个 RDD 分区（竞态），只有一个会成功缓存，其余的 Unroll 内存会被释放。
-
----
-
-## 小结
-
-执行内存与存储内存的动态边界，是 `UnifiedMemoryManager` 最精妙也最容易被误解的设计：
-
-- **`storageFraction` 是保护下限**，不是固定分割线。存储内存的已用量低于保护区时，执行内存无法驱逐；高于保护区时，执行内存可以驱逐超出部分
-- **借用规则不对称**：执行内存可驱逐存储内存（通过 `MemoryStore.evictBlocksToFreeSpace()`），存储内存只能借用空闲的执行内存
-- **四个典型场景**：无缓存时执行内存独享全池；有缓存时按保护区规则驱逐；执行空闲时存储内存自由扩展；执行满载时存储内存扩展受限
-- **动态边界的局限**：无法管理 User Memory，无法解决单 Task 数据倾斜，无法完全避免 Task 间内存竞争
-- **RDD Unroll 机制**：渐进式申请内存，避免预分配浪费，失败时按 StorageLevel 降级到磁盘或直接放弃
-
-第 08 篇将深入 Spill 机制的全貌——不仅是触发条件，还包括 Spill 文件的生命周期管理、Spill 的性能代价量化，以及各种场景下如何通过参数调整减少不必要的 Spill。
+## 参考资料
+
+1. Apache Spark 4.3.0 文档：Configuration，`spark.memory.*`、`spark.storage.unrollMemoryThreshold`、`spark.cleaner.*` 的默认值与语义。https://spark.apache.org/docs/4.3.0/configuration.html
+2. Apache Spark 4.3.0 文档：RDD Programming Guide，存储级别的选择与 `MEMORY_ONLY` 的丢弃语义。https://spark.apache.org/docs/4.3.0/rdd-programming-guide.html
+3. Apache Spark 4.3.0 文档：SQL Performance Tuning，内存列式缓存的压缩与批大小。https://spark.apache.org/docs/4.3.0/sql-performance-tuning.html
+4. Apache Spark 4.3.0 文档：CACHE TABLE，`storageLevel` 可选值与默认 `MEMORY_AND_DISK`。https://spark.apache.org/docs/4.3.0/sql-ref-syntax-aux-cache-cache-table.html
+5. Apache Spark 4.3.0 文档：Job Scheduling，动态分配的 shuffle tracking 与 decommission。https://spark.apache.org/docs/4.3.0/job-scheduling.html
+6. Apache Spark 源码（4.3.0）：`UnifiedMemoryManager.scala`，两条借用路径与驱逐的触发条件。https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/memory/UnifiedMemoryManager.scala
+7. Apache Spark 源码（4.3.0）：`MemoryStore.scala`，LRU 顺序、同 RDD 不驱逐与展开失败的回退。https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/storage/memory/MemoryStore.scala
+8. Apache Spark 源码（4.3.0）：`CacheManager.scala`，按规范化计划匹配缓存与强引用列表。https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/CacheManager.scala
+9. Apache Spark JIRA：SPARK-45451，把 Dataset 的默认缓存级别做成可配置项 `spark.sql.defaultCacheStorageLevel`，4.0.0 起生效。https://issues.apache.org/jira/browse/SPARK-45451
+10. Apache Spark JIRA：SPARK-3824，为什么 Spark SQL 的默认缓存级别是 `MEMORY_AND_DISK` 而不是 `MEMORY_ONLY`。https://issues.apache.org/jira/browse/SPARK-3824
+11. 本站内核系列：[[大数据/Spark/读书笔记-spark内核/04_存储与容错机制/1. Spark内存管理机制|Executor 的四本账与归因]]、[[大数据/Spark/读书笔记-spark内核/04_存储与容错机制/2. Spark内存管理模型深度解析|统一内存池的两个视图与借用不对称]]、[[大数据/Spark/读书笔记-spark内核/04_存储与容错机制/3. Spark_数据缓存机制|数据缓存机制]]。
 
 ---
 
 > [!note] 思考题
-> 1. Execution 内存可以借用 Storage 内存，并且有权强制驱逐 Storage 缓存数据来获取空间。但 Storage 借用 Execution 内存后，Execution 需要时只能等待 Storage 主动归还，而不能强制驱逐。这种"不对称"设计的合理性是什么？如果允许 Execution 强制驱逐已借用其空间的 Storage 数据，会有什么问题？
-> 2. `storageFraction`（默认 0.5）定义了 Storage 在统一内存池中的"保护线"——Storage 持有的数据量低于这条线时不会被 Execution 驱逐。但如果所有缓存的 RDD 加起来远超这条线，Execution 借用内存时会发生什么？缓存逐出（Eviction）的策略是 LRU 吗？
-> 3. 在同一个 Executor 上运行多个 Task 时，所有 Task 共享同一个 `UnifiedMemoryManager` 的内存池。`TaskMemoryManager` 负责管理单个 Task 的内存页。当一个 Task 申请内存失败被迫 Spill 时，是否会影响同 Executor 上其他 Task 的正常执行？内存竞争是否会引发连锁 Spill？
-
-## 参考资料
-
-- [Spark 统一内存管理：UnifiedMemoryManager](https://blog.csdn.net/aijiudu/article/details/78032663)
-- [Deep Dive into Spark Memory Management](https://luminousmen.substack.com/p/deep-dive-into-spark-memory-management)
-- Apache Spark 源码：`org.apache.spark.memory.UnifiedMemoryManager`
-- Apache Spark 源码：`org.apache.spark.storage.memory.MemoryStore`
-- [Project Tungsten: Bringing Apache Spark Closer to Bare Metal](https://databricks.com/blog/2015/04/28/project-tungsten-bringing-spark-closer-to-bare-metal.html)
+> 1. `Fraction Cached` 停在 62%，而 `Size in Memory` 与 `Size on Disk` 之和刚好等于这份缓存应有的总大小。更可能是哪一章描述的现象，为什么？
+> 2. 同一个 DataFrame 上，`df.count()` 与 `df.groupBy(k).count()` 都能命中缓存，而把 `df` 的构造逻辑封进一个函数后每次调用都命中不了。这两件事的差别在哪一层？
+> 3. 把 `spark.storage.decommission.rddBlocks.enabled` 打开之后，是否就能在动态分配回收 executor 时保住缓存？如果不能，还缺什么条件？
+> 4. 一份 200 GB 的结果，用 `rdd.cache()` 只能放进两成，用 `df.cache()` 却放得下。如果业务代码必须走 RDD 接口，还有哪些可行的绕法？
+> 5. 在共享 `SparkSession` 的长驻服务里，缓存的生命周期应该由谁负责？如果两段代码都需要缓存，`clearCache()` 该不该出现在业务代码里？

@@ -323,7 +323,9 @@ virt-sysprep -a ubuntu2404.raw \
 
 第 4 章反复出现的 cloud-init，值得单独一章把它说透。这个项目 2008 年前后诞生于 Canonical，最初是为了让 Ubuntu 镜像能在 EC2 上开机自配置，如今已是跨发行版的云初始化事实标准——OpenStack、AWS、Azure、私有 KVM 环境都靠它完成"镜像出厂后的最后一公里"。它的职责边界同样要说准：**cloud-init 只负责"首次/每次开机时根据元数据配置系统"，不负责镜像制作**——但它与镜像制作深度耦合，因为镜像里 cloud-init 的版本与配置，决定了实例初始化能力的上限。
 
-cloud-init 在开机时按固定顺序跑四个阶段，理解阶段顺序是排障的前提：```mermaid
+cloud-init 在开机时按固定顺序跑四个阶段，理解阶段顺序是排障的前提：
+
+```mermaid
 %%{init: {'theme': 'dracula'}}%%
 flowchart LR
     A["init-local<br/>（本地阶段：不依赖网络<br/>挂载数据源、识别 instance-id）"] --> B["init<br/>（网络阶段：配网络<br/>拉取元数据与 user-data）"]

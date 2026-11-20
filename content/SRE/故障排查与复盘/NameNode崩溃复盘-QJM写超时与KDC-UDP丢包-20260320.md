@@ -1,8 +1,8 @@
 ---
 title: "NameNode 崩溃复盘：HDFS QJM 写超时与 KDC UDP 丢包根因分析（2026-03-20）"
 date: 2026-03-24
-tags: [HDFS, Kerberos, SRE]
-keywords: [NameNode, QJM, 故障复盘]
+tags: [SRE, 故障排查, HDFS]
+keywords: [Kerberos, KDC, NameNode, QJM, 故障复盘, 复盘]
 aliases: ["NN1崩溃", "QJM写超时", "KDC UDP丢包"]
 ---
 
@@ -24,11 +24,12 @@ aliases: ["NN1崩溃", "QJM写超时", "KDC UDP丢包"]
 
 HDFS HA 模式下，Active NN 的每一条 edit log 都通过 QuorumJournalManager 同步写入三个 JournalNode（JN）。写入使用 QJM 的多数派（quorum）语义：至少 2/3 个 JN 返回 ACK 才算成功，否则等待直到 `dfs.qjournal.write-txns.timeout.ms`（默认 20000ms）超时。
 
-```
-Active NN
-  └── IPCLoggerChannel (per JN)
-        └── call() → sendEdits RPC
-              └── SASL/GSS authenticated IPC connection
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+flowchart TD
+    Q1["Active NN"] --> Q2["IPCLoggerChannel (per JN)"]
+    Q2 --> Q3["call() → sendEdits RPC"]
+    Q3 --> Q4["SASL/GSS authenticated IPC connection"]
 ```
 
 `IPCLoggerChannel.call()` 测量的是**端到端的挂钟时间**，包含了 IPC 连接建立、SASL 握手、实际 RPC 传输的所有时间。WARN 阈值为 1000ms。
@@ -36,6 +37,7 @@ Active NN
 ### 1.2 Kerberos 认证流程：AS_REQ / TGS_REQ / SASL
 
 ```mermaid
+%%{init: {'theme': 'dracula'}}%%
 sequenceDiagram
     participant SVC as "服务进程 (NameNode)"
     participant UGI as "Hadoop UGI"
@@ -56,6 +58,7 @@ sequenceDiagram
     SVC->>JN: sendEdits RPC（在认证连接上）
     JN-->>SVC: ACK
 ```
+
 
 **KDC 日志中的关键字段 `authtime`**：记录的是签发本次 TGS_REQ 所用 TGT 的原始认证时间（即 AS_REQ 发生时刻）。
 
@@ -109,6 +112,7 @@ Hadoop UGI 的 `checkTGTAndReloginFromKeytab()` 在每次 IPC 调用前被动检
 ## 3. 排查过程：如何逐步排除两个错误假设
 
 ```mermaid
+%%{init: {'theme': 'dracula'}}%%
 graph TD
     A["NN1 崩溃 02:37:03<br/>QJM write timeout 20000ms"] --> B{"假设一<br/>JN 节点异常"}
     A --> E{"假设二<br/>NN JVM GC STW"}
@@ -129,6 +133,7 @@ graph TD
     style G fill:#ffcccc
     style L fill:#ff6666,color:#fff
 ```
+
 
 ### 3.1 假设一：JournalNode 异常（已排除）
 
@@ -185,6 +190,7 @@ Feb 28, 2026 18:20:30 UTC = 1767225600 + 58×86400 + 66030 = 1772302830 ✓
 **正常日发生 WARN 时的完整调用链**：
 
 ```mermaid
+%%{init: {'theme': 'dracula'}}%%
 sequenceDiagram
     participant NN as "NameNode (Active)"
     participant UGI as "Hadoop UGI"
@@ -219,9 +225,11 @@ sequenceDiagram
     end
 ```
 
+
 **Mar 20 崩溃序列（AS_REQ 本身被丢弃，失败在认证链最前端）**：
 
 ```mermaid
+%%{init: {'theme': 'dracula'}}%%
 sequenceDiagram
     participant NN as "NN1 (nn-01)"
     participant UGI as "Hadoop UGI"
@@ -241,6 +249,7 @@ sequenceDiagram
     NN-xJNs: flush failed for required journal
     Note over NN: ExitUtil.terminate(1) 💀 CRASH
 ```
+
 
 **Fresh kinit 多维验证汇总**
 

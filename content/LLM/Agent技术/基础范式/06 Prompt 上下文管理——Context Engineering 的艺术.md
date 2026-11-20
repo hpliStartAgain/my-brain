@@ -1,8 +1,8 @@
 ---
 title: "Prompt 上下文管理——Context Engineering 的艺术"
 date: 2026-08-01
-tags: [Agent, Checkpoint, Claude Code, Compaction]
-keywords: [Anthropic, Auto-compact, Clear Tool Uses, Clear Thinking, Context Caching, Context Degradation, Context Editing, Context Engineering, Context Rot, Gemini, Just-in-Time Context, Memory Tool, OpenAI]
+tags: [Agent, Claude Code, Compaction]
+keywords: [Anthropic, Auto-compact, Clear Tool Uses, Clear Thinking, Context Caching, Context Degradation, Context Editing, Context Engineering, Context Rot, Gemini, Just-in-Time Context, Memory Tool, OpenAI, Checkpoint]
 aliases: [Context Engineering, Prompt 上下文管理, Context Rot, 上下文退化, Memory Tool]
 ---
 

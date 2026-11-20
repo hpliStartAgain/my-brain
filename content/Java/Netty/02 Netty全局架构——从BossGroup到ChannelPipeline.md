@@ -1,16 +1,16 @@
 ---
 title: "Netty全局架构——从BossGroup到ChannelPipeline"
-date: 2026-09-07
-tags: [Java, Netty]
+date: 2026-11-19
+tags: [Java, Netty, 网络]
 keywords: [Bootstrap, BossGroup, ChannelPipeline, EventLoopGroup, Reactor, WorkerGroup]
-aliases: [Netty全局架构, BossGroup WorkerGroup, Netty架构总览]
+aliases: []
 ---
 
 # Netty全局架构——从BossGroup到ChannelPipeline
 
 **摘要：**
 
-2008 年，韩国程序员 Trustin Lee 在 JBoss 工作期间发起了 Netty 项目，初衷是为自己的 HTTP 服务器和 RPC 框架提供一个可靠的网络层。彼时 Java NIO 已经问世六年，但直接用 NIO 编写生产级网络服务的工程师都知道，那是一段充满陷阱的旅程——空轮询 Bug、粘包拆包、OP_WRITE 管理、Buffer 生命周期，每一个都足以让一个看似正常的服务在生产环境中突然崩溃。Netty 的出现不是重新发明 NIO，而是把 NIO 的原语组装成一套"正确使用方式"的工程框架。本文以一个 Netty 服务器的启动和请求处理流程为主线，从 Reactor 模式的理论基石出发，系统讲解 `EventLoopGroup` 的主从 Reactor 架构、`ServerBootstrap` 的配置与启动过程、`NioEventLoop` 的内部循环机制、`Channel` 的生命周期抽象，以及 `ChannelPipeline` 的双向责任链设计，勾勒出 Netty 的完整架构全貌。理解这套全局架构，是深入 Netty 每一个组件实现细节的前提。
+2008 年，韩国程序员 Trustin Lee 在 JBoss 工作期间发起了 Netty 项目，初衷是为自己的 HTTP 服务器和 RPC 框架提供一个可靠的网络层。彼时 Java NIO 已经问世六年，但直接用 NIO 编写生产级网络服务的工程师都知道，那是一段充满陷阱的旅程——空轮询 Bug、粘包拆包、OP_WRITE 管理、Buffer 生命周期，每一个都足以让一个看似正常的服务在生产环境中突然崩溃。Netty 的出现不是重新发明 NIO，而是把 NIO 的原语组装成一套"正确使用方式"的工程框架。本文以一个 Netty 服务器的启动和请求处理流程为主线，从 Reactor 模式的理论基石出发，系统讲解 `EventLoopGroup` 的主从 Reactor 架构、`ServerBootstrap` 的配置与启动过程、`NioEventLoop` 的内部循环机制、`Channel` 的生命周期抽象，以及 `ChannelPipeline` 的双向责任链设计，勾勒出 Netty 的完整架构全貌。文中还会把几处常见说法拉回源码：`SO_BACKLOG` 与 `TCP_NODELAY` 在 Netty 里的真实默认值、`ChannelConfig` 各项参数的出处、`bind()` 之后 `ServerBootstrapAcceptor` 接管新连接的完整调用顺序，以及 `EventLoopGroup.next()` 在 4.1 里的两种选择算法。4.1 与 4.2 在 I/O 处理层的结构差异也会在版本一节交代清楚。理解这套全局架构，是深入 Netty 每一个组件实现细节的前提。
 
 ---
 
@@ -20,7 +20,7 @@ aliases: [Netty全局架构, BossGroup WorkerGroup, Netty架构总览]
 
 上一篇我们看到了 Java NIO 的三大组件——Channel、Buffer、Selector——以及它们如何解决了 BIO 的 C10K 困境。但 NIO 解决的是"能不能"的问题，不是"好不好用"的问题。一个手写 NIO 服务器的工程师需要同时处理：`Selector.select()` 在某些 Linux 内核下的空轮询 Bug、`OP_WRITE` 的按需注册与注销、TCP 粘包拆包的应用层处理、`ByteBuffer` 的 `flip()`/`clear()`/`compact()` 状态管理、连接关闭与异常处理的边界情况。这些问题中的任何一个处理不当，都会导致服务器在特定条件下出现 CPU 飙升、内存泄漏、连接泄漏或数据错乱。
 
-Netty 的价值可以用一句话概括：**它是"正确实现 NIO 编程"的工程答案**。这个"正确实现"包含两个层面。第一个层面是正确性——Netty 通过精心设计的 API 和内部实现，把 NIO 编程中的已知陷阱一一填平：空轮询 Bug 有自动检测和 Selector 重建机制，粘包拆包有 `ByteToMessageDecoder` 体系，`OP_WRITE` 有自动注册注销逻辑，Buffer 生命周期有引用计数管理，连接异常有 `ChannelHandler` 生命周期回调。第二个层面是性能——Netty 的 `ByteBuf` 用读写双指针替代了 `ByteBuffer` 的单指针 `flip()` 模式，`PooledByteBufAllocator` 用 jemalloc 算法池化堆外内存消除了 GC 压力，`FastThreadLocal` 用数组索引替代了 `ThreadLocal` 的哈希探测，`EventLoop` 的单线程化设计消除了 Channel 操作的锁竞争。这两个层面合在一起，使得 Netty 既是"安全的 NIO"也是"快速的 NIO"。
+Netty 的价值可以用一句话概括：它是"正确实现 NIO 编程"的工程答案。这个"正确实现"包含两个层面。第一个层面是正确性——Netty 通过精心设计的 API 和内部实现，把 NIO 编程中的已知陷阱一一填平：空轮询 Bug 有自动检测和 Selector 重建机制，粘包拆包有 `ByteToMessageDecoder` 体系，`OP_WRITE` 有自动注册注销逻辑，Buffer 生命周期有引用计数管理，连接异常有 `ChannelHandler` 生命周期回调。第二个层面是性能——Netty 的 `ByteBuf` 用读写双指针替代了 `ByteBuffer` 的单指针 `flip()` 模式，`PooledByteBufAllocator` 用 jemalloc 算法池化堆外内存消除了 GC 压力，`FastThreadLocal` 用数组索引替代了 `ThreadLocal` 的哈希探测，`EventLoop` 的单线程化设计消除了 Channel 操作的锁竞争。这两个层面合在一起，使得 Netty 既是"安全的 NIO"也是"快速的 NIO"。
 
 Netty 在 Java 生态中的地位可以用"事实标准"来形容。Apache Dubbo 的 `NettyServer` 和 `NettyClient`、Apache RocketMQ 的 `RemotingServer`、gRPC-Java 的传输层、Elasticsearch 的 `Netty4Transport`、Spring WebFlux 的 Reactor Netty——这些主流中间件和框架的网络层无一例外地构建在 Netty 之上。一个 Java 后端工程师即使不直接使用 Netty，他用的中间件也几乎一定在间接使用 Netty。理解 Netty 的内部机制，既是掌握高性能网络编程的必经之路，也是深入理解上述中间件通信层设计的前置知识。
 
@@ -31,10 +31,13 @@ Netty 在 Java 生态中的地位可以用"事实标准"来形容。Apache Dubbo
 | 版本 | 状态 | 核心变化 |
 |------|------|----------|
 | Netty 3.x | 已停止维护 | 入站/出站 Handler 接口分离，`ChannelBuffer` |
-| Netty 4.x | 当前主流 | Handler 统一为 `ChannelHandler`，引入 `ByteBuf`，重构线程模型 |
+| Netty 4.1.x | 长期主流 | Handler 统一为 `ChannelHandler`，引入 `ByteBuf`，重构线程模型 |
+| Netty 4.2.x | 新的主线 | 抽出 `IoHandler`/`IoHandle`/`IoOps` 处理层，`NioEventLoop` 改继承 `SingleThreadIoEventLoop` |
 | Netty 5.x | 已放弃（2015） | 尝试引入 `ForkJoinPool`，因复杂度过高放弃 |
 
-Netty 5.x 的放弃是一个值得深思的工程决策。Netty 团队在 2013 年开始开发 5.x 版本，试图用 `ForkJoinPool` 替代 `EventLoop` 的单线程模型，引入更灵活的线程调度。但经过两年的开发和测试，团队发现 5.x 的复杂度大幅增加而性能提升微乎其微——`ForkJoinPool` 的 work-stealing 调度在 Netty 的使用模式下并没有比固定线程的 `EventLoop` 更快，反而引入了更多的线程竞争点和调试困难。2015 年，Netty 团队正式宣布放弃 5.x，将全部精力集中在 4.x 的持续优化上。这个决策反映了一个重要的工程哲学：**简单且够用的方案，比先进但复杂的方案更有价值**。Netty 的 `EventLoop` 单线程模型虽然"不够先进"，但它在实践中被证明是高效且可靠的——复杂性不会消失只会转移，引入 `ForkJoinPool` 的复杂性转移到了调试和运维层面，而那正是最难以量化和控制的部分。
+4.1 与 4.2 的差别集中在底层 I/O 处理的组织方式，而不是 API 的用法。4.1 的 `NioEventLoop` 自己持有 `Selector`，在 `run()` 里直接调 `select()` 与 `processSelectedKeys()`；4.2 把"持有 Selector、注册 Channel、分发就绪事件"这三件事抽到一个 `NioIoHandler` 里，它实现 `IoHandler` 的 `run(IoHandlerContext)`、`register(IoHandle)`、`wakeup()`、`rebuildSelector0()`，而 `NioEventLoop` 继承新的 `SingleThreadIoEventLoop`，只保留 `ioRatio`、任务队列、优雅关闭这些协调逻辑。每个 Channel 的底层读写从 `Channel$Unsafe` 的实现类转移到对应的 `IoHandle`（`NioIoHandle` 只要求提供 `selectableChannel()`，读写动作由 `handle(IoRegistration, IoEvent)` 回调完成）。`Channel$Unsafe` 在 4.2 里仍然存在，所以 4.1 的写法大多不用改，但"所有 I/O 都在 `NioEventLoop` 里发生"这个心智模型需要调整成"`NioEventLoop` 驱动 `IoHandler`，`IoHandler` 驱动 `IoHandle`"。至于 4.1 已标记废弃的 `maxMessagesPerRead` 在新模型里归谁管，以对应版本的文档与源码为准。
+
+Netty 5.x 的放弃是一个值得深思的工程决策。Netty 团队在 2013 年开始开发 5.x 版本，试图用 `ForkJoinPool` 替代 `EventLoop` 的单线程模型，引入更灵活的线程调度。但经过两年的开发和测试，团队发现 5.x 的复杂度大幅增加而性能提升微乎其微——`ForkJoinPool` 的 work-stealing 调度在 Netty 的使用模式下并没有比固定线程的 `EventLoop` 更快，反而引入了更多的线程竞争点和调试困难。2015 年，Netty 团队正式宣布放弃 5.x，将全部精力集中在 4.x 的持续优化上。这个决策反映了一个重要的工程哲学：简单且够用的方案，比先进但复杂的方案更有价值。Netty 的 `EventLoop` 单线程模型虽然"不够先进"，但它在实践中被证明是高效且可靠的——复杂性不会消失只会转移，引入 `ForkJoinPool` 的复杂性转移到了调试和运维层面，而那正是最难以量化和控制的部分。
 
 ---
 
@@ -99,7 +102,7 @@ Reactor 模式有一个"兄弟"——Proactor 模式（Proactor Pattern），同
 
 Reactor 模式对应 Linux 的 `epoll`（同步非阻塞），Proactor 模式对应 Windows 的 IOCP（异步 I/O）。Linux 长期以来没有完善的异步 I/O 支持——`aio_read`/`aio_write` 的实现一直被诟病，直到 2019 年 `io_uring` 进入 Linux 5.1 内核才有了真正高效的异步 I/O 方案。这就是 Netty 选择 Reactor 模式而非 Proactor 模式的根本原因——不是 Reactor 比 Proactor 更好，而是 Linux 平台上 Reactor 的基础设施更成熟。Netty 曾经有过 AIO 支持（`AioEventLoopGroup`），但在 Linux 上 AIO 的性能优势不明显且 API 复杂，在 Netty 5.x 被放弃后，AIO 支持也随之移除。
 
-这个选择反映了一个重要的架构原则：**技术选型不是选"最好"的，而是选"最合适"的**。Proactor 在理论上比 Reactor 更高效（应用程序完全不参与 I/O 等待），但在 Linux 平台上 Reactor 的生态更成熟、调试更方便、性能已经足够好。Netty 选择了一条务实的路线，而非追求理论最优。实践标准取代规范标准——一个被大量生产环境验证过的方案，比一个理论上更先进但缺乏实践检验的方案更值得信赖。
+这个选择反映了一个重要的架构原则：技术选型不是选"最好"的，而是选"最合适"的。Proactor 在理论上比 Reactor 更高效（应用程序完全不参与 I/O 等待），但在 Linux 平台上 Reactor 的生态更成熟、调试更方便、性能已经足够好。Netty 选择了一条务实的路线，而非追求理论最优。实践标准取代规范标准——一个被大量生产环境验证过的方案，比一个理论上更先进但缺乏实践检验的方案更值得信赖。
 
 ### 2.4 Netty 对 Reactor 模式的落地
 
@@ -237,19 +240,23 @@ try {
 
 `option()` 和 `childOption()` 是 `ServerBootstrap` 的两套配置接口，区别在于作用对象。`option()` 作用于 `ServerSocketChannel`（监听端口的 Channel），譬如 `SO_BACKLOG`（listen 队列大小）；`childOption()` 作用于每个新建立的 `SocketChannel`（客户端连接），譬如 `SO_KEEPALIVE`、`TCP_NODELAY`。这个区分是 Netty 对 TCP 连接两种角色的映射——服务端监听套接字和客户端连接套接字是不同类型的 socket，它们的可配置参数也不同。
 
-`SO_BACKLOG` 是高并发服务必须关注的参数。它控制 TCP 的全连接队列（accept queue）大小——当客户端完成三次握手后，连接会进入这个队列等待 `accept()` 取走。如果队列满了，新完成握手的连接会被内核丢弃（或发送 RST），客户端表现为连接被拒绝。在高并发场景下（如秒杀、抢购），瞬间大量连接涌入，如果 `SO_BACKLOG` 太小，大量连接会被丢弃。生产环境通常设置为 1024 或更大，同时需要配合调整内核参数 `net.core.somaxconn`（内核允许的最大 backlog 值）和 `net.ipv4.tcp_max_syn_backlog`（SYN 队列大小），否则应用层设置的 `SO_BACKLOG` 会被内核截断到内核参数的上限。
+`SO_BACKLOG` 是高并发服务必须关注的参数。它控制 TCP 的全连接队列（accept queue）大小——当客户端完成三次握手后，连接会进入这个队列等待 `accept()` 取走。如果队列满了，新完成握手的连接会被内核丢弃（或发送 RST），客户端表现为连接被拒绝。Netty 4.1 的默认值不是常见的"128"这个数字：`DefaultServerSocketChannelConfig` 把 `backlog` 初始化为 `NetUtil.SOMAXCONN`，也就是启动时从 `/proc/sys/net/core/somaxconn`（或 macOS 的 `kern.ipc.somaxconn`）读到的系统上限，读不到才回退到 200。这意味着 Netty 默认就把应用层的 backlog 顶到内核允许的最大值，而不是再设一个小值等内核截断。真正需要显式设置 `SO_BACKLOG` 的场景是反向的：某个服务不希望接受那么多排队连接，或者运维临时调小内核值而应用必须跟随。至于"把 backlog 调到 1024 以上"，前提是先确认 `net.core.somaxconn` 和 `net.ipv4.tcp_max_syn_backlog` 也放大了，否则应用层的数字只是一厢情愿——内核在 `listen()` 时会把 backlog 截断到 `somaxconn`。
 
-| 选项 | 默认值 | 含义 |
-|------|--------|------|
-| `SO_BACKLOG` | 128 | TCP 全连接队列大小，高并发服务应增大到 1024+ |
-| `SO_KEEPALIVE` | false | TCP 层 Keepalive，空闲连接存活探测 |
-| `TCP_NODELAY` | false | 禁用 Nagle 算法，降低小包延迟 |
-| `SO_RCVBUF` | 系统默认 | 接收缓冲区大小 |
-| `SO_SNDBUF` | 系统默认 | 发送缓冲区大小 |
-| `SO_REUSEADDR` | false | 允许端口重用（TIME_WAIT 状态下重新绑定） |
+| 选项 | Netty 4.1 的默认值 | 含义 | 调大 / 调小的代价 |
+|------|--------|------|------|
+| `SO_BACKLOG` | `NetUtil.SOMAXCONN`（读不到时回退 200），不是 128 | TCP 全连接队列大小 | 调大能扛瞬时连接洪峰，但要同步放大内核 `somaxconn`，否则被内核截断；调小会让握完成的连接被丢或回 RST |
+| `SO_KEEPALIVE` | false | TCP 层 Keepalive，空闲连接存活探测 | 打开后空闲长连接能被内核探活，但探测周期以小时计，且每个连接多一份内核定时开销 |
+| `TCP_NODELAY` | true（`DefaultSocketChannelConfig` 构造时即设置） | 禁用 Nagle 算法，降低小包延迟 | 关闭会合并小包、提高带宽利用率，但给 RPC 增加几十毫秒级延迟 |
+| `SO_RCVBUF` | 由 JDK/内核决定 | 接收缓冲区大小 | 调大提升吞吐与抗抖动能力但增加内存与延迟；调小省内存但更容易丢包重传 |
+| `SO_SNDBUF` | 由 JDK/内核决定 | 发送缓冲区大小 | 调大能容纳更多未确认数据，调小会提高写满后注册 `OP_WRITE` 的频率 |
+| `SO_REUSEADDR` | 由 JDK 默认决定，Netty 不强制改写 | 允许端口重用（TIME_WAIT 状态下重新绑定） | 打开便于快速重启；关闭后端口在 TIME_WAIT 期间无法重新绑定 |
+| `ALLOW_HALF_CLOSURE` | false | 是否允许半关闭 | 打开后 `read` 到 EOF 只触发输入关闭事件，需自行决定何时关闭整个连接 |
+| `AUTO_READ` | true | 是否自动注册读事件 | 关闭后必须手动 `channel.read()`，适合做读取限流的场景 |
 
 > [!info] TCP_NODELAY 与 RPC 延迟
 > Nagle 算法（1984 年 John Nagle 提出）的设计初衷是减少网络上的小数据包数量：它规定在有未被确认的数据包时，新产生的小数据包不立即发送，而是等待更多数据一起发送或等到 ACK 到来。这个策略对批量传输有利，但对 RPC 调用非常有害——RPC 请求往往是一个小包（请求头加少量参数），Nagle 算法会让它等待几十毫秒再发送，显著增加延迟。因此 RPC 框架（Dubbo、gRPC 等）几乎无一例外地设置 `TCP_NODELAY=true`。这个参数的取舍是"吞吐量 vs 延迟"的经典权衡：禁用 Nagle 牺牲了少量吞吐量，换来了更低的单次请求延迟。
+>
+> 需要分清的是"框架的默认值"和"框架文档里的示例"。Netty 的 `DefaultSocketChannelConfig` 在构造时就会调用 `setTcpNoDelay(true)`（受 `PlatformDependent.canEnableTcpNoDelayByDefault()` 约束，个别平台如早期 Android 除外），所以客户端 `Bootstrap` 与 `ServerBootstrap` 的 `childOption` 两侧其实都已经打开了 `TCP_NODELAY`。示例代码里再写一遍 `childOption(ChannelOption.TCP_NODELAY, true)` 属于把默认值显式化，好处是读代码的人不必去翻源码确认，坏处是容易让人误以为不写就会退化成 Nagle 模式。
 
 ### 4.3 ChannelInitializer：延迟初始化
 
@@ -267,6 +274,59 @@ try {
 
 `ServerBootstrap` 的配置链设计有一个值得注意的细节：`group()`、`channel()`、`option()`、`childHandler()` 等方法都返回 `this`（即 `ServerBootstrap` 自身），使得配置可以链式调用。这种 Builder 模式的优点是配置项一目了然且顺序灵活，缺点是配置项之间有隐含的依赖关系——譬如 `channel()` 必须在 `bind()` 之前调用，`childHandler()` 必须在 `group()` 之后调用——这些依赖关系在编译期不检查，运行时才报错。Netty 在 `bind()` 内部会做基本的配置完整性检查（譬如 `group` 和 `channelFactory` 不能为 null），但更细致的依赖关系需要程序员自己保证。
 
+### 4.5 ChannelConfig 的默认值从哪里来
+
+`option()` 和 `childOption()` 没写到的参数并不是"没有值"，而是取了 `ChannelConfig` 的默认值。这些默认值分散在 `DefaultChannelConfig`、`DefaultSocketChannelConfig`、`DefaultServerSocketChannelConfig` 三个类里，把它们列清楚，调参与排障时就不必靠猜。
+
+| 配置项 | 默认值出处与取值 | 说明 |
+| --- | --- | --- |
+| `CONNECT_TIMEOUT_MILLIS` | `DefaultChannelConfig` 常量 30000 | 连接建立的超时，不是读超时 |
+| `WRITE_SPIN_COUNT` | `DefaultChannelConfig` 字段 16 | 写操作在注册 `OP_WRITE` 之前最多自旋的次数 |
+| `WRITE_BUFFER_WATER_MARK` | `WriteBufferWaterMark.DEFAULT`，低 32 KiB、高 64 KiB | `isWritable()` 的判定边界，决定写缓冲背压 |
+| `ALLOCATOR` | `ByteBufAllocator.DEFAULT` | 默认是 `PooledByteBufAllocator.DEFAULT`，Android 上退化为 `UnpooledByteBufAllocator` |
+| `RCVBUF_ALLOCATOR` | `AdaptiveRecvByteBufAllocator.DEFAULT` | 最小 64、初始 2048、最大 65536，按上次读到的字节数自适应 |
+| `MESSAGE_SIZE_ESTIMATOR` | `DefaultMessageSizeEstimator.DEFAULT`，每消息 8 字节 | 用于估算写缓冲占用量，影响水位线判定 |
+| `AUTO_READ` | true | 关闭后需要手动 `read()` |
+| `AUTO_CLOSE` | true | 写失败时是否自动关闭连接 |
+| `MAX_MESSAGES_PER_READ` | 取自 `ChannelMetadata`，NIO 的字节通道与监听通道都是 16 | 4.1 已废弃，改由 `MaxMessagesRecvByteBufAllocator.maxMessagesPerRead()` 控制 |
+| `SINGLE_EVENTEXECUTOR_PER_GROUP` | true | 同一 Channel 的 Handler 是否固定在同一线程执行 |
+| `ALLOW_HALF_CLOSURE` | false（`DefaultSocketChannelConfig` 字段） | 半关闭语义开关 |
+
+`ALLOCATOR` 那一行值得单独说一句，因为它是"netty 默认用堆外内存"这个结论的真正出处。`ByteBufAllocator.DEFAULT` 本身不是常量引用，而是在 `ByteBufUtil` 的静态块里算出来的：先读系统属性 `io.netty.allocator.type`，没有就用默认值——Android 上是 `unpooled`，其他平台是 `pooled`；取值 `unpooled` 时选 `UnpooledByteBufAllocator.DEFAULT`，其余情况（包括拼错的未知值）一律落到 `PooledByteBufAllocator.DEFAULT`。而 `PooledByteBufAllocator.DEFAULT` 自己的构造参数 `preferDirect` 来自 `PlatformDependent.directBufferPreferred()`，所以"池化 + 堆外"这两个默认结论分别来自两个不同的决策点，改其中一个不会自动影响另一个。
+
+### 4.6 bind 之后：谁接住了第一个连接
+
+`bind()` 返回成功只说明监听套接字已注册、端口已占用，真正的"接连接"发生在 `BossGroup` 的事件循环里，中间要经过三层交接，顺序写错就会丢掉 `childHandler` 或选项。
+
+第一层在 `ServerBootstrap.init()`。它往服务端 Channel 的 Pipeline 上挂一个 `ChannelInitializer`，这个 initializer 的 `initChannel` 里做两件事：先 `pipeline.addLast(config.handler())` 加上用户通过 `handler()` 配的 Boss 侧处理器，再通过 `ch.eventLoop().execute(...)` 异步追加 `ServerBootstrapAcceptor`。注意这里不是直接 `addLast`，而是包一次 `execute` 延后追加——此刻仍在 `channelRegistered` 的传播过程中，把追加动作推后到本轮事件处理结束，acceptor 挂上去时 Channel 已经完成注册，不会出现"处理器还没就位、连接已经被读出来"的窗口。
+
+第二层是 `ServerBootstrapAcceptor.channelRead()`。`BossGroup` 的 `NioMessageUnsafe.read()` 每 `accept()` 到一个新连接，就把它当作一条入站消息 `fireChannelRead`，于是 acceptor 收到的是 `Channel` 对象而不是字节。acceptor 的处理顺序是固定的四步：`child.pipeline().addLast(childHandler)` 先挂业务 Handler，然后 `setChannelOptions(child, childOptions)` 设置 `childOption`，再 `setAttributes(child, childAttrs)` 设置 `childAttr`，最后 `childGroup.register(child)` 把 Channel 注册到 Worker 的某个 EventLoop——注册失败的连接走 `forceClose` 而不是留在半初始化状态。
+
+第三层是 `childGroup.register()` 触发的 `channelRegistered` 传播。子 Channel 的 `ChannelInitializer` 在 `addLast` 时还没注册，`handlerAdded()` 里 `isRegistered()` 为 false，所以 `initChannel()` 被推迟到 `channelRegistered` 时才执行，业务 Pipeline 真正成型的时间点在这里，而不是在 `accept()` 返回的那一刻。这个"延迟到注册后初始化"的设计让 `initChannel` 里的代码总能拿到一个已经绑定 EventLoop、`eventLoop().inEventLoop()` 为真的 Channel。
+
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+sequenceDiagram
+    participant B as BossGroup EventLoop
+    participant S as ServerSocketChannel
+    participant A as ServerBootstrapAcceptor
+    participant C as 子 Channel
+    participant W as WorkerGroup EventLoop
+
+    Note over S: bind() 成功，注册 OP_ACCEPT
+    B->>S: OP_ACCEPT 就绪
+    S->>B: accept() 得到子 Channel
+    B->>A: fireChannelRead(child)
+    A->>C: pipeline().addLast(childHandler)
+    A->>C: setChannelOptions / setAttributes
+    A->>W: childGroup.register(child)
+    W->>C: 注册完成，触发 channelRegistered
+    C->>C: ChannelInitializer.initChannel 建链
+    C-->>B: 注册结果回写 promise
+```
+
+这层交接也解释了一个常见困惑：为什么在 `initChannel()` 里读取 `channel.config().getOptions()` 能拿到 `childOption` 设置的值，而在 `handler()` 里读不到。`handler()` 配的处理器挂在服务端 Channel 上，它的配置来自 `option()`；`initChannel()` 拿到的是子 Channel，配置在注册之前就已经由 acceptor 灌好了。
+
 ---
 
 ## 第 5 章 EventLoopGroup 与 EventLoop
@@ -277,7 +337,9 @@ try {
 
 Netty 默认使用轮询（Round-Robin）策略将 Channel 均匀分配到各个 `EventLoop`，确保负载均衡。轮询策略的优点是简单且公平，缺点是无法感知各个 `EventLoop` 的实际负载——如果某个 `EventLoop` 上的 Channel 恰好都很活跃，它可能过载，而其他 `EventLoop` 却空闲。Netty 没有提供更复杂的负载均衡策略（如最少连接数），因为在实践中轮询已经足够均匀，且 Channel 的活跃度在连接建立时无法预知。
 
-`EventLoopGroup` 的创建过程也值得了解。`new NioEventLoopGroup()` 不带参数时，线程数默认为 `CPU 核数 * 2`，这个值通过 `MultithreadEventExecutorGroup` 的默认 `Executor` 计算得出。每个 `NioEventLoop` 在创建时会打开一个 `Selector`，并创建一个 `MpscQueue` 作为任务队列。`EventLoop` 的线程是懒启动的——第一次有任务提交或 Channel 注册时才真正启动线程，这避免了创建 `EventLoopGroup` 后不使用时的线程浪费。`EventLoopGroup` 内部用一个 `AtomicInteger` 作为轮询计数器，`next()` 方法通过 `AtomicInteger.getAndIncrement() % threadCount` 选出下一个 `EventLoop`，这个 CAS 操作保证了多线程下的线程安全。
+`EventLoopGroup` 的创建过程也值得了解。`new NioEventLoopGroup()` 不带参数时，线程数来自 `MultithreadEventLoopGroup.DEFAULT_EVENT_LOOP_THREADS`，算法是取 `io.netty.eventLoopThreads` 系统属性与 `NettyRuntime.availableProcessors() * 2` 的较大者，前者未设置时就是"CPU 核数乘 2"，不是直接写死的常量。每个 `NioEventLoop` 在创建时会打开一个 `Selector`，并创建一个 `MpscQueue` 作为任务队列。`EventLoop` 的线程是懒启动的——第一次有任务提交或 Channel 注册时才真正启动线程，这避免了创建 `EventLoopGroup` 后不使用时的线程浪费。
+
+轮询分配的实现比"取模"这个描述细一些。`next()` 委托给一个 `EventExecutorChooser`，`DefaultEventExecutorChooserFactory` 会看 `EventExecutor[]` 的长度是不是 2 的幂：是就用 `PowerOfTwoEventExecutorChooser`，`executors[idx.getAndIncrement() & (executors.length - 1)]`，一次自增加一次位与；不是才用 `GenericEventExecutorChooser`，走 `Math.abs(idx.getAndIncrement() % executors.length)`，而且计数器是 `AtomicLong` 而非 `AtomicInteger`——源码注释写明这样做是为了不在 32 位溢出边界上破坏轮询的均匀性。默认线程数是 CPU 核数乘 2，在核数常见的取值下恰好是 2 的幂，所以线上大多数 `EventLoopGroup` 走的是位与那条更快路径。
 
 ### 5.2 NioEventLoop 的内部循环
 
@@ -327,7 +389,7 @@ protected void run() {
 
 `NioEventLoop` 继承自 `SingleThreadEventExecutor`，内部维护一个任务队列（`taskQueue`，默认是 `MpscQueue`——多生产者单消费者无锁队列）和一个定时任务队列（`scheduledTaskQueue`）。当其他线程需要向 `EventLoop` 提交任务时（譬如业务线程池处理完后需要把结果写回 Channel），调用 `eventLoop.execute(task)` 将任务放入任务队列，如果 `EventLoop` 正在 `select()` 阻塞，则通过 `wakeup()` 唤醒它。
 
-这个机制是 Netty 线程安全模型的核心：**Channel 的所有操作都在其绑定的 `EventLoop` 线程中执行**。如果调用方恰好在 `EventLoop` 线程中（`inEventLoop()` 返回 true），任务直接同步执行；如果调用方在其他线程中，任务被放入队列异步执行。这个判断逻辑在 Netty 的几乎所有方法中都有体现——譬如 `Channel.write()` 的实现会先检查 `inEventLoop()`，如果在 `EventLoop` 线程中就直接执行写操作，否则把写操作包装成任务放入队列。
+这个机制是 Netty 线程安全模型的核心：Channel 的所有操作都在其绑定的 `EventLoop` 线程中执行。如果调用方恰好在 `EventLoop` 线程中（`inEventLoop()` 返回 true），任务直接同步执行；如果调用方在其他线程中，任务被放入队列异步执行。这个判断逻辑在 Netty 的几乎所有方法中都有体现——譬如 `Channel.write()` 的实现会先检查 `inEventLoop()`，如果在 `EventLoop` 线程中就直接执行写操作，否则把写操作包装成任务放入队列。
 
 `MpscQueue`（Multi-Producer Single-Consumer Queue）的选择也值得注意。多个业务线程可能同时向同一个 `EventLoop` 提交任务（多生产者），但只有 `EventLoop` 自己的消费线程从队列中取任务（单消费者）。`MpscQueue` 用 CAS 操作实现多生产者的无锁入队，用简单的数组索引实现单消费者的无锁出队，避免了 `LinkedBlockingQueue` 的锁竞争。这是 Netty 高性能的"最后一公里"之一，笔者在后续高性能篇中会详细剖析。
 
@@ -352,13 +414,13 @@ bindFuture.addListener(future -> {
 
 `sync()` 的使用要小心——如果在 `EventLoop` 线程中调用 `sync()`，会导致死锁（`EventLoop` 线程被阻塞等待自己执行的操作完成，但操作需要 `EventLoop` 线程来执行）。Netty 在 `sync()` 内部检测了这种情况并抛出 `BlockingOperationException`，但最佳实践是避免在 `EventLoop` 线程中使用 `sync()`，改用 `addListener()`。
 
-### 5.3 ioRatio：I/O 与任务的时间分配
+### 5.5 ioRatio：I/O 与任务的时间分配
 
 `ioRatio` 是 `NioEventLoop` 的一个重要配置参数（默认 50），控制 I/O 操作与任务处理之间的 CPU 时间分配比例。`ioRatio = 50` 表示 I/O 处理时间与任务处理时间一比一；`ioRatio = 100` 表示不限制任务处理时间（先处理所有 I/O，再处理所有任务）；`ioRatio = 70` 表示 I/O 处理时间占 70%，任务处理时间占 30%。
 
 这个参数的调优逻辑是：I/O 密集型应用（Handler 逻辑轻量，大部分时间在等网络数据）可以适当提高 `ioRatio`，让 `EventLoop` 花更多时间在 `select()` 上等待 I/O 事件；任务密集型应用（Handler 逻辑重，或有大量定时任务）可以降低 `ioRatio`，让 `EventLoop` 花更多时间处理任务。但要注意，`ioRatio` 只是一个参考比例，不是硬性限制——`runAllTasks(timeLimit)` 会在时间预算用完前尽量多执行任务，但如果某个任务本身就很耗时，它不会被中途打断。
 
-### 5.5 优雅关闭
+### 5.6 优雅关闭
 
 `EventLoopGroup.shutdownGracefully()` 是 Netty 优雅关闭的入口。它的行为是：停止接受新任务，等待正在执行的任务完成（有一个静默期，默认 2 秒），然后强制关闭。这个过程确保了正在处理的 I/O 事件和任务不会因为关闭而被截断——这对于生产环境的平滑发布至关重要。
 
@@ -529,3 +591,4 @@ Netty 的全局架构建立在主从 Reactor 线程模型之上，各组件各�
 > 1. Netty 的 Reactor 模式中，BossGroup 负责接受连接，WorkerGroup 负责处理 I/O 读写。BossGroup 通常只需要 1 个 EventLoop，但 WorkerGroup 默认使用 CPU 核数 × 2 个 EventLoop。如果你的业务是 CPU 密集型（如加解密），WorkerGroup 的线程数应该增大还是减小？为什么？如果业务是 I/O 密集型（如代理转发），线程数又该如何调整？
 > 2. Netty 的 EventLoop 保证了一个 Channel 的所有 I/O 事件都由同一个线程处理——这消除了多线程竞争。但如果 ChannelHandler 中有一个耗时操作（如数据库查询），会阻塞 EventLoop 线程，影响该线程上所有 Channel 的处理。除了使用 `DefaultEventExecutorGroup` 将耗时操作卸载到业务线程池，还有哪些方案？每种方案的取舍是什么？
 > 3. `ctx.write(msg)` 和 `ctx.channel().write(msg)` 的传播起点不同——前者从当前 Handler 位置向前找 OutboundHandler，后者从 Pipeline 的 tail 开始向前找。如果你在业务 Handler（位于 Pipeline 中间）中调用 `ctx.write(response)`，但编码器位于你的 Handler 之后（更靠近 tail），会发生什么？这种设计是有意为之还是 API 缺陷？
+> 4. Netty 4.1 的 `SO_BACKLOG` 默认取 `NetUtil.SOMAXCONN`，而很多示例代码仍显式写成 128。如果一个服务在连接洪峰时出现"客户端连接被重置"，你会先查应用层的 `SO_BACKLOG` 还是内核的 `somaxconn`？两者不一致时以内核还是应用层为准？

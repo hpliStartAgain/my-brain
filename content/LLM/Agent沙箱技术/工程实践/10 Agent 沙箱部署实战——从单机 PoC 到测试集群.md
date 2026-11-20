@@ -112,15 +112,15 @@ net.netfilter.nf_conntrack_max = 1048576
 - **进程级沙箱（gVisor）**：需运行独立的 Sentry 虚拟内核及 Go 运行时，单槽物理底噪约 $45\text{ MiB}$；
 - **微虚机沙箱（Kata Containers）**：需承载独立的虚拟机监视器（VMM，如 QEMU 或 Cloud Hypervisor）、Guest 内核及 virtiofs 守护进程，单槽待命底噪高达约 $397\text{ MiB}$。
 
-设宿主机可用物理内存为 $M_{\text{available}}$，保留给操作系统、kubelet、containerd 及平台控制面组件的安全冗余为 $M_{\text{reserved}}$，预期并发沙箱槽位数为 $N$，单沙箱用户业务限制配额为 $M_{\text{limit}}$，运行时固定底噪为 $M_{\text{overhead}}$，超分系数为 $lpha$（一般生产环境要求强隔离时 $lpha = 1.0$）。则节点能够支撑的最大沙箱密度受制于严格的物理不等式：
+设宿主机可用物理内存为 $M_{\text{available}}$，保留给操作系统、kubelet、containerd 及平台控制面组件的安全冗余为 $M_{\text{reserved}}$，预期并发沙箱槽位数为 $N$，单沙箱用户业务限制配额为 $M_{\text{limit}}$，运行时固定底噪为 $M_{\text{overhead}}$，超分系数为 $\alpha$（一般生产环境要求强隔离时 $\alpha = 1.0$）。则节点能够支撑的最大沙箱密度受制于严格的物理不等式：
 
-$$N \le rac{M_{\text{available}} - M_{\text{reserved}}}{lpha \times M_{\text{limit}} + M_{\text{overhead}}}$$
+$$N \le \frac{M_{\text{available}} - M_{\text{reserved}}}{\alpha \times M_{\text{limit}} + M_{\text{overhead}}}$$
 
 以一台配置为 $256\text{ GiB}$ 物理内存的典型四路服务器为例，扣除 $32\text{ GiB}$ 宿主管理与平台组件常驻内存，若为每个 Agent 沙箱分配 $2\text{ GiB}$ 业务配额：
 - 若运行于 runc 模式，理论可承载实例数：$\lfloor (256 - 32) \times 1024 / (2048 + 15) 
-floor pprox 111$ 个；
+floor \approx 111$ 个；
 - 若切换为 Kata Containers 微虚机强隔离模式，理论可承载实例数直接缩减为：$\lfloor (256 - 32) \times 1024 / (2048 + 397) 
-floor pprox 93$ 个。
+floor \approx 93$ 个。
 
 这意味着仅仅因为隔离档位的切换，节点的物理容积就蒸发了近 $16.2\%$。这种前置测算杜绝了脱离运行时底噪而凭空许诺容器密度的空想，为后续架构设计提供了坚实的物理约束。
 

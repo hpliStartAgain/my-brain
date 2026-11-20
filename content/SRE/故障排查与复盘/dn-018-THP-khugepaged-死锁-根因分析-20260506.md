@@ -1,8 +1,9 @@
 ---
 title: dn-018 THP khugepaged 死锁导致系统级 D 状态雪崩根因分析
 date: 2026-05-07
-tags: [cgroups, 故障排查]
-keywords: [alloy, deadlock, incident, khugepaged, linux-kernel, THP]
+tags: [故障排查, Linux, 内核]
+keywords: [alloy, cgroups, deadlock, incident, khugepaged, linux-kernel, THP, 复盘]
+aliases: ["dn-018 死锁", "THP khugepaged 死锁"]
 domain: 集群日常运维
 severity: P0
 status: resolved
@@ -195,6 +196,7 @@ alloy 持有约 93MB+ 的内存缓冲区，对 khugepaged 而言是理想的合�
 ## 四、根因链全景图
 
 ```mermaid
+%%{init: {'theme': 'dracula'}}%%
 graph TD
     A["hiveserver2-gc.log.0.current<br/>文件被循环截断（89MB）"] -->|alloy 每次从 position 0 重读| B["alloy 产生 93MB 超大 batch<br/>（1 line = 93,070,064 bytes）"]
     B -->|Loki 429 限速，无重试上限| C["retry buffer 长期驻留内存<br/>alloy 内存 > 512MB cgroup 限制"]
@@ -225,39 +227,25 @@ graph TD
 
 ## 五、锁链分析（Lock Dependency）
 
-```
 状态快照（19:34 后）：
 
-┌─────────────────────────────────────────────────────────────┐
-│  alloy mm → mmap_sem                                        │
-│                                                             │
-│  持锁者（HOLDER）：                                            │
-│    PID 879756  持有读锁（do_user_addr_fault 路径中）           │
-│                → 阻塞于 io_schedule（cgroup 内存回收 IO）      │
-│                → 无法释放读锁                                 │
-│                                                             │
-│  写锁等待者（WRITER WAITER）：                                  │
-│    PID 585  khugepaged                                      │
-│             → rwsem_down_write_slowpath                     │
-│             → 等待 879756 释放读锁                            │
-│                                                             │
-│  读锁等待者（READER WAITERS，被写优先策略阻塞）：                  │
-│    PID 879745  alloy 主线程（futex_cleanup 缺页）             │
-│    PID 879791/879798/... alloy 其他 goroutine（缺页）         │
-│    PID 3293439-3293449  zabbix_agentd（/proc/cmdline 读取）  │
-│    PID 1728089  swapoff（try_to_unmap）                     │
-│    所有执行 ps/top/w 的进程                                   │
-└─────────────────────────────────────────────────────────────┘
-
-解锁条件：
-  879756 的 cgroup 内存回收 IO 完成
-  → 879756 释放 mmap_sem 读锁
-  → khugepaged 获得写锁 → 完成 collapse → 释放写锁
-  → 所有读锁等待者依次获锁 → 系统逐步恢复
-
-但由于 cgroup 已满 + IO 持续等待，879756 实际上永远无法自行解锁
-→ 需要外部干预（重启 or 停止上游服务释放内存）
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+flowchart TD
+    MM["alloy mm → mmap_sem"]
+    H["持锁者（HOLDER）：<br/>PID 879756　持有读锁（do_user_addr_fault 路径中）<br/>→ 阻塞于 io_schedule（cgroup 内存回收 IO）<br/>→ 无法释放读锁"]
+    W["写锁等待者（WRITER WAITER）：<br/>PID 585　khugepaged<br/>→ rwsem_down_write_slowpath<br/>→ 等待 879756 释放读锁"]
+    R["读锁等待者（READER WAITERS，被写优先策略阻塞）：<br/>PID 879745　alloy 主线程（futex_cleanup 缺页）<br/>PID 879791/879798/...　alloy 其他 goroutine（缺页）<br/>PID 3293439-3293449　zabbix_agentd（/proc/cmdline 读取）<br/>PID 1728089　swapoff（try_to_unmap）<br/>所有执行 ps/top/w 的进程"]
+    MM --> H
+    MM --> W
+    MM --> R
 ```
+
+**解锁条件**：
+
+879756 的 cgroup 内存回收 IO 完成 → 879756 释放 mmap_sem 读锁 → khugepaged 获得写锁 → 完成 collapse → 释放写锁 → 所有读锁等待者依次获锁 → 系统逐步恢复。
+
+但由于 cgroup 已满 + IO 持续等待，879756 实际上永远无法自行解锁 → 需要外部干预（重启 or 停止上游服务释放内存）。
 
 ---
 

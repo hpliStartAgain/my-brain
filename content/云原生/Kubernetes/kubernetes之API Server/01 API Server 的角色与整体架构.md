@@ -1,8 +1,8 @@
 ---
 title: "01 API Server 的角色与整体架构"
-date: 2026-03-04
-tags: [API Server, Kubernetes, 云原生]
-keywords: [Aggregation, Handler Chain, OpenAPI, REST]
+date: 2026-11-19
+tags: [API Server, Kubernetes, 故障排查, 云原生]
+keywords: [审计日志, Audit Policy, APIService, Aggregation Layer, 状态码, APF, 请求管线]
 aliases: []
 ---
 
@@ -10,419 +10,461 @@ aliases: []
 
 **摘要：**
 
-在 [[02 Kubernetes 整体架构]] 中我们确立了 API Server 的核心定位：它是 K8s 集群中**所有组件通信的唯一枢纽**，也是 etcd 的**唯一客户端**。但"唯一枢纽"这四个字背后隐藏着巨大的工程复杂度——API Server 需要同时扮演 REST API 网关、认证授权门卫、数据校验引擎、Watch 事件分发器、API 版本转换器等多重角色，还要在高并发下保持低延迟和高可用。本文作为 API Server 专栏的开篇，先从"API Server 到底做了什么"出发，梳理它在 K8s 架构中承担的全部职责，然后深入其内部的**请求处理管线（Handler Chain）**——一个 HTTP 请求从进入 API Server 到写入 etcd 并通知 Watcher，经历了哪些处理阶段、每个阶段解决什么问题。最后介绍 **API Aggregation Layer**——K8s 如何在不修改核心 API Server 的情况下扩展 API 端点。
+一个三百节点、八千 Pod、日均两千个变更的集群里，值班遇到 API Server 的症状通常只有两句话：「`kubectl apply` 被拒了」和「`kubectl get` 转圈」。这两句话背后可能落在六个完全不同的位置上：排队被拒、认不出身份、权限不足、准入插件拦截、对象校验失败、etcd 写入失败。本文不重讲七重角色与 handler chain 的实现推导（那些在 [[云原生/Kubernetes/Kubernetes架构深度剖析/04 API Server 请求链路：从 HTTP 请求到 etcd 写入|架构深度剖析 04]] 里已经写透），而是把请求管线切成「前置排队 → 认证 → 授权 → 准入 → 校验 → 写入」六段，逐段给出外部可见的痕迹：看哪个指标、读审计日志的哪个字段、错误码说明问题属于哪一层。文章随后把状态码按语义分层，讲清 401 与 403 的归属、403 的四个来源、500 与 503 与 504 的分界；再用一整章讲审计策略的分级、日志体积代价与「谁改了它」的反查流程；最后落到聚合 API 多出来的那一跳，以及四个真实反例。读完应当能回答两件事：这次的请求卡在哪一段，下一次怎样在五分钟内定位到同一段。
 
 ---
 
-## 第 1 章 API Server 的七重角色
+## 第 1 章 先分段落，再分责任
 
-### 1.1 角色一：RESTful API 网关
+### 1.1 一次「被拒」与一次「很慢」
 
-API Server 对外暴露了一组符合 REST 风格的 HTTP API。K8s 中的每种资源类型对应一个 REST 端点，支持标准的 CRUD 操作：
+凌晨两点，告警群里出现两条消息：应用团队说发布流水线报 `Error from server (Forbidden): deployments.apps "checkout" is forbidden`，平台团队说 `kubectl get pods -A` 超过三十秒才返回，中间还夹杂一次 `unable to retrieve the complete list of server APIs`。两条消息都指向 API Server，但它们是两个完全不同的问题——前者在管线中段被某个策略挡住，后者根本还没走到业务逻辑，卡在了聚合层的发现请求上。
 
-| HTTP 方法 | 操作 | K8s 语义 | 示例 |
-| :--- | :--- | :--- | :--- |
-| **GET** | Read | 获取单个对象或列表 | `GET /api/v1/namespaces/default/pods/nginx` |
-| **POST** | Create | 创建新对象 | `POST /api/v1/namespaces/default/pods` |
-| **PUT** | Update | 整体更新对象（必须提供完整的 spec）| `PUT /api/v1/namespaces/default/pods/nginx` |
-| **PATCH** | Partial Update | 部分更新对象 | `PATCH /api/v1/namespaces/default/pods/nginx` |
-| **DELETE** | Delete | 删除对象 | `DELETE /api/v1/namespaces/default/pods/nginx` |
-| **GET** + `?watch=true` | Watch | 长连接监听资源变化 | `GET /api/v1/pods?watch=true` |
+值班常见的错误做法是把两者都当成「API Server 挂了」，然后去翻 `--v=4` 的日志，在一堆 `httplog` 行里找线索。日志里确实有东西：请求方法、URI、响应码、耗时、客户端 User-Agent、源 IP 都在，但它不告诉你请求体是什么、对象叫什么、是谁的哪条策略拒的，而且这些日志会随容器日志轮转消失，留存窗口常常不到一小时。真正能回答「谁、在什么时间、对哪个对象、做了什么、结果如何」的，是审计日志；真正能把延迟拆到段的，是指标。
 
-API Server 使用 Go 的 `net/http` 包构建 HTTP 服务，内部通过 **go-restful** 框架注册路由。每种资源类型（由 [[03 API 对象模型与 GVR 体系|GVR]] 标识）对应一组路由：
+所以排障的第一步不是查，而是把请求切开。
 
-```
-/api/v1/namespaces/{namespace}/pods              → PodStorage (List, Create)
-/api/v1/namespaces/{namespace}/pods/{name}        → PodStorage (Get, Update, Delete)
-/api/v1/namespaces/{namespace}/pods/{name}/status  → PodStatusStorage (Get, Update)
-/api/v1/namespaces/{namespace}/pods/{name}/log     → PodLogStorage (Get)
-```
+### 1.2 段的边界由包裹顺序决定
 
-REST 的一致性使得 K8s 的 API 非常可预测——一旦你知道了一种资源的 API 路径模式，其他所有资源都遵循相同的模式。这也是 `kubectl` 能用统一的命令操作所有资源的基础。
+很多文章把处理链画成一条从左到右的直线，实际实现是一层层包裹的洋葱：外层先执行，内层后执行，响应再原路返回。这个包裹顺序决定了同一类错误码出现的先后关系，也就决定了「你看到的现象」能推出「它在哪一段」。
 
-### 1.2 角色二：认证门卫（Authentication）
+以 1.37 口径的 `staging/src/k8s.io/apiserver/pkg/server/config.go` 中 `DefaultBuildHandlerChain` 为例，从最外层往内层的顺序大致是：审计初始化（AuditInit）、panic 恢复、discovery 完成检查、请求接收时间戳、请求信息解析、HTTP 日志、缓存控制、关闭期 Retry-After、等待组、请求截止、非长请求超时、CORS、**认证**、追踪、**审计**、**身份模拟**、**优先级与公平性（APF）**、**授权**，然后才进入路由与资源处理器，准入插件链与对象校验都在处理器内部。
 
-每个到达 API Server 的请求必须先通过**认证（Authentication）**——确定"请求者是谁"。API Server 支持多种认证方式，并将它们组织为一条**认证链（Authentication Chain）**——请求按顺序通过每种认证方式，任意一种认证成功即可，全部失败则拒绝请求。
+这段顺序里有四个容易被忽略的推论，它们直接决定了排障时该看什么：
 
-认证的结果是一个**用户信息（UserInfo）**——包含用户名、UID、所属组。这个信息会传递给后续的授权阶段。
+第一，认证在 APF 之外，因此一个认证失败的请求不可能被限流成 429，它只会是 401。反过来，只要 429 出现在响应里，就说明这个请求已经通过认证、也已经完成了身份模拟，问题不在凭证。
 
-认证机制的详细分析见 [[02 认证机制深度解析]]。
+第二，APF 包着授权，因此 429 会先于 403 出现。一个没有权限的客户端在集群过载时可能持续收到 429，而不是它「应得」的 403；此时去查 RBAC 是白费力气，该看的是 FlowSchema 与优先级层配置（机制见 [[云原生/Kubernetes/Kubernetes架构深度剖析/04 API Server 请求链路：从 HTTP 请求到 etcd 写入|架构深度剖析 04]] 的 APF 一节与 [[云原生/Kubernetes/kubernetes之API Server/06 API Server 性能调优与高可用|06 性能调优]]）。
 
-### 1.3 角色三：授权门卫（Authorization）
+第三，审计在认证之内、在 APF 与授权之外，因此 429 与 403 都有审计事件可查，而认证失败走的是另一条失败认证分支（`WithFailedAuthenticationAudit`），记录的事件依然带 `user` 字段，只是那个 user 是 `system:anonymous` 或空身份。
 
-认证确定了"你是谁"，授权决定"你能做什么"。API Server 收到一个已认证的请求后，检查该用户是否有权限执行该操作（如"用户 alice 是否可以在 default Namespace 中创建 Pod"）。
+第四，超时与请求截止在认证之外，因此 504 可能发生在还没认完身份的时候。当 OIDC 提供方响应缓慢，你看到的 504 与 etcd 毫无关系，改 etcd 参数只会浪费时间。
 
-K8s 支持多种授权模式，最常用的是 **RBAC（Role-Based Access Control）**——通过 Role/ClusterRole 定义权限、通过 RoleBinding/ClusterRoleBinding 将权限绑定到用户或组。
-
-授权机制的详细分析见 [[03 授权机制——RBAC 深度解析]]。
-
-### 1.4 角色四：准入控制器（Admission Control）
-
-通过认证和授权后，请求进入**准入控制（Admission Control）** 阶段。准入控制器可以修改请求（如设置默认值、注入 Sidecar 容器）或拒绝请求（如拒绝不合规的资源配置）。
-
-准入控制分为两个子阶段：**Mutating Admission**（可以修改请求）和 **Validating Admission**（只能接受或拒绝，不能修改）。准入控制器是 K8s 安全策略和策略执行的关键环节。
-
-准入控制器的详细分析见 [[04 准入控制器深度解析]]。
-
-### 1.5 角色五：数据校验与持久化
-
-通过准入控制后，API Server 对请求中的对象进行**Schema 校验**——验证对象的结构是否符合 API 定义（字段名是否正确、类型是否匹配、必填字段是否存在）。校验通过后，API Server 将对象序列化（默认 protobuf 格式）并写入 etcd。
-
-API Server 是 etcd 的**唯一客户端**——其他任何组件（kubectl、kubelet、Controller Manager）都不直接访问 etcd。这种设计将 etcd 的读写逻辑封装在 API Server 内部，对外暴露结构化的 REST API，实现了存储层与业务逻辑的解耦。
-
-### 1.6 角色六：Watch 事件分发器
-
-当 etcd 中的数据发生变化时（新对象被创建、现有对象被更新或删除），API Server 通过 **Watch 机制**将变更事件推送给所有订阅了该资源的客户端。
-
-API Server 内部维护一个 **watch cache**——它缓存了最近的变更事件和资源对象。当客户端发起 Watch 请求时，API Server 从 watch cache 中获取数据，而不是直接查询 etcd——这大幅减少了 etcd 的读取压力。在大规模集群中，可能有数百个控制器同时 Watch 不同类型的资源——如果每个 Watch 都直接查询 etcd，etcd 会被压垮。
-
-Watch 机制的详细分析见 [[05 List-Watch 机制与 Informer 框架]]。
-
-### 1.7 角色七：API 版本转换器
-
-同一种资源可能有多个 API 版本（如 `autoscaling/v1` 和 `autoscaling/v2`），但在 etcd 中只存储一个版本（Storage Version）。当客户端通过非存储版本的 API 读写资源时，API Server 需要在请求版本和存储版本之间进行**双向转换**。
-
-例如：客户端通过 `autoscaling/v2` 创建一个 HPA，API Server 将其从 `v2` 格式转换为 `v1`（存储版本）后写入 etcd。当另一个客户端通过 `autoscaling/v1` 读取该 HPA 时，API Server 直接返回 etcd 中的数据（已经是 v1 格式）。当通过 `v2` 读取时，API Server 从 etcd 读取 v1 数据，转换为 v2 格式后返回。
-
-这个转换过程对客户端完全透明——客户端认为自己在操作 v2 的 API，不知道 etcd 中存储的是 v1 格式。
-
----
-
-## 第 2 章 请求处理管线（Handler Chain）
-
-### 2.1 全链路概览
-
-一个 HTTP 请求从进入 API Server 到写入 etcd 并通知 Watcher，经历以下处理阶段：
+把段画出来，并标上每段会产出的码，是理解这张网最快的方式。
 
 ```mermaid
 %%{init: {'theme': 'dracula'}}%%
 graph TD
-    REQ["HTTP 请求到达"] --> PANIC["Panic Recovery</br>(异常捕获)"]
-    PANIC --> TRACE["Request Tracing</br>(请求追踪)"]
-    TRACE --> TIMEOUT["Timeout Handler</br>(超时控制)"]
-    TIMEOUT --> AUTH["Authentication</br>(认证：你是谁)"]
-    AUTH --> AUDIT["Audit Logging</br>(审计日志：记录操作)"]
-    AUDIT --> IMPERSON["Impersonation</br>(身份模拟)"]
-    IMPERSON --> FLOW["Flow Control</br>(限流：APF)"]
-    FLOW --> AUTHZ["Authorization</br>(授权：你能做什么)"]
-    AUTHZ --> MUT["Mutating Admission</br>(修改请求)"]
-    MUT --> SCHEMA["Object Schema Validation</br>(结构校验)"]
-    SCHEMA --> VAL["Validating Admission</br>(最终校验)"]
-    VAL --> ETCD["写入 etcd</br>(持久化)"]
-    ETCD --> WATCH["通知 Watchers</br>(事件分发)"]
+    REQ["客户端请求<br/>kubectl / kubelet / 控制器"] --> L0["段 0 接入与排队<br/>TLS · 超时 · APF<br/>码：429 / 504 / 503"]
+    L0 --> L1["段 1 认证<br/>证书 · Token · OIDC<br/>码：401"]
+    L1 --> L2["段 2 授权<br/>RBAC · Node · Webhook<br/>码：403"]
+    L2 --> L3["段 3 准入<br/>Mutating · Validating<br/>内置插件 · Webhook · CEL 策略<br/>码：403 / 400 / 422 / 500"]
+    L3 --> L4["段 4 校验<br/>解码 · Schema · 字段校验<br/>码：400 / 422"]
+    L4 --> L5["段 5 写入<br/>etcd 持久化 · watch 通知<br/>码：409 / 500 / 504"]
 
-    classDef early fill:#44475a,stroke:#8be9fd,color:#f8f8f2
-    classDef auth fill:#44475a,stroke:#ffb86c,color:#f8f8f2
-    classDef admission fill:#44475a,stroke:#ff79c6,color:#f8f8f2
-    classDef storage fill:#44475a,stroke:#50fa7b,color:#f8f8f2
+    classDef seg0 fill:#44475a,stroke:#8be9fd,color:#f8f8f2
+    classDef seg1 fill:#44475a,stroke:#ffb86c,color:#f8f8f2
+    classDef seg2 fill:#44475a,stroke:#ff79c6,color:#f8f8f2
+    classDef seg3 fill:#44475a,stroke:#f1fa8c,color:#f8f8f2
+    classDef seg4 fill:#44475a,stroke:#bd93f9,color:#f8f8f2
+    classDef seg5 fill:#44475a,stroke:#50fa7b,color:#f8f8f2
 
-    class REQ,PANIC,TRACE,TIMEOUT early
-    class AUTH,AUDIT,IMPERSON,FLOW,AUTHZ auth
-    class MUT,SCHEMA,VAL admission
-    class ETCD,WATCH storage
+    class REQ seg0
+    class L0 seg0
+    class L1 seg1
+    class L2 seg2
+    class L3 seg3
+    class L4 seg4
+    class L5 seg5
 ```
 
-每个阶段都是一个 HTTP 中间件（Middleware / Filter）。API Server 使用 Go 的 `http.Handler` 接口将这些中间件串联为一条处理链——请求从最外层开始，逐层通过每个中间件，直到到达最终的 REST handler。
+### 1.3 每段留下的三类外部痕迹
 
-### 2.2 Panic Recovery
+段内发生的事情在进程里，但段与外部世界的接触点只有三类：指标、审计事件、响应报文（外加容器日志这个易失渠道）。把这三类的覆盖情况列出来，就能看出为什么有些层「很好查」、有些层「只能读错误文本」。
 
-处理链的最外层是**异常恢复**——捕获请求处理过程中任何未被处理的 panic，避免单个请求的崩溃导致整个 API Server 进程退出。捕获 panic 后返回 500 Internal Server Error。
+| 段 | 失败码 | 指标覆盖 | 审计可查字段 | 响应与日志补充 |
+| :--- | :--- | :--- | :--- | :--- |
+| 段 0 接入与排队 | 429 / 504 / 503 | APF 拒绝与排队时长、请求终止计数、inflight | `responseStatus.code`，超时由请求截止过滤器补事件 | `Retry-After`、`Connection: close`；`httplog` 行 |
+| 段 1 认证 | 401 | `apiserver_request_total{code="401"}` | `user`、`sourceIPs`、`userAgent`，失败认证分支 | `WWW-Authenticate` 头；客户端 `x509` 错误 |
+| 段 2 授权 | 403 | `apiserver_authorization_decisions_total` | `annotations` 里的 `authorization.k8s.io/decision` 与 `reason` | `kubectl auth can-i`；消息里的 User 与 verb |
+| 段 3 准入 | 403 / 400 / 422 / 500 | 准入步骤耗时、Webhook 请求与拒绝计数、CEL 策略计数 | `annotations` 里的注入与违规注解、`requestObject` | Webhook 返回体、`failurePolicy` |
+| 段 4 校验 | 400 / 422 | 无专门指标 | `responseStatus.message` 是主证据 | `Invalid value: ...`、`unknown field` |
+| 段 5 写入 | 409 / 500 / 504 | etcd 请求耗时与错误数、存储对象数、请求终止计数 | `objectRef`、`responseStatus` | watch 的 410 走重新 List（见架构深度剖析 04） |
 
-这是一个防御性设计——在一个需要 7×24 运行的核心基础设施组件中，任何未预期的异常都不应该杀死整个进程。
-
-### 2.3 Timeout Handler
-
-API Server 为每个请求设置超时——默认 60 秒。如果请求在超时时间内没有处理完，API Server 返回 504 Gateway Timeout。
-
-超时控制的意义在于防止慢请求占用资源——如果一个 etcd 写入操作因为 etcd 响应缓慢而阻塞 60 秒以上，该请求会被强制终止，避免线程（goroutine）泄漏。
-
-长连接的 Watch 请求是例外——它们不受这个超时限制，因为 Watch 本身就是设计为持续运行的。
-
-### 2.4 Authentication（认证）
-
-认证阶段确定请求者的身份。API Server 维护一个认证器链——请求按顺序通过每个认证器：
-
-1. **客户端证书认证**（X.509）：检查 TLS 握手中的客户端证书
-2. **Bearer Token 认证**：检查 HTTP Header 中的 `Authorization: Bearer <token>`
-3. **ServiceAccount Token 认证**：Pod 中自动挂载的 JWT Token
-4. **OIDC 认证**：外部身份提供者（如 Google、Azure AD）签发的 ID Token
-5. **Webhook 认证**：调用外部服务验证 Token
-6. **匿名认证**：如果所有认证器都没有认证成功且允许匿名访问，以 `system:anonymous` 身份继续
-
-任意一种认证方式成功，请求就带上了用户身份信息进入下一阶段。全部失败则返回 401 Unauthorized。
-
-### 2.5 Audit Logging（审计日志）
-
-认证成功后，API Server 记录**审计日志（Audit Log）**——记录"谁（user）在什么时候（timestamp）对什么资源（resource）做了什么操作（verb）"。
-
-审计日志分为四个级别：
-
-| 级别 | 记录内容 |
-| :--- | :--- |
-| **None** | 不记录 |
-| **Metadata** | 记录请求元数据（用户、资源、操作、时间）|
-| **Request** | 记录元数据 + 请求体 |
-| **RequestResponse** | 记录元数据 + 请求体 + 响应体 |
-
-通过 **Audit Policy** 可以为不同的资源和操作配置不同的审计级别——例如对 Secret 的所有操作记录 RequestResponse 级别（便于追踪谁读取了密钥），对 Pod 的 Get 操作只记录 Metadata 级别（减少日志量）。
-
-审计日志是安全合规的关键——它提供了集群中所有操作的完整审计轨迹。在安全事件发生时，审计日志是追溯攻击路径的重要依据。
-
-### 2.6 Impersonation（身份模拟）
-
-**身份模拟**允许一个用户"假装"成另一个用户发送请求——前提是该用户拥有 `impersonate` 权限。典型场景是管理员排查问题时模拟某个 ServiceAccount 的视角，检查它能看到什么资源。
-
-```bash
-# 管理员模拟 ServiceAccount "app-sa" 查看 Pod
-kubectl get pods --as=system:serviceaccount:default:app-sa
-```
-
-API Server 在这个阶段检查请求中的 Impersonation Header（`Impersonate-User`、`Impersonate-Group`），验证发起者是否有权限模拟目标身份，然后将后续处理中的用户身份替换为被模拟的用户。
-
-### 2.7 Flow Control（限流——APF）
-
-**API Priority and Fairness（APF）** 是 K8s 1.20 引入的请求限流机制，替代了之前简单的 `--max-requests-inflight` 全局限流。
-
-APF 的核心思想是将请求分类，并为每个类别分配独立的优先级和并发配额——确保高优先级的请求（如 Leader Election）不会被大量低优先级请求（如批量 List）饿死。
-
-APF 使用两个 CRD 配置：
-
-- **FlowSchema**：将请求分类（基于用户、Namespace、资源类型、API 组等条件）
-- **PriorityLevelConfiguration**：为每个优先级定义并发配额和排队策略
-
-```yaml
-# 示例：将 system:leader-locking 组的请求分为最高优先级
-apiVersion: flowcontrol.apiserver.k8s.io/v1
-kind: FlowSchema
-metadata:
-  name: leader-election
-spec:
-  priorityLevelConfiguration:
-    name: leader-election       # 关联的优先级
-  matchingPrecedence: 100
-  rules:
-    - subjects:
-        - kind: Group
-          group:
-            name: "system:leader-locking"
-      resourceRules:
-        - verbs: ["get", "create", "update"]
-          apiGroups: ["coordination.k8s.io"]
-          resources: ["leases"]
-```
-
-APF 的价值在大规模集群中尤为突出——当集群有数千个 Pod 同时重启（如节点故障恢复后），kubelet 会同时向 API Server 发送大量请求。没有 APF 时，这些请求可能淹没 API Server，导致控制器的协调请求（更高优先级）也被阻塞。APF 确保控制器的请求优先被处理。
-
-### 2.8 Authorization（授权）
-
-授权阶段检查已认证的用户是否有权限执行该操作。API Server 支持多种授权模式，按配置顺序依次检查：
-
-| 授权模式 | 说明 |
-| :--- | :--- |
-| **RBAC** | 基于角色的访问控制（最常用）|
-| **Node** | 专门为 kubelet 设计的授权器——限制 kubelet 只能访问分配给它的 Pod 和相关资源 |
-| **Webhook** | 调用外部服务做授权决策 |
-| **ABAC** | 基于属性的访问控制（已弃用，被 RBAC 取代）|
-| **AlwaysAllow / AlwaysDeny** | 允许/拒绝所有请求（仅用于开发测试）|
-
-任意一种授权方式返回"允许"，请求通过。所有方式都返回"拒绝"或"无意见"，请求被拒绝（403 Forbidden）。
-
-### 2.9 Mutating Admission → Schema Validation → Validating Admission
-
-这是准入控制的三步骤——请求必须依次通过：
-
-1. **Mutating Admission**：可以修改请求中的对象。例如 `DefaultStorageClass` 准入控制器在创建 PVC 时自动注入默认的 StorageClass；`MutatingWebhookConfiguration` 允许外部 Webhook 服务修改请求。
-2. **Schema Validation**：验证对象的 JSON/YAML 结构是否符合 API 的 OpenAPI Schema——字段名是否合法、类型是否正确、枚举值是否有效。
-3. **Validating Admission**：最终的校验——只能接受或拒绝，不能修改。例如 `ResourceQuota` 准入控制器检查请求是否超出 Namespace 的资源配额；`ValidatingWebhookConfiguration` 允许外部 Webhook 服务校验请求。
-
-> [!info] 为什么 Mutating 在 Validating 之前
-> Mutating Admission 可能会修改对象（如注入字段、设置默认值），这些修改后的内容需要再经过 Validating Admission 的校验。如果顺序相反——先 Validate 再 Mutate——Mutate 注入的内容就没有被校验过，可能不符合安全策略。
+这张表最重要的一格是段 4 的「无专门指标」。解码失败与 Schema 校验失败没有任何专属的 Prometheus 指标，它们的证据只存在于响应报文的 `message` 和审计事件的 `responseStatus` 里。这也解释了为什么只靠看板永远定位不到「422 是哪个字段错了」——看板只能告诉你「422 变多了」。
 
 ---
 
-## 第 3 章 API Aggregation Layer
+## 第 2 章 状态码：把「哪一段」先定下来
 
-### 3.1 问题背景
+### 2.1 码是路标，不是根因
 
-K8s 的核心 API Server（kube-apiserver）内置了所有核心资源类型的处理逻辑。但某些 API 需要特殊的后端实现——例如 **Metrics API**（`metrics.k8s.io`），它返回的是实时的 CPU/内存使用率数据，这些数据来自 kubelet 的采集，而不是 etcd 中的持久化对象。
+HTTP 状态码在 API Server 里的语义比一般 Web 服务更窄也更硬：段决定调用哪个错误构造器，构造器决定码。所以见到码就能先划一个大方向，再去找具体主体。方向错了，后面的证据都会被误读。
 
-如果把所有这类特殊 API 都塞进 kube-apiserver，它会变得臃肿且难以维护。K8s 需要一种机制，允许独立的 API 服务"注册"到 kube-apiserver 的 API 路径下——客户端（如 kubectl）无感地通过 kube-apiserver 的统一入口访问这些扩展 API。
+| 码 | 语义归属 | 典型响应文本 | 第一份该看的证据 | 常见误判 |
+| :--- | :--- | :--- | :--- | :--- |
+| 401 | 认证段：认不出你是谁 | `Unauthorized`、`the server has asked for the client to provide credentials` | 证书有效期、Token 过期、`--api-audiences` | 当成 RBAC 权限不足 |
+| 403 | 授权段或准入段：知道你是谁，但不许做 | `pods is forbidden: User "..." cannot list ...`、`exceeded quota`、`violates PodSecurity` | 审计里的 `decision` / `reason` 注解、消息主语 | 一律当成 RBAC 缺 Binding |
+| 400 | 解码段或请求格式 | `the body of the request was in an unknown format`、`unknown field` | 请求体与 `Content-Type`、`fieldValidation` 取值 | 当成对象字段值不合法 |
+| 422 | 校验段：结构对、语义不对 | `Pod "x" is invalid: spec.containers[0].image: Required value` | 响应 `message` 里的字段路径 | 当成准入插件拒绝 |
+| 409 | 写入段：并发或已存在 | `the object has been modified`、`already exists`、`Apply failed with N conflict` | 客户端重试逻辑、`managedFields` | 当成 etcd 故障 |
+| 429 | 段 0：排队被拒或被限流 | `Too many requests, please try again later.` | APF 拒绝计数与 FlowSchema；前置 LB | 当成认证或授权问题 |
+| 500 | 段 3 或段 5：内部错误 | `Internal error occurred: ...`、`failed calling webhook` | Webhook `failurePolicy`、etcd 错误计数 | 一律归咎 etcd |
+| 503 | 段 0：服务端尚未能接待 | `the server is currently unable to handle the request` | `apiserver_request_total{code="503"}` 的来源 URI | 当成 502/网络抖动 |
+| 504 | 段 0：自身超时 | `Timeout: request did not complete within the allotted timeout` | `--request-timeout` 与当时慢在哪一段 | 直接当成后端慢 |
 
-### 3.2 工作机制
+表里 500 与 503 的分野值得单独说一句。500 是「我尝试处理了，但内部出错」，503 是「我还没有能力处理你这件事」——前者要查具体组件的错误，后者只说明接待条件不具备。API Server 启动过程中，多路复用器与 discovery 尚未装配完成，未注册的路径会由兜底处理器返回 503 而不是 404，原因写在源码注释里：如果此时返回 404，垃圾回收与命名空间控制器会把 404 当成「对象已不存在」而做出破坏性动作。聚合层代理到后端的请求在 `APIService` 不可用时同样返回 503，消息与启动期完全一致，这是排障时最容易混淆的一处，后面第 5 章会展开。
 
-**API Aggregation Layer** 是 kube-apiserver 内置的代理层。它通过 **APIService** 对象将特定的 API Group/Version 的请求转发给后端的扩展 API Server。
+### 2.2 403 有四个来源
 
-```yaml
-apiVersion: apiregistration.k8s.io/v1
-kind: APIService
-metadata:
-  name: v1beta1.metrics.k8s.io
-spec:
-  service:
-    name: metrics-server        # 后端服务名称
-    namespace: kube-system
-  group: metrics.k8s.io
-  version: v1beta1
-  insecureSkipTLSVerify: true
-  groupPriorityMinimum: 100
-  versionPriority: 100
-```
+权限类故障最容易被简化成「加个 RoleBinding」。但 403 至少能从四个地方产生，它们的根因、修复方式和审计痕迹都不一样。
 
-注册后，所有发往 `/apis/metrics.k8s.io/v1beta1/` 的请求不再由 kube-apiserver 自己处理，而是被代理转发给 `kube-system` Namespace 中名为 `metrics-server` 的 Service。
+- RBAC 授权器拒绝。消息形如 `deployments.apps is forbidden: User "system:serviceaccount:prod:deployer" cannot patch resource "deployments" in API group "apps" in the namespace "prod"`，审计事件的 `annotations` 里会带 `authorization.k8s.io/decision: forbid` 以及一条说明为何拒绝的 `reason`。
+- Node 授权器拒绝。kubelet 只能访问分配给自己节点上的对象，越界访问会得到 403，消息里的 User 是 `system:node:<node>`，这类拒绝通常意味着节点上跑了不该跑的东西，或者 Pod 被调度到了错误节点。
+- 准入插件拒绝。`ResourceQuota` 超额、`PodSecurity` 违反 `restricted` 档，返回的都是 403，消息主语是对象而不是 User。审计事件里 `objectRef` 有对象名，`annotations` 会带 `pod-security.kubernetes.io/enforce-violations` 之类的键。
+- 准入 Webhook 拒绝。Webhook 返回 `allowed: false` 时，API Server 采用它给出的状态码（不小于 400 即原样透出，`rejection_code` 标签正是为此存在），所以它可以是 403，也可以是 400 或 422。
+
+区分的方法不是猜，而是把响应消息读完整：授权器拒绝的主语是「User 对 resource」，准入拒绝的主语是「对象违反了某规则」，Webhook 拒绝会带引号里的 webhook 名称。
+
+### 2.3 400 与 422 的分界
+
+409、429 之外还有一对常被混用的码。400 出现在请求还没被理解的时候：JSON 语法错误、`Content-Type` 不被接受、用 protobuf 发了一个只能收 JSON 的端点、在 `fieldValidation=Strict` 下带上未知字段。422 出现在请求已经被解析成对象、但对象不符合 API 约束的时候：必填字段缺失、枚举值非法、字符串不匹配正则、CRD 的 OpenAPI Schema 拒绝。
+
+这个分界对排障的意义在于：400 多半出在客户端序列化或代理改写上（譬如网关改写 `Content-Type`、SDK 与服务端版本不匹配），422 则出在对象内容或服务端 Schema 上（譬如 CRD 升级收紧了校验，旧控制器还在写老格式）。两者的证据都只有响应文本，所以遇到它们时第一件事是把完整响应体打出来。
+
+### 2.4 用 server-side dry-run 切掉最后一跳
+
+`kubectl apply --dry-run=server` 是一个被低估的分段工具：它会让请求完整通过认证、授权、变更准入、Schema 校验与验证准入，但不写 etcd。于是同一个请求在两种模式下的差异就变成了判断依据。
+
+| 现象 | 结论 | 后续动作 |
+| :--- | :--- | :--- |
+| dry-run 与真写都 403 | 授权段或准入段 | 先看消息主语，区分 RBAC 与准入 |
+| dry-run 通过、真写 409 | 写入段的并发冲突 | 查 `resourceVersion`、`managedFields` 与重试逻辑（见 [[云原生/Kubernetes/Kubernetes架构深度剖析/08 ResourceVersion 与乐观并发控制|架构深度剖析 08]]） |
+| dry-run 通过、真写 500 | 写入段或 etcd | 查 etcd 错误计数与磁盘、配额 |
+| dry-run 也 504 | 段 0 或 Webhook | 看超时发生时的阶段耗时，而不是 etcd |
+| 两次都 422 | 校验段 | 读字段路径，与 CRD 或 API 版本对齐 |
+
+需要留意一个副作用：dry-run 并不等于零成本。它会真实调用准入 Webhook、真实计算配额，只是不落盘；如果某个 Webhook 有外部副作用（譬如分配 IP、创建外部资源），dry-run 也会触发它。这是 Webhook 设计里需要自行遵守的约定，不由 API Server 保证。
+
+---
+
+## 第 3 章 六段的外部观测点
+
+### 3.1 段 0：连接、排队与超时
+
+排在身份之前的三件事经常被合并讨论，但它们的证据完全不同。
+
+连接层不在请求管线内。TLS 握手失败时你拿不到任何 HTTP 状态码，客户端报 `x509: certificate signed by unknown authority`、`remote error: tls: handshake failure` 或直接连接被重置。要区分「没有 TLS」与「有 TLS 但没有凭证」，可以先用一个不涉身份的探针：`/readyz` 与 `/livez` 默认允许匿名访问，`curl -k https://<apiserver>:6443/readyz?verbose` 能通说明连接、TLS 与进程自身都正常，剩下的才是身份问题。
+
+超时段的证据是 504 加上一组终止计数。`--request-timeout` 默认 1m0s，超时后由超时过滤器返回 `NewTimeoutError`，同时 `apiserver_request_terminations_total{code="504"}` 加一；如果被超时的处理器还在后台跑（Go 的 goroutine 不会因为客户端超时自动停），`apiserver_request_post_timeout_total` 会继续增长，这个指标的上涨往往和 etcd 抖动、Webhook 卡死同时出现。
+
+排队段的证据是 429 加上 APF 的专用指标。`apiserver_flowcontrol_rejected_requests_total{priority_level,flow_schema,reason}` 直接告诉你请求被哪个优先级层拒绝、属于哪个 FlowSchema、原因是什么；`apiserver_flowcontrol_request_wait_duration_seconds` 告诉你排队等了多久；`apiserver_current_inflight_requests{request_kind}` 则给出当前占用的并发。429 未必来自 API Server：如果 apiserver 前面挂了负载均衡或网关，它们自己的限流也返回 429，此时 API Server 侧的同码计数不会上涨，这个对照本身就能定位责任方。
+
+关闭期的拒绝码也常被认错。apiserver 进入优雅关闭后，`--shutdown-delay-duration` 期间仍正常服务、`/readyz` 立刻变红；延迟结束后新请求被 `WithRetryAfter` 拦下，返回 429 加 `Retry-After` 与 `Connection: close`，而不是 503。看到「429 且连接被关闭」，先确认是不是副本在滚动重启。
+
+### 3.2 段 1 认证：401 只说明「不知道你是谁」
+
+认证段的观测点比较薄，但足够定位。指标侧最直接的入口是 `apiserver_request_total{code="401"}`，它按 verb、resource、scope 分组，能看出是全集群的 401，还是某一类客户端（某个 resource 的高频 401 通常指向某个控制器或 agent 的凭证过期）。
+
+审计侧是主要证据。认证失败的请求走失败认证分支，事件里 `user` 是 `system:anonymous`，`sourceIPs` 与 `userAgent` 决定了「是谁在敲门」。若审计策略把这类请求记成 None，你只能看到计数上涨而不知道来源，这是策略设计里最容易留下的盲区。
+
+笔者建议把判定顺序固定为三步：先确认 401 的分布（全集群还是单客户端），再看 `userAgent` 与 `sourceIPs`，最后才怀疑具体凭证。单客户端 401 优先查证书过期与 ServiceAccount Token 的受众（`--api-audiences` 与 Token 里的 aud 不匹配会直接 401）；全集群 401 优先查认证配置本身，譬如结构化认证配置（`--authentication-config`，1.34 起稳定）里 issuer 或 JWKS 地址配置错误、CA 证书轮换未同步。认证机制本身的取舍见 [[云原生/Kubernetes/Kubernetes架构深度剖析/05 认证、授权与准入控制：K8s 的安全三级防线|架构深度剖析 05]]。
+
+### 3.3 段 2 授权：403 的注释比消息更有用
+
+授权段的专用指标是 `apiserver_authorization_decisions_total{name,type,decision}`，它按授权器类型与名字拆分终局决策，能在 RBAC 拒绝与 Node 拒绝之间先分一次类。授权 Webhook 另有一组 `apiserver_authorization_webhook_duration_seconds` 与失败开放计数，用来判断慢或失败的是不是外部授权服务。
+
+真正好用的是审计注解。RBAC 授权器在拒绝时会把决策和理由写进事件的 `annotations`：`authorization.k8s.io/decision: forbid` 配合 `authorization.k8s.io/reason`，里面往往直接写出「user 不在任何授予该 verb 的 RoleBinding 里」。这比响应消息多了一层因果，在多层 RoleBinding 与聚合 ClusterRole 交织的场景里尤其明显。
+
+验证环节用 `kubectl auth can-i` 配合 `--as`：`kubectl auth can-i get pods --namespace prod --as system:serviceaccount:prod:deployer`。请注意这个命令本身也是一次授权请求（SelfSubjectAccessReview），如果连它都 403，说明发起者的 `can-i` 权限本身缺失，此时的 403 与被测身份无关。授权模型的设计细节见 [[云原生/Kubernetes/kubernetes之API Server/03 授权机制——RBAC 深度解析|03 授权机制]]。
+
+### 3.4 段 3 准入：Webhook 是 403、422、500 的混合产地
+
+准入段的观测点是全管线里最丰富的一段，因为它是唯一有外部进程参与、且参与方可能失败的段。
+
+指标侧有三层。`apiserver_admission_step_admission_duration_seconds{type="admit"|"validate",operation,rejected}` 给出「变更准入」与「验证准入」两个子阶段的耗时与拒绝计数；`apiserver_admission_controller_admission_duration_seconds{name}` 进一步拆到具体内置插件（配额、PodSecurity、LimitRanger）；`apiserver_admission_webhook_admission_duration_seconds{name}` 与 `apiserver_admission_webhook_request_total{name,code,rejected}` 拆到具体 Webhook 名称与返回码。用 CEL 写的 `ValidatingAdmissionPolicy` 走 `apiserver_validating_admission_policy_check_total{policy,policy_binding,enforcement_action,error_type}`，这个指标的价值在于把「策略拒绝」与「表达式求值出错」分开——后者往往是 CEL 里访问了对象上不存在的字段，属于策略作者的问题，不是业务对象的问题。
+
+失败行为的分层比指标更需要记住：
+
+- Webhook 明确拒绝：码值由 Webhook 决定（不小于 400 时原样透出），消息里带 Webhook 名字与它的说明。
+- Webhook 调用失败且 `failurePolicy: Fail`（默认值）：API Server 返回 500，消息形如 `Internal error occurred: failed calling webhook "..."`。这类 500 与 etcd 无关，但它是生产里最常见的「500 归错段」。
+- Webhook 调用失败且 `failurePolicy: Ignore`：请求放行，`apiserver_admission_webhook_fail_open_count` 加一。这个计数长期非零意味着有一条安全策略在静默失效，属于安全侧的高优先级信号。
+- Webhook 超过 `timeoutSeconds`（默认 10 秒）未响应：等同调用失败，按 `failurePolicy` 处理，同时把整条请求的延迟推高，最终可能以 504 收场。
+
+审计侧的价值在于能还原「对象被谁改过」。`requestObject` 记录的是**转换版本之前、默认值填充与准入之前**的对象，`responseObject` 是准入之后回给客户端的对象，两者一对比就是准入干的事。若改动来自 Mutating Webhook，事件的 `annotations` 里会出现 `mutation.webhook.admission.k8s.io/round_0_index_0` 与 `patch.webhook.admission.k8s.io/round_0_index_0` 一类的键，直接点名哪个 Webhook 在第几轮改了哪些字段。这条能力在排查「为什么部署出来的 Pod 多了一个 sidecar」时比翻 Webhook 日志快一个数量级。准入机制与策略引擎选型见 [[云原生/Kubernetes/kubernetes之API Server/04 准入控制器深度解析|04 准入控制器]]。
+
+### 3.5 段 4 校验：只读错误文本的一段
+
+校验段没有专属指标：解码与字段校验是 CPU 上的一次函数调用，不涉及外部依赖，没有被观测的动机。证据只有两处——响应报文的 `message` 与审计事件的 `responseStatus.message`。
+
+好消息是这两处的信息密度很高。`Pod "web-0" is invalid: spec.containers[0].image: Required value` 这样的消息已经给出了字段路径与原因；CRD 的 Schema 错误会给出 `spec.replicas: Invalid value: "three": spec.replicas in body must be of type integer` 之类的类型不匹配说明；未知字段在严格校验下报 `unknown field "spec.template.spec.foo"`。
+
+这一段与段 3 的交界处有一个实操判断：如果消息里出现对象名加 `is invalid`，且字段路径清晰，属于校验段；如果消息里出现 `forbidden`、`denied`、`violates` 或 Webhook 名称，属于准入段。两者都会被客户端打印成一行 `Error from server (...)`，但归属不同，修复路径也不同——前者改对象，后者改策略或授权。
+
+### 3.6 段 5 写入：etcd 的账要看两个方向
+
+写入段的证据分读、写两个方向，这个区分在 etcd 出问题时尤其关键。
+
+写方向的指标是 `etcd_request_duration_seconds{operation,resource,group}` 与 `etcd_request_errors_total`，前者按操作类型拆（create、update、delete、deletecollection），后者给出失败计数；容量侧看 `apiserver_storage_size_bytes`（存储文件实际占用）与 `apiserver_resource_objects`（按 group 与 resource 统计的对象数，1.34 起取代已弃用的 `apiserver_storage_objects`）。写失败最常见的三种表现是：etcd 磁盘 IOPS 打满导致写请求排队进而 504、etcd 配额（默认 2GiB 的后端存储上限）写满导致 `etcdserver: mvcc: database space exceeded` 进而 500、以及 etcd 成员失去 quorum 导致所有写失败。
+
+读方向容易被忽略：List 与 Get 在默认的 `resourceVersion=""` 或 `"0"` 下由 watch cache 提供，不查 etcd；只有带精确 `resourceVersion` 的读才会回源。于是 etcd 短暂不可用时的典型现象是「读还好、写全挂」——`kubectl get` 从缓存返回，`kubectl apply` 报 500。把这条现象当成 etcd 故障的确认信号，比看 `kubectl get` 是否可用更可靠。缓存过旧导致的 410 Gone 与重新 List 的行为，机制在 [[云原生/Kubernetes/Kubernetes架构深度剖析/04 API Server 请求链路：从 HTTP 请求到 etcd 写入|架构深度剖析 04]] 的 watch cache 一节；etcd 自身的运维边界见 [[中间件/ETCD/00 专栏导览|etcd 专栏]]。
+
+写入段还会产出 409，但它几乎从不是故障：创建已存在的对象、更新时 `resourceVersion` 过期、服务端应用（SSA）出现字段所有权冲突，都是乐观并发的正常表达，客户端应当重试或改字段所有权。把 409 当成 etcd 异常去查磁盘，是值班里常见的方向性错误。
+
+### 3.7 一次延迟归因的算法
+
+把段拆开后，延迟归因就变成一个减法问题。`apiserver_request_duration_seconds` 是含全部环节的总时长；`apiserver_request_sli_duration_seconds` 明确不计 Webhook 耗时与 APF 排队等待；两者的差近似就是「Webhook + 排队」的增量。再往下拆，`apiserver_flowcontrol_request_wait_duration_seconds` 单独给出排队，`apiserver_admission_webhook_admission_duration_seconds` 单独给出 Webhook，`apiserver_request_filter_duration_seconds{filter}` 给出认证、授权、模拟等过滤器各自的耗时，`etcd_request_duration_seconds` 给出最后的落盘时间。
 
 ```mermaid
 %%{init: {'theme': 'dracula'}}%%
 graph LR
-    CLIENT["kubectl top pods"] -->|"/apis/metrics.k8s.io/v1beta1/pods"| API["kube-apiserver</br>(Aggregation Layer)"]
-    API -->|"代理转发"| MS["metrics-server</br>(扩展 API Server)"]
-    MS -->|"聚合 kubelet 数据"| KL["kubelet (cAdvisor)"]
+    TOTAL["总延迟<br/>apiserver_request_duration_seconds"] --> QUEUE["排队<br/>flowcontrol_request_wait"]
+    TOTAL --> AUTHN["认证<br/>request_filter_duration{filter}"]
+    TOTAL --> WEBHOOK["准入 Webhook<br/>admission_webhook_duration"]
+    TOTAL --> ETCD["etcd 写入<br/>etcd_request_duration"]
+    TOTAL --> REST["其余：授权 · 校验 · 序列化"]
 
-    classDef client fill:#44475a,stroke:#ffb86c,color:#f8f8f2
-    classDef api fill:#44475a,stroke:#ff79c6,color:#f8f8f2
-    classDef ext fill:#44475a,stroke:#8be9fd,color:#f8f8f2
-    classDef node fill:#44475a,stroke:#50fa7b,color:#f8f8f2
+    SLI["sli_duration_seconds<br/>已剔除排队与 Webhook"] -.->|"与总延迟相减"| DELTA["近似 = 排队 + Webhook"]
+    DELTA -.-> QUEUE
+    DELTA -.-> WEBHOOK
 
-    class CLIENT client
-    class API api
-    class MS ext
-    class KL node
+    classDef total fill:#44475a,stroke:#ff79c6,color:#f8f8f2
+    classDef part fill:#44475a,stroke:#8be9fd,color:#f8f8f2
+    classDef hint fill:#44475a,stroke:#f1fa8c,color:#f8f8f2
+    class TOTAL,SLI total
+    class QUEUE,AUTHN,WEBHOOK,ETCD,REST part
+    class DELTA hint
 ```
 
-### 3.3 Aggregated API vs CRD
-
-在 [[03 API 对象模型与 GVR 体系]] 中我们已经对比过 CRD 和 Aggregated API。这里从 API Server 架构的角度补充：
-
-**CRD** 的处理逻辑完全在 kube-apiserver 内部——kube-apiserver 使用通用的 handler 处理所有 CRD 资源，数据存储在 etcd 中。CRD 不需要额外的服务进程。
-
-**Aggregated API** 的处理逻辑在外部的扩展 API Server 中——kube-apiserver 只做请求转发（代理）。扩展 API Server 可以使用自己的存储后端（如内存、数据库），适合返回实时计算的数据（如 Metrics）。
+这套算法的前提要说清：指标是聚合值，不是单条请求的分解，它只能告诉你 p99 主要花在哪一段。要定位单条请求，得回到审计事件——`requestReceivedTimestamp` 与 `stageTimestamp` 的差就是它在服务端的总耗时。
 
 ---
 
-## 第 4 章 API Server 的无状态设计
+## 第 4 章 审计日志：配置、代价与反查
 
-### 4.1 为什么无状态
+### 4.1 它回答什么，不回答什么
 
-API Server 本身不在内存或本地磁盘中保存任何集群状态——所有持久化状态都在 etcd 中，watch cache 只是 etcd 数据的内存镜像。这种无状态设计带来三个关键优势：
+审计子系统回答五个问题：谁发起的、什么时候、对什么对象、做了什么、结果如何。它不回答「为什么慢」，也不回答「etcd 当时在干什么」——那是指标与 etcd 日志的事。在审计日志里找延迟原因，和在指标里找操作者身份，都是在错误的介质里找答案。
 
-**水平扩展**：可以部署多个 API Server 实例，前面放一个负载均衡器（如 HAProxy 或云厂商的 LB），每个实例独立处理请求。实例之间不需要同步任何状态——它们都从 etcd 读取数据、向 etcd 写入数据。
+审计事件在请求的特定阶段生成，阶段只有四个：`RequestReceived`（审计处理器刚拿到请求、尚未下传）、`ResponseStarted`（响应头已发、响应体未发，只对 watch 这类长请求生成）、`ResponseComplete`（响应体写完）、`Panic`（处理中发生 panic）。一个普通请求通常产出 `RequestReceived` 与 `ResponseComplete` 两条事件，策略里省掉前者，事件量直接减半，代价是失去「请求进来但没走完」这段时长的对照。
 
-**快速恢复**：如果一个 API Server 实例崩溃，重启后它只需要重新建立与 etcd 的连接、重建 watch cache——不需要从其他实例同步任何数据。
+### 4.2 策略：四级、四阶段、首条匹配
 
-**简化运维**：不需要关心实例间的状态一致性——每个实例是完全对等的。升级 API Server 时可以逐一滚动重启，不会丢失数据。
+审计策略是一个有序规则列表，每条规则给出级别与匹配条件。事件按列表顺序与规则比对，**第一条命中的规则决定级别**，因此兜底规则必须放在最后，否则它会吞掉后面所有更精细的规则。级别只有四档，其代价差异是全章的重点。
 
-### 4.2 Watch Cache 的角色
+| 级别 | 记录内容 | 单事件体积的主要构成 | 相对代价 | 适用场景 |
+| :--- | :--- | :--- | :--- | :--- |
+| None | 不记录 | 无 | 零 | 高频只读、探针、健康检查 |
+| Metadata | 请求元数据：user、verb、objectRef、时间、源 IP、响应码 | 数百字节到一两千字节 | 低 | 全集群兜底级别 |
+| Request | 元数据 + 请求体（非资源请求不适用） | 与请求对象同阶 | 中 | 记录「谁提交了什么」的写操作 |
+| RequestResponse | 元数据 + 请求体 + 响应体 | 与请求对象加响应对象同阶 | 高 | 少数敏感资源的变更，或短时取证 |
 
-虽然 API Server 是"无状态"的，但它在内存中维护了一个 **watch cache**——这是 etcd 数据的一个副本，用于加速读取和 Watch 操作。
+把写操作的级别定在 Request、把读操作与高频心跳定在 Metadata、把 Secret 与 ConfigMap 的读写成 None 或 Metadata（取决于合规要求），是生产中比较稳的组合。有一个细节必须写进策略注释里：`resources` 里的 `pods` **不会**匹配 `pods/status` 或 `pods/log`，子资源要单独列；`namespaces: [""]` 表示集群级资源；非资源 URL 默认不会命中任何 `resources` 规则，需要 `nonResourceURLs` 单独覆盖，否则 `kubectl version`、`/healthz` 这一类请求根本不在审计里。
 
-watch cache 的结构：
+### 4.3 后端与参数：先把体积账算出来
 
-| 组件 | 作用 |
-| :--- | :--- |
-| **store**（内存缓存）| 存储每种资源类型的所有对象的最新版本 |
-| **watch event buffer**（事件环形缓冲区）| 存储最近的变更事件（默认保留 100 个事件）|
+日志后端把事件按 JSON Lines 写入文件，可以通过 `--audit-log-path` 启用（不设该参数则日志后端关闭，`-` 表示标准输出）。轮转与留存由三个参数控制，它们的默认值加起来就是一个容易被忽略的容量陷阱。
 
-**读取加速**：`kubectl get pods`（List 操作）默认从 watch cache 中读取，不查询 etcd。只有需要强一致性的读取（携带 `resourceVersion="0"` 以外的精确版本号）才会回源到 etcd。
+| 参数 | 默认值 | 含义 | 调大的代价 | 调小的代价 |
+| :--- | :--- | :--- | :--- | :--- |
+| `--audit-log-path` | 未设置 | 日志文件路径，未设置则关闭 | 不适用 | 关闭即无审计，合规缺口 |
+| `--audit-log-maxsize` | 100 | 单文件轮转阈值（MB） | 单文件变大，检索变慢 | 文件切得更碎，频繁轮转 |
+| `--audit-log-maxbackup` | 100 | 保留的旧文件数量 | 磁盘占用线性上升 | 历史窗口缩短，取证不够回溯 |
+| `--audit-log-maxage` | 366 | 按天数保留 | 一年以上文件堆积 | 老文件被提前删除 |
+| `--audit-log-format` | json | 事件格式（legacy 为单行文本） | 不适用 | legacy 不便 jq 检索 |
+| `--audit-log-mode` | blocking | 同步写，事件写完才返回响应 | 不适用 | batch 异步写会因缓冲溢出丢事件 |
+| `--audit-log-compress` | 关闭 | 轮转文件 gzip 压缩 | 不适用（开启省盘） | 不压缩更占盘 |
+| `--audit-log-truncate-enabled` | 关闭 | 超限事件截断 | 不适用 | 关闭时超大事件可能整条被丢弃 |
+| `--audit-log-truncate-max-event-size` | 102400 | 单事件上限（字节） | 更少截断，体积上升 | 请求/响应体被裁掉，取证失真 |
+| `--audit-webhook-mode` | batch | Webhook 后端默认批量异步 | 不适用 | blocking 会拖慢全部请求 |
 
-**Watch 加速**：客户端的 Watch 请求从 watch cache 的事件缓冲区中获取变更事件，而不是直接 Watch etcd。多个客户端同时 Watch 同一种资源时，etcd 只需要推送一次变更给 API Server，API Server 的 watch cache 再扇出（fan-out）给所有客户端。
+按默认值算，一个 apiserver 实例的审计文件上限是 100 个备份 × 100 MB，加上当前文件约十吉字节量级；三个副本就是三十吉字节，而且这还不含事件本身的增长速度。`--audit-log-maxsize 0` 会关闭轮转，配合 `maxbackup 0` 就变成「无限增长」，这两个 0 是磁盘被打爆的经典组合。
 
-> [!note] watch cache 的一致性
-> watch cache 是 etcd 数据的**最终一致副本**——etcd 中的变更需要经过 Watch 机制传播到 API Server 的 watch cache，存在微小的延迟（通常在毫秒级）。对于 K8s 的控制器来说，这个延迟是可以接受的——控制器本身是基于 [[01 Kubernetes 的诞生与设计哲学|Level-triggered]] 设计的，即使短暂读到旧数据，下一次协调循环会修正。
+比磁盘更早出问题的是延迟。日志后端默认 blocking，事件写入完成才放行响应，于是审计磁盘的 fsync 延迟会直接加到每个请求上。症状很有辨识度：所有资源、所有客户端的 p99 一起抬高，`etcd_request_duration_seconds` 完全正常，而 `/var/log` 所在磁盘的 await 很高；把策略从 RequestResponse 降回 Metadata 或者改成 batch，延迟立刻回落。改成 batch 的代价是缓冲溢出时静默丢事件，`apiserver_audit_event_total` 与事件实际落盘数量的差就是丢失量，这个差值在合规审计里是要解释的。
 
----
+### 4.4 反查「谁改了它」的六个步骤
 
-## 第 5 章 API Server 的启动与自举
+审计日志最实用的场景不是事后合规，而是当场定位一次非预期变更。以「生产环境的 checkout Deployment 副本数被改成 0」为例，路径是固定的。
 
-### 5.1 启动流程
+第一步，确认策略覆盖。目标资源（`deployments`）必须命中一条级别不低于 Metadata 的规则，否则后面全部无效。这一条要在平时就验证过，不能等出事才发现 `deployments` 落进了某个 None 规则。
 
-API Server 的启动是一个精心编排的过程——它需要先建立与 etcd 的连接、注册所有 API 资源的 handler、加载认证和授权配置、初始化准入控制器链，然后才开始接受请求。
+第二步，用 `objectRef` 收窄。审计事件的 `objectRef` 带 `resource`、`namespace`、`name`、`apiVersion`、`subresource`，按这五项过滤比按 URI 字符串匹配可靠。
 
-关键的启动阶段：
+第三步，看 `user` 与 `impersonatedUser`。前者是真实身份（可能是某个 ServiceAccount），后者是管理员用 `--as` 模拟时的目标身份。改副本数这类动作最常见的是某个控制器或流水线 SA；若 `user` 是 `system:serviceaccount:<ns>:<sa>`，下一步是查这个 SA 被哪个工作负载使用。
 
-1. **解析命令行参数和配置**：读取证书路径、etcd 端点、认证/授权配置等
-2. **建立 etcd 连接**：验证 etcd 的可达性和健康状态
-3. **创建 API 资源的 Storage**：为每种资源类型（Pod、Deployment、Service 等）创建对应的 Storage 对象——封装了与 etcd 的 CRUD 交互
-4. **注册 REST 路由**：将每种资源的 Storage 映射到对应的 HTTP 路由
-5. **初始化认证器链**：加载客户端 CA 证书、ServiceAccount 密钥、OIDC 配置等
-6. **初始化授权器链**：加载 RBAC 策略（从 etcd 中读取 Role/RoleBinding）
-7. **初始化准入控制器链**：加载内置准入控制器和 Webhook 配置
-8. **初始化 watch cache**：为每种资源启动一个 etcd Watcher，将数据同步到内存缓存
-9. **启动 HTTPS 服务**：开始接受客户端请求
+第四步，比较 `requestObject` 与 `responseObject`。`requestObject` 是客户端提交的原始对象（转换版本、默认值、准入之前），`responseObject` 是最终返回的对象。副本数从 3 变 0，在哪一侧体现，直接区分「客户端的错」与「准入改的」。
 
-### 5.2 健康检查端点
+第五步，看 `annotations`。Webhook 的注入痕迹、PodSecurity 的违规记录、RBAC 的决策理由都在这里；若请求体里副本数是 3、响应体里是 0，且注解带 `patch.webhook.admission.k8s.io/round_0_index_0`，那就是某个 Webhook 干的。
 
-API Server 暴露了三个健康检查端点：
+第六步，与 `managedFields` 交叉验证。`metadata.managedFields` 记录了每个字段管理器、操作类型与时间，能告诉你「哪个 manager 最后写了 `spec.replicas`」。两者对不上时（譬如审计里是人、managedFields 里是控制器），通常是控制器在缓存未同步时做了纠正写回。
 
-| 端点 | 含义 |
-| :--- | :--- |
-| **`/livez`** | API Server 进程是否存活 |
-| **`/readyz`** | API Server 是否准备好接受请求（所有组件是否初始化完成）|
-| **`/healthz`** | 遗留端点，综合了 livez 和 readyz |
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+flowchart TD
+    A["对象被改，需要定位是谁"] --> B{"审计策略覆盖该资源到 Metadata 以上?"}
+    B -->|"否"| B1["先补策略，再验证一次<br/>历史窗口已丢失"]
+    B -->|"是"| C["按 objectRef 五项过滤事件"]
+    C --> D["读 user 与 impersonatedUser"]
+    D --> E{"user 是 ServiceAccount?"}
+    E -->|"是"| E1["反查使用该 SA 的工作负载与流水线"]
+    E -->|"否"| E2["反查 kubeconfig 与证书 CN"]
+    E1 --> F["比较 requestObject 与 responseObject"]
+    E2 --> F
+    F --> G{"两者差异由准入造成?"}
+    G -->|"是"| G1["读 annotations 找 Webhook 轮次与补丁"]
+    G -->|"否"| G2["客户端直接提交"]
+    G1 --> H["与 managedFields 交叉验证"]
+    G2 --> H
 
-负载均衡器使用 `/readyz` 判断实例是否可以接收流量——在 API Server 启动过程中，watch cache 还没有同步完成时，`/readyz` 返回不健康，负载均衡器不会将请求路由到该实例。
+    classDef q fill:#44475a,stroke:#ffb86c,color:#f8f8f2
+    classDef step fill:#44475a,stroke:#8be9fd,color:#f8f8f2
+    classDef bad fill:#44475a,stroke:#ff5555,color:#f8f8f2
+    class B,E,G q
+    class A,C,D,F,H step
+    class B1 bad
+```
 
----
-
-## 第 6 章 OpenAPI 与 API Discovery
-
-### 6.1 OpenAPI Specification
-
-API Server 自动为所有注册的 API 资源生成 **OpenAPI v3 Specification**——这是一份机器可读的 API 文档，描述了每种资源的所有字段、类型、校验规则。
+用 jq 处理 JSON Lines 是日常操作，一条能直接跑的命令长这样：
 
 ```bash
-# 获取 OpenAPI 规范
-kubectl get --raw /openapi/v3
+# 筛出审计日志里所有对 deployments 的写操作，再按时间窗收窄
+jq -c 'select(.stage == "ResponseComplete"
+          and .objectRef.resource == "deployments"
+          and (.verb == "update" or .verb == "patch" or .verb == "create"))
+       | {t: .requestReceivedTimestamp, user: .user.username,
+          ref: .objectRef, code: .responseStatus.code,
+          ann: .annotations, auditID: .auditID}' \
+   /var/log/kubernetes/audit/audit.log
 ```
 
-OpenAPI 规范的用途：
+若同时配了 webhook 后端（`--audit-webhook-config-file`），检索交给日志平台，但它的限流参数（默认每秒 10 批、每批 400 条、最多等 30 秒）会挤掉低级别事件，取证窗口与日志后端不一致。
 
-- **kubectl explain**：`kubectl explain pod.spec.containers` 的输出来自 OpenAPI 规范
-- **客户端代码生成**：`client-go`、Python 客户端、Java 客户端等都基于 OpenAPI 规范自动生成
-- **IDE 补全**：VS Code 等 IDE 使用 OpenAPI 规范提供 YAML 补全和校验
-- **CRD 校验**：CRD 的 `openAPIV3Schema` 字段定义自定义资源的结构，API Server 基于此进行请求校验
+### 4.5 审计子系统自己也会坏
 
-### 6.2 API Discovery
+审计是唯一一个「记录失败会反过来影响请求」的旁路系统，它的故障有三个层次，各有一组指标。
 
-API Server 在 `/api` 和 `/apis` 端点提供 **API Discovery**——列出集群中所有可用的 API Group、Version 和 Resource。
+事件没生成：`apiserver_audit_level_total{level}` 按级别计数，如果 Metadata 的总数在策略未变的情况下掉到零，说明策略文件没被真正加载（`--audit-policy-file` 路径错、文件内容被挂错、规则写成了空列表——空规则列表在审计策略里是非法的）。
 
-```bash
-# 列出所有 API 组
-kubectl get --raw /apis | python3 -m json.tool
+事件生成了但没写出去：`apiserver_audit_error_total{plugin}` 按插件计数，日志后端写失败、webhook 后端调用失败都在这里；而 `--audit-log-mode=blocking-strict` 下若在 `RequestReceived` 阶段写失败，整个请求会被直接拒绝，`apiserver_audit_requests_rejected_total` 即为此准备；这个模式只适合审计后端本地、磁盘可靠的集群。
 
-# 列出 apps/v1 组中的所有资源
-kubectl get --raw /apis/apps/v1 | python3 -m json.tool
-```
-
-kubectl 在首次运行时会查询 Discovery API 并缓存结果（`~/.kube/cache/discovery/`）。CRD 注册后，Discovery API 自动包含新资源——这就是为什么 `kubectl get <crd-resource>` 能立即工作。
+事件被截断或丢弃：截断默认关闭，此时超大事件会连请求体与响应体一起完整写入，反而让审计写入成为瓶颈；开启截断后，超限事件先丢 `requestObject` 与 `responseObject`，仍超限则整条丢弃。后者意味着「审计文件里没有这条」，而指标只给总数，不会指出是哪条。判断依据是同一时间窗内 `apiserver_request_total` 与 `apiserver_audit_event_total` 的比值——比值突然下降，就是事件在生成之后丢了。
 
 ---
 
-## 第 7 章 总结
+## 第 5 章 聚合层：多出来的一跳与转移的责任
 
-本文建立了对 API Server 内部架构的全局认知：
+### 5.1 路径上多了一段不可见的路
 
-- **七重角色**：REST API 网关、认证、授权、准入控制、数据校验与持久化、Watch 事件分发、API 版本转换
-- **Handler Chain**：请求经历 Panic Recovery → Timeout → Authentication → Audit → Impersonation → Flow Control (APF) → Authorization → Mutating Admission → Schema Validation → Validating Admission → etcd 写入 → Watch 通知
-- **API Aggregation**：通过 APIService 对象将特定 API Group 的请求代理给外部扩展 API Server
-- **无状态设计**：所有持久状态在 etcd 中，watch cache 是加速层，支持水平扩展
-- **OpenAPI + Discovery**：自动生成 API 文档和资源发现，驱动 kubectl、客户端库和 IDE
+聚合层的机制一句话可以说清：`APIService` 对象在 kube-apiserver 里「认领」一段 URL 路径，此后发往该路径的请求由 kube-apiserver 代理给后端的扩展 API Server，客户端无感。注册方式与代理链路见 [[云原生/Kubernetes/Kubernetes架构深度剖析/04 API Server 请求链路：从 HTTP 请求到 etcd 写入|架构深度剖析 04]] 的聚合层一节，这里只谈运维含义。
 
-后续五篇文章将逐一深入每个核心阶段：[[02 认证机制深度解析|认证]]、[[03 授权机制——RBAC 深度解析|RBAC 授权]]、[[04 准入控制器深度解析|准入控制]]、[[05 List-Watch 机制与 Informer 框架|List-Watch/Informer]]、[[06 API Server 性能调优与高可用|性能与高可用]]。
+对一个请求来说，多出来的东西有三样：一次网络往返（kube-apiserver 到后端 Service 或 endpoints）、一次双向 TLS 的身份校验（`--proxy-client-cert-file` 出示身份，后端用 `extension-apiserver-authentication` 里的 CA 验证）、以及一段在 kube-apiserver 里不可见的后端处理时间。
+
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+sequenceDiagram
+    participant C as kubectl
+    participant K as kube-apiserver
+    participant A as APIService 后端
+    participant B as 业务 API 或 kubelet
+
+    C->>K: GET /apis/metrics.k8s.io/v1beta1/pods
+    K->>K: 认证 · APF · 授权（只对本地入口生效）
+    K->>A: 代理转发 + 客户端证书
+    A->>A: 自身认证与授权（不可见）
+    A->>B: 可能再调用 kube-apiserver 或 kubelet
+    B-->>A: 数据
+    A-->>K: 响应
+    K-->>C: 响应（延迟已含上述全部）
+```
+
+这张图解释了两件事。其一，`kubectl top pods` 慢的时候，你看到的 `apiserver_request_duration_seconds` 里那一段变长，无法区分「kube-apiserver 代理慢」与「后端慢」，因为入口侧只测到自己的包裹边界。其二，后端自己也是一个 apiserver，它有自己的认证、授权、审计与限流；如果它没有独立部署监控与审计，这一段就是彻底的黑盒。
+
+### 5.2 责任转移：503 与 discovery 的连锁
+
+聚合层最典型的故障形态是「一个扩展 API 挂了，所有 kubectl 命令都变慢或报错」。原因在 discovery：kubectl 在执行任何资源操作之前都要拉取 discovery 数据，把 `pods` 这类短名解析成资源路径、并判断是否 namespaced；聚合发现（aggregated discovery，1.30 起稳定）让这件事收敛到 `/api` 与 `/apis` 两个端点，但这两个端点的内容仍然要覆盖所有已注册的 API 组，包括聚合组。
+
+于是 `metrics-server` 不可用时，`/apis/metrics.k8s.io/v1beta1` 的发现请求超时，`/apis` 的聚合结果不完整，kubectl 报 `unable to retrieve the complete list of server APIs: metrics.k8s.io/v1beta1: the server is currently unable to handle the request`，连带 `kubectl get pods` 也失败或明显变慢——哪怕 Pod 这件事与 metrics 毫无关系。
+
+这类故障的判据是两条命令：`kubectl get --raw /api/v1` 能通说明 kube-apiserver 本体正常；`kubectl get --raw /apis/metrics.k8s.io/v1beta1` 失败说明问题在聚合组。`kubectl get apiservices` 的 AVAILABLE 列与 `status.conditions` 同源，聚合器会周期性探测后端并把结论写进去，所以一张 `kubectl get apiservices` 就能列出所有「借出去的责任」。指标侧对应 `aggregator_unavailable_apiservice{name}`（按 APIService 名给出不可用状态）与 `aggregator_unavailable_apiservice_total{name,reason}`（不可用的原因计数），`aggregator_discovery_aggregation_count_total` 则能看出发现聚合的频次是否异常升高。
+
+还有一个被文档明确写出的约束：发现请求要求从 kube-apiserver 往返在五秒内完成。后端若在跨可用区、跨集群的网络里，或者冷启动时要做大量初始化，五秒很容易被突破，症状是「平时好好的，扩容或重启后 kubectl 整体变卡」。
+
+### 5.3 配置与代价
+
+聚合层的配置面很小，但每条都牵着责任边界。
+
+| 配置项 | 作用 | 改动的代价 |
+| :--- | :--- | :--- |
+| `APIService.spec.service` | 指到后端的 Service（名、命名空间、端口） | 配错即整组 API 503；改端口要同步改后端监听 |
+| `APIService.spec.insecureSkipTLSVerify` | 跳过后端证书校验 | 开启后失去后端身份验证，中间人可以冒充后端 |
+| `APIService.spec.caBundle` | 验证后端服务端证书的 CA | 轮换后忘更新会导致该组 API 全部不可用 |
+| `--proxy-client-cert-file` / `--proxy-client-key-file` | kube-apiserver 出示给后端的客户端证书 | 证书过期会同时打断聚合代理与准入 Webhook 调用 |
+| `--requestheader-client-ca-file` | 校验代理客户端证书，后端据此信任用户头 | 配错导致后端看到的用户身份失真 |
+| `--enable-aggregator-routing` | 直接路由到 endpoints IP 而非 Service clusterIP | 绕过 kube-proxy 排查网络问题的利器，但要确认网络策略允许 |
+| `--aggregator-reject-forwarding-redirect` | 默认 true，拒绝后端转发的重定向 | 关掉会把后端重定向透给客户端，可能造成请求绕路 |
+| `APIService.spec.groupPriorityMinimum` / `versionPriority` | 决定 API 组与版本在发现结果里的排序 | 配错会让 `kubectl` 优先选择错误的版本 |
+
+参数表里最值得单独交代的是证书这条链。kube-apiserver 的客户端证书同时用于代理扩展 API 与调用准入 Webhook，所以「Webhook 全部 500」与「聚合 API 全部 503」可能同时发生，根因是同一张证书过期。此外，聚合代理与准入 Webhook 都属于递归调用场景——后端或 Webhook 在处理请求时可能反过来调用 kube-apiserver，两边的 APF 会同时生效，官方文档明确警告可能出现优先级反转甚至死锁，缓解办法是让这条子调用走高优先级层，或在非 kube-apiserver 的一方关掉 APF。
+
+### 5.4 聚合层里的审计与指标边界
+
+代理请求在 kube-apiserver 侧的审计事件里有痕迹：`requestURI` 是 `/apis/<group>/<version>/...`，`objectRef` 可能为空或只有 `apiGroup`/`apiVersion`，`responseStatus.code` 就是最终透传的码。但它不记录后端内部发生了什么，后端的审计事件在它自己的日志里，两者的 `auditID` 不保证一致（审计 ID 由接收请求的那个 apiserver 生成），因此跨聚合层对齐要用时间窗加 `requestURI`，而不是指望 ID 相同。
+
+指标侧同样只覆盖入口这一段：代理请求的耗时计入入口的延迟直方图，后端内部的认证、授权、限流全部不可见。要让这一跳变得可运维，只有两条路——让后端也暴露自己的指标与审计，或者在 kube-apiserver 前面加一层能按 URI 前缀归因的网关。
+
+---
+
+## 第 6 章 反例与配置总表
+
+### 6.1 只开 `--v=4`，不看审计
+
+`--v=4` 打开的是 `httplog` 行，包含方法、URI、响应码、耗时、User-Agent 与源 IP。它看起来什么都有，实际缺三样：请求体、对象名字、以及是谁的哪条策略决定的。更麻烦的是留存：控制平面以静态 Pod 运行时，容器日志受 kubelet 的 `--container-log-max-files=5` 与 `--container-log-max-size=10Mi` 约束，一个 apiserver 容器只有五十兆左右的轮转窗口，高峰期几分钟就被覆盖。两小时后复盘，日志里什么都没有了。
+
+正确做法是让渠道各司其职：常规日志用于进程级异常（etcd 连接、TLS 配置、启动失败），审计用于请求级取证，指标用于趋势与延迟。
+
+### 6.2 把审计级别一律开到 RequestResponse
+
+「审计越全越好」在磁盘上不成立。RequestResponse 会同时记录请求体与响应体，一条 List 请求的响应体可能是几十兆（八千 Pod 的集群做一次全量 List，响应体量级远超单事件 100 KB 的截断阈值），事件要么被截断得面目全非，要么直接导致审计写入变成瓶颈。默认轮转下每实例十吉字节的账，全量 RequestResponse 几小时就能填满，`maxbackup` 一到就开始删最老的文件，事故发生时最需要的那段窗口恰好被删掉。
+
+合理的做法是分级：全集群 Metadata 兜底，敏感资源与写操作提到 Request，只有取证窗口内需要的极少数资源才上 RequestResponse，并配合截断参数。审计磁盘要单独规划容量与 IOPS，不要和 etcd 的数据盘共用。
+
+### 6.3 聚合层故障导致 `kubectl get` 整体超时
+
+这类故障最容易被误判成「API Server 崩了」。值班看到 `kubectl get pods -A` 超时，第一反应是重启 apiserver 或者扩副本，重启之后症状依旧——因为故障在后端扩展 API Server 上，kube-apiserver 只是替它背了锅。判据在 5.2 节已经给出：`kubectl get --raw /api/v1` 与 `kubectl get --raw /apis/<聚合组>/<版本>` 两条命令就能把责任分开。
+
+处置顺序也是固定的：先确认是哪一组 APIService 不可用（`kubectl get apiservices`），再看该组的后端 Pod 是否在运行、Service 是否有 endpoints、`caBundle` 是否与后端证书匹配，最后才考虑 `--enable-aggregator-routing` 绕开 Service 直接打 endpoints 验证网络路径。把聚合后端当成 kube-apiserver 的一部分、却不给它配监控，是这类故障反复发生的原因。
+
+### 6.4 把 403 一律当 RBAC
+
+第 2 章列过 403 的四个来源，值班里的典型表现是：看到 403 就加 RoleBinding，加完仍然 403，于是开始怀疑 RBAC 缓存。更快的路径是读响应消息的主语：`User "..." cannot ...` 是授权，`exceeded quota` 与 `violates PodSecurity` 是准入插件，带 webhook 名字的是准入 Webhook。三者分别对应改 Binding、改配额、改工作负载，方向完全不同。
+
+| 反例 | 症状 | 常见误判 | 正解 |
+| :--- | :--- | :--- | :--- |
+| 只开 `--v=4` | 复盘时日志已轮转，缺请求体与对象名 | 认为「日志里有码就够了」 | 审计负责取证，指标负责趋势，日志只管进程异常 |
+| 全量 RequestResponse | 审计盘被填满、最老文件被删、写入变慢 | 认为「审计越多越安全」 | 分级策略 + 截断 + 独立磁盘 |
+| 聚合组不可用 | 所有 kubectl 命令超时，重启 apiserver 无效 | 重启控制平面、扩容副本 | 分两条 raw 请求确认真身，修 APIService 与后端 |
+| 403 一律当 RBAC | 加 Binding 后仍 403，开始怀疑缓存 | 认为「403 就是权限不足」 | 读消息主语与审计注解，区分授权与准入 |
+| 429 当认证故障 | 排查 Token 与证书，越查越乱 | 认为「限流不可能出现在这里」 | APF 在授权之外，429 说明已通过认证 |
+
+---
+
+## 第 7 章 收束
+
+把六段、九个码、三类痕迹放在一起，排障就退化成一条固定的判断链：先由状态码定段，再由段选证据，最后由证据定主体。401 只说明身份没被认出来，403 要分清是授权器还是准入，400 与 422 只能读文本，409 是并发的正常表达，429 说明请求已经过了身份关，500 要区分 etcd 与 Webhook，503 是「还没准备好接待」，504 是「自己等超时了」。
+
+审计日志在这条链里承担的角色，是把「谁」和「结果」固化下来，代价是磁盘、内存与延迟；它的每一档级别、每一个轮转参数都在拿这三样东西换取证能力。聚合层则把一段责任借了出去，借出去的那部分在入口侧既不可观测也不可控制，只能靠后端自己的指标与审计补回来。它们都不是配置完就结束的工作，而是要在容量、延迟与可追溯性之间持续校准。
+
+真正决定排障上限的往往不是工具，而是平时有没有把「段」和「痕迹」对齐：策略覆盖到哪些资源、指标保留了哪些 label、聚合后端有没有自己的监控。等到事故来了再补这些，补的都是复盘时已经来不及的那部分。
 
 ---
 
 ## 参考资料
 
-1. Kubernetes Documentation - API Server：https://kubernetes.io/docs/reference/command-line-tools-reference/kube-apiserver/
-2. Kubernetes Documentation - API Access Control：https://kubernetes.io/docs/concepts/security/controlling-access/
-3. Kubernetes Documentation - API Aggregation：https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/apiserver-aggregation/
+1. Kubernetes Documentation - Auditing：https://kubernetes.io/docs/tasks/debug/debug-cluster/audit/
+2. Kubernetes Documentation - kube-apiserver 参数参考：https://kubernetes.io/docs/reference/command-line-tools-reference/kube-apiserver/
+3. Kubernetes Documentation - Metrics Reference：https://kubernetes.io/docs/reference/instrumentation/metrics/
 4. Kubernetes Documentation - API Priority and Fairness：https://kubernetes.io/docs/concepts/cluster-administration/flow-control/
-5. Kubernetes Source Code - staging/src/k8s.io/apiserver：https://github.com/kubernetes/kubernetes/tree/master/staging/src/k8s.io/apiserver
-6. Daniel Smith (2019). *API Machinery Deep Dive*. KubeCon.
-7. Michael Hausenblas, Stefan Schimanski (2019). *Programming Kubernetes*. O'Reilly, Chapter 2.
+5. Kubernetes Documentation - Kubernetes API Aggregation Layer：https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/apiserver-aggregation/
+6. Kubernetes Documentation - Controlling Access to the Kubernetes API：https://kubernetes.io/docs/concepts/security/controlling-access/
+7. Kubernetes Documentation - Validating Admission Policy：https://kubernetes.io/docs/reference/access-authn-authz/validating-admission-policy/
+8. Kubernetes Source - `staging/src/k8s.io/apiserver/pkg/server/config.go`（`DefaultBuildHandlerChain`）：https://github.com/kubernetes/kubernetes/blob/master/staging/src/k8s.io/apiserver/pkg/server/config.go
+9. Kubernetes Source - `staging/src/k8s.io/apiserver/pkg/apis/audit/types.go`：https://github.com/kubernetes/kubernetes/blob/master/staging/src/k8s.io/apiserver/pkg/apis/audit/types.go
 
 ---
 
 > [!note] 思考题
-> 1. API Server 是 Kubernetes 唯一直接操作 etcd 的组件——所有其他组件（Controller Manager、Scheduler、kubelet）通过 API Server 间接访问 etcd。这种'单一入口'设计简化了安全控制（只需保护 API Server），但也使 API Server 成为潜在瓶颈。在 5000 节点的集群中，API Server 的 QPS 可能达到数万——如何通过多实例水平扩展和负载均衡来应对？
-> 2. API Server 的请求处理链：认证（Authentication）→ 授权（Authorization）→ 准入控制（Admission Control）→ 持久化到 etcd。Mutating Admission Webhook 可以修改请求对象（如注入 Sidecar），Validating Admission Webhook 可以拒绝不合规的请求。Webhook 的调用增加了 API 请求的延迟——在什么场景下 Webhook 延迟成为问题？`failurePolicy: Ignore` 跳过不可用的 Webhook 是否安全？
-> 3. API Server 的 Watch 机制是 Kubernetes 响应式架构的基础——Controller 通过 Watch 监听资源变化并做出响应。大量 Watch 连接（如 1000 个 Controller 各 Watch 不同资源）对 API Server 的内存和 CPU 有什么影响？`--watch-cache-sizes` 参数如何优化 Watch 性能？
+> 1. 认证在 APF 之外、APF 又在授权之外：未通过认证的请求完全不进排队，而没权限但已认证的请求要先排队。如果遇到大量伪造 Token 的请求，APF 能起多大作用？你会把限流提前到哪一层，代价是什么？
+> 2. 审计日志的 blocking 模式会把审计磁盘的延迟加到每个请求上，batch 模式会在缓冲溢出时静默丢事件。在你的合规要求下，这两个代价哪个更容易接受？
+> 3. 聚合层的发现请求要求五秒内往返。如果一个扩展 API 的 P99 稳定在四秒，`kubectl` 的体验会怎样？你会先优化后端还是先调整发现缓存？
+> 4. 段 4 校验没有专属指标。假设 422 突然增多而响应文本被中间层截断，你还能用哪些线索定位是哪个字段、哪类客户端？
+> 5. 把审计策略里的 `deployments` 从 Metadata 提到 Request 之后，日志体积会涨多少？请给出一个可以先用小流量样本估算的方法，而不是直接在全量集群上试。

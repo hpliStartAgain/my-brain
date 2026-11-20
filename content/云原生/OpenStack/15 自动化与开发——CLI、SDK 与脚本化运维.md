@@ -490,7 +490,6 @@ for server in conn.compute.servers(all_projects=True):
 ```
 
 N+1 查询是 SDK 脚本最常见的性能问题，识别特征是"循环里调 API"——看到这个模式就往本地缓存方向优化。
-```
 
 ### 4.3 场景三：巡检脚本
 

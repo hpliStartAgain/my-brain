@@ -1,8 +1,9 @@
 ---
 title: "HiveServer2 Kerberos 认证故障深度分析报告"
 date: 2026-07-26
-tags: [SRE]
-aliases: []
+tags: [SRE, 故障排查, Hive]
+keywords: [复盘]
+aliases: ["HS2 Kerberos 认证故障", "Paimon UGI 状态篡改"]
 ---
 
 ## 1. 摘要
@@ -36,6 +37,7 @@ aliases: []
 本次故障经历了潜伏、爆发和雪崩三个阶段。
 
 ```mermaid
+%%{init: {'theme': 'dracula'}}%%
 timeline
     title HiveServer2 故障时间线
     section 阶段一：潜伏期
@@ -47,6 +49,8 @@ timeline
         5点05分 : HMS 侧出现海量<br>SASL negotiation failure
     section 阶段三：雪崩与死锁
         5点05分 - 9点30分 : 线程池爆满<br>大量线程 BLOCKED<br>服务完全不可用
+
+
 ```
 
 ### 3.1 阶段一：潜伏期
@@ -167,6 +171,7 @@ Paimon 引入了如下逻辑来处理 Proxy User 登录，这是导致服务瘫�
 下图展示了 7月30日（幸存）与 12月31日（宕机）的逻辑分支对比：
 
 ```mermaid
+%%{init: {'theme': 'dracula'}}%%
 flowchart TD
     Start["TGT Renewer 线程崩溃"] --> CheckUGI{"检查 UGI 登录方式"}
     
@@ -188,6 +193,7 @@ flowchart TD
     Start -.->|触发条件| CheckUGI
 ```
 
+
 ## 6. 结论与风险评估
 
 ### 6.1 结论
@@ -199,6 +205,11 @@ flowchart TD
 如果不进行修复，当前集群面临以下风险：
 *   **定时炸弹**：每次 HS2 重启或重新登录后，服务寿命仅等于 TGT 的有效期（24小时）。一旦到期，服务必挂。
 *   **权限混乱**：Paimon 的修改可能导致 Proxy User 身份丢失，引发 HDFS 文件 Owner 错误（变为 hive 用户而非业务用户）。
+
+---
+
+> [!warning] 待补充
+> 本文的复盘链在「改进项」处断开：只给出根因（JDK 对 renewable 票据的处理偏差 + Paimon 对 UGI 登录上下文的篡改）与风险，没有落地的修复动作与验证判据——krb5.conf 侧是否显式声明 `renewable=true`、Paimon 侧 `loginUserFromSubject(null)` 的改法与回滚、HS2 侧的上线验证口径，原文均未记录。补写时以实际变更单为准，不要凭空补。
 
 ---
 

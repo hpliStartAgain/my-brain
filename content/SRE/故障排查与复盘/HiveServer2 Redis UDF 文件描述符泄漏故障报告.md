@@ -1,8 +1,9 @@
 ---
 title: "HiveServer2 Redis UDF 文件描述符泄漏故障报告"
 date: 2026-07-26
-tags: [SRE]
-aliases: []
+tags: [SRE, 故障排查, Hive, JVM]
+aliases: ["HS2 FD 泄漏", "Redis UDF 连接池泄漏"]
+keywords: [HiveServer2, JedisCluster, 文件描述符, UDF]
 ---
 
 **报告编号**: INC-2026012901    
@@ -189,14 +190,14 @@ public abstract class AbstractRedisUDF extends GenericUDF {
   
 ### 4.2 缺陷清单  
   
-| 编号  | 缺陷描述                          | 严重程度   | 影响               |     |
-| --- | ----------------------------- | ------ | ---------------- | --- |
-| D1  | `redisClients` 为实例变量而非静态变量    | **严重** | 每个 UDF 实例持有独立连接池 |     |
-| D2  | `initialize()` 每次创建新的 HashMap | **严重** | 无法复用现有连接         |     |
-| D3  | `synchronized` 仅锁实例级别         | **严重** | 多实例并发时无法防止重复创建   |     |
-| D4  | `MinIdle=5` 设置过高              | 中等     | 加速 FD 耗尽         |     |
-| D5  | `close()` 依赖 GC 调用，不可靠        | **严重** | 连接无法确保释放         |     |
-| D6  | 无连接池复用/共享机制                   | **严重** | 每次查询创建新池         |     |
+| 编号  | 缺陷描述                          | 严重程度   | 影响               |
+| --- | ----------------------------- | ------ | ---------------- |
+| D1  | `redisClients` 为实例变量而非静态变量    | **严重** | 每个 UDF 实例持有独立连接池 |
+| D2  | `initialize()` 每次创建新的 HashMap | **严重** | 无法复用现有连接         |
+| D3  | `synchronized` 仅锁实例级别         | **严重** | 多实例并发时无法防止重复创建   |
+| D4  | `MinIdle=5` 设置过高              | 中等     | 加速 FD 耗尽         |
+| D5  | `close()` 依赖 GC 调用，不可靠        | **严重** | 连接无法确保释放         |
+| D6  | 无连接池复用/共享机制                   | **严重** | 每次查询创建新池         |
   
 ### 4.3 问题可视化  
   ![[Pasted image 20260130143703.png]]
@@ -340,7 +341,8 @@ public abstract class AbstractRedisUDF extends GenericUDF {
   
 2. **重新打包**  
    ```bash  
-   mvn clean package -DskipTests   # 生成新的 adp_udf-3.1.jar   ```  
+   mvn clean package -DskipTests   # 生成新的 adp_udf-3.1.jar
+   ```
 3. **灰度发布**  
    - 先在测试环境验证  
    - 选择一个低流量 HS2 节点进行灰度  
@@ -378,18 +380,23 @@ public abstract class AbstractRedisUDF extends GenericUDF {
 2. **ulimit 调整**  
    ```bash  
    # /etc/security/limits.d/hive.conf  
-   hive soft nofile 200000   hive hard nofile 200000  
+   hive soft nofile 200000
+   hive hard nofile 200000
    ```  
 3. **FD 使用监控脚本**  
    ```bash  
    #!/bin/bash  
    # 每分钟检查 HS2 进程 FD 使用情况  
    HS2_PID=$(pgrep -f HiveServer2)  
-   FD_COUNT=$(ls /proc/$HS2_PID/fd 2>/dev/null | wc -l)   FD_LIMIT=$(cat /proc/$HS2_PID/limits | grep "Max open files" | awk '{print $4}')   USAGE_PCT=$((FD_COUNT * 100 / FD_LIMIT))      echo "$(date): HS2 FD Usage: $FD_COUNT / $FD_LIMIT ($USAGE_PCT%)"  
+   FD_COUNT=$(ls /proc/$HS2_PID/fd 2>/dev/null | wc -l)
+   FD_LIMIT=$(cat /proc/$HS2_PID/limits | grep "Max open files" | awk '{print $4}')
+   USAGE_PCT=$((FD_COUNT * 100 / FD_LIMIT))
+   echo "$(date): HS2 FD Usage: $FD_COUNT / $FD_LIMIT ($USAGE_PCT%)"
       if [ $USAGE_PCT -gt 80 ]; then  
        # 发送告警  
        curl -X POST "https://alert-api/send" \  
-            -d "message=HS2 FD Usage Critical: $USAGE_PCT%"   fi  
+            -d "message=HS2 FD Usage Critical: $USAGE_PCT%"
+       fi
    ```  
 ---  
   
@@ -415,15 +422,18 @@ pool592: {NumIdle: 5, NumActive: 0}
   
 ### 8.3 反编译代码完整结构  
   
-```  
-AbstractRedisUDF.class  
-├── 字段  
-│   ├── stringOIs: StringObjectInspector[] (transient, protected)  
-│   └── redisClients: Map<String, JedisCluster> (transient, private) ⚠️  
-├── 方法  
-│   ├── initialize(ObjectInspector[]): 创建新 HashMap│   ├── getRedisClient(String, String): synchronized, 创建新 JedisCluster│   ├── getPoolConfig(): MinIdle=5, MaxIdle=8, MaxTotal=20  
-│   └── close(): 遍历关闭连接池  
-```  
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+flowchart TD
+    C["AbstractRedisUDF.class"] --> F["字段"]
+    C --> M["方法"]
+    F --> F1["stringOIs: StringObjectInspector[] (transient, protected)"]
+    F --> F2["redisClients: Map&lt;String, JedisCluster&gt; (transient, private) ⚠️"]
+    M --> M1["initialize(ObjectInspector[]): 创建新 HashMap"]
+    M --> M2["getRedisClient(String, String): synchronized, 创建新 JedisCluster"]
+    M --> M3["getPoolConfig(): MinIdle=5, MaxIdle=8, MaxTotal=20"]
+    M --> M4["close(): 遍历关闭连接池"]
+```
   
 ### 8.4 相关配置参数  
   

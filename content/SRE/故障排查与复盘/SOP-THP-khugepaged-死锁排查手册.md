@@ -1,15 +1,16 @@
 ---
 title: SOP — THP khugepaged 死锁 / 系统级 D 状态雪崩排查手册
 date: 2026-05-07
-tags: [cgroups, 故障排查]
-keywords: [deadlock, khugepaged, linux-kernel, SOP, THP]
+tags: [故障排查, 运维, 内核, Linux]
+keywords: [cgroups, deadlock, khugepaged, linux-kernel, SOP, THP]
+aliases: ["THP 死锁 SOP", "D 状态雪崩排查手册"]
 ---
 
 # SOP：THP khugepaged 死锁 / 系统级 D 状态雪崩排查手册
 
 > **适用场景**：节点出现大量进程 D 状态、load 异常升高、`ps`/`top` 挂死，但 SSH 仍可登录，且怀疑与 THP / khugepaged / cgroup 内存 / 内核锁相关。
 >
-> 本 SOP 基于 dn-018 2026-05-06 故障提炼，详见关联 RCA：[dn-018-THP-khugepaged-死锁-根因分析-20260506.md](dn-018-THP-khugepaged-死锁-根因分析-20260506.md)
+> 本 SOP 基于 dn-018 2026-05-06 故障提炼，详见关联 RCA：[[dn-018-THP-khugepaged-死锁-根因分析-20260506]]
 
 ---
 
@@ -28,6 +29,7 @@ keywords: [deadlock, khugepaged, linux-kernel, SOP, THP]
 ## 快速决策树
 
 ```mermaid
+%%{init: {'theme': 'dracula'}}%%
 graph TD
     A[SSH 能否登录?] -->|否| B[通过 IPMI/BMC 强制重启]
     A -->|是| C{timeout 5 ps aux 是否卡住?}
@@ -418,4 +420,7 @@ Go runtime 在分配堆内存时调用 `madvise(MADV_HUGEPAGE)`，将整个 Go h
 ---
 
 *文档版本：v2.0 | 作者：SRE 团队 | 基于 dn-018 2026-05-06 故障提炼*
-*关联 RCA：[dn-018-THP-khugepaged-死锁-根因分析-20260506.md](dn-018-THP-khugepaged-死锁-根因分析-20260506.md)*
+*关联 RCA：[[dn-018-THP-khugepaged-死锁-根因分析-20260506]]*
+
+> [!warning] 待补充
+> 本文的止损与恢复步骤（关闭 THP、停止上游服务、sysrq 强制重启）都是单向操作，缺少回滚约定：THP 与相关内核参数在故障解除后是否恢复默认、如何恢复；被停止的上游服务按什么顺序拉起。补写时请依据实际变更流程核实。

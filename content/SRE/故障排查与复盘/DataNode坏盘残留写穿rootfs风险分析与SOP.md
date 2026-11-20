@@ -1,8 +1,9 @@
 ---
 title: "风险分析：DataNode 坏盘残留导致写穿 rootfs——fstab nofail 与 HDFS 配置漂移的致命组合"
 date: 2026-05-20
-tags: [HDFS]
+tags: [SRE, 故障排查, HDFS, 运维]
 keywords: [Ambari, DataNode, fstab, nofail, rootfs, SOP, 坏盘, 风险分析]
+aliases: ["DataNode 写穿 rootfs", "坏盘残留写穿根分区"]
 category: 风险分析 & SOP
 severity: P1-潜在
 ---
@@ -19,43 +20,19 @@ severity: P1-潜在
 
 ### 1.1 故障链全景
 
-```
-坏盘事件
-    │
-    ▼
-/dev/sdm (UUID=11111111-...) 物理磁盘故障，无备件暂不更换
-    │
-    ▼
-主机重启（进程重启 or 物理重启）
-    │
-    ▼
-内核 fstab 挂载阶段：UUID 11111111-... 未找到（磁盘已死）
-nofail → 挂载失败，静默跳过，系统正常启动 ✅
-    │
-    ▼
-/data_m 挂载点目录依然存在（空目录，位于 rootfs /）
-    │
-    ▼
-ambari-agent 拉起 DataNode 进程
-    │
-    ▼
-FsDataset 初始化：扫描 dfs.datanode.data.dir 中所有路径
-/data_m 目录存在且可读写 → 认为是合法 Volume ⚠️
-    │
-    ▼
-DiskChecker 健康检测：对 /data_m 执行 write + read + delete
-rootfs 可正常读写 → 测试通过，Volume 标记为 healthy ⚠️
-    │
-    ▼
-DataNode 开始向 /data_m 写入 HDFS Block（每个 128MB）
-实际写到 rootfs（/）
-    │
-    ▼
-rootfs 写满（通常只有 50-100GB 可用）
-    │
-    ▼
-系统级联故障：进程无法写临时文件、日志、pid 文件...
-宿主机服务全面异常，可能触发物理机崩溃
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+flowchart TD
+    N1["坏盘事件"] --> N2["/dev/sdm (UUID=11111111-...) 物理磁盘故障，无备件暂不更换"]
+    N2 --> N3["主机重启（进程重启 or 物理重启）"]
+    N3 --> N4["内核 fstab 挂载阶段：UUID 11111111-... 未找到（磁盘已死）<br/>nofail → 挂载失败，静默跳过，系统正常启动 ✅"]
+    N4 --> N5["/data_m 挂载点目录依然存在（空目录，位于 rootfs /）"]
+    N5 --> N6["ambari-agent 拉起 DataNode 进程"]
+    N6 --> N7["FsDataset 初始化：扫描 dfs.datanode.data.dir 中所有路径<br/>/data_m 目录存在且可读写 → 认为是合法 Volume ⚠️"]
+    N7 --> N8["DiskChecker 健康检测：对 /data_m 执行 write + read + delete<br/>rootfs 可正常读写 → 测试通过，Volume 标记为 healthy ⚠️"]
+    N8 --> N9["DataNode 开始向 /data_m 写入 HDFS Block（每个 128MB）<br/>实际写到 rootfs（/）"]
+    N9 --> N10["rootfs 写满（通常只有 50-100GB 可用）"]
+    N10 --> N11["系统级联故障：进程无法写临时文件、日志、pid 文件...<br/>宿主机服务全面异常，可能触发物理机崩溃"]
 ```
 
 ### 1.2 为什么 DiskChecker 无法识别这个问题
@@ -281,41 +258,43 @@ UserParameter=datanode.mount.status,/usr/local/bin/datanode-mount-guard.sh > /de
 
 ### SOP-坏盘处置标准流程
 
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+flowchart TD
+    S0["发现 DataNode 磁盘故障（告警/巡检/DiskChecker 上报）"] --> S1["① 确认磁盘状态（5min）"]
+    S1 --> S2["② 确认挂载状态（1min）"]
+    S2 --> S3["③ 立即通过 Ambari 更新 dfs.datanode.data.dir（10min）"]
+    S3 --> S4["④ 注释 fstab 对应行（2min）"]
+    S4 --> S5["⑤ 验证（2min）"]
+    S5 --> S6["⑥ 登记坏盘工单，等待备件"]
 ```
-发现 DataNode 磁盘故障（告警/巡检/DiskChecker 上报）
-    │
-    ▼
-① 确认磁盘状态（5min）
-    ├─ smartctl -a /dev/sdm         # SMART 状态
-    ├─ dmesg | grep -i error        # 内核 I/O 错误
-    └─ lsblk / fdisk -l             # 确认设备是否可见
 
-    ▼
-② 确认挂载状态（1min）
-    ├─ mountpoint /data_m           # not a mountpoint = 未挂载
-    └─ df -h | grep data_m          # 无输出 = 未挂载
+各步骤的操作与判据：
 
-    ▼
-③ 立即通过 Ambari 更新 dfs.datanode.data.dir（10min）
-    ├─ 登录 Ambari UI
-    ├─ HDFS → Configs → dfs.datanode.data.dir
-    ├─ 删除 /data_m（仅本节点 override！）
-    └─ 仅重启受影响的 DataNode
+1. **① 确认磁盘状态（5min）**
+   - `smartctl -a /dev/sdm` —— SMART 状态
+   - `dmesg | grep -i error` —— 内核 I/O 错误
+   - `lsblk` / `fdisk -l` —— 确认设备是否可见
+2. **② 确认挂载状态（1min）**
+   - `mountpoint /data_m` —— not a mountpoint = 未挂载
+   - `df -h | grep data_m` —— 无输出 = 未挂载
+3. **③ 立即通过 Ambari 更新 dfs.datanode.data.dir（10min）**
+   - 登录 Ambari UI
+   - HDFS → Configs → dfs.datanode.data.dir
+   - 删除 /data_m（仅本节点 override！）
+   - 仅重启受影响的 DataNode
+4. **④ 注释 fstab 对应行（2min）**
 
-    ▼
-④ 注释 fstab 对应行（2min）
-    sed -i "s|^UUID=11111111.*data_m.*|# &  # DISK FAILED $(date '+%Y-%m-%d')|" /etc/fstab
+   ```bash
+   sed -i "s|^UUID=11111111.*data_m.*|# &  # DISK FAILED $(date '+%Y-%m-%d')|" /etc/fstab
+   ```
 
-    ▼
-⑤ 验证（2min）
-    ├─ DataNode 正常启动
-    ├─ hdfs dfsadmin -report | grep -A5 hostname   # 确认 Volume 数量
-    └─ HDFS 副本数恢复（NN 会调度再复制）
-
-    ▼
-⑥ 登记坏盘工单，等待备件
-    └─ 备注：节点/磁盘/故障时间/Ambari 配置是否已更新
-```
+5. **⑤ 验证（2min）**
+   - DataNode 正常启动
+   - `hdfs dfsadmin -report | grep -A5 hostname` —— 确认 Volume 数量
+   - HDFS 副本数恢复（NN 会调度再复制）
+6. **⑥ 登记坏盘工单，等待备件**
+   - 备注：节点/磁盘/故障时间/Ambari 配置是否已更新
 
 ---
 
@@ -346,5 +325,5 @@ UserParameter=datanode.mount.status,/usr/local/bin/datanode-mount-guard.sh > /de
 
 ## 关联文档
 
-- [[08 DataNode 存储引擎——FsDataset 与磁盘 IO 管理机制]]
-- [[09 HDFS 容错与恢复机制——自愈修复的工程实现]]
+- [[大数据/Hadoop/HDFS/08 DataNode 存储引擎——FsDataset 与磁盘 IO 管理机制|08 DataNode 存储引擎——FsDataset 与磁盘 IO 管理机制]]
+- [[大数据/Hadoop/HDFS/09 HDFS 容错与恢复机制——自愈修复的工程实现|09 HDFS 容错与恢复机制——自愈修复的工程实现]]

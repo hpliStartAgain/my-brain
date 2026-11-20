@@ -1,477 +1,470 @@
 ---
 title: "03 算子转换逻辑：惰性求值与 DAG 构建的底层机制"
-date: 2026-02-27
-tags: [RDD, Spark]
-keywords: [DAG, 惰性求值, 算子]
-aliases: [RDD Operators and Lazy Evaluation]
+date: 2026-11-19
+tags: [Spark, 大数据, 性能优化]
+keywords: [惰性求值, DAG, 报错延迟, explain, AQE, 重复计算]
+aliases: []
 ---
 
 # 03 算子转换逻辑：惰性求值与 DAG 构建的底层机制
 
-> [!abstract] 摘要
-> 上一篇深入了 RDD 的五大核心属性，理解了 RDD 是"逻辑描述"而非"物理容器"。本文聚焦一个关键问题：当你写下 `rdd.filter(...).map(...).reduceByKey(...)` 这样一串代码时，Spark 内部究竟在做什么？为什么前两个调用"瞬间返回"而最后一个却触发了集群的全量计算？这不仅仅是一个"惰性求值"的技术概念问题，更涉及分布式计算引擎如何在"局部代码"与"全局最优执行计划"之间架起桥梁的深层设计哲学。本文将完整推导：Transformation 的本质是什么 → 惰性求值带来了哪些工程价值 → DAG 如何在内存中悄然成形 → Action 触发后 DAGScheduler 如何将 DAG 切分为可执行的 Stage → 流水线计算模型如何在物理层面消除中间开销。
+**摘要：**
+
+惰性求值通常被当作一条抽象层性质来讲：转换不执行，动作才执行，讲完就翻页。但对一个每天两千个作业、三百个节点的集群来说，这条性质真正的分量在另外一面——它决定了错误在哪一刻暴露、计划在哪一刻定型、同一份数据会被读几遍。本文不谈源码，谈判据：把所谓"三层惰性"逐层拆开，把"报错延迟"这个流行说法校正到它真正成立的那三类错误上，再给出四道预检工事各自的边界：构造即分析、`explain`、`queryExecution`、`limit(n)` 抽样，并说明为什么第四道之后仍有一层必须靠真读。随后处理惰性与优化器的关系（全局视野是推迟执行的技术理由）、两个最贵的陷阱（重复计算与把 `count()` 当预检）、以及不可变性与链式调用造成的两处误判。四类延迟错误的形态——字段名、类型、路径、UDF——各自对应不同的首见位置与处置入口，混为一谈最容易把排查方向指错。全篇落到一张症状判据表、一张带代价列的参数表和四组反例上；机制推导留给内核系列。
 
 ---
 
-## 第 1 章 一个被忽视的基本问题：算子调用究竟做了什么？
+## 第 1 章 三层推迟，三笔账
 
-理解 Spark 算子的本质，需要先从一个看似简单的问题出发：**调用 `rdd.map(f)` 时，Spark 执行了什么操作？**
+凌晨两点十分，一份按省份与品类聚合的日报作业提交上去，第一个 Stage 一开跑就是全量扫描。三十八分钟之后，Jobs 页上出现一条红色：某个 task 抛 `FileNotFoundException`，路径指向 `dt=2026-11-18/part-00123.parquet`。表还在 metastore 里，分区还在，`desc formatted` 一切正常，只有那一个分片不在了——上游写完之后做了一次目录清理，把"看起来多余"的分片删掉了。
 
-大多数初学者的直觉答案是"对 rdd 里的每条数据执行 f"。但这是错误的。正确答案是：**调用 `map` 只是在 Driver JVM 堆内存里创建了一个新的 `MapPartitionsRDD` 对象，并将 f 作为字段保存在这个对象中，整个过程在毫秒级内完成，不涉及任何数据读取或计算。**
+同一天中午，另一个作业被查出同一份表读了三遍：调度平台记的输入量 3.1 TB，而 HDFS 的计数说那天这张表被读了十一次。代码里只有一处 `spark.read`、一个 `filter`、一个 `groupBy`，却接了三个 action——写主表、算总量、写校验表，中间没有 `cache`。
 
-让我们看一段简化的源码来验证这一点：
+两个现场的共同点不在 SQL 写得对不对，在于**判断被推到了结算的那一刻**。文件没了这件事，只有真正去读那个分片才可能知道；同一份数据被读了几遍，只由 action 的个数决定，与代码里出现几次 `spark.read` 毫无关系。惰性求值（Lazy Evaluation）落到运维上是三笔要分开记的账，混在一起记就会得出错误的处置动作。
+
+### 1.1 第一层：算子不执行，换来的是"晚点算"
+
+调用一个转换算子，在 driver 上只改动对象图：新建计划节点挂到父节点下，闭包清洗一遍，返回新对象。机制细节见 [[大数据/Spark/读书笔记-spark内核/03_调度与执行机制/3. Spark逻辑处理流程详解|逻辑处理流程与惰性求值的边界]] 第 1 章；运维要盯的是另一面——**对象图本身也是有成本的资产**，它在 driver 堆上一直长。
+
+长到什么程度会出问题，有明确的形态。循环里追加列是最典型的写法：
 
 ```scala
-// RDD 基类中 map 的实现（简化自 Spark 源码）
-def map[U: ClassTag](f: T => U): RDD[U] = withScope {
-  val cleanF = sc.clean(f)  // 序列化闭包，确保可被发送到远端 Executor
-  new MapPartitionsRDD[U, T](this, (_, _, iter) => iter.map(cleanF))
-  // 仅仅是 new 了一个新对象，传入 this（父 RDD）和用户函数
-  // 没有任何数据被读取或处理
-}
+// 一千次 withColumn，等于在一棵计划树上挂一千个 Project 节点
+var df = spark.table("dwd_order")
+for (c <- 0 until 1000) df = df.withColumn(s"f_$c", lit(c))
+df.write.saveAsTable("tmp_wide")   // 分析、优化、代码生成全压在这一刻
 ```
 
-这段代码做了两件事：
-1. 通过 `sc.clean(f)` 序列化用户函数（捕获闭包，确保可以被发送到远端 Executor）
-2. `new MapPartitionsRDD(...)` 创建一个新 RDD 对象，构造函数参数包含父 RDD（即 `this`）和计算函数
+这段代码的代价不在计算，在准备：计划树深到上千层之后，分析与优化要反复遍历这棵树，耗时从毫秒级涨到分钟级；嵌套过深时 driver 侧直接抛 `StackOverflowError`；即便不炸，driver 序列化 task 闭包时也要把这棵树的残余带下去。换来的是执行之前还能改主意：只读需要的列、只算够用的分区、把相邻窄依赖合成一次遍历。第一层的账就是"用 driver 的内存与准备时间，换执行期的自由度"。
 
-**新 RDD 对象的两个关键字段：**
-- `dependencies`：指向父 RDD（`this`），这就是血缘链的物理连接方式
-- `f`：用户传入的转换函数，被存储在闭包中，等待 Executor 执行时调用
+### 1.2 第二层：错误晚暴露，但"晚"要分档
 
-这个"创建对象"而非"执行计算"的行为，就是**惰性求值（Lazy Evaluation）的物理本质：Transformation 算子构建的是一张由 RDD 对象构成的引用图，而非执行任何实际计算。
+"代码写完不报错，跑起来才炸"这句话流传很广，它半对半错，错的那一半直接影响处置动作。把错误按暴露时机分三档，边界才清楚。
 
-### 1.1 sc.clean(f) 的作用：闭包清理为什么必须存在？
+**分析期**的错误在构造计划对象的那一行就抛。Spark 每构造一个 `Dataset` 就做一次分析（analysis），列名解析不出来、函数参数类型对不上、聚合里混了非聚合列，都在这一刻报 `AnalysisException`，错误类通常是 `UNRESOLVED_COLUMN` 或 `DATATYPE_MISMATCH`。写下 `df.select("usr_id")` 而表里只有 `user_id`，异常栈顶就落在这行代码上，不需要任何 action。
 
-`sc.clean(f)` 这个调用值得展开说明，因为它是 Spark 中一类常见运行时报错（`Task not serializable`）的根源。
+**计划期**的错误在 action 触发优化与物理化时暴露，典型是 join 策略选错、分区数配错导致的任务数爆炸，以及写出时的路径与权限问题。**执行期**的错误在 task 内部暴露，全部与数据相关：脏数据转换失败、字段取错、文件消失、UDF 抛异常。
 
-用户在编写 `map(f)` 时，`f` 往往是一个 Lambda 表达式，而 Lambda 表达式会隐式捕获其所在作用域的变量（即"闭包"）。当这个闭包被发送到远端 Executor 执行时，整个闭包对象需要通过 Java 序列化传输。
+三档里只有第三档符合"跑起来才炸"，但线上感受到的延迟报错几乎全是第三档——第一档在开发时就炸掉了，活不到上线。这个筛选效应决定了**生产上看到的错误分布是开发期预检过滤后的残余**，而残余恰好最难提前发现。
 
-问题在于：如果被捕获的变量（或其所在对象）没有实现 `Serializable` 接口，序列化就会失败，抛出 `Task not serializable` 异常。`sc.clean(f)` 的工作就是在 Driver 端**提前检测**这个问题，并尝试通过静态分析去除不必要的外层引用（"清理"闭包），让其可序列化。
+| 错误档位 | 暴露时机 | 典型错误类 | 首见位置 | 能否零成本提前 |
+| :--- | :--- | :--- | :--- | :--- |
+| 分析期 | 构造 DataFrame 那一行 | `UNRESOLVED_COLUMN`、`DATATYPE_MISMATCH` | driver 侧异常栈，栈顶就是你的代码行 | 是，写代码时就报 |
+| 计划期 | action 触发优化与物理化 | 路径不存在、权限不足、结果超限 | driver 日志，作业未进 Stage | 部分，`explain` 可看计划 |
+| 执行期 | task 内部 | `CAST_INVALID_INPUT`、`FileNotFoundException`、`PythonException` | executor 日志与失败 task 的栈 | 否，必须读到那段数据 |
 
-> [!warning] 生产常见错误
-> ```scala
-> class MyProcessor {
->   val threshold = 100
->   def process(rdd: RDD[Int]): RDD[Int] = {
->     rdd.filter(_ > threshold)  // 看似只捕获了 threshold
->     // 实际上 Lambda 捕获了 this（MyProcessor 实例）
->     // 若 MyProcessor 不可序列化，则抛出 Task not serializable
->   }
-> }
-> ```
-> **修复方式**：将 `threshold` 提取为本地变量 `val t = threshold`，再在 Lambda 中使用 `t`，这样闭包只捕获一个 `Int`，不再持有 `this` 引用。
+### 1.3 第三层：计划晚定型，于是有三种"看不见"
+
+逻辑计划在写代码时就在长，这一点可见——`df.explain` 随时能把树打出来。真正被推迟的是后两步：优化在 action 触发时才发生，物理计划在那一刻才生成；同一份逻辑计划在 AQE 打开时，运行到 Stage 边界还会被改一次，改成什么取决于上游实际产出。
+
+于是"计划不可见"其实是三件事叠在一起。其一，action 之前能看到的只有逻辑计划与优化计划，物理执行的样子要等 §3.3 那一步。其二，即便看到了物理计划，AQE 之后的最终形态与它不同，`explain` 里 `AdaptiveSparkPlan` 节点的 `isFinalPlan` 标记在运行前一直是 `false`，运行后才会翻成 `true`。其三，RDD 层根本没有可读的计划，节点里装的是 JVM 闭包，`toDebugString` 只能给你一串缩进，读得出链长，读不出优化空间。
+
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+flowchart TD
+    L["一层惰性"] --> A1["算子不执行"]
+    L --> A2["错误晚暴露"]
+    L --> A3["计划晚定型"]
+    A1 --> B1["换来：执行前还能改主意<br/>少读列、少读分区、合并遍历"]
+    A1 --> C1["代价：driver 上的计划树只增不减"]
+    A2 --> B2["换来：开发期免费过滤掉分析类错误"]
+    A2 --> C2["代价：剩下的错误全落在结算时刻"]
+    A3 --> B3["换来：完整计划齐备后才有全局优化"]
+    A3 --> C3["代价：action 前拿不到真实执行形态"]
+    C1 --> D["观测位置：driver 堆、StackOverflowError、explain 树高"]
+    C2 --> D
+    C3 --> D
+```
+
+### 1.4 机制归机制，判据归判据
+
+先把分工讲清楚，免得重复读。算子的分类坐标（会不会产生 Shuffle、保不保留分区器）、窄依赖为什么能流水线、宽依赖为什么非落盘不可，见 [[大数据/Spark/读书笔记-spark内核/01_核心概念与基础/3. Spark核心Transformation操作详解|Transformation 的三个坐标]]；DAG 如何在 driver 内存里组装、Stage 在哪里切开、`take` 为什么能只算几个分区，见 [[大数据/Spark/读书笔记-spark内核/03_调度与执行机制/3. Spark逻辑处理流程详解|逻辑处理流程与惰性求值的边界]]；Shuffle 一次重排的三笔账与 m×r 放大，见 [[大数据/Spark/读书笔记-spark内核/05_Shuffle核心机制/1. Spark_Shuffle机制深度解析|Shuffle 的三笔账]]。
+
+这三处回答的是"它为什么这样工作"。本篇回答的是另一半：同样的机制，为什么在这个作业里表现为"跑到一半才报错"，在另一个作业里表现为"同一份数据被读三遍"，在第三个作业里表现为"`explain` 看到的和跑起来的不一样"。这三种表现各有各的判据，也各有各的处置入口。
 
 ---
 
-## 第 2 章 Transformation 的分类学：数据流拓扑的两种形态
+## 第 2 章 报错延迟的四种典型
 
-### 2.1 按依赖类型分类：窄变换 vs 宽变换
+把四种现场按"多晚才知道"排开，会发现延迟程度差别很大，处置入口也完全不同。这一章逐个校正：哪些是真延迟，哪些是被误传的延迟，误判之后又会在哪里付出代价。
 
-从调度器的视角，Transformation 最重要的分类维度不是"做什么"，而是"**会不会产生 Shuffle**"。
+### 2.1 字段名错：在 DataFrame 上其实不延迟，延迟的是它的三个变体
 
-**窄变换（Narrow Transformation）**：每条输入记录只影响至多一个输出分区，不需要跨节点数据移动。
+先纠正一个流传很广的说法：很多人以为列名写错要到 action 才报，于是用一次 `count()` 做预检。事实相反，列名错在写下那一行就报，因为构造 `Dataset` 时已经做过分析。
 
-| 算子 | 依赖类型 | 说明 |
+```scala
+// 这一行就抛，不需要等到 action
+val bad = df.select("usr_id")
+// AnalysisException: [UNRESOLVED_COLUMN] cannot resolve `usr_id`
+```
+
+真正会延迟到执行期的是字段访问被挪到了 Row 上，也就是把结构化 API 降级成 RDD 之后：
+
+```scala
+// 分析器看不到 Row.getAs 里的字符串，只能等 task 跑到那一条才炸
+df.rdd.map(row => row.getAs[String]("usr_id")).count()
+// 执行期抛 IllegalArgumentException: Field "usr_id" does not exist
+```
+
+第二种变体是 schema 漂移：分析期用的是 metastore 里的表结构，读文件时实际结构不同，错误在向量化读端抛出，表现为 task 失败而非提交失败。第三种是列名来自配置、拼进 SQL 字符串，它照样在构造期抛错，只是评审时看不到那行字面量——这是"发现得晚"，不是"报错得晚"：前者靠契约测试，后者靠预检。
+
+判据只有一条：栈顶落在你写的那行代码就是分析期，落在 `Task.run` 或 codegen 生成类就是执行期。
+
+### 2.2 类型错：路径分两条，都不在 action 那一个点上
+
+类型错同样分两路。分析期能发现的那一路（字符串直接做算术、聚合函数参数个数不对）在构造时就抛；另一路是数据依赖的转换，只有读到具体那一行才知道。
+
+后一路在 Spark 4.x 上比 3.x 更吵，因为 ANSI 模式默认打开了（`spark.sql.ansi.enabled` 自 4.0 起默认为 `true`）。同一个 `cast("int")`，两种模式给出两种完全不同的故障形态：
+
+| 模式 | 脏数据 `"12.5a"` 转 int 的结果 | 故障形态 | 排查难度 |
+| :--- | :--- | :--- | :--- |
+| ANSI 开（4.x 默认） | 抛 `CAST_INVALID_INPUT`，task 失败 | 立即失败，错误行可定位 | 低，但作业停 |
+| ANSI 关 | 静默返回 null | 结果里多出一批 null，错误转移到下游 | 高，往往几天后才发现 |
+
+后者才是难查的一类：错误没有延迟，而是被**取消**了，代价由下游报表承担。判断形态看报错文案：出现 `CAST_INVALID_INPUT`、`DIVIDE_BY_ZERO`、`ARITHMETIC_OVERFLOW` 就是数据问题；没有这些错误类而结果里是 null，是配置问题。
+
+### 2.3 路径错：元数据在、数据不在
+
+路径错也要分两段看。`spark.read.parquet(path)` 对不存在的路径立刻失败，因为解析 schema 要列举文件，绕不开元数据 I/O，属于计划期甚至构造期。真正拖到执行期的是"元数据在、数据不在"这一类：
+
+- 表还挂在 metastore 上，底层目录被上游清理或迁移了；
+- 挂载点掉线，目录存在但读不出内容；
+- 作业读写的路径与它自己的输出目录重叠，覆盖写把刚读进来的分片改掉了；
+- 执行期间有人在做归档，文件在 Stage 跑到一半时消失。
+
+这四种的全部表现都是 executor 侧抛 `FileNotFoundException`，driver 日志里只有一个被包装过的 `SparkException`，真正的原因在失败 task 的栈里。第四种在长作业上格外常见：一个跑两小时的作业，中途被别人清目录的概率远高于提交那一刻。
+
+处置上有一个危险旋钮：`spark.sql.files.ignoreMissingFiles` 与 `spark.sql.files.ignoreCorruptFiles` 默认都是 `false`，改成 `true` 后作业不再失败，而是**静默少读**——把可诊断的失败换成不可诊断的少算。笔者只建议救急时用，且必须配套行数对账。
+
+### 2.4 UDF 里的异常：栈被包装了两三层
+
+UDF 抛出的异常要到 task 执行时才可见，没有例外，因为函数体对 Catalyst 完全不透明。麻烦在栈的形状：Scala UDF 的异常会被包进 `SparkException`，原始异常藏在 `Caused by` 里；Python UDF 以 `PythonException` 出现，真正的 traceback 打在 executor 的 stderr 上，driver 侧只看到一句被截断的总结；代码生成更绕，整个 Stage 的表达式树被拼成一个生成类，栈里出现 `GeneratedIteratorForCodegenStage` 这样的帧，看起来像 Spark 内部出错，其实是你那行 UDF。
+
+Python UDF 还有一个额外代价，`explain` 里能看到：计划中出现 `BatchEvalPython` 节点，意味着这段逻辑被从 Catalyst 的表达式体系里摘了出去，基于它的过滤条件不会被下推，扫描量等于全表，过滤发生在数据进了 JVM 之后。诊断"读得多、留得少"的作业，先看有没有这个节点，比看数据快。
+
+### 2.5 一张按暴露时机排开的表
+
+| 错误类型 | 最早暴露时机 | 首见位置 | 判据 | 处置入口 |
+| :--- | :--- | :--- | :--- | :--- |
+| 列名错（DSL 字符串） | 构造 DataFrame 那一行 | driver 异常栈 | 栈顶就是用户代码行 | 无需预检，改代码 |
+| 列名/类型错（`Row.getAs`） | task 执行 | executor 栈，含 `Row` 调用 | 栈里有 `Task.run` | 先看是否走了 `df.rdd` |
+| 数据依赖的类型错 | task 执行 | 失败 task 栈 | `CAST_INVALID_INPUT` 等错误类 | 数据侧清洗或改 `try_cast` |
+| 路径与文件缺失 | task 执行 | executor 栈 | `FileNotFoundException` | 查上游清理与挂载 |
+| 数据源不存在 | 构造/计划期 | driver 栈 | 解析 schema 时即失败 | 无需预检 |
+| UDF 异常 | task 执行 | codegen 帧后跟 `Caused by` | 栈里有生成类与 `PythonException` | 看 `explain` 里的 `BatchEvalPython` |
+
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+flowchart LR
+    S1["写下算子"] --> P1["构造计划与分析"]
+    P1 -->|"列名/类型不匹配"| E1["AnalysisException<br/>就在这一行"]
+    P1 --> S2["调用 action"]
+    S2 --> P2["优化与物理化"]
+    P2 -->|"结果超限/权限"| E2["driver 侧失败<br/>尚未进 Stage"]
+    P2 --> S3["task 执行"]
+    S3 -->|"脏数据/文件缺失/UDF"| E3["executor 侧失败<br/>栈顶在 Task.run"]
+    E1 --> D["只有 E3 符合<br/>『跑起来才报错』"]
+    E2 --> D
+    E3 --> D
+```
+
+---
+
+## 第 3 章 提前暴露：四道工事与它们的边界
+
+把错误提前暴露的努力，本质上是在"结算点"之前插检查站。四道工事从便宜到贵排开，每一道都只能覆盖一段，越往后越接近真读。写这一段的价值不在推荐手段，而在说清每道工事**看不到什么**——把预检当成万能，是下一个坑的开始。
+
+### 3.1 第一道：构造即分析，免费的，覆盖面窄
+
+第一道工事不需要额外动作：把 DataFrame 构造出来，分析就发生了。它覆盖全部静态可判定的错误：列不存在、类型不匹配、聚合分组错配、窗口定义不合法。成本为零，上限也清楚——看不到数据、看不到文件、看不到 UDF 内部。
+
+实践中能把它用得更狠一点：把构造集中到一处，先构造完所有 DataFrame 再统一触发 action，分析类错误就会在作业开始的第一秒集中爆发，而不是分散在四十分钟的执行过程里。反过来，构造与 action 交错写，错误就被摊进了运行时间轴。
+
+### 3.2 第二道：`explain` 能看到什么，看不到什么
+
+`explain` 触发优化，不触发执行：它把分析后、优化后、物理化的计划打出来，读的是元数据与统计信息，不扫数据。它能提前暴露"结构性问题"，见下表；看不到"数据本身有什么问题"，这一层无法靠计划推断。
+
+| 看什么 | 在计划里的位置 | 它能回答的问题 |
 | :--- | :--- | :--- |
-| `map(f)` | OneToOneDependency | 一对一，分区结构不变 |
-| `filter(f)` | OneToOneDependency | 过滤，分区结构不变 |
-| `flatMap(f)` | OneToOneDependency | 一变多，分区结构不变 |
-| `mapPartitions(f)` | OneToOneDependency | 分区级批处理，分区结构不变 |
-| `union(rdd2)` | RangeDependency | 合并分区列表，无 Shuffle |
-| `coalesce(n, shuffle=false)` | NarrowDependency | 合并分区，不触发 Shuffle |
+| 分区裁剪是否生效 | 扫描节点的 `PartitionFilters` | 分区条件写对了没有，有没有被函数包住导致失效 |
+| 谓词是否下推 | 扫描节点的 `PushedFilters` | 过滤发生在读之前还是读之后 |
+| 列裁剪是否生效 | 扫描节点的 `ReadSchema` | 宽表只读几列这件事有没有兑现 |
+| join 策略 | `BroadcastHashJoin` 与 `SortMergeJoin` | 会不会多一次 Shuffle，广播的表是否过大 |
+| Shuffle 次数 | `Exchange` 节点个数 | 一次查询里有几处重分布，能不能省掉 |
+| UDF 是否切断优化 | `BatchEvalPython`、`ScalaUDF` | 这段逻辑是否已经脱离优化器管辖 |
+| AQE 是否介入 | `AdaptiveSparkPlan` 节点 | 后面的计划还会不会变 |
 
-**宽变换（Wide Transformation）**：一条输入记录可能影响多个输出分区，必须经过 Shuffle（数据在节点间重分布）。
+`explain` 的边界有四条。第一，它不读数据，凡与数据分布有关的判断都只是估算，表没做过统计时 `Statistics` 里的行数取的是默认值。第二，CBO 在 4.x 上默认关着，join 顺序不保证最优，打出来的顺序只代表规则优化后的产物。第三，AQE 会让最终计划与它不同。第四，各模式看到的层次不一样，用错模式会把分析计划当成执行计划读。
 
-| 算子 | 说明 |
-| :--- | :--- |
-| `groupByKey()` | 按 Key 分组，全量数据 Shuffle |
-| `reduceByKey(f)` | 按 Key 聚合，Map 端可预聚合 |
-| `sortByKey()` | 全局排序，需 RangePartitioner |
-| `join(rdd2)` | 两表 Join，若分区规则不同则 Shuffle |
-| `repartition(n)` | 重分区，强制 Shuffle |
+`explain(mode)` 的模式差异值得单列一行：
 
-### 2.2 按作用粒度分类：元素级 vs 分区级
+| 模式 | 输出内容 | 适用场合 | 误用后果 |
+| :--- | :--- | :--- | :--- |
+| `simple` | 物理计划 | 日常看 join 策略与扫描节点 | 看不到逻辑优化过程 |
+| `extended` | 分析、优化、物理三层 | 判断错误出在解析还是优化 | 输出长，噪音多 |
+| `cost` | 带统计信息的优化计划 | 排查 join 顺序与广播判定 | 统计缺失时信息误导 |
+| `codegen` | 生成的代码 | 确认表达式是否被代码生成 | 极少用于运维 |
+| `formatted` | 分节带编号的计划 | 与人讨论、贴进工单 | 不便于逐行比对 |
 
-**元素级算子**（`map`, `filter`, `flatMap`）：函数作用于每条记录，是最常用的算子。其 `compute` 实现是对父迭代器的直接包装。
+### 3.3 第三道：`queryExecution` 的三个计划
 
-**分区级算子**（`mapPartitions`, `mapPartitionsWithIndex`）：函数接收整个分区的 `Iterator`，可以在函数内部维护分区级状态。
+`explain` 给人看，`queryExecution` 给脚本用。它把计划拆成三份，每份对应一个阶段：
 
-`mapPartitions` 是一个容易被低估的重要算子。考虑这个场景：将每条记录写入数据库。
+- `analyzed`：分析后的逻辑计划，节点是 `Project`、`Filter`、`Aggregate` 这类可读结构；
+- `optimizedPlan`：规则优化后的计划，谓词下推、列裁剪、常量折叠都已发生；
+- `executedPlan`：物理计划，能看出算子实现、`Exchange` 的分布方式与分区数。
 
-```scala
-// 低效写法：每条记录建立一次 JDBC 连接（N 条记录 = N 次连接）
-rdd.map { record =>
-  val conn = DriverManager.getConnection(url)
-  conn.execute(record)
-  conn.close()
-}
+三份都是纯对象，取值不启动任何作业，适合放进预检脚本：数 `optimizedPlan` 里的 `Exchange` 个数，超过阈值告警；取 `executedPlan` 里扫描节点的 `PartitionFilters`，为空就提示分区裁剪没生效。
 
-// 高效写法：每个分区建立一次连接（N 条记录 = 1 次连接）
-rdd.mapPartitions { iter =>
-  val conn = DriverManager.getConnection(url)
-  val result = iter.map { record =>
-    conn.execute(record)
-    record
-  }
-  conn.close()
-  result
-}
+同一层还有两个便宜的口子：`df.inputFiles` 返回计划里解析出的文件列表，用来确认路径解析到了哪里；`df.schema` 返回分析后的结构，对读端意味着一次文件列举已经发生。两者都不执行数据，都能在提交前把路径与结构这一层挡掉。
+
+### 3.4 第四道：`limit(n)` 抽样，而 `count()` 不是预检
+
+前三道都读不到数据，第四道只能靠真读一小段。这一步的正确工具是 `limit(n)` 而不是 `count()`，两者的成本差着数量级。
+
+`limit` 能被优化器下推，穿过 `Project` 与 `Filter` 落到扫描节点上，"只看十条"于是变成"只读够十条的量"；执行上还有一层放大机制，`CollectLimitExec` 先扫一个分区，不够再按 `spark.sql.limit.scaleUpFactor`（默认 4）放大，万级分区的表取十条样本通常只付几个分区。
+
+但它穿不过聚合、join、排序与 `Exchange`。写 `df.groupBy("province").count().limit(10)` 时聚合照旧跑全量，`limit` 只截断送回 driver 的结果。抽样预检的适用范围由此确定：过滤之后抽样便宜，聚合之后抽样等于全量跑一遍还多一次取数。
+
+`count()` 本身就是一次完整 action，会把整条链跑一遍：用它换一句"能跑通"，代价是一次全量扫描，而下游还要再跑一遍。它不算全量的场合极窄——只涉及分区列、过滤也只落在分区列上时，优化器可能直接读元数据回答；其余场景一律按全量扫描计。
+
+| 手段 | 成本量级 | 能提前暴露 | 暴露不了 |
+| :--- | :--- | :--- | :--- |
+| 构造 DataFrame | 零，毫秒 | 分析期错误 | 数据、文件、UDF |
+| `explain` / `queryExecution` | 元数据 I/O，秒级 | 计划结构问题、下推与裁剪失效 | 数据本身的问题 |
+| `df.limit(n).collect()` | 少量分区读取 | 解析、schema、前半段数据 | 聚合之后的逻辑、尾部脏数据 |
+| `df.count()` | 全量扫描 | 能跑通、总行数 | 数据质量问题（只给一个数） |
+| 全量写一次再验 | 全量读写 | 全部 | 无，但最贵 |
+
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+flowchart TD
+    A["作业准备上线"] --> B["构造 DataFrame<br/>分析期错误在这一行暴露"]
+    B --> C{"看计划：explain 或 optimizedPlan"}
+    C -->|"分区裁剪为空 / Exchange 偏多 / 出现 BatchEvalPython"| D["改代码，不必跑数据"]
+    C -->|"计划符合预期"| E{"要验证数据吗"}
+    E -->|"要，且过滤之后可抽样"| F["limit(n) 抽样<br/>只付几个分区"]
+    E -->|"要，且逻辑在聚合之后"| G["只能全量跑<br/>此时 count 与写出一致"]
+    E -->|"不要"| H["直接进入正式作业"]
+    F --> I["剩余风险：尾部脏数据与聚合逻辑"]
+    G --> I
+    I --> J["只能靠线上失败或对账发现"]
 ```
 
-这种"资源在分区级别初始化和释放"的模式，是 Spark 大量生产场景中必须掌握的基础技巧。
+### 3.5 边界：为什么预检不可能彻底
 
-### 2.3 有状态 vs 无状态 Transformation
-
-**无状态 Transformation**：每条记录的处理结果只取决于该记录本身，与其他记录无关（`map`, `filter`）。这类算子天然适合并行化，且实现简单。
-
-**有状态 Transformation**：记录的处理结果取决于同一分区或跨分区的其他记录（`sortByKey`, `groupByKey`, `distinct`）。这类算子通常需要 Shuffle，或者在分区内维护累积状态。
-
-理解这一分类，能帮助你在调优时判断：**一个算子的性能瓶颈是 CPU 计算（无状态）还是 I/O 和内存（有状态）？**
+四道工事越靠后越贵，而"预检彻底"在原理上做不到：数据层错误的判据就是数据本身。能做的是把"必须真读"压到最小——计划检查挡结构性问题，抽样挡 schema 与前半段数据，剩下的承认它只能在线上暴露，并提前备好对账手段（行数、分区数、关键指标基线），让失败发生时能定位到是哪一段。
 
 ---
 
-## 第 3 章 惰性求值的工程价值：为什么推迟执行是更聪明的选择
+## 第 4 章 惰性与优化器：为什么不能立即执行
 
-### 3.1 即时执行模式（Eager Evaluation）的三个致命缺陷
+惰性最常被追问的一个问题是："为什么不能边写边算，省得用户等？"这个问题有一半是误解——用户并不在等，action 之前根本没有等待，只是没有进度。另一半是真实的技术理由：立即执行会把优化器的输入切成碎片。
 
-假设有如下代码：
+### 4.1 立即执行切断的是"跨算子的视野"
 
-```scala
-val lines = sc.textFile("hdfs://huge-log-1TB.txt")   // 1TB 日志
-val errors = lines.filter(_.contains("ERROR"))         // 约 10GB（1%）
-val parsed = errors.map(parseLogLine)                  // 仍约 10GB
-val grouped = parsed.groupBy(_.hostname)               // Shuffle
-grouped.saveAsTextFile("hdfs://output/")
+以"过滤掉九成再聚合"为例。惰性让 `filter` 与 `scan` 留在同一份计划里，优化器可以把过滤条件推给扫描端（分区裁剪 + 谓词下推），只读需要的列；RDD 层做不到下推，但至少能把 `filter` 与相邻 `map` 融合成一次遍历。若每个算子写完就执行，`filter` 一完成就要把结果物化成中间数据，下游看到的是一份落定的数据集，下推无从谈起——**下推的前提是上游的读取动作还没发生**。
+
+技术理由一句话说完：优化发生在完整计划齐备之后，而完整计划要等最后一个算子写完。窄依赖如何融合成一次遍历、分区器如何在链上传递、宽依赖为什么在 Stage 边界强制落盘，见 [[大数据/Spark/读书笔记-spark内核/01_核心概念与基础/3. Spark核心Transformation操作详解|Transformation 的三个坐标]] 的推导，此处只用结论。
+
+### 4.2 AQE：explain 之后计划还会改
+
+自适应查询执行（Adaptive Query Execution，AQE）从 3.2 起默认开启，4.x 沿用 `spark.sql.adaptive.enabled=true`。它在 Stage 边界拿到上游真实产出量后重新规划，三个动作：合并过小的 Shuffle 分区、拆开倾斜的 join 分区、按实际大小把 `SortMergeJoin` 换成 `BroadcastHashJoin`（或反过来）。
+
+对运维的意义是：**`explain` 的结果不是承诺，是一次快照**。同一个查询，`explain` 里写着 `SortMergeJoin`，运行后的最终计划可能变成 `BroadcastHashJoin`；写着 200 个分区，运行后可能被合并成 80 个。判断位置在 SQL 页：`AdaptiveSparkPlan` 节点的 `isFinalPlan` 运行后翻成 `true`，并且可以切换初始计划与最终计划两张图，差异就是 AQE 改掉的部分。
+
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+flowchart TD
+    A["df.explain()<br/>看到初始物理计划"] --> B["action 提交"]
+    B --> C["Stage 执行，上游产出落地"]
+    C --> D{"AQE 在 Stage 边界重规划"}
+    D -->|"分区过小"| E["合并分区<br/>分区数变少"]
+    D -->|"join 一侧很小"| F["改广播连接<br/>去掉一次 Shuffle"]
+    D -->|"单分区显著偏大"| G["拆分倾斜分区"]
+    E --> H["最终计划 isFinalPlan=true"]
+    F --> H
+    G --> H
+    H --> I["与 explain 看到的不是同一张图"]
 ```
 
-如果 Spark 采用**即时执行**模式，每个 Transformation 调用立即触发计算：
+这里有一处容易误判：最终计划与 `explain` 不同，不代表有人改了代码，也不代表优化器不稳定。先确认 AQE 开着，再确认差异只发生在 join 策略与分区数上——是，就是正常重规划；连扫描节点与过滤条件都变了，才需要查是不是读到了别的表或视图。
 
-**缺陷一：无效的中间数据物化**
-- `filter` 完成后，10GB 中间结果必须存储（内存或磁盘），等待 `map` 读取
-- `map` 完成后，再次生成 10GB 中间结果，等待 `groupBy` 读取
-- 每个算子之间产生一次完整的数据写-读往返，放大了 I/O 成本
+### 4.3 `explain` 里真正值得看的几行
 
-**缺陷二：调度器无法跨算子优化**
-- 执行 `filter` 时，调度器不知道后面还有 `map`，无法将两者合并为一个 Task
-- 每个算子都需要独立的调度开销（Task 序列化、RPC、线程上下文切换）
-
-**缺陷三：无法实现短路（Short-Circuit）**
-- 若用户调用 `result.take(10)`，即时执行模式仍然会处理全部 1TB 数据，生成完整结果后再取前 10 条
-- 惰性模式下，Spark 知道只需要 10 条，可以在满足条件后立即停止各分区的计算
-
-### 3.2 惰性求值的三大工程收益
-
-**收益一：算子融合（Operator Fusion），消除中间物化**
-
-惰性求值让调度器在真正执行前看到完整的 Transformation 链。`filter` 和 `map` 都是窄依赖，可以被合并为一个 Task 中的 Iterator 链：
-
-```
-磁盘 → [HadoopRDD.compute: 读一条] → [FilteredRDD.compute: 判断] → [MappedRDD.compute: 转换] → 结果
-```
-
-整个过程在单次数据扫描中完成，没有任何中间数据物化。
-
-**收益二：全局优化视野**
-
-调度器可以在执行前分析整个 DAG，做出只有全局视野才能做的优化决策：
-- 发现两个相邻的 `filter` 可以合并为一个
-- 发现某个 RDD 被多次使用（多个 Action 或多路 DAG 引用），主动建议 `cache()`
-- 在 SQL/DataFrame 层（通过 Catalyst 优化器），实现谓词下推、列裁剪等
-
-**收益三：容错模型的基础**
-
-因为 Transformation 只记录"如何从父 RDD 算出子 RDD"，而不物化中间数据，整个 Lineage 图就是完整的重算路径。当某个 Executor 故障时，调度器只需从血缘图中找到最近的起点，重新提交相关 Task，不需要任何全局快照（这与 Hadoop MapReduce 的容错机制形成对比：MapReduce 每个 Step 的输出都写入 HDFS，容错靠重跑 Step，而非血缘重算）。
-
-### 3.3 惰性求值的代价：调试难度上升
-
-惰性求值也带来了一个实际问题：**错误的栈轨迹难以对应到用户代码的原始位置**。
-
-当一个 `NullPointerException` 在某个 Executor 的 `map` 函数中发生时，异常堆栈显示的是 Executor 端的执行代码，而不是用户在 Driver 端写 `rdd.map(...)` 的那一行。这导致调试 Spark 作业往往比调试普通程序困难得多。
-
-> [!info] 调试技巧
-> - 在开发阶段可以在关键 Transformation 后调用 `.take(1)` 或 `.count()` 来"物化"中间结果，将惰性链路切断，快速定位问题所在的算子。
-> - 使用 `mapPartitions` 时，在函数内部添加 `try-catch` 并打印详细日志，比默认异常信息有用得多。
-> - Spark UI 的 "Stage DAG Visualization" 可以直观看到 DAG 结构和每个 Stage 的执行时间。
+计划树动辄几十行，逐行读没收益。先找五处：扫描节点的 `PartitionFilters` 与 `PushedFilters`（分区与谓词是否生效）、`ReadSchema`（列裁剪是否兑现）、`Exchange` 个数（Shuffle 次数）、`BroadcastHashJoin`（是否多一次重分布）、`BatchEvalPython`（优化器是否被摘出局）。这五处能解释八成"为什么读得多、跑得慢"，余下的才需要看数据分布。
 
 ---
 
-## 第 4 章 DAG 的成形：从 Scala 代码到内存中的图结构
+## 第 5 章 两个最贵的陷阱
 
-### 4.1 DAG 是如何在内存中"悄然构建"的？
+惰性的代价有两种常见形态，一种让作业变贵，一种让作业白跑。两者的判据都在 Jobs 页与 Stages 页上，不在代码里。
 
-DAG（Directed Acyclic Graph，有向无环图）不是由某个显式的"构建器"创建的，它是 Transformation 算子链的**自然产物**。每次调用 Transformation，就在内存中增加一个 RDD 节点和一条依赖边。
+### 5.1 重复计算：血缘被重放，几个 action 就几遍
 
-```scala
-val sc = new SparkContext(...)
+同一个 DataFrame 上接 N 个 action、中间没有缓存，整条血缘就被重放 N 次：action 之间不共享任何已算出的分区，除非有物化点。这不是 bug，是"不物化中间结果"的直接推论。
 
-val rdd0 = sc.textFile("hdfs://data.txt")
-// 内存中：RDD节点 [HadoopRDD#0]
+判据不需要读代码：Jobs 页里同一个 Stage Id 反复出现，Stages 页里所有 `input size` 加起来远大于源表。那个读了三遍的作业就是这样对出来的账——源表 1.03 TB，三个阶段累计输入 3.1 TB。
 
-val rdd1 = rdd0.filter(_.contains("ERROR"))
-// 内存中：[HadoopRDD#0] --OneToOneDep--> [MapPartitionsRDD#1]
+容易被忽略的细节是：**多个 action 未必写在同一个函数里**。主流程写一遍、校验流程再读一遍、监控埋点再统计一遍，三段代码分属三个文件，调度平台上表现为三个作业，人对"复用了同一份数据"毫无感知，但集群知道。这类重复在每天两千个作业的规模上格外贵，因为它不制造告警，只制造账单。
 
-val rdd2 = rdd1.map(parseLogLine)
-// 内存中：[HadoopRDD#0] --> [MapPartitionsRDD#1] --> [MapPartitionsRDD#2]
+### 5.2 缓存：DataFrame 与 RDD 上不是一回事
 
-val rdd3 = rdd2.reduceByKey(_ + _)
-// 内存中：...#2 --ShuffleDep--> [ShuffledRDD#3]
+加 `cache` 是对的方向，但要先知道两套语义不同。`rdd.cache()` 等价于 `persist(StorageLevel.MEMORY_ONLY)`，缓存反序列化后的 Java 对象；`df.cache()` 等价于 `persist()`，默认 `MEMORY_AND_DISK`，缓存 `InternalRow` 形式的二进制数据。前者对象膨胀明显，后者紧凑得多，同一个 200 GB 的中间结果，两种缓存占用的堆可以差出一个量级（量级判断）。
 
-val rdd4 = rdd3.map(formatOutput)
-// 内存中：...#3 --> [MapPartitionsRDD#4]
-```
+三个配套判断跟着来。第一，缓存只对命中的部分免算，内存不足时 BlockManager 按 LRU 淘汰分区，被淘汰的下次照样重算，UI 上表现为命中率不满而不是报错。第二，`cache` 不截断血缘，它只是把结果放到货架上，货架空了下游仍要沿血缘回溯；要截断得用 `checkpoint`。第三，缓存的代价记在 GC 账上，长寿对象一路晋升老年代。判定条件与 BlockManager 的交互在 [[大数据/Spark/Spark-RDD核心原理解析/08 缓存与持久化：StorageLevel 策略、BlockManager 协作与堆外内存实践|08 缓存与持久化]] 里展开，本篇只留一条判据：被两个以上 action 复用、且重算代价明显高于缓存它的内存代价，两个条件缺一，缓存就是纯支出。
 
-整个过程在 Driver JVM 堆内存中完成，涉及的只是普通的 Scala 对象引用。DAG 的"图"结构由 RDD 对象之间的 `dependencies` 引用链构成。
+### 5.3 把 `count()` 当"轻量预检"
 
-### 4.2 DAG 的拓扑结构：为什么必须是"无环"的？
+这个陷阱的形状很像上一个：代码里出现 `if (df.count() > 0) { ... }`，本意是"先看看有没有数据"，实际发生的是**完整跑了一遍全量扫描**，然后才开始干正事。在 1 TB 的表上这一句让输入量翻倍，而它的作用等价于一次 `isEmpty`。
 
-"有向无环图"中"无环"这个约束不是数学上的任意选择，而是有其工程必然性。
+更便宜的替代有三个：`df.isEmpty` 只需读到第一个非空分区就能回答；`df.limit(1).count()` 也能达到同样目的；如果只想知道上游到底产出了没有，`df.inputFiles.size`（文件列举，不读数据）就够。三者语义有差别——`isEmpty` 回答"有不有"，`limit(1)` 回答"至少一条"，`inputFiles` 回答"目录里有没有文件"——选哪个取决于要回答哪个问题，但都不该是 `count()`。
 
-**如果 DAG 中存在环路**：假设 RDD A 依赖 RDD B，RDD B 又依赖 RDD A（循环依赖）。当 A 的某个分区需要重算（容错触发），调度器向上追溯依赖，发现需要 B 的某个分区，进而发现需要 A 的某个分区……陷入无限递归，容错机制彻底失效。
+### 5.4 两笔账的量级
 
-**"有向"保证了计算方向的单一性**：数据只从源头（如 HDFS 文件对应的 HadoopRDD）流向最终结果（Action 作用的 RDD），不会回流。这使得 Stage 的拓扑排序（先执行哪个 Stage、后执行哪个 Stage）有唯一确定的答案。
-
-```mermaid
-graph TD
-    subgraph "逻辑 DAG -- Driver 内存中的 RDD 对象图"
-        A["HadoopRDD</br>(1TB 日志)"]
-        B["MapPartitionsRDD</br>filter: contains ERROR"]
-        C["MapPartitionsRDD</br>map: parseLogLine"]
-        D["ShuffledRDD</br>reduceByKey: 统计"]
-        E["MapPartitionsRDD</br>map: formatOutput"]
-    end
-
-    A -->|"OneToOneDep</br>窄依赖"| B
-    B -->|"OneToOneDep</br>窄依赖"| C
-    C -->|"ShuffleDep</br>宽依赖 -- Stage 边界"| D
-    D -->|"OneToOneDep</br>窄依赖"| E
-
-    classDef stage1 fill:#d4f1f9,stroke:#2c6e8a,stroke-width:2px;
-    classDef stage2 fill:#f9ebd4,stroke:#8a6e2c,stroke-width:2px;
-    classDef shuffleEdge color:#cc3333;
-    class A,B,C stage1;
-    class D,E stage2;
-```
-
-### 4.3 DAGScheduler 如何将逻辑 DAG 切分为物理 Stage？
-
-当 Action 被调用时（如 `saveAsTextFile`），`SparkContext.runJob()` 被触发，最终调用 `DAGScheduler.handleJobSubmitted()`。DAGScheduler 执行以下关键步骤：
-
-**步骤一：从末端 RDD 向上递归遍历依赖**
-
-DAGScheduler 从 Action 作用的末端 RDD 出发，沿 `getDependencies()` 链向上逐层遍历，同时判断每条依赖边的类型：
-- 遇到 `NarrowDependency`：继续向上，将上层 RDD 并入当前 Stage
-- 遇到 `ShuffleDependency`：**在此处切割**，为上层 RDD 创建一个新的 Stage（`ShuffleMapStage`），当前 Stage 标记为依赖该 ShuffleMapStage 的输出
-
-**步骤二：构建 Stage 依赖图（Stage DAG）**
-
-切割完成后，原始的 RDD DAG 被转化为一个 Stage 级别的 DAG：
-- **ShuffleMapStage**：不是最终 Stage，其输出数据需要被后续 Stage 通过 Shuffle 读取
-- **ResultStage**：包含 Action 的最终 Stage，其输出直接返回 Driver 或写入外部存储
-
-**步骤三：拓扑排序，按依赖顺序提交 Stage**
-
-DAGScheduler 对 Stage DAG 进行拓扑排序，按顺序提交：无依赖的 Stage 先提交（通常是读取原始数据的 Stage），有依赖的 Stage 等待所有依赖 Stage 完成后再提交。
-
-```mermaid
-sequenceDiagram
-    participant User as "用户代码 (Driver)"
-    participant SC as "SparkContext"
-    participant DAG as "DAGScheduler"
-    participant TS as "TaskScheduler"
-
-    User->>SC: rdd.saveAsTextFile() (Action 触发)
-    SC->>DAG: runJob(finalRDD, ...)
-    DAG->>DAG: 从 finalRDD 向上遍历依赖，切割 Stage
-    DAG->>DAG: 拓扑排序 Stage，确定提交顺序
-    DAG->>TS: submitStage(ShuffleMapStage)
-    TS-->>DAG: Stage 完成，Shuffle 文件已写出
-    DAG->>TS: submitStage(ResultStage)
-    TS-->>DAG: Stage 完成，结果已写入 HDFS
-    DAG-->>User: Job 完成
-```
-
----
-
-## 第 5 章 物理执行的基石：流水线计算模型（Pipelining）
-
-### 5.1 MapReduce 的痛点：强制物化的中间结果
-
-理解 Spark 流水线的价值，最好的对比对象是 Hadoop MapReduce。
-
-MapReduce 的编程模型天然强制了"Map 全部完成 → Shuffle → Reduce 全部完成"的同步屏障。即使你的逻辑只是 `filter + map`（两个窄依赖操作），用 MapReduce 实现时：
-1. Map 阶段执行 `filter`，结果写入 HDFS（临时目录）
-2. Reduce 阶段读取 HDFS 临时数据，执行 `map`
-
-这个写-读往返（Write-Read Roundtrip）产生了两次完整的磁盘 I/O。如果你有 10 个这样的 `filter + map` 步骤，就产生了 20 次磁盘 I/O，每次都是全量数据。这正是 Hadoop 在迭代计算（机器学习算法）场景下性能极差的根本原因。
-
-### 5.2 Spark 的解法：Iterator 链构成的流水线
-
-Spark 通过 Iterator 嵌套组合，将多个窄依赖算子的 `compute` 调用链接成一条流水线。数据在这条流水线中"流过"，每条记录只被处理一次，不产生任何中间存储。
-
-**流水线的物理实现**：
-
-```scala
-// 假设 DAG: HadoopRDD -> FilterRDD -> MapRDD
-// Task 执行时，实际调用的是末端 RDD 的 iterator：
-
-// MapRDD.compute 返回：
-iter_map = iter_filter.map(parseLogLine)
-
-// iter_filter 是 FilterRDD.compute 返回的：
-iter_filter = iter_hadoop.filter(_.contains("ERROR"))
-
-// iter_hadoop 是 HadoopRDD.compute 返回的：
-iter_hadoop = new HadoopLineIterator(inputSplit)  // 指向磁盘文件，按需读取
-
-// 驱动力：Task 的汇聚逻辑不断调用 iter_map.next()
-// 每次 next() 触发链式调用：
-//   iter_map.next()
-//     -> iter_filter.next()（循环直到找到满足条件的记录）
-//       -> iter_hadoop.next()（从磁盘读取一行）
-```
-
-**关键特性**：
-- 数据以"行"为单位在 CPU 缓存层级流转，不产生任何分区级别的中间对象
-- 内存中同时只有极少数记录（当前处理的那几行）
-- 所有窄依赖算子合并为**一个 Task**，享受单线程执行的局部性优势
-
-### 5.3 流水线的边界：宽依赖（Shuffle）处的同步屏障
-
-流水线不能跨越 Shuffle 边界。原因是：Shuffle 要求上游所有分区的数据都写出到 Shuffle 文件后，下游分区才能开始读取（否则读到的数据是不完整的）。
-
-这个"所有上游分区完成后下游才能开始"的等待，就是**同步屏障（Synchronization Barrier）**，也是 Stage 边界的物理含义。
-
-Stage 内部：全流水线，无中间物化，内存压力极低。  
-Stage 之间：强制同步，Shuffle 数据写入本地磁盘（MapOutputTracker 追踪位置），下游 Stage 通过网络拉取。
-
-```mermaid
-graph LR
-    subgraph "Stage 1 内部 -- 全流水线执行"
-        A1["read line</br>HadoopRDD"]
-        B1["filter</br>_.contains ERROR"]
-        C1["map</br>parseLogLine"]
-        A1 -->|"Iterator.next()"| B1
-        B1 -->|"Iterator.next()"| C1
-    end
-
-    C1 -->|"写 Shuffle 文件</br>磁盘落地"| SHUFFLE[("Shuffle</br>磁盘")]
-
-    subgraph "Stage 2 内部 -- 全流水线执行"
-        D1["ShuffledRDD</br>跨网络拉取"]
-        E1["map</br>formatOutput"]
-        D1 -->|"Iterator.next()"| E1
-    end
-
-    SHUFFLE -->|"网络传输</br>拉取"| D1
-
-    classDef stage1 fill:#d4f1f9,stroke:#2c6e8a,stroke-width:2px;
-    classDef stage2 fill:#f9ebd4,stroke:#8a6e2c,stroke-width:2px;
-    classDef shuffleDisk fill:#f9d4d4,stroke:#cc3333,stroke-width:2px;
-    class A1,B1,C1 stage1;
-    class D1,E1 stage2;
-    class SHUFFLE shuffleDisk;
-```
-
-### 5.4 流水线的性能量化：与 MapReduce 的对比
-
-以一个典型的 ETL 作业为例：1TB 数据，经过 3 次 filter + map（全窄依赖），最后 reduceByKey：
-
-| 指标 | MapReduce 实现 | Spark 实现 |
+| 场景 | 额外开销（示例推算） | 判据 |
 | :--- | :--- | :--- |
-| 磁盘 I/O 次数（前 3 步） | 6 次（每步写+读） | 1 次（只读原始数据） |
-| 内存峰值占用 | ~1 个分区数据大小 × 副本数 | ~当前处理记录大小（接近 0） |
-| JVM GC 压力 | 高（大量中间对象） | 极低（几乎无中间对象） |
-| 容错代价 | 重跑整个 Step（最差情况重读 HDFS） | 重算单个分区（最近 Shuffle 或源头） |
+| 同一份表被 2 个 action 使用，无缓存 | 输入量翻倍，作业时长接近翻倍 | Stages 页累计 input 为源表两倍 |
+| 同一份表被 3 个 action 使用，无缓存 | 输入量三倍，Shuffle 与落盘同步翻倍 | 调度平台输入量与 HDFS 读取计数不符 |
+| `count()` 当预检 | 一次完整扫描，通常占总时长三到五成 | 第一个 Job 只为了一个数 |
+| `cache` 后被淘汰再重算 | 命中率低于一半时接近没有缓存 | Storage 页 Fraction Cached 低位抖动 |
+| 用 `df.rdd` 绕过分析器 | 优化全丢，通常让扫描量与 Shuffle 都上升 | 计划里出现 `SerializeFromObject` |
 
-这张对比表解释了为什么在迭代型机器学习算法（如 K-Means、PageRank）上，Spark 能比 MapReduce 快 10x ~ 100x：不是因为 Spark 的 CPU 更快，而是因为 Spark 消除了绝大多数不必要的磁盘 I/O 和内存对象创建。
-
----
-
-## 第 6 章 Action 触发：从 RDD 图到 JobSubmitted 事件
-
-### 6.1 Action 的本质：消费者驱动的"拉取"
-
-所有 Action（`count`, `collect`, `saveAsTextFile`, `take`, `foreach`）的共同本质是：它们是数据的**最终消费者**，通过"拉取"操作驱动整个 Iterator 链的执行。
-
-```scala
-// count() 的简化实现：
-def count(): Long = sc.runJob(this, Utils.getIteratorSize _).sum
-// 对每个分区提交一个 Task，Task 执行：
-//   Utils.getIteratorSize(iter) = { var cnt = 0L; while(iter.hasNext) { iter.next(); cnt += 1 }; cnt }
-// 这个 while 循环就是"拉取"驱动力，不断调用 next() 驱动整个 Iterator 链
-```
-
-不同 Action 的差异在于对分区数据的**汇聚方式**不同：
-- `count()`：对每个分区统计数量，然后在 Driver 端求和
-- `collect()`：将每个分区的全部数据拉到 Driver 端内存（注意：数据量大时可能导致 Driver OOM）
-- `take(n)`：只从部分分区获取数据，满足 n 条后停止（短路优化）
-- `saveAsTextFile(path)`：将每个分区的数据写入 HDFS（每个分区对应一个输出文件）
-- `foreach(f)`：在 Executor 端对每条记录执行 f，结果不返回 Driver
-
-### 6.2 runJob 的调用链
-
-```
-rdd.count()
-  → SparkContext.runJob(rdd, func)
-    → DAGScheduler.runJob(rdd, func, partitions, ...)
-      → DAGScheduler.submitJob(rdd, func, ...)
-        → eventProcessLoop.post(JobSubmitted(...))  // 投递事件到事件队列
-          → DAGScheduler.handleJobSubmitted(...)    // 事件处理（异步）
-            → createResultStage(...)               // 创建 ResultStage
-              → getOrCreateShuffleMapStage(...)    // 递归创建上游 ShuffleMapStage
-            → submitStage(resultStage)
-```
-
-`eventProcessLoop.post(JobSubmitted(...))` 这一步值得注意：DAGScheduler 内部使用**事件驱动架构**（Event Loop），Job 提交是通过投递事件消息实现的，而非直接函数调用。这使得 DAGScheduler 可以在单线程中顺序处理所有调度事件，避免并发问题，同时保持对多个并发 Job 的管理能力。
+表里的数字只表达方向与量级，不作基准；可信的是判据那一列，都能在 UI 上直接读到。
 
 ---
 
-## 第 7 章 常见模式的 DAG 分析
+## 第 6 章 不可变性与链式调用的真相
 
-### 7.1 多次 Action 与 cache() 的关系
+### 6.1 每次 `select`/`filter` 只是加了一个节点
 
-```scala
-val expensiveRDD = sc.textFile("hdfs://huge.txt")
-  .filter(isValid)
-  .map(expensiveTransform)
-  .cache()  // 标记为需要缓存
+`df2 = df.filter(col("dt") === "2026-11-18")` 执行之后，`df` 没有变，`df2` 是一个新对象，两者的差别只有一层计划节点。这中间没有数据被读取、没有数据被复制、没有数据被移动——所谓"链式调用"，在 driver 上只是把节点串起来。
 
-val count = expensiveRDD.count()    // Action 1：触发计算，结果缓存到内存
-val sample = expensiveRDD.take(10)  // Action 2：直接从内存读取，不重算
-```
+这层"假象"带来两处误判。第一处是以为拿到了数据：`val small = big.filter(...)` 之后紧接着 `small.cache()`，很多人以为此刻数据已经进内存，实际只是打了个标记，物化发生在之后第一个 action 的 task 内部。第二处是以为改了原表：`df.withColumn(...)` 不会修改 `df`，后面还用 `df` 计算时用的是旧计划。这个性质多数时候是保护，但在"边读边写同一路径"的场景里会变成事故——读的入口与写的出口指向同一个目录，写入过程中的文件替换会影响尚在读取的任务，表现就是 §2.3 里那类 `FileNotFoundException`。
 
-如果没有 `cache()`，Action 2 会重新触发从 HDFS 读取并执行 `filter + map` 的全量计算。`cache()` 的本质是将 RDD 的 `storageLevel` 设置为非 `NONE`（默认 `MEMORY_AND_DISK`），使得 `RDD.iterator()` 方法在第一次计算后将结果存入 `BlockManager`，后续调用直接从 `BlockManager` 读取。
+### 6.2 缓存之后再衍生，省掉的是上游不是下游
 
-### 7.2 DAG 的分叉与 Union
+一个常见的错误期待：`df.cache()` 之后再做 `df.filter(...).groupBy(...)`，认为整条链都被缓存加速了。实际省掉的只是缓存节点以上的部分，往下新增的算子照旧要算。判断缓存在这次计算里有没有被用到，看 `optimizedPlan` 里有没有 `InMemoryRelation` 节点，以及它的输出列够不够下游用——列不够时，缓存照样会被绕开重算。
 
-```scala
-val rdd1 = sc.textFile("hdfs://logs-2024.txt").filter(isError)
-val rdd2 = sc.textFile("hdfs://logs-2025.txt").filter(isError)
-val combined = rdd1.union(rdd2)  // 两个独立 DAG 在此汇合
-combined.map(parseError).saveAsTextFile("hdfs://output/")
-```
+### 6.3 链多长该拆
 
-`union` 创建的 `UnionRDD` 持有两个父 RDD 的引用，使用 `RangeDependency`（窄依赖）。DAG 在此处形成"菱形"结构，但不触发 Shuffle——`union` 只是将两个 RDD 的分区列表拼接在一起（rdd1 的分区 + rdd2 的分区），Task 仍然各自独立执行。
+链长本身不是问题，问题在三个位置：driver 侧树高（分析优化时间、内存、序列化体积）、执行侧迭代深度（窄依赖层的栈深）、失败恢复的起点（链越长回溯越远）。分界是量级判断：几十层不必管，上百层留意分析耗时，上千层性质已从"慢"变成"可能直接失败"，处置也从调参变成截断——写出中间表、拆作业，或用 `checkpoint` 与 `localCheckpoint` 钉住血缘。
 
 ---
 
-## 第 8 章 总结
+## 第 7 章 症状到判据：三个现场
 
-本文从"调用 map 究竟做了什么"这一基础问题出发，逐层推导出 Spark 算子设计的完整逻辑：
+### 7.1 作业"跑起来才报错"
 
-- **Transformation 的本质**：在 Driver 内存中创建 RDD 对象，构建血缘引用链，不触发任何计算
-- **惰性求值的价值**：赋予调度器全局视野，实现算子融合、短路优化，并作为血缘容错的基础
-- **DAG 的构建方式**：Transformation 调用链的自然产物，无环性保证容错路径的收敛性
-- **Stage 划分的机制**：DAGScheduler 沿依赖链向上遍历，在 ShuffleDependency 处切割，形成 Stage DAG
-- **流水线计算的物理实现**：Iterator 嵌套组合，单次扫描完成多个窄依赖算子，消除中间物化
-- **Action 的驱动作用**：作为最终消费者，通过 while 循环驱动 Iterator 链执行，触发 runJob 调用链
+先看报错位置，不要先看错误内容。栈顶在用户代码行，说明分析期错误漏过了构造期，有路径绕过了分析（譬如动态拼 SQL）；栈顶在 `Task.run` 或 codegen 生成类，是执行期错误，再分三支：`CAST_*`/`ARITHMETIC_*` 属数据问题，取一条脏数据复现最快；`FileNotFoundException` 属文件层，查上游清理与挂载；`PythonException` 或 `Caused by` 里有用户代码的属 UDF，去 executor stderr 看 traceback。
 
-在 **[[04 依赖关系的本质：宽依赖与窄依赖的结构定义与性能边界|下一篇文章]]** 中，我们将把本文提到的"宽依赖是 Stage 边界"这一结论深入展开：DAGScheduler 具体如何识别和处理宽依赖？Shuffle 的数据流动过程是怎样的？宽依赖对容错代价有何影响？
+反向误判要防：看到 `AnalysisException` 就以为"惰性让分析错误延迟到执行"。它在执行期出现的合理解释只有一个——错误发生在运行期才构造的计划上，典型是按批次拼 SQL 的循环，或 UDF 内又发起一次查询。这类代码不是补预检，而是把构造提到循环外。
+
+### 7.2 同一份数据被读两次
+
+判据两条，都在 Stages 页：累计 `input size` 是否远大于源表；同一 Stage Id 是否在多个 Job 下重复出现。两条都成立，去 Jobs 页数 action 个数，再找它们是否指向同一个 DataFrame。处置是在复用分叉点加一次缓存，不是每个中间步骤都加——后者会填满 storage、互相驱逐，命中率反而下降。
+
+还有一种变体：数据没有被读两次，但被**算了两次**。上游是 Shuffle 输出很贵的聚合，下游两个 action 都用它，输入量不变而 CPU 与 Shuffle 时间翻倍。判据是 Stages 页的 Shuffle Write 总量接近两倍，而输入量正常。
+
+### 7.3 `explain` 看到的与运行的不一致
+
+先排除 AQE：`spark.sql.adaptive.enabled` 为 `true` 时 join 策略与分区数都会被重规划，这是预期行为。再看统计：CBO 默认关、统计也可能过期，`explain` 里 join 两端的行数估算与实际差一个量级时，计划自然对不上。两条都排除，才轮到怀疑表或视图在两次之间变过，判据是 `df.inputFiles` 列出的文件不同。
+
+| 症状 | 首看位置 | 判据 | 不属于本层的情况 | 处置方向 |
+| :--- | :--- | :--- | :--- | :--- |
+| 跑起来才报错 | 失败 task 的栈顶 | 栈顶在 `Task.run` 而非用户代码行 | 栈顶在构造期说明代码路径绕过了分析 | 按错误类分数据、文件、UDF 三支 |
+| 同一份数据读两次 | Stages 页累计 input size | 累计输入为源表数倍 | Shuffle Write 翻倍属重复计算 | 在复用点缓存 |
+| explain 与运行不一致 | SQL 页初始/最终计划 | 差异只在 join 策略与分区数 | 扫描节点也变了属数据源变化 | 确认 AQE，无需动作 |
+| 计划里有 `BatchEvalPython` | 扫描节点的 `PushedFilters` 为空 | 谓词未下推 | 无 | 把过滤提出 UDF |
+
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+flowchart TD
+    S["作业异常"] --> Q1{"报错时机"}
+    Q1 -->|"提交即失败"| A1["分析期或计划期<br/>看 driver 栈"]
+    Q1 -->|"跑到一半失败"| Q2{"栈顶在哪"}
+    Q2 -->|"用户代码行"| A2["动态拼 SQL 或 UDF 内查询<br/>把构造提到循环外"]
+    Q2 -->|"Task.run 或 codegen"| Q3{"错误类"}
+    Q3 -->|"CAST / ARITHMETIC"| A3["数据问题：取脏数据复现"]
+    Q3 -->|"FileNotFound"| A4["文件层：查清理、挂载、覆盖写"]
+    Q3 -->|"PythonException / Caused by"| A5["UDF：看 executor stderr"]
+    S --> Q4{"成本异常"}
+    Q4 -->|"输入量数倍于源表"| A6["重复扫描：查 action 个数"]
+    Q4 -->|"Shuffle 写翻倍"| A7["重复计算：在复用点缓存"]
+    Q4 -->|"读得多留得少"| A8["下推失效：查 UDF 与函数包裹"]
+```
+
+---
+
+## 第 8 章 参数与阈值：哪些旋钮会改结算方式
+
+### 8.1 一张带两侧代价的参数表
+
+| 参数 | 默认值 | 决定什么 | 调大之后 | 调小之后 |
+| :--- | :--- | :--- | :--- | :--- |
+| `spark.sql.adaptive.enabled` | true | 运行期是否重规划 | 关掉：计划可预测，但倾斜与小分区不再被自动处理 | 打开：计划随时会改，`explain` 与运行不一致 |
+| `spark.sql.autoBroadcastJoinThreshold` | 10m | 多大的表可以广播 | 调大：省掉一次 Shuffle，但广播内容挤占 executor 内存与 driver 内存 | 调小：退化为 `SortMergeJoin`，多一次 Shuffle |
+| `spark.sql.files.ignoreMissingFiles` | false | 文件缺失时是否继续 | 打开：不再失败，代价是静默少读，必须配套对账 | 保持关闭：作业失败，但原因是可诊断的 |
+| `spark.sql.files.ignoreCorruptFiles` | false | 文件损坏时是否继续 | 打开：跳过坏文件，坏数据的边界更难界定 | 保持关闭：失败停在最早出错的分片 |
+| `spark.sql.ansi.enabled` | true（4.x 起） | 类型转换失败时抛错还是给 null | 打开：脏数据立即失败、可定位 | 关闭：静默 null，错误转移到下游报表 |
+| `spark.sql.cbo.enabled` | false | 是否用统计信息估算代价 | 打开：join 顺序更可能更优，但依赖统计及时更新 | 关闭：计划稳定，但可能长期用次优 join 顺序 |
+| `spark.sql.cbo.joinReorder.enabled` | false | 是否重排多表 join 顺序 | 打开：多表 join 有机会变快，统计过期时会变差 | 关闭：按书写顺序，可预测 |
+| `spark.sql.limit.scaleUpFactor` | 4 | 抽样取数时分区放大的步长 | 调大：一次多扫分区，抽样变贵 | 调小：往返次数增多，driver 侧调度开销上升 |
+| `spark.sql.adaptive.advisoryPartitionSizeInBytes` | 64m | AQE 合并分区的目标大小 | 调大：分区变大、单 task 变重、倾斜更集中 | 调小：分区变细、task 数上升、常驻开销增多 |
+
+### 8.2 三个不要动的旋钮
+
+第一个是 `spark.sql.files.ignoreMissingFiles`。它不"提高健壮性"，而是把一次可诊断的失败换成不可诊断的少算。数据治理没做好时打开它，结果是下游报表少几天数据，排查成本远高于一次作业失败。
+
+第二个是 `spark.sql.cbo.enabled` 的无脑打开。CBO 的输入是统计信息，多数仓库里的统计既不全也过期；跑一张没做过 `ANALYZE` 的表，join 顺序会按默认行数估算排，比按书写顺序更糟。
+
+第三个是 `spark.sql.autoBroadcastJoinThreshold` 的无限调大。广播的代价从"多一次 Shuffle"变成"每个 executor 复制一份"，调到几百 MB 时，单个 Stage 的内存压力会压过省下的那次 Shuffle，表现为频繁 GC 甚至被杀。
+
+---
+
+## 第 9 章 反例与边界
+
+### 9.1 把 `count()` 当轻量预检
+
+最常见的反例。作者想确认"数据在不在、有多少"，于是在链头写一句 `count()`，之后才开始正式计算。代价是完整一遍全量扫描，且对数据质量什么都不保证——返回 1.2 亿行只说明读得通，不说明那 1.2 亿行是对的。更贵的变体是在循环里做，每批一次 `count`，输入端被放大几十倍。替代方案见 §5.3，核心是把"有不有"与"有多少"分开问。
+
+### 9.2 不缓存却复用同一个 DataFrame
+
+第二个反例的动机通常是"缓存占内存，能不加就不加"。方向不错，判据用错地方：缓存该不该加取决于复用次数与重算代价的乘积，不是"内存紧不紧"。4 TB 宽表被两个 action 复用，重算一次是四十分钟读盘，远超缓存它需要的几十 GB。该做的是只在复用点缓存，且缓存裁剪后的窄表——把 `select` 与 `filter` 放到 `cache` 之前。
+
+### 9.3 以为 `explain` 会执行
+
+第三种反例是把 `explain` 当"跑一遍看结果"。它输出计划，不读数据，行数都是估算，脏数据一个都发现不了。反向误判同样常见：看到 `explain` 没报错就认为作业"至少能跑通"，于是跳过抽样，线上遇到 cast 失败。正确的位置关系是 `explain` 负责结构、抽样负责数据，两者不能互相替代。
+
+### 9.4 用 `df.rdd` 绕过分析器
+
+最后一个是把结构化 API 换成 RDD 的入口。`df.rdd` 本身合法，代价是**从这一点起后面的算子都不再受 Catalyst 管辖**：谓词不能下推、列不能裁剪、代码生成被替换成逐行对象序列化，计划里出现 `SerializeFromObject` 基本可确认踩了这条线。报错形态也变了，字段名与类型错误重新变成执行期异常（§2.1 第二个变体），绕回"报错延迟"的老路。
+
+---
+
+## 第 10 章 落点
+
+回到那两个现场。文件消失那件事，四道工事一道都挡不住，因为它属于数据层，判据就是数据本身；能提前做的是把它压缩成"少数几个分区的读取"，而不是压成零。同一份表被读三遍那件事，则完全可以在提交前算出来——数一下 action 的个数，看一眼 Stages 页的累计输入，两条判据都不需要读代码。
+
+惰性求值的运维含义可以收成三句。它把错误暴露的时刻推到了数据面前，"能提前发现"与"必须读到"于是成了一条连续带，预检的作用是划线而不是消除。它把计划的定型推到了 action 与运行期，**`explain` 因此是快照而不是承诺**，AQE 之下更是如此。它把成本记在 action 的次数上，同一份数据被算几遍取决于代码里有几个消费者，而不是 `spark.read` 出现了几次。
+
+至于"什么时候它会坑你"，答案有共同的形状：在写代码的时候做只属于运行时才能做的判断。用 `count()` 做预检、用 `explain` 代替抽样、用 `cache` 代替对复用结构的分析、用 `ignoreMissingFiles` 代替对上游清理的治理，四件事动机相同——想在提交前把不确定性消掉，消不掉的那部分被藏了起来。承认它消不掉，把剩余的不确定性变成可观测的量（行数、分区数、累计输入、命中率），才是这类作业稳定的原因。
+
+---
+
+## 参考资料
+
+- Zaharia, M., et al. "Resilient Distributed Datasets: A Fault-Tolerant Abstraction for In-Memory Cluster Computing." NSDI 2012. <https://www.usenix.org/system/files/conference/nsdi12/nsdi12-final138.pdf>
+- Apache Spark 4.3.0 Documentation: Performance Tuning（AQE 的合并分区、倾斜 join、动态切换 join 策略三节）. <https://spark.apache.org/docs/latest/sql-performance-tuning.html>
+- Apache Spark 4.3.0 Documentation: Configuration（`spark.sql.adaptive.*`、`spark.sql.autoBroadcastJoinThreshold`、`spark.sql.files.*`、`spark.sql.limit.scaleUpFactor` 的默认值以此为准）. <https://spark.apache.org/docs/latest/configuration.html>
+- Apache Spark 4.3.0 Documentation: SQL, Datasets and DataFrame Migration Guide（`spark.sql.ansi.enabled` 自 4.0 起默认开启，以及 ANSI 关闭时的兼容行为）. <https://spark.apache.org/docs/latest/sql-migration-guide.html>
+- Apache Spark 4.3.0 Documentation: RDD Programming Guide（`cache` 与 `persist` 的存储级别，以及 RDD 与 DataFrame 缓存语义的差异）. <https://spark.apache.org/docs/latest/rdd-programming-guide.html>
 
 ---
 
 > [!note] 思考题
-> 1. `rdd.map(f1).filter(f2).map(f3).count()` 中，Spark 执行了几次磁盘读取？生成了几个 RDD 对象？如果改成 `rdd.map(f1).cache().filter(f2).map(f3).count()` 再调用一次 `count()`，第二次 `count()` 还会读磁盘吗？
-> 2. 为什么 `collect()` 可能导致 Driver OOM，而 `foreach(f)` 不会？两者的 DAG 结构有什么本质区别？
-> 3. 在迭代式机器学习算法（如 K-Means 迭代 100 次）中，如果不 `cache()` 中间数据集，每次迭代都从 HDFS 重新读取，会产生什么性能问题？`cache()` 如何打破这个瓶颈？
+> 1. 你手上的作业里，从提交到第一个 Stage 启动之间的这段时间里，究竟发生了哪些事？哪几类错误一定能在这段时间暴露，哪几类一定不能？
+> 2. 如果一次预检要花掉正式作业三分之一的时长，它还算预检吗？你会把这条线画在哪里，依据是什么？
+> 3. 同一个 DataFrame 接了三个 action、中间结果约 400 GB，你选择缓存、写出中间表，还是合并这三个消费者？三种做法各自把成本记在哪个账户上？
+> 4. `explain` 显示 `SortMergeJoin`、运行后变成 `BroadcastHashJoin`，这中间发生了什么？如果反过来变化，你会先怀疑什么？
+> 5. 一个作业稳定复现"跑到四十分钟才报文件不存在"，在 `ignoreMissingFiles` 打开与不打开两种处置下，你分别需要补上什么才能确定结果是对的？

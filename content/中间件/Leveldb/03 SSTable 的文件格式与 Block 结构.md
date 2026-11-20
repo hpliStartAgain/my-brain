@@ -1,480 +1,402 @@
 ---
 title: "SSTable 的文件格式与 Block 结构"
-date: 2026-03-05
-tags: [布隆过滤器, LevelDB, 中间件, 存储引擎, 索引]
-keywords: [Block, SSTable, 前缀压缩]
+date: 2026-11-19
+tags: [LevelDB, RocksDB, 存储引擎, 索引]
+keywords: [BlockCache, BloomFilter, 读放大, 假阳性率, 前缀过滤]
 aliases: []
 ---
 
 # SSTable 的文件格式与 Block 结构
 
-## 摘要
+**摘要：**
 
-SSTable（Sorted String Table）是 LevelDB 磁盘存储的核心单元，是 Immutable MemTable 刷盘后的不可变有序文件。理解 SSTable 的文件格式，是理解 LevelDB 读取性能来源的关键。本文从 SSTable 的整体文件布局出发，深度解析 **Data Block 的前缀压缩与重启点机制**（在节省空间的同时保留随机访问能力）、**Meta Block 中 Bloom Filter 的快速判否原理**（大幅减少不必要的磁盘 IO）、**Index Block 的稀疏索引设计**（以极小的内存代价定位任意 key 所在的 Data Block），以及 Footer 的固定锚点作用。每一个设计决策背后都是写入效率、读取效率与存储开销三者之间的精确权衡。
-
----
-
-## 第 1 章 SSTable 的地位与生命周期
-
-### 1.1 SSTable 是什么，为什么设计成这样
-
-SSTable 这个名字来自 Google 的 Bigtable 论文（2006 年），原意是"Sorted String Table"——一个按 key 有序排列的、不可变的键值对文件。"不可变"（Immutable）是 LSM-Tree 架构的核心约束：一旦 SSTable 写入磁盘，就永远不会被修改，只会在 Compaction 时被整体删除并由新文件替代。
-
-**为什么选择不可变设计？** 如果允许就地修改 SSTable，那么：
-1. 修改一条记录需要先读取整个 Block（4KB），在内存中修改，再写回，变成随机读写，与 LSM-Tree 追求顺序写的目标背道而驰
-2. 并发读取时需要加读写锁，大幅降低并发性能
-3. 文件内容可能处于中间状态（修改了一半的 Block），增加崩溃恢复的复杂度
-
-不可变性带来的好处是：SSTable 可以被多个线程、多个 Version 同时持有引用，零成本共享（无需加锁），文件内容的 CRC 校验也更容易维护。
-
-### 1.2 SSTable 的产生时机
-
-SSTable 通过两种方式产生：
-
-1. **Minor Compaction（Minor 合并）**：Immutable MemTable 达到大小阈值后，后台线程将其顺序写出为一个 L0 层的 SSTable 文件。这个过程是纯顺序写，速度取决于磁盘顺序写吞吐量。
-
-2. **Major Compaction（Major 合并）**：将 L(N) 层的一个或多个 SSTable 与 L(N+1) 层中 key range 有重叠的 SSTable 合并，读取所有输入文件的数据，进行有序合并（多路归并），写出新的 SSTable 到 L(N+1) 层，并删除所有输入文件。
-
-每个 SSTable 文件都有全局唯一的文件编号（FileNumber），文件名格式为 `{FileNumber}.ldb`（旧版本为 `.sst`）。
-
-### 1.3 SSTable 文件的总体布局
-
-一个 SSTable 文件从逻辑上分为以下几个区域：
-
-```
-SSTable 文件结构（从文件头到文件尾）：
-┌──────────────────────────────────────────────────────────┐
-│  Data Block 0       (变长，默认约 4KB)                     │  ← 存储实际键值对
-├──────────────────────────────────────────────────────────┤
-│  Data Block 1       (变长)                                │
-├──────────────────────────────────────────────────────────┤
-│  ...                                                     │
-├──────────────────────────────────────────────────────────┤
-│  Data Block N       (变长)                                │
-├──────────────────────────────────────────────────────────┤
-│  Meta Block         (变长，存储 Bloom Filter 等元数据)     │  ← 快速过滤
-├──────────────────────────────────────────────────────────┤
-│  MetaIndex Block    (固定格式，指向各 Meta Block 的偏移量)  │  ← 元数据索引
-├──────────────────────────────────────────────────────────┤
-│  Index Block        (变长，每个 Data Block 对应一条索引)   │  ← 二分定位 Block
-├──────────────────────────────────────────────────────────┤
-│  Footer             (固定 48 字节，文件的"锚点")           │  ← 解析入口
-└──────────────────────────────────────────────────────────┘
-```
-
-读取一个 SSTable 的第一步永远是**从文件末尾读取 Footer**——因为 Footer 是固定大小（48 字节）且位于文件末尾，可以用 `seek(-48, SEEK_END)` 精确定位，无需扫描文件。Footer 中存储了 Index Block 和 MetaIndex Block 的文件偏移量，是解析整个文件的"锚点"。
+一份 SSTable 的字节布局本身不产生延迟，产生延迟的是"为确认某个块里没有这个 key"而多走的路：L0 要按文件号从新到旧逐个查，L1 到 Ln 每层要二分定位一个文件，命中的那个文件还要读块、解压、块内二分。本篇把一次点查拆成"可写内存表 → 只读内存表 → L0 → L1..Ln → 块内"这条链路，先算清读放大从哪里来、给出"最坏读几个文件"的算例，再交付三笔内存预算的判据：block cache 该给多少（默认 32MB，通常要占可用内存三分之一以上）、row cache 为什么默认关闭、文件句柄为什么会先于内存耗尽；最后把 Bloom Filter 落到算术上，用 p=(1-e^(-kn/m))^k 推出"每 key 多一位，假阳性率乘 0.6185"，给出位数与内存的对照、`optimize_filters_for_hits` 与 prefix bloom 的边界，以及 `block_size` 在点查与扫描之间的取舍刻度。文件格式的细节留在源码剖析那篇。本篇只谈一件事：读放大是怎么被压下去的，以及压它的每一步要付什么——L0 的顺序扫、层内二分、过滤器的假阳性、缓存与句柄的容量，每一个旋钮都对应一个可以算出来的数，也对应一笔要挪走的内存。
 
 ---
 
-## 第 2 章 Footer——文件解析的入口
+## 第 1 章 一次点查要走多少道门
 
-### 2.1 Footer 的结构
+一次 `Get` 的时间，大半不花在它真正读到的那一个块上，而花在它为确认"别处也没有"而多走的路上。这句话听着像常识，但它决定了两件事的算法：读放大的量级 **由文件数与层数决定**，而不是由数据总量决定；读侧的每一个优化——缓存、过滤器、块大小——本质上都是在买"少走几道门"或者"走到门口就知道不必进门"。
 
-Footer 是 SSTable 文件的最后 48 字节，结构如下：
+这条链路的骨架是 LevelDB 的 `DBImpl::Get`：锁内取快照序列号，拿到可写内存表、只读内存表与当前 `Version` 的引用，释放锁，按内存表、只读内存表、磁盘文件的顺序查找，磁盘这一段交给 `Version::Get` 逐层下沉，最后落到 `TableCache` 与 `BlockBasedTable` 完成块级定位。骨架本身、`LookupKey` 对序列号的编码、引用计数保护锁外访问，在 [[09 LevelDB 源码剖析——MemTable、SSTable 与 Compaction]] 里已经逐行讲过，此处不复述，只标出与读放大相关的计量点。
 
-```
-Footer 格式（48 字节）：
-┌───────────────────────────────────────────────────────┐
-│  MetaIndex Block 的 BlockHandle (变长，最多 20 字节)   │
-│  Index Block 的 BlockHandle     (变长，最多 20 字节)   │
-│  填充至 40 字节                                        │
-│  Magic Number (8 字节固定值: 0xdb4775248b80fb57)       │
-└───────────────────────────────────────────────────────┘
-```
+前两段的成本可以忽略：跳表查找是纯内存操作，命中即返回，没有 IO。分水岭在第三段——一旦落到磁盘，读放大就以文件为单位开始累加。
 
-**BlockHandle** 是一个用于定位文件中某个 Block 的指针，包含两个字段：
-- `offset`：Block 在文件中的字节偏移量（变长编码的 uint64）
-- `size`：Block 的字节大小（变长编码的 uint64，不包含 Block Trailer）
+### 1.1 三段式决定了读放大的起点
 
-**Magic Number** 的作用是防止将非 SSTable 文件误读为 SSTable。`0xdb4775248b80fb57` 是 Google 选择的一个随机幻数，在解析 Footer 时首先校验这个值，不匹配则立即返回错误。
+内存表命中率是读放大的第一道闸，它决定了有多少读请求会走到磁盘。写入先进可写内存表，写满后转成只读内存表等待刷盘；这两级都命中的读，成本约等于一次跳表查找加一次序列号比较。写缓冲越小，刷盘越频繁，落盘数据在总量中的占比越高，落到磁盘的读也就越多。这与 [[02 MemTable 与 SkipList]] 里讲的容量与 flush 时机是同一件事的两面。
 
-**变长编码（Varint）** 是 LevelDB（和 Protocol Buffers）中广泛使用的整数编码方式：小整数用 1 字节表示，大整数用更多字节表示。例如偏移量 300（十六进制 0x12C）用 2 字节表示：`0xAC 0x02`（每个字节的最高位标识是否还有后续字节）。这比固定 8 字节编码节省空间，对于 SSTable 内的小偏移量尤其有效。
+RocksDB 在这条链路上做了一处 LevelDB 没有的扩展：内存表可以有多个，读的时候要按时间从新到旧遍历整条只读内存表链。好处是写侧不会因为一个只读表挡路而停顿，代价是读侧最坏要多扫几次跳表。还有一个容易忽略的细节：内存表里也有过滤器——配置了 `prefix_extractor` 与 `memtable_prefix_bloom_size_ratio` 之后，内存表会用一段固定比例的内存建前缀布隆过滤器，专门服务那些"注定查不到、必须穿透到磁盘"的请求。
 
-### 2.2 Block Trailer——完整性保证
+### 1.2 L0：为什么只能逐个查，以及它为什么对新旧顺序敏感
 
-每个 Block（包括 Data Block、Meta Block、Index Block）的末尾都跟随一个 **5 字节的 Block Trailer**：
+L0 的文件全部来自内存表刷盘，彼此之间的 key 区间可以重叠：两次刷盘之间写入的 key 可能落在任意区间上，所以 L0 里不存在"层内有序"这个前提。既然不能二分，就只能按文件号从大到小逐个尝试，一旦某个文件命中就停：文件号越大越新，同一个用户 key 的新版本一定在更新的文件里，从新到旧查可以在第一次命中时停手，这也是它必须从新到旧而不是从旧到新的原因。**L0 只能线性扫**，这条线性扫描是读放大最直接的放大器：L0 有 n 个文件，一次点查就可能尝试 n 次，而 n 由写侧决定——flush 快于合并，L0 就会堆积。
 
-```
-Block Trailer（5 字节）：
-┌─────────────────────┬──────────────────────────────────┐
-│  压缩类型 (1 字节)   │  CRC32 校验和 (4 字节，小端序)   │
-└─────────────────────┴──────────────────────────────────┘
-```
+LevelDB 的分层参数把这件事写死在配置里：L0 到 4 个文件触发合并，到 8 个开始拖慢写入，到 12 个直接停写。写停阈值的存在，正是为了不让读路径上的这个乘数无限增长，这条背压链条在 [[02 MemTable 与 SkipList]] 与 [[01 LevelDB 全局架构——LSM-Tree 的写优化设计]] 里各有侧重。
 
-- **压缩类型**：`kNoCompression=0`（无压缩）或 `kSnappyCompression=1`（使用 Snappy 压缩）。LevelDB 默认对 Data Block 使用 Snappy 压缩（通常压缩率 40%~70%），Index Block 和 Meta Block 不压缩（本身较小）。
+不过这里要提一个常被忽略的边界：L0 的逐个尝试并不是每次都真的读盘。`Version::Get` 在打开文件之前，先拿用户 key 与该文件的 `smallest`、`largest` 做一次区间判断，范围不覆盖就直接跳过。所以"尝试 n 个文件"里的多数只是两次比较，只有当区间覆盖时才继续往下走——**真正决定 IO 的是这一步**。
 
-- **CRC32 校验和**：覆盖 Block 内容 + 压缩类型字段，用于检测文件损坏。LevelDB 使用 masked CRC（异或旋转变换后的 CRC），避免全零数据和全零 CRC 的歧义。
+### 1.3 L1 到 Ln：二分一个文件，越过层尾即断言不存在
 
-在 `BlockHandle` 的 `size` 字段中记录的大小**不包含**这 5 字节 Trailer，因此读取一个 Block 时需要读取 `size + 5` 字节。
+L1 及以下由合并产出，层内 key 区间互不重叠，于是可以二分：`FindFile` 在文件元数据数组上做一次二分，定位到唯一可能包含目标 key 的文件。这里的放大上限被结构本身摁住了——每层至多一个候选文件，七层就是六次二分。层数由容量比例决定，改不动多少，这也解释了为什么读放大的可控部分主要压在 L0 上。
 
----
+二分还有一个漂亮的短路：如果 `FindFile` 返回的索引越过该层末尾，说明目标 key 大于这一层所有文件的最大键；而层与层之间是"越往下越老"的关系，更下层只会有更老的键，于是可以立刻断定不存在，不必再往下沉。这条短路省掉的是"逐层确认它确实不在"的成本，在未命中的点查上体现得最明显。
 
-## 第 3 章 Data Block——键值对的存储核心
+需要说清二分定位的语义：它定位的是"可能包含这个 key 的文件"，而不是"包含这个版本的文件"。层内文件按内部键排序，内部键把用户 key 与序列号打包在一起，同一个用户 key 的多个版本可能被切在两个相邻文件里。所以二分命中之后，仍要在文件内部按序列号做一次版本判断，决定返回旧值、返回墓碑，还是继续往更老的层下沉。墓碑之所以也被当作"命中"，原因就在这里：它终止下沉，把一个被删除的 key 的查找代价固定在删除发生的那一层，而不是让它在每一层都重查一遍。
 
-### 3.1 Data Block 的整体设计目标
+### 1.4 命中之后：句柄、索引、块、解压、块内二分
 
-Data Block 是 SSTable 中存储实际键值数据的基本单元，默认大小约为 4KB（`block_size` 参数）。每个 Data Block 存储一批有序的 InternalKey → Value 对。
+候选文件确定之后，工作才进入文件内部，这一段分成五步，每一步都可能变成一次 IO。
 
-设计 Data Block 面临两个矛盾的需求：
-1. **压缩存储**：key 之间通常有大量公共前缀（如大量 `user:` 开头的 key），存储每个 key 的完整内容会浪费大量空间
-2. **支持随机访问**：读取时需要能快速定位 Block 内的某个 key，如果所有 key 都只存储增量（差值），就必须从头顺序扫描，读取任意位置的代价为 O(N)
+第一步是打开文件，也就是 `TableCache` 查表。`TableCache` 缓存已经解析好的表对象，其中包含索引块与过滤器块；命中它，后面两步都变成内存操作。未命中则要读文件尾部固定 48 字节的 Footer、再读索引块与过滤器块，两到三次 IO，随后才轮到真正的数据块。这就是"文件句柄"这个看似与读性能无关的参数为什么会直接影响延迟。
 
-LevelDB 通过**前缀压缩 + 重启点（Restart Point）**机制，在空间压缩和随机访问之间找到平衡。
-
-### 3.2 前缀压缩——相邻 key 的差量编码
-
-由于 Data Block 内的 key 是有序的，相邻 key 之间往往有共同前缀。前缀压缩（Prefix Compression）利用这一规律，每条记录只存储相对于前一条记录的增量：
-
-```
-未压缩存储（原始）：
-  [key: "user:001", value: "Alice"]   → 占用 17 字节
-  [key: "user:002", value: "Bob"]     → 占用 16 字节
-  [key: "user:003", value: "Carol"]   → 占用 18 字节
-
-前缀压缩存储：
-  [shared=0, non_shared=8, key_delta="user:001", value="Alice"]   → 首条记录，没有前缀复用
-  [shared=7, non_shared=1, key_delta="2",       value="Bob"]      → 前7字节("user:00")与前一条相同
-  [shared=7, non_shared=1, key_delta="3",       value="Carol"]    → 前7字节("user:00")与前一条相同
-```
-
-每条记录的编码格式：
-```
-记录编码格式：
-┌──────────────────────────┬──────────────────────────┬──────────────────────────┬───────────────┬───────┐
-│ shared_key_len (varint)  │ non_shared_key_len(varint)│ value_len (varint)       │ key_delta(非  │ value │
-│ (与前一条 key 的共享前缀  │ (独有部分的长度)           │ (value 的字节长度)        │ 共享部分的字节)│       │
-│  字节数)                 │                           │                          │               │       │
-└──────────────────────────┴──────────────────────────┴──────────────────────────┴───────────────┴───────┘
-```
-
-前缀压缩可以大幅减少存储空间，对于 key 前缀重复度高的场景，压缩率可达 50% 以上。但问题是：若要查找 Block 中间某个 key，必须从 Block 开头逐条解码（因为每条记录的完整 key 需要结合前面的记录才能还原）。这就是**前缀压缩破坏随机访问能力**的问题。
-
-### 3.3 重启点（Restart Point）——恢复随机访问能力
-
-LevelDB 的解决方案是引入**重启点（Restart Point）**机制：
-
-- 每隔固定数量的记录（默认 16 条，由 `block_restart_interval` 参数控制），强制将当前记录视为"重启点"——该记录不使用前缀压缩，存储完整的 key（即 `shared_key_len = 0`）
-- Block 末尾维护一个**重启点数组**，记录每个重启点在 Block 内的字节偏移量
-
-```
-Data Block 内部结构：
-
-┌──────────────────────────────────────────────────────────┐
-│  记录 0 (重启点，shared=0，存完整 key)                   │
-│  记录 1 (shared=N，前缀压缩)                             │
-│  记录 2 (shared=N，前缀压缩)                             │
-│  ...（共 block_restart_interval 条）                     │
-├──────────────────────────────────────────────────────────┤
-│  记录 16 (重启点，shared=0，存完整 key)                  │
-│  记录 17 (shared=N，前缀压缩)                            │
-│  ...                                                     │
-├──────────────────────────────────────────────────────────┤
-│  ...更多记录组...                                        │
-├──────────────────────────────────────────────────────────┤
-│  重启点数组 [offset_0, offset_16, offset_32, ...]        │  ← 每个重启点的文件偏移
-│  重启点数量 (4 字节，uint32)                             │
-└──────────────────────────────────────────────────────────┘
-```
-
-**查找一个 key 的过程**：
-1. 对**重启点数组**进行**二分查找**，找到最后一个重启点 key ≤ 目标 key 的位置
-2. 从该重启点开始，顺序解码后续记录（最多 `block_restart_interval - 1 = 15` 条），直到找到目标 key 或超过目标 key
-
-最坏情况下只需顺序扫描 15 条记录（`block_restart_interval` 的默认值），使得随机访问的代价从 O(N)（N 为 Block 内记录数）降低到 O(block_restart_interval)，是一个固定的小常数。
-
-> [!info] 核心概念
-> **block_restart_interval 的取值权衡**：值越小，重启点越密集，随机访问越快，但压缩率越低（更多记录存完整 key）；值越大，随机访问越慢，但压缩率越高。LevelDB 默认值 16 是经验权衡。对于 key 相似度极高的场景（如时序数据的时间戳 key），可以适当增大此值以获得更好的压缩率。
-
-### 3.4 Block 内的比较器（Comparator）
-
-Data Block 内 key 的排序依赖**比较器（Comparator）**，LevelDB 的默认比较器是 `BytewiseComparatorImpl`——按字节序（字典序）比较 key。
-
-LevelDB 允许用户自定义比较器（通过 `Options.comparator`），例如：
-- 按时间戳数值排序（不是字典序）
-- 忽略 key 中的某个前缀字段（如版本号）后再比较
-
-自定义比较器还需要实现 `FindShortestSeparator` 和 `FindShortSuccessor` 方法，这两个方法用于生成 Index Block 中的分隔 key（详见第 5 章）——可以生成比 Data Block 最大 key 更短但同样有效的分隔 key，减少 Index Block 的空间占用。
-
----
-
-## 第 4 章 Meta Block 与 Bloom Filter
-
-### 4.1 Bloom Filter 要解决的问题
-
-考虑这样一个读取场景：查询 `Get("nonexistent_key_12345")`，该 key 根本不存在于数据库中。
-
-在没有 Bloom Filter 的情况下，读取路径必须：
-1. 检查 MemTable（内存，快）
-2. 检查 Immutable MemTable（内存，快）
-3. 逐个检查 L0 层每个 SSTable：读取 Index Block（1 次磁盘 IO），定位到候选 Data Block（1 次磁盘 IO），确认 key 不存在——每个文件 2 次磁盘 IO
-4. L1、L2...每层也需要类似操作
-
-对于一个有 10 个 L0 文件 + 6 层的 LevelDB，查询不存在的 key 最坏需要约 20+ 次磁盘 IO，每次 IO 约 1ms，总延迟可达 20ms。对于大量"读取不存在 key"的场景（如缓存穿透），这是不可接受的。
-
-**Bloom Filter** 正是为此而生：以极小的内存代价（每个 key 约 10 bits），在读取任何磁盘文件之前，**以 O(1) 时间、零磁盘 IO 的代价判断一个 key 是否"一定不在"某个 SSTable 中**。
-
-### 4.2 Bloom Filter 的工作原理
-
-Bloom Filter 的数学基础：一个 m 位的 bit 数组，k 个独立哈希函数。
-
-**插入一个 key**：用 k 个哈希函数分别计算 key 的哈希值，将 bit 数组中对应的 k 个位设为 1。
-
-**查询一个 key**：用同样的 k 个哈希函数计算 key 的哈希值，检查 bit 数组中对应的 k 个位：
-- 若所有 k 个位都为 1：key **可能存在**（存在假阳性）
-- 若有任意一个位为 0：key **一定不存在**（零假阴性）
-
-```
-Bloom Filter 示意（m=10, k=2, 已插入 "alice" 和 "bob"）：
-
-bit 数组：  [ 0, 1, 0, 1, 0, 0, 1, 0, 1, 0 ]
-索引：         0  1  2  3  4  5  6  7  8  9
-
-插入 "alice"：hash1("alice")=1, hash2("alice")=6  → 位 1 和位 6 设为 1
-插入 "bob"：  hash1("bob")=3,   hash2("bob")=8   → 位 3 和位 8 设为 1
-
-查询 "carol"：hash1("carol")=1, hash2("carol")=5
-  → 位 1=1（OK），位 5=0（失败！）
-  → 结论："carol" 一定不在这个 SSTable 中，跳过
-  
-查询 "alice"：hash1("alice")=1, hash2("alice")=6
-  → 位 1=1（OK），位 6=1（OK）
-  → 结论："alice" 可能在这个 SSTable 中，继续读取 Index Block
-```
-
-**假阳性率的数学公式**：
-$$P_{fp} = \left(1 - e^{-kn/m}\right)^k$$
-
-其中 n 为已插入元素数量。对于固定的 m/n（bits per key），最优 k 值为 `k = (m/n) × ln(2) ≈ 0.693 × (m/n)`。
-
-LevelDB 使用 10 bits per key（默认），此时最优 k ≈ 7，假阳性率约 **1%**。这意味着：100 次查询不存在的 key，只有约 1 次会因为 Bloom Filter 假阳性而触发额外的磁盘 IO，其余 99 次都会被 Bloom Filter 直接过滤。
-
-### 4.3 LevelDB 的 Bloom Filter 实现细节
-
-LevelDB 使用了一个简洁但高效的 Bloom Filter 实现技巧——**双哈希模拟多哈希**：
+第二步是过滤器判定。两种实现的顺序不同，值得单独说明：LevelDB 的过滤器粒度是 2KB 数据区域，所以它必须先用索引块定位候选数据块，再用该块在文件中的偏移右移 11 位找到对应区域查一次；RocksDB 的默认实现是整文件一个 full filter，因此它可以在索引之前先判——判否就直接返回，连索引二分都省了。这个差别在下面这段简化代码里能看出来。
 
 ```cpp
-// LevelDB Bloom Filter 的核心哈希计算（简化版）
-// 只需要两个真正的哈希函数 h1 和 h2，即可模拟 k 个独立哈希函数
-// 公式：hash_i(key) = h1(key) + i * h2(key)  （i = 0, 1, ..., k-1）
-
-uint32_t h = Hash(key.data(), key.size(), 0xbc9f1d34);  // h1，种子固定
-const uint32_t delta = (h >> 17) | (h << 15);           // h2 = h1 的循环位移
-
-for (size_t j = 0; j < k_; j++) {
-    const uint32_t bitpos = h % bits;  // 第 j 个哈希函数的 bit 位置
-    array[bitpos / 8] |= (1 << (bitpos % 8));  // 设置对应位
-    h += delta;  // h += h2，模拟下一个哈希函数
+// BlockBasedTable::Get 的判定顺序（简化）
+// full filter 覆盖整个文件，所以可以在定位数据块之前就否掉这次查找
+if (filter != nullptr && !filter->KeyMayMatch(user_key)) {
+  return;  // 连索引都不查，省掉一次 index 二分
 }
+// 过滤器通过（可能是假阳性）才走 index -> block handle -> 块读
+GetDataBlock(handle, &block);
 ```
 
-这个技巧（称为 Kirsch-Mitzenmacher optimization）被广泛引用：用位移和加法代替多次哈希计算，速度提升显著，且理论上假阳性率与使用 k 个独立哈希函数几乎相同。
+第三步是块读。先在 block cache 里查，键由缓存 id、文件号与块偏移拼成；命中直接拿解压后的内容，未命中才发一次 `read`，长度是块大小加 5 字节的 trailer。
 
-**Bloom Filter 在 SSTable 中的存储位置**：Meta Block 区域。每个 SSTable 只有一个 Bloom Filter Meta Block，过滤整个文件中所有 key。LevelDB 也支持 "per-block" 模式（每个 Data Block 一个 Bloom Filter），但 "per-file" 模式是默认，因为过滤粒度到文件级别已经足够，且占用空间更少。
+第四步是解压。磁盘上的块通常经过压缩，缓存里的块是解压后的内容，所以命中缓存省掉的不只是那一次 IO，还包括解压的 CPU。
 
-### 4.4 Bloom Filter 的内存占用分析
+第五步是块内定位：在重启点数组上二分，找到不大于目标的重启点，再从那里顺序解码，最多走 16 条记录。这一段是纯 CPU，前缀压缩与重启点的分工在 [[09 LevelDB 源码剖析——MemTable、SSTable 与 Compaction]] 里已经写透，此处只提醒一句：它决定了块大小的上限——块越大，一次解压与一次顺序扫描搬进来的无关数据越多。
 
-对于一个 LevelDB 数据库，Bloom Filter 的总内存占用为：
+### 1.5 算例：一次点查最坏读几个文件
 
-```
-内存占用 = 总 key 数量 × bits_per_key / 8（字节）
-
-例：1000 万个 key，bits_per_key=10：
-  = 10,000,000 × 10 / 8 = 12.5 MB
-```
-
-LevelDB 默认将 Bloom Filter 存储在 SSTable 文件中（不加载到内存），读取时按需从磁盘加载到 Block Cache。若开启了 Table Cache（`Options.max_open_files` 控制缓存的文件句柄数），频繁访问的 SSTable 的 Bloom Filter 会常驻内存，读取时无需磁盘 IO。
-
-> [!warning] 生产避坑
-> Bloom Filter 只对"点查询一个不存在的 key"有加速效果。对于范围扫描（`NewIterator()` + `SeekToFirst()` + `Next()`），Bloom Filter 无法使用，因为无法预判 key 范围内有哪些 key。如果业务以范围扫描为主，应重点关注 Block Cache 和 Index Block 的内存配置，而非 Bloom Filter 的 bits_per_key。
-
----
-
-## 第 5 章 Index Block——二分定位的核心
-
-### 5.1 Index Block 的职责
-
-Index Block 是 SSTable 的"目录"，为每个 Data Block 维护一条索引记录。读取一个 key 时，先在 Index Block 中**二分查找**定位到目标 key 可能所在的 Data Block，再加载该 Data Block 进行精确查找，避免扫描所有 Data Block。
-
-### 5.2 Index Block 的记录格式
-
-Index Block 的结构与 Data Block 相同（同样使用前缀压缩和重启点），但每条记录的含义不同：
-
-```
-Index Block 中的每条记录：
-  key:   该 Data Block 的"最大分隔 key"（separator key）
-  value: 该 Data Block 的 BlockHandle（offset + size）
-```
-
-**separator key 的设计**：Index Block 中记录的 key 不是 Data Block 中实际存在的 key，而是一个**分隔 key**——满足条件"该 Data Block 中所有 key ≤ separator key，且 separator key < 下一个 Data Block 中所有 key"的最短字符串。
-
-例如，若 Data Block 0 的最大 key 是 `"user:100"`，Data Block 1 的最小 key 是 `"user:200"`，那么分隔 key 可以是 `"user:101"`（而不是完整的 `"user:100"`）。通过 `Comparator::FindShortestSeparator` 方法找到最短的合法分隔 key，可以减少 Index Block 的空间占用。
-
-**查找过程**：在 Index Block 中执行 `Seek(target_key)`，找到第一条 `separator_key >= target_key` 的记录，其 value（BlockHandle）即为目标 Data Block 的位置。
-
-### 5.3 Index Block 与整体查找流程的结合
+把上面的计量点合起来，就可以算"最坏读几个文件"。下面的流程图是这条链路的完整形状，注意分支里每一处"判否"都对应一次可以省掉的 IO。
 
 ```mermaid
-sequenceDiagram
-    participant C as "客户端 Get(key)"
-    participant BF as "Bloom Filter"
-    participant IB as "Index Block"
-    participant DB as "Data Block"
-
-    C->>BF: "检查 key 是否可能存在"
-    alt "Bloom Filter 判定: 一定不存在"
-        BF-->>C: "返回 NotFound（零磁盘 IO）"
-    else "Bloom Filter 判定: 可能存在"
-        BF->>IB: "加载 Index Block（1次磁盘 IO，通常已缓存）"
-        IB->>IB: "二分查找 separator_key >= target_key"
-        IB->>DB: "加载目标 Data Block（1次磁盘 IO）"
-        DB->>DB: "重启点数组二分 + 顺序扫描至多16条"
-        DB-->>C: "返回 value 或 NotFound"
-    end
+%%{init: {'theme': 'dracula'}}%%
+flowchart TB
+    A["Get(key, snapshot)"] --> B{"可写内存表命中？"}
+    B -->|是| Z["返回 value"]
+    B -->|否| C{"只读内存表命中？"}
+    C -->|是| Z
+    C -->|否| D["Version::Get 逐层下沉"]
+    D --> E["L0：按文件号从新到旧<br/>区间判断 + filter 判定"]
+    E -->|"全部判否"| F["L1：层内二分定位 1 个文件"]
+    E -->|"区间覆盖且判为正"| K["进入文件内部"]
+    F --> G["L2 到 L6：每层二分 1 个文件"]
+    G -->|"越过层尾即断言不存在"| Y["NotFound"]
+    G --> K
+    K --> L["TableCache：取已解析的 index 与 filter"]
+    L --> M["block cache 查块"]
+    M -->|未命中| N["读 size+5 字节 → 解压"]
+    M -->|命中| O["块内重启点二分 + 顺序扫至多 16 条"]
+    N --> O
+    O --> P{"版本判断"}
+    P -->|value| Z
+    P -->|tombstone| Y
+    P -->|更老版本| D
 ```
 
-**缓存策略的重要性**：Index Block 通常只有几 KB（每个 Data Block 一条记录，约 20~30 字节/条，一个 4MB SSTable 有约 1000 个 Data Block，Index Block 约 20~30KB），完全可以常驻 Block Cache。如果 Index Block 常驻缓存，读取一个已知存在的 key 只需**一次磁盘 IO**（加载 Data Block）。
+按 LevelDB 的参数（7 层、L0 上限 12）与 RocksDB 的参数（7 层、L0 慢停 20、写停 36），可以列出几种典型场景下的文件触碰数与块读数。表里的期望块读按每 key 10 位、假阳性率 0.84% 计算，只统计"确认没有"的那部分。
+
+| 场景 | 触碰文件数 | 无过滤器块读 | 10 位 bloom 后期望块读 |
+| :--- | :--- | :--- | :--- |
+| 命中可写内存表 | 0 | 0 | 0 |
+| 命中 L0 最新文件 | 1 | 1 | 1 |
+| 命中 L6（L0 有 8 个文件） | 8 + 5 + 1 = 14 | 8 + 5 + 1 = 14 | 1 + 13 × 0.84% ≈ 1.1 |
+| 完全未命中，LevelDB 参数 | 12 + 6 = 18 | 18 | 18 × 0.84% ≈ 0.15 |
+| 完全未命中，RocksDB 参数 | 36 + 6 = 42 | 42 | 42 × 0.84% ≈ 0.35 |
+
+这张表要横着读：第一列说明文件触碰的数量级是十几个到几十个，第二列说明没有过滤器时每一次触碰都可能是一次块读，第三列说明过滤器把"确认没有"的块读压到了不足一次。但它同时暴露了一个常被误读的地方：**过滤器并不减少文件触碰数**。命中 L6 的那一行，14 个文件一个也没少碰，每个文件仍要取 TableCache、仍要做区间判断、仍要查一次过滤器，只是这些动作都落在内存里。
+
+用数量级推算感受一下差距（下面是示例推算，不是基准数据）：假设一次 4KB 随机读约 100 微秒、block cache 命中约 1 微秒、过滤器判定约 0.2 微秒。命中 L6 从 14 次块读约 1.4 毫秒，降到 1 次块读加 13 次过滤器判定约 0.1 毫秒；完全未命中从 18 次块读约 1.8 毫秒，降到 18 次过滤器判定约 4 微秒。两个数量级的差距来自同一件事——把"读盘确认"换成了"查表确认"。
 
 ---
 
-## 第 6 章 MetaIndex Block——元数据的索引
+## 第 2 章 三笔内存预算与一份句柄表
 
-### 6.1 MetaIndex Block 的结构
+读路径上的缓存不止一层，容量都从同一台机器的内存里切出来；分清它们各自缓存什么，比记住某个推荐值重要得多。
 
-MetaIndex Block 是一个简单的 KV 映射，记录 SSTable 中所有 Meta Block 的名称和位置：
+下图是读请求从进程到设备要穿过的四层，箭头方向是"命中即止"。
 
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+flowchart TB
+    A["读请求：key + 快照序列号"] --> B{"TableReader 内的 filter / index<br/>（默认不进 block cache 容量）"}
+    B -->|"判否，直接返回"| C["结束，零 IO"]
+    B -->|"判正"| D{"block cache<br/>解压后的数据块"}
+    D -->|命中| E["块内二分，结束"]
+    D -->|未命中| F{"OS Page Cache<br/>压缩后的文件页"}
+    F -->|命中| G["拷贝 + 解压"]
+    F -->|未命中| H["设备读：NVMe 或 SSD 或 HDD"]
+    H --> G
+    G --> E
 ```
-MetaIndex Block 内容示例：
-  key: "filter.leveldb.BuiltinBloomFilter2"
-  value: Bloom Filter Meta Block 的 BlockHandle（offset + size）
+
+### 2.1 block cache：缓存的是解压后的块
+
+`block_cache` 缓存的是 **解压后的数据块**内容，键由缓存 id、文件号与块偏移组成。这一条决定了它的容量该怎么估：磁盘上经过压缩的块，解压后在内存里会变大，压缩比 2:1 时，标称 32MB 的缓存只覆盖约 16MB 的磁盘数据。用"数据集有多大"去反推缓存容量的人，常常在这里低估一半。
+
+默认值方面，LevelDB 在 `SanitizeOptions` 里直接给 8MB，RocksDB 的 `block_cache` 默认是空指针，此时内部会创建一个 32MB 的缓存，也可以设 `no_block_cache` 彻底关掉。**32MB 只是起步价**，对一个动辄几十 GB 的库来说，这是几乎所有生产部署都要动的第一个参数，也是本篇认为最关键的一个：点查的稳态延迟几乎完全由它决定。
+
+它为什么必须调大，可以用命中率与容量的关系说清。LRU 下命中率随容量单调上升，但没有线性关系：容量小于热点集时，命中率随容量快速爬升；一旦覆盖了热点集，再翻倍也只是小幅提升。所以判据不是"配内存的三分之一"，而是 **看命中率曲线**——三分之一这个经验值之所以流行，是因为多数在线业务的活跃数据占比大致落在这个量级。
+
+代价同样要说清。block cache 与内存表默认不是同一个预算池，它们的容量互不相让：把一个进程的可用内存分成两半，读侧拿得多了，写侧就少了，写缓冲变小意味着 flush 变频繁、L0 文件数上升，读放大反而变差。RocksDB 提供了把两者并账的手段——`WriteBufferManager` 可以把内存表的用量记账到 block cache 的容量里（`CacheEntryRole::kWriteBuffer`），这时才是真正的"一个池子里分配"，而这也让"调大 block cache"从一个免费动作变成一次明确的预算再分配。
+
+还有一个细节影响有效容量：缓存元数据默认计入容量。`CacheMetadataChargePolicy` 的默认值是全量计费，LRU 链表、哈希表这些支持快速查找的结构所占的空间也要从容量里扣。块越小，条目越多，元数据占比越高，标称 32MB 的缓存能装下的数据就越少。
+
+### 2.2 缓存实现：LRU 与 HyperClockCache
+
+选哪个实现，取决于你更在意 CPU 还是命中率。LRU 的实现分片，每片一把互斥锁，而且读操作也要拿独占锁——因为它要把命中的条目挪到 LRU 链头。分片数够多时争用不明显，但单个热块即使有再多的分片也躲不掉锁：同一个 key 打到同一个分片，读线程在锁上排队。缓存只有几十 MB 时还有第二个麻烦，分片被切得很小，一个体积较大的条目（典型是未分区的过滤器块）就可能把某个分片的容量占掉一大截，形成小范围抖动。
+
+HyperClockCache 的思路是不在读路径上写共享状态：命中时只对计数字段做原子操作，淘汰由后台的 CLOCK 扫描完成。RocksDB 的头文件里已经写明它一般优于 LRUCache，代价是三条：优先级执行得没那么严格，长范围扫描会把缓存稀释掉（除非扫描时用 `fill_cache=false`）；命中率可能略低；部分配置依赖匿名 mmap。
+
+这里要纠正一个流传很广的说法：老版本的 `ClockCache` 因为一个未修复的缺陷已经被移除，`NewClockCache` 这个接口现在只是返回一个 LRU 缓存以保持兼容；今天要用 CLOCK 语义，得用 `HyperClockCacheOptions` 构造实例，再把实例塞进 `block_cache`。同样地，`block_cache_type` 这个参数名在现代版本的头文件里已经不存在，选实现的方式是传不同的 `Cache` 实例，而不是改一个枚举值。
+
+下图把两条读路径并排画出来，差别只在读的那一次要不要拿锁。
+
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+flowchart TB
+    A["读线程查块"] --> B["按 key 哈希到分片"]
+    B --> C{"实现类型"}
+    C -->|"LRUCache"| D["取分片互斥锁（独占）"]
+    D --> E["查表 + 把条目挪到链头"]
+    E --> F["放锁，返回块"]
+    C -->|"HyperClockCache"| G["探测 entry，原子读计数字段"]
+    G --> H["后台 CLOCK 扫描负责淘汰"]
+    H --> F
 ```
 
-目前 LevelDB 只有 Bloom Filter 这一种 Meta Block，但 MetaIndex Block 的设计为未来扩展其他元数据类型（如统计信息、压缩字典等）预留了空间。这是**开闭原则**在文件格式设计中的体现——对扩展开放（新增 Meta Block 类型），对修改关闭（现有解析代码无需变更）。
+### 2.3 row cache：默认关闭的那一层
+
+`row_cache` 缓存的是"表级行"，用来加速 `Get`：命中时直接拿到这一行所在块的内容，连块内二分都可以省。它默认是空指针，也就是关闭。
+
+它为什么默认关，原因可以列成三条。第一，重复存储：它缓存的内容与 block cache 高度重叠，同一批数据在进程里存了两份，而两份的容量互不相让。第二，条目与文件版本强绑定：缓存键里带文件号，还额外带一个与快照相关的序号，SST 文件本身不可变，所以正常的写入不会让它失效——新写入先进内存表，落盘时生成新的文件号，旧条目只是不再命中，然后等淘汰。这听起来是优点，但它意味着一次合并之后，大批条目的命中率直接归零，却还占着容量。第三，接口限制：官方注释里写明它暂不支持 `DeleteRange`。
+
+真正需要它的场景很少，判据也清楚：只有当 `value` 大到块里只装得下一两条记录、块利用率很低时，row cache 才有机会赢——因为它缓存的是"行"而不是"块"，不会为了一条记录把整块无关数据搬进内存。反过来说，如果块内记录数正常（4KB 块装几十条），row cache 就是在给同一份数据收两份内存。
+
+### 2.4 文件句柄与四个参数的代价
+
+文件句柄这一层不缓存数据，缓存的是"已经打开并解析过的表"。它的大小由 `max_open_files` 决定：LevelDB 的默认值是 1000，实现里还会预留十来个留作他用，剩下的给 `TableCache`；RocksDB 的默认值是 -1，含义是"打开全部文件"，分片数由 `table_cache_numshardbits` 控制（默认 6）。
+
+`max_open_files` 设成 -1 在文件数不多时最省事，在几千个 SST 文件的库上就是另一回事：每个打开的表都要常驻索引块与过滤器块，这部分内存挂在表对象上，不计入 block cache。于是"文件太多"会同时撞两个上限——进程的 fd 上限，以及一块没人统计的元数据内存。**文件句柄会先于内存耗尽**，这句话在大库上并不夸张。
+
+判据要分两步看：先看 fd 余量（`ulimit -n` 与实际打开数），再看每文件的索引与过滤器有多大。过滤器按每 key 10 位算，一个 2GB、平均 100 字节 KV 的文件约有两千万个 key，光是过滤器就要 25MB；五百个这样的文件同时打开，就是十几 GB 的元数据内存，这还没算索引块。
+
+把这一节的内容压成一张表，重点在最后两列：任何调大都有一个对称的代价，不存在单向的收益。
+
+| 参数 | 默认值 | 缓存什么 | 调大的代价 | 调小的代价 |
+| :--- | :--- | :--- | :--- | :--- |
+| `block_cache` | 32MB（LevelDB 为 8MB） | 解压后的数据块 | 挤占写缓冲与内存表，flush 变频繁，写放大上升 | 命中率下降，块读次数按未命中比例线性上升 |
+| 缓存实现 | LRUCache | 同上 | 换 HyperClockCache：并发 CPU 效率提升，命中率可能略降，长扫描需关 `fill_cache` | 留在 LRU：高并发下分片锁争用，小缓存易被大条目打散 |
+| `row_cache` | 关闭 | 表级行 | 与 block cache 重复占内存，合并后条目大批失效 | 大 value、块利用率低的场景省不掉那次块内定位 |
+| `max_open_files` | -1（LevelDB 1000） | 打开的表与已解析的 index、filter | fd 与元数据内存随文件数上涨 | 每次 table cache miss 要多读 Footer、索引块与过滤器块，两三次 IO |
 
 ---
 
-## 第 7 章 SSTable 的构建过程
+## 第 3 章 Bloom Filter 的算术
 
-### 7.1 TableBuilder——SSTable 的写入器
+过滤器是读路径上最划算的一笔买卖：花几百 MB 内存，把十几个块读换成十几个内存查询。但"划算"有刻度，刻度就是假阳性率，而假阳性率可以算出来。
 
-LevelDB 通过 `TableBuilder` 类将有序的键值对流式写入 SSTable 文件。构建过程遵循严格的顺序性：
+### 3.1 公式：从位数组到 0.6185 的幂
 
+设有 m 个位、k 个哈希函数、已插入 n 个 key。插入一个 key 时，某一位被置为 1 的概率是 1/m，插入 n 个 key 之后某一位仍为 0 的概率是 (1-1/m)^(kn)，当 m 较大时约等于 e^(-kn/m)。查询一个不存在的 key 时，k 个哈希算出的位全部为 1 的概率就是假阳性率：
+
+$$
+p = \left(1 - e^{-kn/m}\right)^{k}
+$$
+
+令 b = m/n 表示每 key 分配的位数，则 kn/m = k/b，公式变成 p = (1 - e^(-k/b))^k。对 k 求导并令其为零，得到最优哈希个数 **k\* = b·ln2** ≈ 0.693b，代回原式：
+
+$$
+p_{\min} = \left(\tfrac{1}{2}\right)^{k^*} = 0.6185^{\,b}
+$$
+
+这个结果给出两条很好用的直觉。第一，**每多一位，假阳性率就乘 0.6185**；要把假阳性率降一个数量级，需要增加 ln10 / ln(1/0.6185) ≈ 4.8 位。第二，位数是唯一的杠杆，哈希个数只能逼近最优，无法突破它。
+
+实现上还留了一道取整。LevelDB 的 `BloomFilterPolicy` 把哈希个数取成 k = floor(0.69 × bits_per_key)：每 key 10 位时取 6 而不是理论最优的 7，省下一次探针，代价是假阳性率从 0.82% 抬到 0.84%。RocksDB 的默认建议值是 9.9 位，官方注释给的对应假阳性率约 1%，与这个取整后的结果吻合。
+
+无假阴性是它能放在读路径上的前提：过滤器说"一定不在"的时候必须真的不在，否则返回的就是错数据；说"可能在"的时候允许错，大不了多读一次块。下面的流程图把这四种结局分开画了出来，其中只有标着"假阳性"的那一支是白花的 IO。
+
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+flowchart TB
+    A["候选文件：先判 key 是否落在区间内"] -->|"不在区间"| B["跳过，零 IO"]
+    A -->|"在区间"| C["用 k 个哈希取 k 个位"]
+    C --> D{"k 位全为 1？"}
+    D -->|"否"| E["一定不在：只花一次内存访问"]
+    D -->|"是"| F["可能在，概率为 p"]
+    F --> G["二分索引 → 取块 → 读盘或查缓存 → 解压"]
+    G --> H{"块内找到目标版本？"}
+    H -->|"否"| I["假阳性兑现：这次 IO 白花"]
+    H -->|"是"| J["返回 value"]
 ```
-TableBuilder 工作流程：
 
-1. 创建新 SSTable 文件，初始化 TableBuilder
-2. 循环调用 Add(key, value)：
-   a. 将 InternalKey + value 编码后追加到当前 Data Block
-   b. 更新 Bloom Filter 过滤器状态（将 key 加入 Bloom Filter）
-   c. 若当前 Data Block 达到 block_size（默认 4KB）：
-      - 将 Data Block 刷写到文件（可选 Snappy 压缩）
-      - 写入 Block Trailer（压缩类型 + CRC32）
-      - 在 Index Block 中添加一条该 Data Block 的索引记录
-      - 重置 Data Block 缓冲区，开始新的 Data Block
-3. 调用 Finish()：
-   a. 写出最后一个（不完整的）Data Block
-   b. 写出 Bloom Filter Meta Block
-   c. 写出 MetaIndex Block
-   d. 写出 Index Block
-   e. 写出 Footer（包含 Index Block 和 MetaIndex Block 的 BlockHandle + Magic Number）
-4. 调用 Sync() 确保数据落盘
+### 3.2 位数、假阳性率与内存的对照
+
+把公式按实现里的取整算出来，就得到下面这张刻度表，内存列按 1 亿个 key 估算。
+
+| 每 key 位数 | 实际哈希个数 | 假阳性率（按取整计算） | 1 亿 key 的内存 | 相对 10 位的体积 |
+| :--- | :--- | :--- | :--- | :--- |
+| 6 位 | 4 | 约 5.6% | 75 MB | 0.6 |
+| 8 位 | 5 | 约 2.2% | 100 MB | 0.8 |
+| 10 位 | 6 | 约 0.84% | 125 MB | 1.0 |
+| 12 位 | 8 | 约 0.31% | 150 MB | 1.2 |
+| 16 位 | 11 | 约 0.046% | 200 MB | 1.6 |
+| 20 位 | 13 | 约 0.0068% | 250 MB | 2.0 |
+
+表里的数字是理论值，实测通常略高于它，原因有三个：位数在文件级别取整、哈希之间的相关性、过滤器按区域切分时每段元素数太少导致方差变大。实测比理论差一倍属于正常范围，差一个数量级就要怀疑配置。
+
+怎么选这一列，取决于读负载里"未命中"占多大比例。全是命中查询时，过滤器只值"少读十几次确认块"；一半是存在性判断（缓存穿透、去重、唯一性校验）时，它值得 16 位。笔者的经验刻度是：点查为主、未命中占比一成以上的在线业务，从 12 位起步；纯命中型的离线批处理，10 位足够。
+
+### 3.3 分块、局部性与 Ribbon：三个层次的取舍
+
+过滤器的空间与查询精度之外，还有第三个维度：它与缓存如何相处。
+
+LevelDB 选择按 2KB 数据区域切分过滤器。读的时候先用索引定位候选块，再用块偏移右移 11 位找到对应区域，只查那一段。好处是过滤器不必整文件常驻，用到哪段读哪段；代价是区域内元素数很少时（几 KB 数据、几十个 key），最小位数限制会让"每 key 位数"失真。这个设计在过滤器块要跟着数据块一起读盘的年代是合理的。
+
+RocksDB 后来把这条路走成了 full filter——整文件一个过滤器，并在 7.0 之后从公共接口里移除了旧的 block-based 构造方式（`use_block_based_builder` 参数被忽略）。所以今天讨论"分块 bloom 块内假阳性更高但 cache miss 更少"，说的其实是历史实现；现代版本里与之对应的是分区过滤器（`partition_filters`）：把 full filter 切成 4KB 左右的分区，命中时只把一两个分区装进 block cache。它保住了 full filter 的判定效率，又让过滤器内存可以随访问局部性伸缩。
+
+`bloom_locality` 这个参数容易引起误解。它现在的语义是"控制过滤器探针的局部性以提升 CPU 缓存命中"，而且只对 PlainTable 的前缀过滤器生效，默认值是 0（关闭）。在 block-based table 上把它当成"分块 bloom 的开关"是错的——那种效果要靠 `partition_filters` 得到，而它解决的是过滤器常驻内存的粒度，不是探针的 CPU 局部性。
+
+还有一种用空间换构建成本的选择：Ribbon 过滤器。同等假阳性率下它比 Bloom 省约 30% 的空间，代价是构建时消耗三到四倍 CPU、约三倍临时内存。它的策略参数默认只在 flush 产出的文件（也就是 L0）上用 Bloom，其余层用 Ribbon——快的地方要快，省的地方要省。这个默认值本身就是一条判据：L0 的文件每次点查都要挨个试，过滤器判定在热路径上；深层每层只查一个文件，空间更值钱。
+
+### 3.4 optimize_filters_for_hits：把最后一层的过滤器砍掉
+
+`optimize_filters_for_hits` 默认关闭。打开它之后，RocksDB 不再给最后一层建过滤器，官方注释给出的理由是：最后一层装着数据量的大头，而对于一次命中查询，这一层的过滤器本来就没有用——你终究要读那个块，过滤器救不了任何 IO。**最后一层不建过滤器**，这就是它的全部含义。
+
+这句话点出了过滤器的收益结构。每层至多一个候选文件，所以每层的过滤器每次点查最多省一次块读；可这一层的过滤器要按这一层的数据量来分配内存。于是"每次查询省下的 IO 除以占用的内存"这个比值，随层深单调下降：L0 最划算（一次点查要试 n 个文件，过滤器省 n 次读，而 L0 数据量最小），越往下越不划算，最后一层最不划算，而它恰恰最占内存。
+
+需要纠正一个方向性错误：这个参数是"最后一层不建过滤器"，而不是"只给最后一层建过滤器"。二手资料里把它写反的不在少数，而写反之后结论会完全颠倒——按错误的理解，你会以为它省的是中间层的过滤器，于是对未命中型负载也敢打开它。实际影响正好落在未命中型负载最疼的地方：存在性判断在最后一层失去了最后一道闸，每次都要真读一个块。
+
+### 3.5 whole_key_filtering 与 prefix bloom
+
+前面讨论的过滤器默认按整 key 建，`whole_key_filtering` 的默认值就是 true，服务的是 `Get` 这类精确点查。另一条路是按前缀建：配置 `prefix_extractor` 之后，SST 里会多出一个前缀过滤器，服务的是"同一前缀下的批量查找"，典型场景是按用户 ID 前缀取该用户的全部记录、按日期前缀扫描某天的时间线。
+
+两者的成本结构不同。整 key 过滤器的元素数等于 key 总数，前缀过滤器的元素数等于前缀基数；前缀基数远小于 key 总数时，同样位数下前缀过滤器更省内存，但它只对前缀查询有效。RocksDB 允许两者并存：整 key 与前缀各有一个过滤器块，读的时候按查询方式选。
+
+内存表这一侧也有对应的配置：`memtable_prefix_bloom_size_ratio` 默认 0（关闭，上限 0.25），它按写缓冲大小的固定比例切出一块内存做前缀过滤器；`memtable_whole_key_filtering` 默认 false，打开后整 key 也进过滤器。这两个参数服务的是同一类请求——那种注定要穿透内存表、到磁盘上再确认一遍的未命中查询。
+
+这里藏着本篇最值得记的一个陷阱：前缀过滤器**只在前缀查找中生效**。`ReadOptions::total_order_seek` 为 true 时，用 `Get` 读 block-based table 会跳过前缀过滤器，官方注释写得很直白，说这会影响 `Get` 的性能；迭代器一侧则由 `auto_prefix_mode`、`prefix_same_as_start` 与列族级的 `prefix_seek_opt_in_only` 共同决定走不走前缀模式。配了 `prefix_extractor` 却一直用总序模式读，前缀过滤器就是一个只占内存不干活的组件。
+
+还有一个生命周期问题：前缀过滤器与建表时的 `prefix_extractor` 绑定。改了提取逻辑之后，旧文件里的过滤器与新配置不匹配，只能等合并重建；在重建完成之前，那批旧文件的点查退回无过滤状态。
+
+### 3.6 算例：1 亿 key 的过滤器占多少内存
+
+按 10 位算，1 亿个 key 的过滤器是 125MB；按 16 位算是 200MB。放进上下文里看：假设平均 KV 100 字节，1 亿条数据约 10GB，125MB 相当于数据量的 1.25%，却能把命中路径上的十几次确认读压成一次。
+
+盈亏平衡点可以这样估。设一次块读约 100 微秒、一次过滤器判定约 0.2 微秒，一次命中 L6 的点查在无过滤器时要读 14 个块，有过滤器时读 1 个块加 13 次判定，省下约 1.3 毫秒。要在一秒内追回 125MB 的内存成本，只要这个库每秒有几百次这样的点查——对在线业务来说，这个门槛低得可以忽略。
+
+---
+
+## 第 4 章 三个"读变慢"的成因与判据
+
+读路径上的故障很少表现为报错，表现为"P99 慢慢变高"。下面三个成因覆盖了多数现场，判据都可以从统计项里读出来（统计项名称以对应版本文档为准）。
+
+### 4.1 过滤器不生效
+
+最隐蔽的一种。表现是块读次数与"层数 × 候选文件数"吻合，过滤器明明配了，却看不到收益。
+
+判据看一对计数器：一个记录"过滤器判否、省掉的读"，一个记录"过滤器判正"（其中一部分是真命中，一部分是假阳性）。如果判否数接近零而判正数很高，说明过滤器在几乎所有 key 上都给正面——位数不够，或者前缀配置与查询方式不匹配；如果两个数都接近零，说明过滤器根本没被查——要么没配 `filter_policy`，要么读走了总序模式。
+
+处置顺序是先确认配置，再确认读法，最后才调位数：把每 key 位数从 10 提到 12 到 16，看判正数是否明显下降；如果不下降，问题就不在位数上。
+
+### 4.2 block cache 太小
+
+表现是稳态 IO 持续偏高，缓存用量长期贴着容量上限。判据有三个：数据块命中率（命中数除以命中加未命中）低于九成而负载有明显热点；缓存用量等于容量且淘汰持续发生；块读字节数与点查次数的比值明显高于块大小。
+
+还有一种误判要提防：缓存命中率很高，IO 仍然很高。这时问题不在 block cache，而在表缓存——每次 table cache miss 都要重新读 Footer、索引块与过滤器块，这些 IO 不经过数据块缓存。两个缓存的命中率要分开看。
+
+### 4.3 block_size 太大
+
+表现是每次点查都搬进 16KB 甚至 32KB 的数据，其中九成是无关内容。判据很直接：用总读字节数除以点查次数，得到的就是平均单次读的字节数，它应该接近 `block_size`；再用缓存用量除以条目数，得到平均条目大小，条目越大，LRU 越容易在容量压力下把有用的块挤出去。
+
+### 4.4 三者的判据表
+
+| 症状 | 该看的观测项 | 判据 | 处置方向 |
+| :--- | :--- | :--- | :--- |
+| P99 高，块读次数接近候选文件数 | 过滤器判否数与判正数 | 判否接近零、判正很高 → 位数不足或前缀不匹配；两者皆零 → 过滤器没被查 | 先验配置与读法，再提位数 |
+| 稳态 IO 高，缓存长期满 | 数据块命中率、缓存用量、淘汰情况 | 命中率低于九成且有热点；用量等于容量 | 调大 `block_cache`，同时给写缓冲留足预算 |
+| 命中率不低但 IO 仍高 | 表缓存命中率与 miss 次数 | 表缓存 miss 频繁 → 句柄不足 | 调大 `max_open_files`，或减少文件数 |
+| 单次读字节数远大于 4KB | 读字节数除以点查次数、平均条目大小 | 比值接近 16KB 或 32KB | 调小 `block_size`，或按负载分列族配置 |
+
+---
+
+## 第 5 章 block_size 的取舍
+
+`block_size` 的默认值是 4KB，这个默认值的来源是操作系统页大小：读一个块正好落在一页上，不跨页，也不浪费。调它的时候，真正在交换的是三样东西。
+
+调大的收益有三条。块内 key 更多，相邻 key 共享前缀的概率更高，前缀压缩更有效，写出的文件更小；索引项按块数增长，块大了索引就小，常驻内存的索引也随之变小；每块 5 字节的 trailer、每次解压的调用开销都被摊薄，扫描时顺序预读也更顺。
+
+调大的代价有两条，都在点查这一侧。单次读放大：点查一个 key 要搬进整块，4KB 变 16KB 就是四倍的读放大，而其中往往只有一条记录有用。缓存条目变大：同样的容量装下的条目数减少，LRU 在大条目上更容易做错决策——一次长扫描就能把容量里的大块全冲掉。
+
+下图把这两组对价画在同一张图上，收益向下游走，代价落在点查这一侧。
+
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+flowchart LR
+    A["block_size 调大"] --> B["块内 key 更多<br/>前缀压缩更有效"]
+    A --> C["索引项更少<br/>常驻元数据更省"]
+    A --> D["单次 IO 变大<br/>随机点查读放大上升"]
+    D --> E["缓存条目更大<br/>长扫描易冲掉容量"]
+    B --> F["扫描与局部性负载受益"]
+    C --> F
 ```
 
-**为什么 Index Block 在 Data Block 之后才写出？** 因为每个 Data Block 的 offset 和 size（BlockHandle）只有在该 Block 写完后才能确定，必须按顺序确定每个 Data Block 的位置，才能构建 Index Block。这要求整个 SSTable 在构建时必须**从头到尾按序写出**，与 LSM-Tree 的顺序写原则完美契合。
+这里要拆掉一个流传的说法：调大 `block_size` 会减少过滤器的查询次数。对 LevelDB 那种按 2KB 区域切分的过滤器，一次点查在单个文件里只查一次，与块大小无关；对 RocksDB 的 full filter，一次点查在每个候选文件里也只查一次。**块大小的收益不在过滤器**，真正被减少的是索引项数量与分区过滤器的分区数——这些属于元数据开销，不属于每次查询的判定次数。把两者混为一谈，会导致在"点查慢"的现场去动过滤器那一侧的参数，方向从一开始就是错的。
 
-### 7.2 SSTable 构建的性能特征
+那么什么时候该调到 16KB。判据是访问的局部性：如果一次读之后紧接着要读相邻的 key（时间线扫描、前缀遍历、批量导出），16KB 块让一次 IO 服务多条记录，读放大就不再是浪费；NVMe 上一次 16KB 的顺序页读与 4KB 的延迟差距远小于四倍，所以这种负载下 16KB 往往更快。反过来，纯随机点查、key 之间毫无关联时，4KB 更稳，因为没有第二次访问来摊薄那多读的 12KB。
 
-SSTable 的构建是纯顺序写操作，没有任何随机 IO。构建速度主要受以下因素影响：
-
-| 因素 | 典型值 | 影响 |
-|------|--------|------|
-| 磁盘顺序写带宽 | HDD: ~100MB/s，SSD: ~500MB/s | 决定最大构建速度 |
-| Snappy 压缩 CPU | ~250MB/s per core | 压缩速度通常高于磁盘带宽，非瓶颈 |
-| Key 排序（已在 MemTable 完成） | 无额外开销 | MemTable 的 SkipList 已保证有序性 |
-| Bloom Filter 计算 | ~100ns per key | 约 1000 万 key/s，几乎不影响 |
-
----
-
-## 第 8 章 SSTable 的读取优化
-
-### 8.1 Block Cache——热点数据的内存缓冲
-
-LevelDB 通过 `Options.block_cache` 参数配置一个 LRU 缓存（默认 8MB），缓存最近访问的 Data Block。缓存的 key 为 `{cache_id, block_offset}`，value 为解压缩后的 Block 内容。
-
-Block Cache 的命中率对读取性能影响巨大：
-- **命中**：直接从内存读取，延迟约 100ns~1μs
-- **未命中**：需要磁盘 IO，延迟约 1~10ms（HDD）或 100μs~1ms（SSD）
-
-**Block Cache 大小规划**：一般建议将 Block Cache 设置为热点数据集大小的 10%~20%。对于 LRU（最近最少使用） 缓存，若热点数据分布符合 80/20 法则（80% 的访问集中在 20% 的数据），则 20% 大小的 Block Cache 可以获得约 80% 的命中率。
-
-### 8.2 mmap 与直接 IO
-
-LevelDB 支持两种文件读取方式，由 `Options.use_mmap_reads`（64位系统默认 true）控制：
-
-**mmap 方式**：将 SSTable 文件直接映射到进程的虚拟地址空间。优点是读取时不需要额外的内存拷贝（直接从 Page Cache 读取），OS 负责管理缓存；缺点是如果打开的文件过多，会耗尽虚拟地址空间（在 32 位系统上尤为严重）。
-
-**pread 方式**：通过 `pread(fd, buf, size, offset)` 系统调用读取文件。优点是精确控制读取范围，不消耗虚拟地址空间；缺点是需要一次用户态到内核态的拷贝。
-
-在 64 位系统上，LevelDB 默认使用 mmap，充分利用 OS 的 Page Cache 作为额外的文件缓存层（在 Block Cache 之外）。
-
-### 8.3 Table Cache——文件句柄缓存
-
-除了 Block Cache（缓存 Block 内容），LevelDB 还维护一个 **Table Cache**（`Options.max_open_files`，默认 1000），缓存打开的 SSTable 文件句柄（包括 Bloom Filter、Index Block 等已解析的元数据）。
-
-若一个 SSTable 在 Table Cache 中，读取时：
-- **Bloom Filter**：直接从内存检查（零磁盘 IO）
-- **Index Block**：直接从内存二分查找（零磁盘 IO）
-- **Data Block**：根据 Block Cache 命中情况决定是否需要磁盘 IO
-
-若不在 Table Cache 中，需要额外的磁盘 IO 来读取 Footer 和 Index Block，然后才能开始查找。
-
-> [!info] 核心概念
-> **缓存层次结构**：LevelDB 有三层缓存：OS Page Cache（全局，由 OS 管理）→ Table Cache（文件句柄和元数据，LevelDB 管理）→ Block Cache（Data Block 内容，LevelDB 管理）。理解这个层次结构，对于调优 LevelDB 的内存使用非常重要。`block_cache` 和 `max_open_files` 是最关键的两个内存相关参数。
+| 维度 | 4KB（默认） | 16KB | 64KB |
+| :--- | :--- | :--- | :--- |
+| 单次点查读放大 | 最小，约等于一条记录加块头 | 四倍于 4KB | 十六倍，随机点查基本不可接受 |
+| 前缀压缩效率 | 一般，块内相邻 key 数量有限 | 较好 | 好 |
+| 索引大小 | 较大，每 4KB 一条索引项 | 约为默认的四分之一 | 约为默认的十六分之一 |
+| 块内二分与扫描量 | 小 | 中等 | 大，解压后扫描的无关记录多 |
+| 适用负载 | 随机点查为主 | 局部性强、扫描与点查混合 | 顺序扫描、批量导入、离线分析 |
 
 ---
 
-## 第 9 章 文件格式的演进与扩展性设计
+## 第 6 章 反例与边界
 
-### 9.1 格式的向后兼容性
+反例一：用默认值撑一个大库。32MB 的 block cache 对 500GB 的数据集，命中率会低到个位数，于是每一次点查都落在"十几个块读"的最坏路径上；现场看到的是"RocksDB 比预期慢一个数量级"，实际原因是缓存根本没起到作用。判断它不需要压测，把缓存用量与数据集大小放在一起看即可。
 
-LevelDB 的 SSTable 格式在设计上考虑了向后兼容性：
+反例二：以为过滤器能省掉所有读。它省的是"确认没有"的块读，不省文件触碰、不省索引二分、不省表缓存 miss 之后读 Footer 与过滤器块的那几次 IO，对范围扫描完全无效。一个以扫描为主的库把每 key 位数从 10 提到 20，除了多占 125MB 内存，什么也不会变。
 
-1. **Footer 的 Magic Number**：不同格式版本可以使用不同的 Magic Number，加载时根据 Magic Number 选择对应的解析逻辑
-2. **MetaIndex Block**：新类型的 Meta Block 只需在 MetaIndex Block 中注册，旧版本代码读取时遇到未知的 Meta Block 名称会直接忽略，不影响核心功能
-3. **Block Trailer 的压缩类型**：新增压缩算法只需分配一个新的压缩类型编号，旧版本遇到未知压缩类型会返回错误（而不是静默损坏数据）
+反例三：配了 `prefix_extractor`，查询却走总序。用 `Get` 读，同时把 `total_order_seek` 打开；或者用迭代器从 `SeekToFirst` 开始全表扫，前缀过滤器都不会被使用。配置看起来齐全，收益为零，统计项上表现为"判否数几乎不动"。
 
-### 9.2 RocksDB 对 SSTable 格式的扩展
+反例四：估算内存时只算 block cache。默认配置下索引与过滤器不在 block cache 里，它们挂在表对象上，随打开的文件数增长；把 `max_open_files` 设成 -1 让所有文件常开，等于把这块内存交给文件数决定。一个文件数上千的库，这部分开销可以超过 block cache 本身。
 
-RocksDB 在 LevelDB 的 SSTable 格式基础上做了若干扩展（兼容旧格式的同时引入新特性）：
-
-- **BlockBasedTable v2**：新增 Full Filter（整个文件一个 Bloom Filter）和 Partitioned Index（将大 Index Block 分片，减少内存占用）
-- **压缩字典（Dictionary Compression）**：对于大量相似 Block，使用共享的 Zstd 压缩字典，显著提升压缩率
-- **校验和算法扩展**：新增 xxHash64 等更高效的校验算法作为 CRC32 的替代
+边界也要说明白。这一章所有的优化都只作用于读路径：过滤器不影响写放大，缓存不减少合并产生的重写，块大小不改变分层策略。**三笔账是联动的**，压低其中一笔往往抬高另一笔——缓存大了写缓冲就小，过滤器多了内存就紧，块大了扫描快而点查慢。三者的选型判据在 [[01 LevelDB 全局架构——LSM-Tree 的写优化设计]] 里给了框架，合并策略那一侧的对价在 [[04 Compaction——分层合并与版本管理]] 里展开。
 
 ---
 
-## 第 10 章 小结
+## 第 7 章 结语
 
-### 10.1 设计决策全景回顾
+读放大的账可以按"文件"和"块"两级来记：文件一级的放大由层数与 L0 文件数决定，块一级的放大由过滤器与缓存决定。前一级几乎改不动，后一级是调优的全部空间。过滤器把"读盘确认"换成"查表确认"，代价是每 key 若干位内存，收益随层深递减，所以最后一层可以砍掉；缓存把"读盘"换成"命中"，代价是挤占写缓冲，收益随容量递减，所以要盯命中率曲线而不是盯容量数字；块大小把"单次 IO"与"块内扫描量"互换，代价落在另一类负载上。
 
-SSTable 的文件格式体现了在多个约束条件下的精确权衡：
+这三笔交易的共同点是：它们都不消除成本，只把成本挪到你能承受的那一侧。判断该往哪边挪，靠的是读分布的实测形状——命中率、判否率、单次读字节数，这三个数字比任何推荐配置都可靠。
 
-| 设计决策 | 解决的问题 | 带来的代价 |
-|----------|-----------|-----------|
-| **不可变文件** | 避免随机写，支持并发读 | 数据修改必须通过新文件 + Compaction 实现 |
-| **前缀压缩** | 减少 key 存储空间（30%~70%） | 随机访问需要从重启点顺序扫描 |
-| **重启点机制** | 恢复 O(1) 的 Block 内随机访问 | 每 N 条记录存一次完整 key（空间换时间） |
-| **Bloom Filter** | 快速过滤不存在的 key（99% 命中） | 每 key 约 10 bits 的额外空间 |
-| **Index Block** | 文件级别 O(log N) 定位 Data Block | Index Block 需要常驻内存（几十 KB/文件） |
-| **Footer 固定位置** | 文件解析入口，零扫描定位元数据 | 格式固定，扩展时需要兼容设计 |
+---
 
-### 10.2 后续章节导引
+## 参考资料
 
-- **[[04 Compaction——分层合并与版本管理]]**：理解多个 SSTable 如何通过 Compaction 进行有序合并，以及 VersionEdit/VersionSet 如何管理 SSTable 文件集合的 MVCC 版本
-- **[[05 从 LevelDB 到 RocksDB——优化与演进]]**：分析 RocksDB 在 SSTable 格式、索引结构、压缩算法上的改进，以及这些改进背后的工程动机
+1. Google. *LevelDB Source Code*: `db/db_impl.cc`（`SanitizeOptions`、`TableCacheSize`）、`db/dbformat.h`（`kNumLevels`、`kL0_StopWritesTrigger`）、`util/bloom.cc`（`k_ = bits_per_key * 0.69`）、`include/leveldb/options.h`. https://github.com/google/leveldb
+2. Meta. *RocksDB Source Code*: `include/rocksdb/table.h`（`block_cache` 默认 32MB、`block_size`、`cache_index_and_filter_blocks`、`whole_key_filtering`、`partition_filters`）、`include/rocksdb/cache.h`（`LRUCacheOptions`、`HyperClockCacheOptions`）、`include/rocksdb/advanced_options.h`（`optimize_filters_for_hits`、`bloom_locality`、`memtable_prefix_bloom_size_ratio`）、`include/rocksdb/filter_policy.h`（`NewBloomFilterPolicy`、`NewRibbonFilterPolicy`）、`include/rocksdb/options.h`（`row_cache`、`max_open_files`、`ReadOptions`）. https://github.com/facebook/rocksdb
+3. Meta. *RocksDB Wiki: Block Cache, Bloom Filter, Memory Usage in RocksDB, RocksDB Tuning Guide*. https://github.com/facebook/rocksdb/wiki
+4. Bloom, B. H. *Space/Time Trade-offs in Hash Coding with Allowable Errors*. Communications of the ACM, 13(7), 1970.
+5. Kirsch, A., Mitzenmacher, M. *Less Hashing, Same Performance: Building a Better Bloom Filter*. ESA, 2006.
+6. Dayan, N., Athanassoulis, M., Idreos, S. *Monkey: Optimal Navigable Key-Value Store*. SIGMOD, 2017.
+7. Dayan, N., Athanassoulis, M. *Optimal Bloom Filters and Adaptive Merging for LSM-Trees*. ACM TODS, 2018.
+8. Petrov, A. *Database Internals: A Deep Dive into How Distributed Data Systems Work*. O'Reilly, 2019.
+9. Athanassoulis, M. et al. *Designing Access Methods: The RUM Conjecture*. EDBT, 2016.
 
 ---
 
 > [!note] 思考题
-> 1. LevelDB 使用 Leveled Compaction——每一层的总大小是上一层的 10 倍（默认）。Level 0 最多 4 个 SSTable 文件，Level 1 最大 10MB，Level 2 最大 100MB...。Compaction 选择一个 Level L 的 SSTable 与 Level L+1 中 Key 范围重叠的 SSTable 合并。在什么场景下 Compaction 的写放大最严重（如大量更新已有 Key）？
-> 2. RocksDB 提供了多种 Compaction 策略：Leveled（LevelDB 默认）、Universal（类似 Size-Tiered）和 FIFO。Universal Compaction 将相似大小的 SSTable 合并——写放大更小但空间放大更大。在时序数据（TTL 删除旧数据）场景中，FIFO Compaction 直接删除过期的 SSTable——几乎没有写放大。你如何根据工作负载选择 Compaction 策略？
-> 3. Compaction 消耗 CPU 和磁盘 IO——可能影响前台的读写性能。LevelDB 在后台单线程执行 Compaction。RocksDB 支持多线程并发 Compaction（`max_background_compactions`）。在 NVMe SSD 上，单线程 Compaction 是否会成为瓶颈？如何判断 Compaction 是否跟不上写入速度（Compaction 积压）？
+> 1. 一次未命中的点查在 LevelDB 上要触碰 18 个文件，加上过滤器后块读降到期望 0.15 次，但文件触碰数不变。如果要继续压掉这 18 次触碰本身，可以在结构上动哪几层？
+> 2. 每 key 位数从 10 提到 12 只多花 25MB（按 1 亿 key 计），假阳性率从 0.84% 降到 0.31%。在什么负载下这笔加仓不划算，判据是什么？
+> 3. `optimize_filters_for_hits` 砍掉最后一层的过滤器。如果这个库的真实读分布是三成命中、七成未命中，打开它会怎样？请用第 1 章的算例估一个数量级。
+> 4. 前缀过滤器与整 key 过滤器并存时，同一批数据要占两份内存。什么情况下只留前缀过滤器是安全的，什么情况下会出错误而不是仅仅变慢？
+> 5. 如果把 `block_cache` 从 32MB 调到 8GB，同时用 `WriteBufferManager` 把内存表记账进去，实际可用内存会怎么分布？这种并账方式在什么条件下反而让写侧更不稳？

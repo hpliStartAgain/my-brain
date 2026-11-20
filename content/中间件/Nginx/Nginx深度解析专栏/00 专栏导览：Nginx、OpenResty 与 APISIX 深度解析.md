@@ -1,122 +1,39 @@
 ---
 title: "专栏导览：Nginx、OpenResty 与 APISIX 深度解析"
-date: 2026-02-28
-tags: [Nginx, 专栏导览, 性能优化]
-keywords: [APISIX, OpenResty, 云原生网关, 反向代理]
+date: 2026-11-19
+tags: [Nginx, 中间件, 性能优化]
+keywords: [APISIX, OpenResty, 云原生网关, 反向代理, epoll]
 aliases: []
 ---
 
-# 00 专栏导览：Nginx、OpenResty 与 APISIX 深度解析
+# 专栏导览：Nginx、OpenResty 与 APISIX 深度解析
 
-## 为什么要深度理解 Nginx
+## 这一列怎么读
 
-Nginx 是互联网基础设施中使用频率最高的软件之一。全球超过 **34%** 的 Web 服务器运行 Nginx（W3Techs 2024 数据），几乎每一个生产级 Web 架构都将 Nginx 作为流量入口——无论是作为静态资源服务器、反向代理，还是负载均衡器。在云原生时代，Nginx 又以 OpenResty 为中间层，演化出了 APISIX、Kong 等新一代 API 网关，成为微服务治理的核心组件。
+大多数工程师对 Nginx 的认知停在"会写配置文件"这一层：知道 `location` 怎么匹配、知道 `proxy_pass` 怎么转发。但真正出问题时，这个层次是不够用的——502 是不是上游挂了、504 是不是超时配错了、`add_header` 为什么没生效、`if` 为什么不建议用，这些问题的答案都在配置语法之外。
 
-然而，大多数工程师对 Nginx 的认知停留在"会写配置文件"的层面：知道 `location` 如何匹配，知道 `proxy_pass` 如何转发，但对 **Nginx 为什么能用几个进程处理百万并发**（epoll 事件模型）、**`location` 的优先级规则背后的决策树是什么**、**`proxy_cache` 的文件如何组织、如何失效**等问题知之甚少。
+本列按"一个请求从进来到出去"的顺序组织：它被谁接住（01）→ 配置怎么被解析和继承（02）→ 经过哪些处理阶段（03）→ 怎么转发给上游（04）→ 怎么缓存（05）→ TLS 在哪卸（06）→ URI 怎么匹配到 location（07）→ 怎么限流（08）→ 怎么记日志（09）→ 怎么调优（10）→ 怎么加固（11）。后半程延伸到扩展能力：OpenResty 的协程与 cosocket（12/13）与 APISIX 的配置中心模型（14），最后用一条完整生产链路把判据串起来（15）。
 
-停留在"会用"层面的代价是：
-- 性能调优时无从下手，只能盲目调整参数
-- 生产故障（502、504、499）时缺乏系统性诊断路径
-- 面对 OpenResty Lua 插件开发时不理解协程调度模型导致写出阻塞代码
-- 部署 APISIX 时不理解 etcd 强一致性配置中心与数据平面的关系，出现故障无法快速定位
-
-本专栏从 Nginx 的事件驱动内核出发，逐步深入到配置体系、HTTP 处理管道、反向代理、缓存、TLS、限流、日志、性能调优与安全，再延伸到 OpenResty 的 LuaJIT 协程模型与 cosocket 机制，最终到达 APISIX 的云原生网关架构。每一篇文章都遵循**是什么 → 为什么出现 → 不这样会怎样 → 核心机制深度解析 → 生产最佳实践与边界条件**的逻辑展开。
-
----
+每一篇都写到"这个参数调大调小各付什么代价、出问题先看哪个指标"，不停留在语法说明。
 
 ## 专栏地图
 
-### 第一部分：Nginx 核心机制（01-05）
+| 部分 | 篇目 | 回答什么 |
+| :--- | :--- | :--- |
+| 核心机制 | [[01 事件驱动模型：epoll 与 Master-Worker 进程架构]]、[[02 配置体系解析：指令、上下文与继承规则]]、[[03 HTTP 请求处理管道：11 个阶段全解]] | 一个 worker 怎么扛住上万连接；配置为什么"不生效"；请求在哪个阶段被谁处理 |
+| 转发与缓存 | [[04 反向代理与负载均衡：upstream 模块深度解析]]、[[05 缓存机制：proxy_cache 的物理结构与失效策略]] | 均衡算法与健康检查的真实行为；配了缓存却 MISS 的六个原因 |
+| 连接与匹配 | [[06 SSL-TLS 卸载：HTTPS 握手流程与性能优化]]、[[07 Location 匹配：优先级规则与正则引擎]] | 握手慢在哪、TLS 1.3 改变了什么；匹配优先级为什么总被记反 |
+| 治理与可观测 | [[08 限流与熔断：leaky bucket 与 burst 参数的数学本质]]、[[09 日志体系与可观测性：access_log、error_log 与链路追踪]] | 漏桶的数学与"限流了还被打穿"；五个时间变量到底怎么读 |
+| 调优与安全 | [[10 性能调优全攻略：worker 进程、连接数与内核参数]]、[[11 安全加固：常见攻击向量与防御配置]] | 三层瓶颈的定位顺序；每个攻击向量配置能防到哪一步 |
+| 扩展能力 | [[12 OpenResty 架构：LuaJIT、cosocket 与协程调度]]、[[13 OpenResty 实战：lua-resty 生态与性能陷阱]]、[[14 APISIX 架构：etcd 配置中心与插件体系]] | 协程不等于线程的完整后果；生态库的七个坑；配置在 etcd 里、运行时在内存里的收益与代价 |
+| 收口 | [[15 生产实战：完整流量链路与专栏知识体系总结]] | 一条链路八跳各看什么；超时链怎么配才自洽；一次 502 的完整回溯 |
 
-```
-01 事件驱动模型
-   └─ epoll 的 ET/LT 模式 → Master-Worker 进程架构 → 信号管理
+## 与其他专栏的边界
 
-02 配置体系解析
-   └─ Block/上下文嵌套 → 指令继承规则 → 变量延迟求值
+- `云原生/服务网格`：Envoy 与数据面的线程模型、Filter 链。本列只在做对照时一句话引用，不展开。
+- `中间件/ETCD`：APISIX 的配置中心依赖 etcd，但 etcd 自身的 Raft 与运维在那一列，本列 14 篇只讲"APISIX 怎么用它"。
+- `SRE/故障排查与复盘`：里面有机房与网络层的真实事故报告。本列 15 篇引用其形态，不复制细节。
 
-03 HTTP 请求处理管道
-   └─ 11 个 Phase → rewrite/access/content 语义 → 内部跳转
+## 版本口径
 
-04 反向代理与负载均衡
-   └─ upstream 连接池 → 5 种均衡算法 → 健康检查
-
-05 缓存机制
-   └─ 两级结构（内存索引+磁盘文件）→ Key 哈希 → 失效策略
-```
-
-### 第二部分：Nginx 进阶功能（06-11）
-
-```
-06 SSL/TLS 卸载
-   └─ TLS 1.3 握手 → Session Ticket → OCSP Stapling
-
-07 Location 匹配
-   └─ 四种匹配类型优先级 → PCRE 正则缓存 → try_files 内部跳转
-
-08 限流与熔断
-   └─ 漏桶/令牌桶数学模型 → burst+nodelay → limit_conn
-
-09 日志体系与可观测性
-   └─ log_format 变量体系 → 缓冲写日志 → $request_id 链路追踪
-
-10 性能调优全攻略
-   └─ worker_processes/connections/cpu_affinity → sendfile/tcp_nopush → open_file_cache
-
-11 安全加固
-   └─ Host Header 攻击 → 响应头安全 → 目录遍历防御 → ModSecurity 集成
-```
-
-### 第三部分：OpenResty 可编程 Nginx（12-13）
-
-```
-12 OpenResty 架构：LuaJIT、cosocket 与协程调度
-   └─ LuaJIT JIT 编译 → ngx_lua Phase Hook → cosocket 非阻塞 I/O
-
-13 OpenResty 实战：高性能 Lua 插件开发模式
-   └─ lua-resty-* 生态 → 共享内存缓存 → 连接池模式 → 常见性能陷阱
-```
-
-### 第四部分：APISIX 云原生 API 网关（14-15）
-
-```
-14 APISIX 架构：etcd 配置中心与插件体系
-   └─ 数据平面/控制平面分离 → etcd watch 机制 → 插件优先级链
-
-15 APISIX 实战：流量治理、可观测性与故障排查
-   └─ 限流/熔断/灰度发布 → Prometheus/Skywalking 集成 → 故障诊断
-```
-
----
-
-## 阅读建议
-
-- **有 Nginx 配置经验、想理解底层**：从 01 开始顺序阅读
-- **遇到具体性能问题**：直接跳到 10（调优）或 12（故障排查 — 后续补充）
-- **需要写 OpenResty 插件**：先读 01（事件模型基础）再读 12-13
-- **评估或使用 APISIX**：先读 12（OpenResty 基础）再读 14-15
-
----
-
-## 技术版本说明
-
-| 组件 | 版本 | 说明 |
-|-----|-----|-----|
-| Nginx | 1.24.x（Stable）/ 1.25.x（Mainline）| 核心 API 自 1.18 以来稳定 |
-| OpenResty | 1.21.4.x | 基于 Nginx 1.21.4 + LuaJIT 2.1 |
-| APISIX | 3.x | 2024 年当前 GA 版本 |
-| LuaJIT | 2.1-rolling | OpenResty 内置版本 |
-
----
-
-## 参考资源
-
-- [Nginx 官方文档](https://nginx.org/en/docs/)
-- [OpenResty lua-nginx-module](https://github.com/openresty/lua-nginx-module)
-- [APISIX 官方文档](https://apisix.apache.org/docs/apisix/getting-started/)
-- [Nginx 源码（GitHub 镜像）](https://github.com/nginx/nginx)
-
-
----
-
-> **下一篇**：[[01 事件驱动模型：epoll 与 Master-Worker 进程架构]]
+Nginx 1.27.x / OpenResty 1.27 / APISIX 3.x。几个版本敏感的默认值容易按旧资料配错：`accept_mutex` 自 1.11.3 起默认关闭；`keepalive_requests` 自 1.19.10 起默认 1000；`ssl_buffer_size` 调小是为降 TTFB 而不是"更快发送"。核实不了的写「以对应版本文档为准」。

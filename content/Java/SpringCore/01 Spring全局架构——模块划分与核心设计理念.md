@@ -1,566 +1,693 @@
 ---
 title: "Spring全局架构——模块划分与核心设计理念"
-date: 2026-03-04
-tags: [Java, Spring, 依赖注入]
-keywords: [AOP, IoC, 控制反转, 模块架构, 设计哲学]
+date: 2026-11-19
+tags: [Java, Spring, 软件架构]
+keywords: [IoC容器, AOP代理, BeanPostProcessor, refresh流程, 模块依赖, SpEL]
 aliases: []
 ---
 
 # Spring全局架构——模块划分与核心设计理念
 
-## 摘要
+**摘要：**
 
-本文是 Spring Core 原理专栏的开篇。在深入源码之前，我们需要先建立一个全局视角——Spring Framework 究竟是什么？它为什么能在 J2EE 时代杀出重围，成为 Java 企业开发的事实标准？它的模块是如何组织的，各模块之间的依赖关系是怎样的？控制反转（IoC）和依赖注入（DI）这两个词你一定听过，但它们在本质上是什么关系，Spring 为何选择以此为核心？本文将以"是什么 → 为什么 → 不这样会怎样"的逻辑，带你完整建立对 Spring 的宏观认知，为后续深入每一个机制奠定坚实基础。
+Spring Framework 的模块图几乎每一个 Java 工程师都见过，但多数人记住的是"有哪些模块"，而不是"这些模块为什么正好被切在这几刀上"。本文按机制视角重画这张图：先给出模块切分的三条判据，再顺着 `spring-core` → `spring-beans` → `spring-context` 这条单向链，解释 `Resource`、`Converter`、`OrderComparator` 这三件"不认识 Bean"的东西为什么必须沉在最底层，以及为什么 Web 层可以依赖容器而容器不能反过来依赖 Web 层。随后进入两条主干：其一，IoC 与 AOP 的交汇点是 `BeanPostProcessor`，`AbstractAutoProxyCreator` 在 `postProcessAfterInitialization` 里把需要增强的 Bean 换成代理，这条缝同时解释了 `@Transactional` 为什么靠 AOP 生效；其二，`refresh()` 的十二步是容器启动协议，每一步的顺序背后都压着一条隐含约束，也是扩展点的实际挂载位置。结尾拆解"Spring 重"的技术来源，并给出能减什么、不能减什么的判据。
 
----
-
-## 第 1 章 Spring 的历史与诞生背景
-
-### 1.1 J2EE 的困境：Spring 诞生的根本原因
-
-要理解 Spring 的设计哲学，必须先理解它所要解决的问题。2003年，Rod Johnson 在他的著作《Expert One-on-One J2EE Design and Development》中，系统性地批判了当时主流的 J2EE 开发模式——EJB（Enterprise JavaBeans）。
-
-J2EE 的 EJB 规范在设计之初出发点是好的：它试图为企业级应用提供一套标准化的、容器管理的、可分布式部署的组件模型。但在实践中，它走向了另一个极端——**过度复杂**。
-
-一个典型的 EJB 2.x 应用，开发者要写一个简单的业务服务类，往往需要：
-
-1. 编写一个 **Remote 接口**，声明所有可被远程调用的方法；
-2. 编写一个 **Home 接口**，用于创建和查找 EJB 实例；
-3. 编写 **实现类**，必须继承 `javax.ejb.SessionBean` 并实现一堆生命周期方法（`ejbCreate`、`ejbRemove`、`ejbActivate`、`ejbPassivate`），而这些方法在业务上通常是空实现；
-4. 编写 **部署描述符**（一大坨 XML），描述 EJB 的事务策略、安全角色、JNDI 名称等等；
-5. 将代码部署到专用的**重量级应用服务器**（WebLogic、JBoss、WebSphere）上，离开容器寸步难行。
-
-最令人崩溃的是：**这样一个 EJB 组件几乎无法在容器外独立测试**。你必须启动整个应用服务器才能运行一次单元测试，每次测试的启动时间动辄几分钟。在当时，"单元测试"这个概念对于 EJB 开发者来说几乎是奢侈品。
-
-> [!warning] J2EE 困境的本质
-> EJB 的核心问题不是"功能不强大"，而是它用**侵入性**换取了功能。它强制业务代码继承特定基类、实现特定接口、依赖特定容器环境，导致业务逻辑与基础设施代码严重耦合，完全违背了"关注点分离"（Separation of Concerns）的基本原则。
-
-Rod Johnson 提出的核心洞见是：**对于绝大多数企业应用，根本不需要 EJB 的那套重量级机制（分布式对象、XA 事务等），用普通的 Java 对象（POJO）配合轻量级框架完全可以做到**。这个观点在当时的 J2EE 社区是相当激进的，但历史证明他是对的。
-
-### 1.2 Spring 的核心主张：用 POJO 构建企业应用
-
-Spring 的出发点非常明确：**让普通的 Java 对象（Plain Old Java Object，POJO）成为一等公民**。
-
-所谓 POJO，就是没有继承任何特定框架基类、没有实现任何特定框架接口的普通 Java 类。你可以在任何地方创建它的实例，可以在没有任何容器的情况下对它进行单元测试。这是 Spring 与 EJB 最根本的区别：
-
-- **EJB 模型**：业务对象必须"委身"于容器，代码侵入，生命周期由容器完全托管；
-- **Spring 模型**：业务对象保持 POJO 纯洁性，通过外部配置（XML 或注解）将它们"组装"在一起，容器负责协调，但不污染业务代码。
-
-这个主张直接决定了 Spring 的两个核心能力：
-
-1. **IoC 容器（控制反转）**：由容器来"管理"POJO 的创建、配置和生命周期，而不是由 POJO 自己去查找依赖；
-2. **AOP（面向切面编程）**：将横切关注点（日志、事务、安全）从业务 POJO 中剥离，以声明式的方式叠加，不需要业务代码继承任何特定基类。
-
-### 1.3 Spring Framework 的版本演进
-
-理解版本演进有助于我们把握各个特性出现的历史背景，避免用旧的知识去解读新版本的行为。
-
-| 版本里程碑 | 发布年份 | 核心变化 |
-| --- | --- | --- |
-| **Spring 1.0** | 2004 | 首个正式发布版，IoC 容器 + AOP 基础框架，XML 配置驱动 |
-| **Spring 2.0** | 2006 | 简化 XML 配置，引入 `<context:component-scan>` 注解扫描 |
-| **Spring 2.5** | 2007 | `@Component`/`@Service`/`@Repository`/`@Controller` 等基础注解正式引入 |
-| **Spring 3.0** | 2009 | 全面拥抱 Java 5+，`@Configuration`/`@Bean` 注解驱动配置，`@Async`/`@Scheduled` |
-| **Spring 3.1** | 2011 | `@Profile`、`@Enable*` 系列模块开关注解、环境抽象（`Environment`） |
-| **Spring 4.0** | 2013 | 全面支持 Java 8，`@Conditional` 条件注解（SpringBoot 的基石） |
-| **Spring 5.0** | 2017 | 响应式编程栈（WebFlux），要求 JDK 8+ |
-| **Spring 5.3** | 2020 | 最后一个支持 JDK 8/11/17 的大版本 |
-| **Spring 6.0** | 2022 | **迁移至 Jakarta EE 9**（`javax.*` → `jakarta.*`），要求 JDK 17+，AOT 编译支持 |
-| **Spring 6.1** | 2023 | 虚拟线程（Project Loom）支持，JDK 21 适配 |
-
-> [!info] 关于 Spring 6.x 的迁移意义
-> Spring 6.0 是一个历史性的版本。它将整个框架从传统的 `javax.*` 命名空间迁移到了 Jakarta EE 9 的 `jakarta.*` 命名空间。这意味着依赖旧 `javax.*` 包的代码必须进行迁移。同时，JDK 17 的强制要求也是 Spring 向现代 Java 的一次明确表态，记录式类（Record）、密封类（Sealed Class）等 Java 新特性将在 Spring 生态中得到更好的支持。
+> [!info] 本篇的边界
+> 本篇写机制视角：模块依赖方向、容器层次、Bean 的创建与后处理、代理织入时机、启动协议。应用层怎么用 Spring Boot——启动引导、自动装配、内嵌容器、配置体系——属于 [[Java/SpringBoot/00 专栏导览]] 那一列；代理模式、模板方法、观察者模式这些模式视角的取舍，已经在 [[Java/OOP设计模式/09 设计模式在Spring中的应用全景]] 里写过，本篇只在交汇处给一句结论。
 
 ---
 
-## 第 2 章 Spring Framework 的模块层次
+## 第 1 章 九个模块的切法
 
-### 2.1 模块全景图
+### 1.1 从单一 jar 说起
 
-Spring Framework 并不是一个单体的巨石架构，而是一个**精心设计的、可按需组合的模块化框架**。官方将其核心模块划分为以下几个大类：
+2002 年，Rod Johnson 在《Expert One-on-One J2EE Design and Development》里贴出了一份自己写的框架代码，用来证明一件事：绝大多数企业应用根本用不上 EJB 那套分布式对象与容器托管的重型机制，用普通 Java 对象（Plain Old Java Object，POJO）配合一层轻量的组装逻辑就够了。这份代码在 2003 年长成了 Spring Framework 的雏形，并且很快被拆成了好几个 jar——但最初的切分相当粗糙，接口与实现、配置解析与代理生成常常混在同一棵包树里。真正意义上的模块边界，是随着使用场景分化而被一次次逼出来的。
+
+理解这段历史有一个现实好处：模块不是按"功能分类"切出来的，而是按"依赖方向"切出来的。官方文档把模块分成 Core Container、Data Access、Web、AOP 与 Test 几组，那是给人看的阅读分组；Maven 坐标里那些 `spring-core`、`spring-beans` 之间的依赖箭头，才是真正硬的约束。一个人如果把模块图当成功能清单背下来，遇到"为什么这个类在这儿而不在那儿"时依然无从判断；只有把切分判据拿在手里，才能在没有源码的情况下推出答案。
+
+> [!warning] EJB 的教训：功能不是免费的
+> EJB 2.x 的问题不在于能力不足，而在于它用侵入性换能力：业务类必须继承 `SessionBean`、实现一批在业务上永远空着的生命周期方法、依赖容器提供的 JNDI 环境才能运行。这样做的代价是业务对象离开容器就活不了，单元测试要启动整个应用服务器。Spring 的反叛正是从这里开始——容器可以管组装，但业务类必须保持为一个能被 `new` 出来的普通对象。这条主张后来直接决定了容器的分层方式：管组装的机制与业务无关，所以它可以独立成模块；业务对象不认识容器，所以容器也不能强迫业务对象依赖它的类型。
+
+### 1.2 切分的三条判据
+
+判断一个类该落在哪个模块，笔者用三条判据，按顺序适用。
+
+第一条是认知边界：如果一个模块的公开契约里出现了另一个模块的概念，依赖就必须指向那个模块。`BeanFactory` 的方法签名里出现 `BeanDefinition`、`BeanPostProcessor`，所以 `spring-beans` 不可能不知道它们；而 `Resource` 的方法签名里只有 `InputStream`、`URL`、`File` 这些 JDK 类型，所以 `spring-core` 可以完全不知道 Bean 是什么。这条判据管的是"能不能"，它给出的是**依赖的下界**。
+
+第二条是可裁剪性：删掉依赖方，被依赖方应当仍然完整可用。删掉 `spring-web`，`spring-context` 依然能启动、能注入、能发事件；反过来删掉 `spring-context`，`spring-web` 里的 `HttpMessageConverter` 抽象和 `RestTemplate` 也依然能编译。这条判据管的是"该不该"，它给出的是**依赖的上界**——凡是删掉之后被依赖方没有损失的依赖，都是不必要的依赖。
+
+第三条是发布节奏：模块的边界往往也是修复与升级的边界。`spring-jcl` 这种只为把日志门面桥接到不同实现上的模块，单独成 jar 的唯一理由就是它可以被替换而不牵动其他模块。
+
+三条判据合起来，得到的是一张严格单向的图。九个模块的职责与依赖方向如下表，其中"编译期依赖"一列只列直接依赖，传递依赖省略。
+
+| 模块 | 一句话职责 | 直接依赖 | 为什么必须停在这一层 |
+| :--- | :--- | :--- | :--- |
+| `spring-core` | 资源抽象、类型转换、排序与反射工具 | `jcl`（只有日志桥接） | 它的契约只与"值、字节、类型、顺序"有关，与 Bean 无关，因此可以沉到最底 |
+| `spring-beans` | `BeanFactory`、`BeanDefinition`、DI 引擎 | `core` | 它需要读资源、转类型、排处理器顺序，但不需要"容器启动"这个概念 |
+| `spring-context` | `ApplicationContext`、事件、国际化、BFPP 自动注册 | `core`、`beans`、`aop`、`expression` | 它负责编排启动协议与工程能力，因此必须知道 Bean、代理、表达式三件事 |
+| `spring-aop` | 代理创建、切点匹配、通知链 | `core`、`beans` | 代理是 Bean 的一种包装，它需要类型查询，但不需要容器生命周期 |
+| `spring-expression` | SpEL 的解析与求值 | `core` | 它是纯语言实现，除了 core 的工具外不依赖任何框架概念 |
+| `spring-tx` | `PlatformTransactionManager` 抽象与资源同步 | `core`、`beans` | 事务语义（传播行为、同步器）与具体数据源无关，可以被任何资源适配 |
+| `spring-jdbc` | `JdbcTemplate`、`DataSourceUtils`、异常翻译 | `core`、`beans`、`tx` | 模板是事务抽象的消费者，方向只能是 jdbc → tx |
+| `spring-web` | Servlet 环境工具、消息转换抽象、HTTP 客户端 | `core`、`beans`（外加观测 API） | 它刻意不依赖容器：能在没有 IoC 的世界里当工具库用 |
+| `spring-webmvc` | `DispatcherServlet`、控制器映射、视图解析 | `core`、`beans`、`context`、`aop`、`expression`、`web` | 它需要完整的 `WebApplicationContext`、拦截器链与代理共存 |
+
+外围还有若干模块——`spring-orm`、`spring-webflux`、`spring-messaging`、`spring-context-support`、`spring-aspects`、`spring-instrument`、`spring-jcl`、`spring-test`。它们的存在意义基本都能用上面三条判据解释：`spring-orm` 之所以独立，是因为 Hibernate 与 JPA 的集成不该让不用 ORM 的人付出依赖代价；`spring-jcl` 之所以独立，是因为 Commons Logging 桥接是纯兼容层，可替换。
+
+### 1.3 依赖方向图
+
+把九个模块的方向画出来，得到的不是一棵树，而是一个"漏斗加两翼"的形状：左边一翼是 AOP 与 SpEL，右边一翼是数据访问与 Web，两翼都从容器这一支分出去，任何一侧都没有回流。下图只画单向依赖，箭头方向即编译期依赖方向。
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#6272a4', 'primaryTextColor': '#f8f8f2', 'primaryBorderColor': '#44475a', 'lineColor': '#bd93f9', 'secondaryColor': '#44475a', 'tertiaryColor': '#282a36', 'background': '#282a36', 'mainBkg': '#44475a', 'nodeBorder': '#6272a4', 'clusterBkg': '#282a36', 'titleColor': '#f8f8f2', 'edgeLabelBackground': '#44475a', 'fontFamily': 'monospace'}}}%%
+%%{init: {'theme': 'dracula'}}%%
 graph TD
-    classDef core fill:#6272a4,stroke:#bd93f9,color:#f8f8f2
-    classDef data fill:#50fa7b,stroke:#282a36,color:#282a36
-    classDef web fill:#ff79c6,stroke:#282a36,color:#282a36
-    classDef integration fill:#ffb86c,stroke:#282a36,color:#282a36
-    classDef test fill:#8be9fd,stroke:#282a36,color:#282a36
+    classDef base fill:#6272a4,stroke:#bd93f9,color:#f8f8f2
+    classDef mid fill:#44475a,stroke:#bd93f9,color:#f8f8f2
+    classDef leaf fill:#282a36,stroke:#50fa7b,color:#f8f8f2
 
-    A["spring-core</br>资源抽象/类型转换/工具类"]
-    B["spring-beans</br>BeanFactory/BeanDefinition/DI引擎"]
-    C["spring-context</br>ApplicationContext/事件机制/国际化"]
-    D["spring-aop</br>AOP代理机制/切点/通知链"]
-    E["spring-expression</br>SpEL表达式引擎"]
-    
-    F["spring-jdbc</br>JdbcTemplate/异常转换"]
-    G["spring-tx</br>事务抽象/PlatformTransactionManager"]
-    H["spring-orm</br>JPA/Hibernate集成"]
-    
-    I["spring-web</br>Servlet基础/过滤器/MultiPart"]
-    J["spring-webmvc</br>DispatcherServlet/MVC框架"]
-    K["spring-webflux</br>响应式Web/WebClient"]
-    
-    L["spring-messaging</br>消息抽象/WebSocket"]
-    M["spring-context-support</br>邮件/缓存/调度集成"]
-    
-    N["spring-test</br>MockMvc/TestContext框架"]
-    
-    A --> B
-    B --> C
-    C --> D
-    C --> E
-    C --> F
-    F --> G
-    G --> H
-    C --> I
-    I --> J
-    I --> K
-    C --> L
-    C --> M
-    C --> N
+    CORE["spring-core 资源 转换 排序"]
+    BEANS["spring-beans BeanFactory BeanDefinition"]
+    AOP["spring-aop 代理 切点 通知链"]
+    SPEL["spring-expression SpEL"]
+    CTX["spring-context ApplicationContext 事件 国际化"]
+    TX["spring-tx 事务抽象"]
+    JDBC["spring-jdbc JdbcTemplate"]
+    WEB["spring-web Servlet 工具 消息转换"]
+    MVC["spring-webmvc DispatcherServlet"]
 
-    class A,B,C,D,E core
-    class F,G,H data
-    class I,J,K web
-    class L,M integration
-    class N test
+    CORE --> BEANS
+    BEANS --> AOP
+    CORE --> SPEL
+    AOP --> CTX
+    SPEL --> CTX
+    BEANS --> CTX
+    CORE --> TX
+    BEANS --> TX
+    TX --> JDBC
+    BEANS --> WEB
+    CORE --> WEB
+    CTX --> MVC
+    AOP --> MVC
+    SPEL --> MVC
+    WEB --> MVC
+
+    class CORE,BEANS base
+    class AOP,SPEL,CTX,TX mid
+    class JDBC,WEB,MVC leaf
 ```
 
-这张依赖图揭示了一个非常重要的信息：**`spring-core` 和 `spring-beans` 是整个框架的绝对基础**，所有其他模块都依赖于它们。理解这两个模块，就抓住了 Spring 的命脉。
+图里有一条容易被忽略的边：`spring-context` 指向 `spring-aop`。这不是可选的扩展，而是硬依赖——容器的启动协议里有一个专门步骤（`registerBeanPostProcessors`）用来装配后处理器，而代理创建器正是通过这个入口挂进容器的。换句话说，容器在设计上就预留了"让某个东西来包装我的 Bean"的位置，AOP 占据了这个位置。本篇第 7 章会把这条边展开成一整条时序。
 
-### 2.2 Core Container 层：框架的地基
+### 1.4 为什么 Web 能依赖容器，反过来不行
 
-Core Container 由四个核心模块构成，它们是 Spring 一切能力的来源：
+这是模块图里最常被问的一个问题，答案不止"分层"两个字。笔者把它拆成四层判据。
 
-#### 2.2.1 spring-core：工具箱与资源抽象
+第一层是**生命周期方向**。依赖只能从更短命、更具体的东西指向更长命、更一般的东西。一次 HTTP 请求的寿命是毫秒级，一个 `ApplicationContext` 的寿命是整个进程。请求处理过程中需要问容器要 Bean，所以 Web 层依赖容器是自然的；反过来，容器在启动时需要 HTTP 请求吗？不需要。容器甚至在启动时不知道有没有网络这回事。这条判据可以推广到几乎所有框架分层：短命的东西找长命的东西要资源，是运行时依赖的唯一合理方向。
 
-`spring-core` 是最底层的模块，它提供的不是"业务功能"，而是整个框架赖以运行的**基础能力**：
+第二层是可使用性。`spring-context` 的契约里只有"Bean 的创建、装配、后处理、销毁"，没有任何与传输协议相关的东西。批处理程序、消息消费者、命令行工具、定时任务都可以用 `ApplicationContext`，它们没有 Servlet，也不需要。如果容器反过来依赖 Web 层，那么所有非 Web 场景都被迫携带 Servlet API——一个只处理 Kafka 消息的进程要在类路径上装一个 Servlet 容器，这显然荒谬。反过来，`spring-web` 依赖 `spring-beans` 就没有这个问题，因为它只会被"想处理 HTTP 的地方"使用。
 
-- **`Resource` 抽象**：将不同来源的资源（classpath、file、URL、even InputStream）统一成一个接口。`ClassPathResource`、`FileSystemResource`、`UrlResource` 等实现类让框架内部的资源加载代码不必关心资源从哪里来。
-- **类型转换体系（`ConversionService`）**：将字符串 `"true"` 转换成 `Boolean`，将 `"2024-01-01"` 转换成 `LocalDate`，这是注解驱动配置能够工作的基础。
-- **`ReflectionUtils`、`ClassUtils`、`StringUtils`** 等大量工具类：封装了 Java 反射操作、类加载、字符串处理等底层 API，屏蔽了版本差异和异常处理的繁琐。
+第三层是测试与裁剪的代价。依赖方向决定了"删掉一个模块之后哪些还能用"。删 `spring-webmvc`，容器完好；删 `spring-context`，`spring-web` 的 `RestTemplate`、`HttpMessageConverter` 抽象仍然可以单独使用，因为它们只碰 `core` 与 `beans`。这种"删谁都只影响下游"的性质，正是单向依赖的全部价值——它不是美学要求，而是打包与部署的实际约束。
 
-> [!note] 为什么需要 Resource 抽象？
-> Java 标准库处理资源加载的 API 非常分散：classpath 下的文件要用 `ClassLoader.getResourceAsStream()`，文件系统上的文件要用 `File`，网络资源要用 `URL.openStream()`。Spring 用 `Resource` 接口将它们统一，使得框架内部所有读取配置文件的代码只依赖这一个接口，极大降低了耦合度——这本身就是面向接口编程的经典范例。
+第四层是事实核查，也是这里最容易讲错的地方：`spring-web` 本身根本不依赖 `spring-context`。它只依赖 `core` 与 `beans`（外加一个观测 API），因为它提供的是 Servlet 环境下的工具与 HTTP 客户端，不需要一个完整的容器；真正依赖 `spring-context` 的是 `spring-webmvc`，也就是带 `DispatcherServlet`、需要 `WebApplicationContext` 的那一层。这个细节恰好印证了判据——"能不依赖就不依赖"是同一套判据的另一面：只要一个模块能在没有容器的世界里独立成立，它就不该声明对容器的依赖。顺便说，Spring Framework 5 引入 WebFlux 时官方文档特意说明"WebFlux 应用甚至不直接使用 Servlet API"，同一套判据在响应式栈上又用了一遍。
 
-#### 2.2.2 spring-beans：IoC 引擎的核心
+### 1.5 版本演进留下的印记
 
-`spring-beans` 是 IoC 容器的核心实现模块，包含了两个最重要的概念：
+模块的边界也记录着框架的演进史。下表保留自原稿，并补一列"对模块边界的意义"，因为版本史如果不与结构变化挂钩，读起来就只是一份年表。
 
-**`BeanFactory`**：Spring IoC 容器的根接口，定义了"根据名称/类型获取 Bean"的基础能力。它是一个非常简洁的接口，核心方法只有几个：`getBean(String name)`、`getBean(Class<T> requiredType)`、`containsBean(String name)`、`isSingleton(String name)` 等。
+| 版本里程碑 | 发布年份 | 核心变化 | 对模块边界的意义 |
+| :--- | :--- | :--- | :--- |
+| Spring 1.0 | 2004 | IoC 容器 + AOP 基础框架，XML 配置驱动 | 首批 jar 已按核心容器、数据访问、Web 分开，`core`、`beans`、`context`、`aop` 是当时的核心四件 |
+| Spring 2.0 | 2006 | 简化 XML，引入 `<context:component-scan>` | 扫描能力落在 context，而不是 beans，这个位置选择避免了容器核心被迫认识包扫描 |
+| Spring 2.5 | 2007 | `@Component`/`@Service`/`@Repository`/`@Controller` | 注解成为定义来源，注解本身在 core 的元数据工具里被解析 |
+| Spring 3.0 | 2009 | `@Configuration`/`@Bean`，注解驱动配置 | `ConfigurationClassPostProcessor` 以 BFPP 身份进入 context，用扩展点而非硬编码承载 Java Config |
+| Spring 3.1 | 2011 | `@Profile`、`@Enable*`、`Environment` 抽象 | 环境抽象在 core，`Environment` 的容器侧装配在 context |
+| Spring 4.0 | 2013 | Java 8、`@Conditional` | 条件求值挂在定义注册阶段，为后来的 Boot 自动装配留出位置 |
+| Spring 5.0 | 2017 | WebFlux 响应式栈 | `spring-webflux` 与 `spring-web` 平行，不依赖 `spring-webmvc` |
+| Spring 5.3 | 2020 | 支持 JDK 8 到 JDK 17 的过渡版本 | 6.0 之前的最后一个 5.x 分支 |
+| Spring 6.0 | 2022 | 迁移到 Jakarta EE 9（`javax.*` → `jakarta.*`），要求 JDK 17+，AOT 支持 | 命名空间迁移会穿透 `web`、`orm`、`tx` 三层；AOT 的运行时提示 API 落在 core |
+| Spring 6.1 | 2023 | 虚拟线程支持，JDK 21 适配 | 线程模型变化发生在 Web 层与 `@Async` 的执行器，不触及容器核心 |
 
-**`BeanDefinition`**：一个 Bean 的"元数据描述符"。当 Spring 读取你的 XML 配置或扫描你的注解时，它不会立刻创建 Bean 实例，而是先将 Bean 的描述信息（类名、scope、是否懒加载、构造器参数、属性值、初始化/销毁方法名……）封装成一个 `BeanDefinition` 对象存入注册表。只有在真正需要时，才根据这份"配方"实例化 Bean。
-
-这种"先注册元数据，再按需实例化"的设计是整个 Spring 容器能够支持懒加载、原型作用域、循环依赖处理等复杂特性的根本原因。
-
-#### 2.2.3 spring-context：容器的"大脑升级版"
-
-`spring-context` 在 `spring-beans` 的 `BeanFactory` 基础上，构建了 `ApplicationContext` 这个"增强版容器"。它增加了大量企业级特性：
-
-- **国际化（i18n）**：通过 `MessageSource` 接口支持多语言消息解析；
-- **事件发布/监听机制**：`ApplicationEventPublisher` 接口，支持观察者模式的应用内事件总线；
-- **`ApplicationContext` 本身就是 `ResourceLoader`**：可以直接加载资源；
-- **Bean 自动后处理机制**：自动探测并注册 `BeanPostProcessor`、`BeanFactoryPostProcessor`，这是 Spring 强大扩展性的来源。
-
-`spring-context` 里有一个非常关键的实现类：**`DefaultListableBeanFactory`**，它同时实现了 `BeanFactory` 的所有接口，是整个 IoC 容器真正的"发动机"。我们后续会对它进行非常深入的分析。
-
-#### 2.2.4 spring-aop 与 spring-expression
-
-`spring-aop` 提供了 AOP 代理的创建机制，包括 JDK 动态代理和 CGLIB 两种方式的封装，以及切点（Pointcut）语言的 AspectJ 集成。
-
-`spring-expression` 是 Spring Expression Language（SpEL）的实现，一个功能强大的表达式引擎，被 `@Value`、`@ConditionalOnExpression`、Spring Security 等众多场景大量使用。
-
-### 2.3 Data Access 层：消灭重复代码
-
-`spring-jdbc`、`spring-tx`、`spring-orm` 这一层解决的是另一类问题：**如何简化数据库访问代码**。
-
-早期 Java 的 JDBC 编程极其繁琐：获取连接、创建 Statement、执行 SQL、遍历 ResultSet、处理异常、关闭资源——每一步都要手动处理，且必须嵌套在 `try-finally` 中防止资源泄漏。`JdbcTemplate` 用模板方法模式将这些重复步骤封装起来，开发者只需提供真正不同的部分——SQL 语句和结果映射逻辑。
-
-`spring-tx` 更是 Spring 的另一个杀手锏：通过 `PlatformTransactionManager` 抽象屏蔽了 JDBC 事务、JPA 事务、JMS 事务的差异，再结合 AOP，实现了 `@Transactional` 注解式的声明式事务。
-
-### 2.4 Web 层：MVC 与响应式双轨并行
-
-从 Spring 5 开始，Web 层形成了两条并行的轨道：
-- **spring-webmvc**：基于 Servlet API 的传统同步阻塞模型，`DispatcherServlet` 是核心；
-- **spring-webflux**：基于 Reactor 响应式编程模型的非阻塞框架，适合 I/O 密集型高并发场景。
-
-两套模型在注解层面高度相似（`@RestController`、`@GetMapping` 等注解在两套框架中通用），但底层的 I/O 模型、线程模型截然不同。
+本文的分析基线取 Spring Framework 6.x，对应 Spring Boot 3.x；更高版本的行为差异以对应版本的官方文档为准。
 
 ---
 
-## 第 3 章 控制反转（IoC）的本质
+## 第 2 章 spring-core：三件不认识 Bean 的东西
 
-这是本文最核心的章节。IoC 这个词被说了无数遍，但很多人说不清楚它的本质。
+`spring-core` 常被当成"工具类集合"一笔带过，因为它提供的确实不是业务功能。但对于理解模块切分，这一层恰恰是最有信息量的地方：一个东西要沉到最底层，必须满足一个苛刻条件——它的契约里不能出现任何上层概念。`spring-core` 里有三件最典型的抽象，它们共同构成了"最小可用的地基"。
 
-### 3.1 从"正转"到"反转"：一个生动的比喻
+### 2.1 Resource：把"字节从哪来"挤出所有上层代码
 
-**什么是"正转"（正向控制）？**
+`Resource` 解决的问题朴素到容易被忽略：同一个配置文件，可能在 classpath 里、在文件系统上、在一个 jar 包里、在一个 URL 后面，甚至在一个 `InputStream` 里。JDK 对此给出的答案极为分散——classpath 用 `ClassLoader.getResourceAsStream()`，文件系统用 `File`，网络用 `URL.openStream()`，业务代码为了通用，往往被迫写三段 `if`。`Resource` 用一个接口把"拿到字节"这件事收窄为 `getInputStream()`，再由 `AbstractResource` 提供默认实现，`ClassPathResource`、`FileSystemResource`、`UrlResource`、`InputStreamResource` 分别覆盖四类来源。
 
-考虑这样一段代码：
+它必须停在 core 的理由，用第一条判据就能推出来：`Resource` 的契约里只有 JDK 类型。上层有太多调用点需要它——`spring-beans` 要从 XML 或 class 文件读定义，`spring-context` 要加载 properties 与国际化消息，`spring-web` 要读 `ServletContext` 里的资源。这些调用点分属不同模块，唯一的共同祖先就是 core。如果 `Resource` 上浮到 beans，context 与 web 依然能用，但 core 内部的 `PathMatchingResourcePatternResolver`、`ResourceLoader` 就无处安放，而这些恰恰是 core 自己需要的东西。
 
-```java
-// 传统写法：OrderService 自己负责创建依赖
-public class OrderService {
-    // 直接 new，OrderService 主动"控制"了 PaymentService 的创建
-    private PaymentService paymentService = new PaymentService();
-    private InventoryService inventoryService = new InventoryService();
-    
-    public void createOrder(Order order) {
-        inventoryService.deduct(order.getItems());
-        paymentService.pay(order.getAmount());
-    }
-}
-```
+这里藏着一个容易被错过的细节：`ResourcePatternResolver` 及其实现 `PathMatchingResourcePatternResolver` 也在 core 里，`classpath*:` 这种带通配符的批量资源匹配能力是它提供的，而 `@ComponentScan` 的候选类扫描最终就落在它上面。也就是说，容器做包扫描时最底层的那一步"把一个包路径变成一组 class 资源"，发生在 core，而不是 context。这解释了为什么 `spring-context-indexer` 这类优化能在不碰容器逻辑的前提下生效——它把"从 classpath 里逐个找候选类"换成了"读一个编译期生成的索引文件"。
 
-在这段代码中，`OrderService` 自己 `new` 了 `PaymentService` 和 `InventoryService`。它**主动控制**了这两个依赖的创建。这就是"正转"。
+> [!note] 为什么接口要这么多方法
+> `Resource` 除 `getInputStream()` 之外，还有 `exists()`、`isFile()`、`getURL()`、`contentLength()`、`lastModified()`。这些方法严格说都能从输入流推出来，但它们让调用方在"不真正打开流"的前提下做判断。`AbstractResource` 给它们保守的默认实现——`exists()` 真开一次流再关掉，`isFile()` 返回 `false`；风险是性能，收益是新增一种资源类型只实现一个方法就能工作。
 
-**这样做有什么问题？**
+### 2.2 Converter：值与类型的关系，与 Bean 无关
 
-问题不是"不能用"，而是**耦合度过高**：
+`Converter<S, T>` 是一个只有一个方法的接口：`T convert(S source)`。围绕它，`ConversionService` 提供运行时门面，`GenericConversionService` 用一张"来源类型 → 目标类型"的注册表维护转换器，`DefaultConversionService` 预注册了字符串到数字、日期、枚举、字符集、时区等基础转换。
 
-1. `OrderService` 不仅依赖 `PaymentService` 的**接口**，还依赖它的**具体实现类**和**构造方式**。如果 `PaymentService` 的构造函数参数变了，`OrderService` 也得改；
-2. 你无法在不修改 `OrderService` 代码的前提下，将 `PaymentService` 替换成 `MockPaymentService`，导致单元测试困难；
-3. 如果 `PaymentService` 本身又依赖了其他服务，依赖树会无限扩展，最终演变成一张复杂的依赖网，整个系统牵一发而动全身。
+为什么转换体系必须在 core，而不是在 beans？因为有三类调用点同时需要它，而它们分属三个模块：`spring-beans` 在为 Bean 属性赋值时要把字符串转成目标类型（`BeanWrapper` 的赋值路径）；`spring-context` 在解析 `@Value` 的占位符结果时要转类型；`spring-web` 在绑定请求参数时要转类型。三者需要一个共同的语义——"字符串 `"true"` 与 `Boolean.TRUE` 是同一个值"。这套语义描述的是值与类型的关系，跟 Bean 毫无关系，所以它属于 core。
 
-**什么是"反转"（控制反转）？**
+真正的机制接缝在 beans 这一侧：`BeanWrapperImpl` 背后的 `TypeConverterDelegate` 会把转换请求委托给容器里注册的 `ConversionService`，如果没有，就退化到 JDK 的 `PropertyEditor`。这条委托链说明了一件事——beans 自己并不实现转换，它只负责"找到转换器并调用"。当容器里存在名为 `conversionService` 的 Bean 时，启动流程的最后一步会调用 `setConversionService` 把它装进工厂，整条赋值链的语义随之被替换。这也是为什么自定义一个 `Converter<String, Money>` 并把它注册为 Bean，全局的配置注入都会认识 `Money` 类型：你改的不是某个 Bean 的行为，而是这条委托链背后的转换表。
 
-```java
-// IoC 写法：OrderService 被动接受依赖注入
-public class OrderService {
-    private final PaymentService paymentService;    // 声明依赖接口，不关心实现
-    private final InventoryService inventoryService;
-    
-    // 通过构造器接收依赖，不自己创建
-    public OrderService(PaymentService paymentService, InventoryService inventoryService) {
-        this.paymentService = paymentService;
-        this.inventoryService = inventoryService;
-    }
-    
-    public void createOrder(Order order) {
-        inventoryService.deduct(order.getItems());
-        paymentService.pay(order.getAmount());
-    }
-}
-```
+### 2.3 OrderComparator：排序是一种基础设施
 
-`OrderService` 不再自己 `new` 任何依赖，而是通过构造器"**被动地接受**"依赖对象的注入。它甚至不知道传进来的到底是 `AlipayPaymentService` 还是 `WechatPaymentService`，只知道它们实现了 `PaymentService` 接口——这就是**面向接口编程**。
+第三件东西最不起眼，却是整个扩展点体系的秩序来源。`Ordered` 接口只定义 `getOrder()`，`PriorityOrdered` 是它的子接口，用来表达"比普通有序更优先"，`OrderComparator` 负责按这两个接口比较，`AnnotationAwareOrderComparator` 还会读 `@Order` 注解与 `Ordered` 接口实现。
 
-"控制"被"反转"了：依赖对象的创建权，从 `OrderService` 内部，转移到了外部（容器或调用方）。
+它必须在 core，因为需要排序的名单长得惊人：`BeanPostProcessor`、`BeanFactoryPostProcessor`、`ApplicationListener`、`HandlerInterceptor`、`Filter`、`Advisor`、`SmartLifecycle`、`Validator`，还有应用自己注册的各种策略组件。这些名单分属所有模块，如果排序语义定义在 beans，那么 `spring-aop` 与 `spring-webmvc` 都得重复实现一遍"怎么比较两个组件"，而重复实现必然导致语义漂移——某个模块按降序排，某个模块按升序排，这种 bug 极难定位。把它放在 core，等于宣布"顺序"是与框架无关的通用概念，任何模块都可以引用同一份语义。
 
-> [!info] IoC 是思想，DI 是手段
-> 这里要厘清一个常见的概念混淆：**IoC（控制反转）是一种设计思想/原则，DI（依赖注入）是实现 IoC 的一种具体手段**。
-> 
-> Martin Fowler 在 2004 年的经典文章中专门澄清了这一点：IoC 的含义太宽泛了（很多框架都涉及"控制反转"），而"依赖注入"更准确地描述了 Spring 这类框架所做的事情：它主动将依赖"注入"到对象中，而不是让对象自己去"拉取"依赖。
->
-> 因此，更精确的说法是：**Spring 是一个 DI 框架，DI 是实现 IoC 原则的主要手段**。
+`PriorityOrdered` 之所以要单独存在，是因为存在一类组件必须在所有其他组件之前生效，而普通的 `getOrder()` 排序无法表达"我必须整批优先于另一整批"。容器里的例子是 `ConfigurationClassPostProcessor`：它必须先于所有普通 BFPP 执行，否则 `@Configuration` 里声明的 BFPP 还没被解析出来。为此，`invokeBeanFactoryPostProcessors` 按 `PriorityOrdered`、`Ordered`、无序三段分别收集、分别排序、分别执行——这个三段结构在第 8 章会再出现一次，因为 `registerBeanPostProcessors` 用的是同一套写法。
 
-### 3.2 依赖倒置原则（DIP）：IoC 的哲学根基
+### 2.4 三件东西的共同点
 
-IoC 思想并非凭空产生，它有坚实的面向对象设计原则基础——**依赖倒置原则（Dependency Inversion Principle，DIP）**，这是 Robert C. Martin 提出的 SOLID 原则之一。
+把三件抽象放在一起看，共同点非常清楚：它们都不认识 Bean，也不知道容器存在。这正是**最小可用地基**的定义。
 
-DIP 的定义：
-1. **高层模块不应该依赖低层模块，两者都应该依赖抽象（接口/抽象类）；**
-2. **抽象不应该依赖细节，细节应该依赖抽象。**
+| 抽象 | 一句话职责 | 主要使用方 | 若上移到 beans 会怎样 |
+| :--- | :--- | :--- | :--- |
+| `Resource` | 把资源来源统一为可读的字节流 | beans 读定义、context 读消息、web 读上下文资源 | core 自己的 `ResourcePatternResolver` 无处安放，扫描能力被绑进容器 |
+| `Converter` | 值与类型之间的可注册映射 | beans 属性赋值、context 注解解析、web 参数绑定 | 三个模块各自维护一套转换语义，`@Value` 与参数绑定行为不一致 |
+| `OrderComparator` | 组件执行顺序的统一语义 | 所有扩展点名单 | `PriorityOrdered` 的"整批优先"语义无法跨模块表达 |
 
-用上面的例子来理解：
-
-- `OrderService`（高层模块）不应该依赖 `AlipayPaymentService`（低层具体实现）；
-- `OrderService` 应该依赖 `PaymentService` 接口（抽象）；
-- `AlipayPaymentService` 应该实现 `PaymentService` 接口（细节依赖抽象）。
-
-"**倒置**"这个词的意义在于：在传统的自顶向下依赖链中，高层模块依赖低层模块；而在 DIP 中，这个依赖方向被"倒置"了——两者都依赖居中的抽象层，运行时具体实现才被注入进来。
-
-Spring IoC 容器，本质上就是**在运行时为整个应用程序维护依赖倒置原则的一个"配线中心"**：它持有所有 Bean 的实例，知道谁依赖谁，并在 Bean 初始化时将正确的实现类注入到对应的依赖声明中。
-
-### 3.3 IoC 容器的核心职责
-
-明确了 IoC 的本质之后，我们可以总结出 Spring IoC 容器承担的三大核心职责：
-
-| 职责 | 说明 | 对应机制 |
-| --- | --- | --- |
-| **Bean 的创建与管理** | 按照 BeanDefinition 中的描述，在合适的时机通过反射创建 Bean 实例 | 实例化 → 属性填充 → 初始化 |
-| **依赖关系的装配** | 分析 Bean 之间的依赖关系，按正确顺序注入依赖（构造器/Setter/字段） | `@Autowired`/`@Inject`/XML `<property>` |
-| **Bean 生命周期的托管** | 管理 Bean 从创建到销毁的完整生命周期，触发各种扩展点回调 | `InitializingBean`/`@PostConstruct`/`DisposableBean` |
+顺带说，`spring-core` 里还有两样不在"三件东西"之列、但同样关键的内容：一是被重新打包（repackaged）的 ASM 与 CGLIB，也就是 `org.springframework.asm` 与 `org.springframework.cglib` 这两棵包树；二是 AOT 相关的运行时提示 API，`org.springframework.aot.hint.RuntimeHints` 这一族类型。前者解释了为什么 `spring-aop` 生成代理不需要任何外部字节码库，后者解释了为什么 AOT 的元数据描述能放在最底层——它描述的是"运行时需要哪些反射与资源"，这同样与 Bean 无关。
 
 ---
 
-## 第 4 章 面向切面编程（AOP）的本质
+## 第 3 章 spring-beans：定义与实例的两级分离
 
-### 4.1 横切关注点：OOP 的天然盲区
+### 3.1 BeanDefinition 是一份配方
 
-面向对象编程（OOP）解决了一类问题：通过封装、继承、多态对业务领域建模，将相关的数据和行为封装在类中。但 OOP 有一个天然的局限性——**它对"横切关注点"（Cross-Cutting Concerns）无能为力**。
+`spring-beans` 的设计核心可以用一句话概括：把"Bean 是什么"和"Bean 怎么来"分开。前者由 `BeanDefinition` 承载，后者由 `BeanFactory` 执行。
 
-什么是横切关注点？想象一个电商系统中的典型需求：
+`BeanDefinition` 是一份元数据描述，它记下的不是对象本身，而是造对象所需的全部配方：类名、作用域（singleton 还是 prototype）、是否懒加载、依赖哪些 Bean（`dependsOn`）、是否作为自动装配候选、构造器参数、属性值、初始化与销毁方法名、是否抽象、父定义名。这份配方在容器启动的早期就被构造出来并注册进 `BeanDefinitionRegistry`，而实例要等到 `getBean` 被调用时才创建。
 
-- 所有 Service 层方法执行前，需要**打日志**；
-- 所有涉及金融操作的方法，需要加**事务**；
-- 所有对外接口，需要做**权限校验**；
-- 所有耗时超过阈值的方法调用，需要**上报监控指标**。
+一级分离带来三个直接后果，这三个后果就是容器大多数特性的来源。第一，懒加载成为可能：创建实例的时机与读取定义的时机解耦之后，容器可以自由决定什么时候执行配方。第二，同一份配方可以造出多个实例：prototype 作用域本质上是"每次 `getBean` 重新执行一次配方"，无需额外机制。第三，配方可以被改写：`BeanFactoryPostProcessor` 拿到的是定义而非实例，因此它能在任何实例存在之前调整作用域、替换类名、注入属性值——这是 Spring 扩展性最强的一个口子，比"后处理实例"的侵入性低得多。
 
-这四个需求有一个共同特点：它们**横向切割了所有业务类**，与具体的业务逻辑无关，却又必须无处不在。
+定义的具体类型有若干变体，区别在元数据来源：`GenericBeanDefinition` 是通用载体，`RootBeanDefinition` 与 `ChildBeanDefinition` 用于父子定义继承，`ScannedGenericBeanDefinition` 的元数据来自 ASM 读取的 class 文件（而不是反射加载类），`ConfigurationClassBeanDefinition` 则由 `@Bean` 方法生成。这个差异在启动成本上有实际后果：扫描阶段只读字节码、不加载类，所以"扫描了 3000 个类"并不等于"加载了 3000 个类"，真正的类加载发生在实例化与条件求值时。
 
-如果用 OOP 的方式实现，只有两条路：
+### 3.2 BeanFactory 的最小契约
 
-**方案一：在每个方法里手动添加**
+`BeanFactory` 的接口表面上看很小：`getBean` 的几个重载、`containsBean`、`isSingleton`、`isPrototype`、`getType`、`getAliases`、`getBeanProvider`。但这几组方法的语义差异，恰好画出了容器的能力边界。
+
+`getBean(String)` 与 `getBean(Class<T>)` 是"我要一个，现在就要"，找不到就抛异常。`getBeanProvider(Class<T>)` 则是"我先拿一个可延迟求值的句柄"，返回的 `ObjectProvider` 在真正调用 `getObject()` 或 `getIfAvailable()` 时才去解析。这个差别不是语法糖：它让"可选依赖"与"按需依赖"成为可能，`@Autowired(required = false)`、构造器里的 `ObjectProvider<T>`、`@Lazy` 注入都建立在它之上。一个 Bean 依赖另一个可能不存在的 Bean 时，用 `ObjectProvider` 是唯一不引发启动失败的写法。
+
+`isSingleton`/`isPrototype`/`getType` 这几个查询方法看起来只是便利，实际是给上层模块用的：`AbstractAdvisorAutoProxyCreator` 需要按类型找出所有 Advisor Bean，`registerListeners` 需要按类型找出所有 `ApplicationListener`，`initMessageSource` 需要按名字取出 `messageSource`。也就是说，`BeanFactory` 不只是"取 Bean 的地方"，还是"按条件枚举 Bean 的地方"，容器的很多编排逻辑都建立在类型查询之上。
+
+### 3.3 DI 引擎为什么停在 beans 这一层
+
+一个自然的疑问是：既然 `DefaultListableBeanFactory` 已经能完成定义注册、依赖解析、实例化、后处理、销毁的完整流程，为什么还需要 `spring-context`？答案在"编排"二字上。
+
+`DefaultListableBeanFactory` 能做上面所有事，但它不主动做。它不会自动发现并注册 `BeanPostProcessor`，不会自动调用 `BeanFactoryPostProcessor`，不会预实例化单例——这些动作全在 `refresh()` 里，而 `refresh()` 属于 context。反过来说，DI 引擎也不需要 `refresh()`：给它一份注册好的定义，它就能独立地把 Bean 造出来，甚至可以在一个没有 `ApplicationContext` 的测试里单独跑起来。
+
+> [!info] IoC 是思想，DI 是手段，容器是编排者
+> 这三个概念经常被混为一谈。IoC（Inversion of Control）是原则：把依赖的创建权从使用者手里拿走；DI（Dependency Injection）是 Spring 实现这条原则的具体手法，Martin Fowler 在 2004 年的文章里专门澄清过，说"IoC"这个词太宽泛，而"依赖注入"更准确地描述了框架所做的事。容器是第三层：它把定义管理、依赖解析、生命周期回调、扩展点调度编排成一条启动协议。依赖倒置原则（Dependency Inversion Principle，DIP）解释了为什么要这么分层——高层模块与低层模块都依赖抽象。容器层次结构上的更多细节在 [[Java/SpringCore/02 IoC容器——BeanFactory与ApplicationContext的层次设计]] 里展开。
+
+模块边界的证据也在这一层：`spring-beans` 里没有任何与"容器启动"有关的类型，`ApplicationEvent`、`MessageSource`、`Environment` 全部在 context 或 core；而 `spring-context` 里到处都是对 `ConfigurableListableBeanFactory` 的调用。依赖的箭头是由"谁编排谁"决定的，不是由抽象层次高低决定的。
+
+---
+
+## 第 4 章 spring-context：容器之上的六个能力
+
+### 4.1 六个能力及其装配位置
+
+`ApplicationContext` 相对 `BeanFactory` 多出来的能力，经常被笼统地列成一张功能清单。清单本身没错，但列完仍然不知道这些能力在什么时刻被装进容器。下表把能力、承载接口、以及它在 `refresh()` 中的装配位置对齐起来。
+
+| 能力 | 承载接口或类 | 装配位置 | 与 BeanFactory 的关系 |
+| :--- | :--- | :--- | :--- |
+| 事件发布 | `ApplicationEventPublisher`、`ApplicationEventMulticaster` | `initApplicationEventMulticaster` 与 `registerListeners` | 广播器本身是一个 Bean，监听器也通过类型查询取出 |
+| 国际化 | `MessageSource`、`DelegatingMessageSource` | `initMessageSource` | 名为 `messageSource` 的 Bean，缺省则委托父容器 |
+| 资源加载 | `ResourcePatternResolver`（`AbstractApplicationContext` 继承 `DefaultResourceLoader`） | 类型层面直接继承，无独立步骤 | 资源抽象的实现在 core，context 只是让它变成 Bean 与组件的可用依赖 |
+| 环境抽象 | `EnvironmentCapable`、`ConfigurableEnvironment` | `prepareBeanFactory` 注册 `environment` 单例 | 环境对象被注册成名为 `environment` 的单例，可被注入 |
+| BFPP 自动注册 | `PostProcessorRegistrationDelegate.invokeBeanFactoryPostProcessors` | `refresh()` 第 5 步 | 这是 `BeanFactory` 完全不具备的能力：自动发现并执行定义层面的后处理 |
+| AOP 自动装配 | `BeanPostProcessor` 注册机制 + 代理创建器 | `registerBeanPostProcessors` 第 6 步 | 容器提供挂载点，代理创建器由注解配置登记 |
+
+第六项需要一句精确的说明，否则很容易理解偏：`ApplicationContext` 本身并不会自动让 AOP 生效。它做的是提供一个挂载点——`registerBeanPostProcessors` 会把容器里所有 `BeanPostProcessor` 实例化并排序，包括代理创建器；而代理创建器是否存在于容器中，取决于有没有人登记它，例如 `@EnableAspectJAutoProxy` 通过 `ImportBeanDefinitionRegistrar` 调用 `AopConfigUtils` 完成登记，Spring Boot 场景下则由 `AopAutoConfiguration` 默认完成同一件事（`spring.aop.auto` 默认为真）。换个说法：AOP 的开关不在容器里，容器**只负责让开关插得进去**。
+
+### 4.2 事件与国际化为什么需要"独立的装配步骤"
+
+`initMessageSource` 与 `initApplicationEventMulticaster` 这两步看起来只是"取一个 Bean、没有就建一个默认的"，但它们的位置相当讲究：都在 `registerBeanPostProcessors` 之后。原因很直接——这两步会调用 `getBean`，而 `getBean` 会走完整的后处理器链。如果把这两步提前到第 5 步之前，取出来的 `messageSource` 就是一个没有经过注入、没有经过代理的裸对象；一旦用户在 `MessageSource` 实现里注入了别的 Bean，或者给它加了缓存切面，行为就会与预期不符。
+
+同理，`registerListeners` 排在 `onRefresh` 之后、`finishBeanFactoryInitialization` 之前，这个位置意味着监听器注册时 Web 容器已经创建、而单例尚未批量实例化：监听器因此可以引用 Web 环境里的对象，又能在单例创建期间收到事件——容器在这一阶段可能发布内部事件，如果监听器还没注册，这些事件就丢了。至于"更早发布的事件"，容器用 `earlyApplicationEvents` 这个列表先存起来，等广播器就绪后统一补发，这个细节在第 8 章会展开。
+
+### 4.3 什么时候直接用 BeanFactory
+
+既然 `ApplicationContext` 多出这么多能力，为什么 Spring 还保留 `BeanFactory` 这个"裸容器"？因为在三类场合里，编排本身就是负担。
+
+第一类是"只装配，不要生命周期"的工具。典型场景是配置对象的构建、测试夹具的组装、代码生成器里的小型依赖图。这类代码不需要事件、不需要国际化、不需要自动代理，`DefaultListableBeanFactory` + 手工注册定义就够，用 `AnnotationConfigApplicationContext` 反而会引入一次完整启动。
+
+第二类是"需要完全延迟初始化"。`BeanFactory` 不做 `preInstantiateSingletons`，所有 Bean 都在首次 `getBean` 时创建。对启动时间极度敏感、又不想用 `@Lazy` 污染业务代码的场景，直接持有工厂是更直接的手段——代价是首个请求的延迟，这一点在第 9 章会量化。
+
+第三类是"自己当编排者"。框架开发者、嵌入式脚本环境、需要精细控制启动顺序的基础设施，会直接操作 `DefaultListableBeanFactory`，自己决定什么时候 `invokeBeanFactoryPostProcessors`、什么时候 `registerBeanPostProcessors`。
+
+判据可以压缩成一句话：**要不要别人替你编排启动**。要，就用 `ApplicationContext`，接受它规定的十二步；不要，或者要自己编排，就用 `BeanFactory`，同时接受两个后果——没有 BFPP/BPP 的自动发现（`DefaultListableBeanFactory` 不会自己去找 `BeanPostProcessor`，你必须手动注册），也没有 `ContextRefreshedEvent` 这类生命周期通知。很多人以为"用 `BeanFactory` 更轻"，却忽略了轻的代价是那些能力本来就不存在，而不是被关掉了。
+
+---
+
+## 第 5 章 spring-aop 与 spring-expression：两条正交的增强线
+
+### 5.1 spring-aop 依赖 beans 的确切含义
+
+`spring-aop` 的核心类型是 `ProxyFactory`、`Advisor`、`Pointcut`、`Advice`，它依赖 `spring-beans` 与 `spring-core`，但不依赖 `spring-context`。这个依赖关系值得细看，因为它说明了"代理机制"与"容器编排"的边界在哪里。
+
+`ProxyFactory` 需要 `BeanFactory` 的能力吗？不需要。它需要的是类型信息、拦截器链、以及生成代理的字节码能力。真正用到 `BeanFactory` 的是上层自动代理器：`AbstractAdvisorAutoProxyCreator` 需要按类型找出容器里所有 `Advisor` Bean，于是它调 `getBeanNamesForType`；`AbstractAutoProxyCreator` 需要知道 Bean 的类名以便生成缓存键，于是它调 `getType`。也就是说，AOP 的"机制内核"（怎么造一个代理）与容器无关，"自动装配层"（哪些 Bean 需要代理）才需要容器。
+
+一个具体的证据是 CGLIB 的位置。生成代理要用字节码库，但 `spring-aop` 并不声明对第三方 CGLIB 的依赖——因为 `org.springframework.cglib` 这棵包树被 repackaged 进了 `spring-core`。同样的处理还有 `org.springframework.objenesis`（用于绕过构造器创建实例）。这种"把第三方字节码库吞进 core"的做法，让 `spring-aop` 的依赖面保持极小，也让用户不必处理 CGLIB 版本冲突——代价是框架体积增加，以及无法通过升级 CGLIB 获得新特性。
+
+### 5.2 SpEL 为什么独立成模块
+
+`spring-expression` 只依赖 `spring-core`，它提供 SpEL 的解析器（`SpelExpressionParser`）、求值上下文（`StandardEvaluationContext`）以及一系列 AST 节点。它独立成模块的理由不是"代码量大"，而是"用户群的交叉度低而广"：需要表达式的模块远远不止 context。
+
+`@Value` 里的 `#{...}` 由 beans 侧触发求值，`spring-security` 的 `@PreAuthorize`、`spring-cache` 的 key 表达式、`spring-integration` 的路由表达式、Boot 的 `@ConditionalOnExpression` 都要用 SpEL。这些库大多不依赖 `spring-context`——`spring-security-core` 就不需要容器。如果 SpEL 实现放在 context，这些库要么被迫拖着 context，要么各自引入第三方表达式引擎，两种结果都很糟。
+
+这里有一个漂亮的依赖倒置例子，值得单独说。`spring-beans` 定义了一个只有两个方法的接口 `BeanExpressionResolver`，并在 `AbstractBeanFactory` 里留了 `setBeanExpressionResolver` 的入口；而它的标准实现 `StandardBeanExpressionResolver` 位于 **`spring-context`** 的 `org.springframework.context.expression` 包。谁把实现塞进去的？`prepareBeanFactory`——`refresh()` 的第 3 步。于是形成一条完整的链：beans 定义"怎么把字符串求值成对象"的抽象，context 提供 SpEL 实现，启动协议在第 3 步把两者接起来。这是**依赖倒置**的教科书式布局：抽象在底层、实现在上层、装配落在启动协议里，也是理解模块依赖方向的最佳样本。
+
+---
+
+## 第 6 章 spring-jdbc、spring-tx 与 Web 层：依赖收窄的两个样板
+
+### 6.1 事务抽象与模板的分工
+
+`spring-tx` 里没有一行数据库代码。它定义的是 `PlatformTransactionManager`（提交、回滚、获取当前事务）、`TransactionDefinition`（传播行为、隔离级别、超时、只读）、`TransactionStatus`，以及 `TransactionSynchronizationManager`（把资源绑定到线程）。这些概念与具体数据源无关，JTA、JDBC、JMS、JPA 都可以各自实现 `PlatformTransactionManager`。
+
+有意思的是 `DataSourceTransactionManager` 不在 `spring-tx`，而在 `spring-jdbc`；`JpaTransactionManager` 在 `spring-orm`。这个安排遵循了第一条判据：事务的"语义"（传播、回滚规则、同步回调）在 tx，事务的"具体资源"在各自的适配模块。tx 需要知道的只有一件事——怎么把一个资源绑定到当前线程、怎么在事务结束时释放。具体绑的是什么（`Connection`、`EntityManager`、`JmsSession`），它不知道也不需要知道。
+
+依赖方向 jdbc → tx 的理由也在这里：`JdbcTemplate` 之所以能在事务里复用同一个连接，靠的是 `DataSourceUtils.getConnection()` 先问 `TransactionSynchronizationManager`"当前线程有没有绑定这个数据源的连接"。这一步查询是 tx 的职责，模板只是消费者。如果把 tx 的抽象下沉到 jdbc，那么 JPA、JMS 的事务适配就得反过来依赖 jdbc——依赖方向立刻反转，模块化失效。
+
+### 6.2 Web 层的一分为二
+
+`spring-web` 与 `spring-webmvc` 的切分，是**依赖收窄**最干净的样板。`spring-web` 提供 Servlet 环境下的基础设施：`ServletContext` 工具、`HttpMessageConverter` 抽象、`RestTemplate`、CORS 与媒体类型处理、`WebApplicationInitializer`。它只依赖 `core`、`beans` 与一个观测量库，因此可以被当作纯工具库使用——不需要容器也能编，也不需要 Servlet 容器之外的东西。
+
+`spring-webmvc` 才是"Web 框架"：`DispatcherServlet`、`HandlerMapping`、`HandlerAdapter`、`ViewResolver`、拦截器链。它需要 `context`（`WebApplicationContext` 本身就是 `ApplicationContext` 的子接口）、需要 `aop`（拦截器与代理共存）、需要 `expression`（`@Value` 与方法参数上的 SpEL）、需要 `web`。换句话说，只有在"要给 HTTP 请求做一整套调度"时，容器依赖才是不可避免的。
+
+判据在这里又用了一次：一个模块若能在没有容器的世界里独立成立，它就不该依赖容器；`spring-web` 的用户是 `RestTemplate` 的调用者与 `HttpMessageConverter` 的实现者，他们都不需要一个 `ApplicationContext`。
+
+---
+
+## 第 7 章 IoC 与 AOP 的交汇点
+
+### 7.1 BeanPostProcessor 缝合两条主线
+
+容器与 AOP 的接口只有一个：`BeanPostProcessor`。理解了这个接口的位置，就理解了为什么 Spring 的 AOP 不需要"编译器参与"或"类加载器参与"，也能在运行时把横切逻辑加进去。
+
 ```java
-public void createOrder(Order order) {
-    log.info("createOrder called, order={}", order);    // 日志
-    authService.checkPermission("ORDER_CREATE");         // 权限
-    long start = System.currentTimeMillis();
-    
-    // 实际业务逻辑
-    inventoryService.deduct(order.getItems());
-    paymentService.pay(order.getAmount());
-    
-    metrics.record("createOrder", System.currentTimeMillis() - start); // 监控
+public interface BeanPostProcessor {
+
+    // 返回值会替换容器中保存的实例；返回 null 表示终止后续回调，沿用当前实例
+    default Object postProcessBeforeInitialization(Object bean, String beanName) {
+        return bean;
+    }
+
+    default Object postProcessAfterInitialization(Object bean, String beanName) {
+        return bean;
+    }
 }
 ```
-这种方式的问题是：日志、权限、监控的代码把真正的业务逻辑淹没了，每个方法都要重复这些模板代码，一旦需要修改（比如日志格式变了），要改几百个地方。
 
-**方案二：抽出父类，利用继承或模板方法**
+两个回调的语义差别是整个机制的支点。`postProcessBeforeInitialization` 在初始化回调（`@PostConstruct`、`InitializingBean.afterPropertiesSet`、`init-method`）之前执行，它拿到的是"属性已填好、但尚未初始化"的对象；`postProcessAfterInitialization` 在初始化之后执行，它拿到的是"完全就绪、但尚未交付给任何调用方"的对象。AOP 要的正是后者：代理必须包一个已经完整构造的 target，且代理必须在 Bean 被任何人拿到之前替换掉容器里的引用。这个窗口恰好存在，而且只有一个，所以 AOP 只能落在这里。
 
-继承解决不了这个问题，因为一个类不能同时继承"日志基类"和"事务基类"（Java 不支持多继承），而且日志和事务本来就不是继承关系，强行用继承建模会造成语义混乱。
+先把这个领域里的术语摆正，后文的时序描述才有共同语言。
 
-AOP 提供了第三条路：**在不修改业务代码的前提下，以声明式的方式将横切逻辑"织入"到指定的方法调用点**。
+| 术语 | 英文 | 在机制上的位置 |
+| :--- | :--- | :--- |
+| 切面 | Aspect | 切点与通知的组合，最终体现为一个或多个 `Advisor` |
+| 连接点 | JoinPoint | Spring AOP 中只有方法调用一种 |
+| 切点 | Pointcut | 决定"哪些方法需要增强"的匹配器 |
+| 通知 | Advice | 真正执行的横切逻辑，被包装成 `MethodInterceptor` |
+| 目标对象 | Target | 被代理的原始对象，即 `postProcessAfterInitialization` 收到的 `bean` |
+| 代理对象 | Proxy | 返回值，实现同一接口或继承同一类，持有一条 `MethodInterceptor` 链 |
+| 织入 | Weaving | 在运行期创建代理并替换容器引用的过程，区别于 AspectJ 的编译期织入 |
 
-### 4.2 AOP 的核心抽象
+### 7.2 代理创建器的身份
 
-Spring AOP 定义了一套标准的术语体系，理解这些术语是入门 AOP 的关键：
+Spring 里真正做这件事的类叫 `AnnotationAwareAspectJAutoProxyCreator`，它的继承链值得记住，因为每一层对应一种能力：
 
-| 术语 | 英文 | 含义 |
-| --- | --- | --- |
-| **切面** | Aspect | 横切逻辑的模块化封装单元，将"关注什么"和"在哪里执行"组合在一起 |
-| **连接点** | JoinPoint | 程序执行过程中的一个特定点，Spring AOP 中特指方法调用点 |
-| **切点** | Pointcut | 定义"在哪些连接点上织入"的表达式，如"所有 Service 包下的所有 public 方法" |
-| **通知** | Advice | 在连接点上实际执行的横切逻辑，分为 Before/After/Around/AfterReturning/AfterThrowing |
-| **目标对象** | Target | 被代理的原始 Bean 对象 |
-| **代理对象** | Proxy | Spring AOP 创建的代理对象，对外暴露与 Target 相同的接口，但在方法调用时会执行织入的 Advice |
-| **织入** | Weaving | 将 Advice 应用到 Target 上创建 Proxy 的过程 |
+```text
+AnnotationAwareAspectJAutoProxyCreator  解析 @Aspect 注解，生成 Advisor
+  └─ AspectJAwareAdvisorAutoProxyCreator  处理 AspectJ 的切面排序规则
+      └─ AbstractAdvisorAutoProxyCreator  从容器里找出所有 Advisor Bean
+          └─ AbstractAutoProxyCreator     决定哪些 Bean 需要代理，并创建代理
+```
+
+`AbstractAutoProxyCreator` 同时实现了 `SmartInstantiationAwareBeanPostProcessor`、`BeanFactoryAware`，并继承 `ProxyProcessorSupport`（因此带 `Ordered` 语义）。这份签名本身就是答案：它是一个后处理器，这解释了它为什么能介入 Bean 的创建；它需要 `BeanFactory`，这解释了它为什么能按类型找出 Advisor；它有排序，这解释了为什么它能和其他后处理器共存于同一条链上。
+
+它被注册的名字是 `org.springframework.aop.config.internalAutoProxyCreator`，一个约定俗成的常量，框架内部按这个名字判断"是否已经装过自动代理器"，以避免重复登记。登记动作由 `AopConfigUtils.registerAspectJAnnotationAutoProxyCreatorIfNecessary` 完成，触发者通常是 `@EnableAspectJAutoProxy`——它通过 `ImportBeanDefinitionRegistrar` 在解析配置类的阶段插入这条定义；Spring Boot 的 `AopAutoConfiguration` 在没有显式关闭时也会导入同一个注解。
+
+### 7.3 从 refresh 到代理：完整时序
+
+把上面的碎片连起来，就是一条从启动入口直到代理替换的完整时序。下图只画主干：容器在最后一步预实例化单例时，逐个 Bean 走创建流程，代理创建器在每个 Bean 初始化完成之后介入。
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#6272a4', 'primaryTextColor': '#f8f8f2', 'primaryBorderColor': '#44475a', 'lineColor': '#bd93f9', 'secondaryColor': '#50fa7b', 'tertiaryColor': '#282a36', 'background': '#282a36', 'mainBkg': '#44475a', 'nodeBorder': '#6272a4', 'clusterBkg': '#282a36', 'titleColor': '#f8f8f2', 'edgeLabelBackground': '#44475a', 'fontFamily': 'monospace'}}}%%
+%%{init: {'theme': 'dracula'}}%%
 sequenceDiagram
-    participant C as "调用方 (Caller)"
-    participant P as "代理对象 (Proxy)"
-    participant A as "切面 (Aspect)"
-    participant T as "目标对象 (Target)"
+    participant S as 启动入口
+    participant C as AbstractApplicationContext
+    participant F as DefaultListableBeanFactory
+    participant P as AutoProxyCreator
+    participant B as 业务Bean
 
-    C->>P: "调用 createOrder()"
-    P->>A: "执行 @Before 通知"
-    A-->>P: "前置逻辑执行完毕"
-    P->>T: "调用原始方法"
-    T-->>P: "方法执行结果"
-    P->>A: "执行 @AfterReturning 通知"
-    A-->>P: "后置逻辑执行完毕"
-    P-->>C: "返回结果"
+    S->>C: refresh
+    C->>F: finishBeanFactoryInitialization
+    F->>F: preInstantiateSingletons 遍历全部定义
+    F->>F: getBean 进入 doGetBean 与 createBean
+    F->>B: 实例化并填充属性
+    F->>P: postProcessBeforeInitialization
+    P-->>F: 原样返回 不做代理
+    F->>B: 初始化回调 PostConstruct 与 afterPropertiesSet
+    F->>P: postProcessAfterInitialization
+    P->>P: 匹配 Advisor 命中则创建代理
+    P-->>F: 返回代理对象 替换容器中的引用
+    F->>F: 第二轮回调 SmartInitializingSingleton
 ```
 
-### 4.3 Spring AOP 的局限性与 AspectJ 的对比
+沿这条时序逐段说明，每一步都有可验证的落点。
 
-这里需要指出一个重要的边界：**Spring AOP 并不是完整的 AOP 实现，它是一个"够用"的 AOP 框架**。
+第一步，`refresh()` 走到最后第二步 `finishBeanFactoryInitialization`，它先注册 `conversionService`（如果容器里有这个 Bean）、把 `embeddedValueResolver` 指向 `Environment.resolvePlaceholders`、处理 `LoadTimeWeaver`，然后调用 `freezeConfiguration()` 冻结配置，最后调 `preInstantiateSingletons()`。注意顺序：冻结在实例化之前，意味着实例化阶段不会再有新的定义注册进来，按类型查找的缓存也不会失效。
 
-Spring AOP 采用的是**运行时代理**的方式实现织入：在 ApplicationContext 初始化阶段，对满足切点条件的 Bean 创建代理对象，替换容器中的原始 Bean。这意味着：
+第二步，`preInstantiateSingletons` 会先复制一份 `beanDefinitionNames` 的快照再遍历——因为创建过程中可能注册新 Bean，直接遍历原集合会抛 `ConcurrentModificationException`。遍历时跳过抽象定义、跳过 `prototype`、跳过 `lazy-init`，剩下的逐个 `getBean`。
 
-1. **Spring AOP 只能拦截方法调用**（JoinPoint 只有方法执行一种），不能拦截字段访问、构造器调用等；
-2. **同类内部方法调用无法被拦截**：`this.methodA()` 调用 `this.methodB()` 时，`methodB` 不会经过代理，因此加在 `methodB` 上的 `@Transactional` 会失效——这是生产中最常见的事务失效场景之一；
-3. **只能代理 Spring 容器管理的 Bean**，`new` 出来的对象不在 AOP 的管辖范围内。
+第三步，`getBean` 进入 `doGetBean`：先检查单例缓存，未命中则标记 `beanName` 正在创建（用于循环依赖检测），然后 `createBean`。`createBean` 先给后处理器一个"短路"机会（`resolveBeforeInstantiation`，若某个后处理器返回非 null 实例，整个创建流程被跳过），接着实例化、填充属性、执行初始化。
 
-相比之下，AspectJ 是一个完整的 AOP 框架，通过**编译时织入**或**类加载时织入**实现，可以拦截任何 JoinPoint，但使用和配置复杂度更高。
+第四步，初始化阶段的三段结构是：`invokeAwareMethods`（处理 `BeanNameAware`、`BeanClassLoaderAware`、`BeanFactoryAware`），然后 `applyBeanPostProcessorsBeforeInitialization` 按注册顺序正序执行所有后处理器的 `before` 回调，然后 `invokeInitMethods`（`afterPropertiesSet` 与 `init-method`），最后 `applyBeanPostProcessorsAfterInitialization` 逆序执行 `after` 回调。这段三段式结构与各回调点的精确顺序在 [[Java/SpringCore/04 Bean的生命周期——从定义到销毁的完整流程]] 里有逐步拆解，此处只需记住"before 正序、after 逆序"这条对称规律。
 
-Spring AOP 默认优先采用 AspectJ 的注解语法（`@Aspect`、`@Before`、`@Around` 等），但底层代理机制仍然是 JDK Proxy 或 CGLIB，而非 AspectJ 的字节码织入——这是一个常见的认知误区，需要特别注意。
-
-> [!warning] @Transactional 失效的 AOP 根因
-> `@Transactional` 是基于 AOP 代理实现的。当同一个类的方法 A 内部调用方法 B 时，这个调用走的是 `this` 引用，而不是通过 Spring 创建的代理对象。因此 AOP 拦截器链不会被执行，方法 B 的事务注解形同虚设。解决方案是将 B 提取到另一个 Bean 中，或通过 `AopContext.currentProxy()` 获取当前代理对象进行调用（需要配置 `exposeProxy=true`）。
-
----
-
-## 第 5 章 Spring 的五大设计哲学
-
-Spring 官方文档明确列出了五条指导框架设计的哲学原则，这不是口号，而是贯穿整个框架设计的真实决策依据。
-
-### 5.1 在每一层提供选择（Provide Choice at Every Level）
-
-Spring 在每一个层次都让你保留"选择权"，推迟决策时机。
-
-最典型的例子：Spring 的持久层从来不绑定任何一种 ORM 框架。你可以用 `JdbcTemplate`（纯 JDBC），可以用 JPA + Hibernate，可以用 MyBatis，可以用 jOOQ——Spring 提供了统一的 `DataSource` 抽象和事务抽象，底层实现可以随时替换，业务代码零感知。
-
-这种设计的背后是**策略模式**的大量使用：定义接口/抽象类（`PlatformTransactionManager`、`ResourceLoader`、`MessageSource`……），框架内部依赖这些抽象，具体实现可以自由插拔。
-
-### 5.2 包容多元视角（Accommodate Diverse Perspectives）
-
-Spring 没有强迫你选择某一种配置风格。XML 配置、注解配置、Java Config（`@Configuration`/`@Bean`）在现代 Spring 中可以**混用**，没有哪一种被标记为"官方正统"。
-
-这种包容性在框架的早期发展中至关重要：让从 XML 时代迁移过来的老项目不需要一次性重写全部配置，只需要逐步迁移。
-
-### 5.3 强力保持向后兼容（Maintain Strong Backward Compatibility）
-
-Spring 6.0 是历史上少有的"有破坏性变更"的版本（`javax.*` → `jakarta.*`），但这是一次经过精心评估的、有充分理由的迁移（Jakarta EE 规范的强制要求）。在此之前，Spring 几乎保持了 20 年的向后兼容，Spring 2.x 的 XML 配置文件在 Spring 5.x 中仍然可以正常工作。
-
-这种强兼容性是有代价的：框架内部大量"历史包袱"不得不保留，一些次优的 API 设计（比如 `BeanFactory` 某些设计略显臃肿）也不敢轻易修改。但对于企业用户而言，升级框架版本的风险被大大降低了，这才是企业级框架最重要的属性之一。
-
-### 5.4 用心设计 API（Care About API Design）
-
-Spring 的 API 设计质量是业界公认的高水准。以 `JdbcTemplate` 为例：
+第五步，代理创建器在 `after` 阶段被调用，它做三件事：算出缓存键（类名 + Bean 名）、检查 `earlyProxyReferences`（循环依赖时提前生成的代理引用）、调 `wrapIfNecessary`。`wrapIfNecessary` 里先看这个 Bean 是否已经在 `targetSourcedBeans` 或 `advisedBeans` 缓存里，再问 `getAdvicesAndAdvisorsForBean` 要一组匹配的 Advisor；没有匹配就返回原对象，有匹配就用 `ProxyFactory` 生成代理。
 
 ```java
-// Spring 的 API 设计哲学：只暴露用户真正需要关心的部分
-List<User> users = jdbcTemplate.query(
-    "SELECT * FROM users WHERE status = ?",
-    (rs, rowNum) -> new User(rs.getLong("id"), rs.getString("name")),  // 只需提供映射逻辑
-    "active"
-);
+public abstract class AbstractAutoProxyCreator extends ProxyProcessorSupport
+        implements SmartInstantiationAwareBeanPostProcessor, BeanFactoryAware {
+
+    // 循环依赖场景下，容器需要提前暴露一个引用，这里缓存"已经提前代理过"的标识
+    private final Map<Object, Object> earlyProxyReferences = new ConcurrentHashMap<>(16);
+
+    @Override
+    public Object getEarlyBeanReference(Object bean, String beanName) {
+        Object cacheKey = getCacheKey(bean.getClass(), beanName);
+        this.earlyProxyReferences.put(cacheKey, bean);
+        return wrapIfNecessary(bean, beanName, cacheKey);
+    }
+
+    @Override
+    public Object postProcessAfterInitialization(Object bean, String beanName) {
+        if (bean != null) {
+            Object cacheKey = getCacheKey(bean.getClass(), beanName);
+            // 若该 Bean 在循环依赖处理时已经被提前代理，这里就不再包装第二次
+            if (this.earlyProxyReferences.remove(cacheKey) != bean) {
+                return wrapIfNecessary(bean, beanName, cacheKey);
+            }
+        }
+        return bean;
+    }
+}
 ```
 
-连接的获取、Statement 的创建、ResultSet 的关闭、异常的转换——这些"必须做但每次都一样"的操作全都被封装在 `JdbcTemplate` 内部。用户看到的 API 极度简洁，学习成本极低。
+这段代码解释了为什么"三级缓存"的第三级必须存在，也解释了为什么 AOP 与循环依赖会互相纠缠：代理本该在初始化之后才生成，但循环依赖要求容器在初始化之前就把一个引用交出去。折中方案是"提前生成代理并记下标记，正常流程走到 `after` 阶段时发现已被代理过就跳过"。这个折中的代价是代理的生成时机被提前，某些依赖"初始化完成后状态"的切面可能看到不完整的对象——这是机制本身的取舍，不是 bug。
 
-这背后是模板方法模式的精妙运用：**把变化的部分（SQL、参数、映射逻辑）暴露给用户，把不变的部分（JDBC 模板流程）封装在框架内**。
+### 7.4 三个介入位置
 
-### 5.5 高标准的代码质量
+代理创建器在容器里其实有三个可介入的位置，用途各不相同，混用会导致很难排查的行为差异。
 
-Spring Framework 的源码是 Java 世界中代码质量最高的开源代码库之一，有几个特别值得关注的特性：
+| 介入位置 | 触发时机 | 代理创建器的用法 | 后果 |
+| :--- | :--- | :--- | :--- |
+| `getEarlyBeanReference` | 循环依赖暴露早期引用时 | 提前包装并记录标记 | 循环依赖下的 Bean 也能被增强，但增强生效早于初始化完成 |
+| `postProcessAfterInitialization` | 初始化完成、交付之前 | 常规包装，替换容器引用 | 绝大多数代理在这里生成 |
+| `postProcessBeforeInitialization` | 初始化之前 | 原样返回，不参与 | 保证代理不会包住一个未初始化的对象 |
 
-- **包之间没有循环依赖**：Spring 的包结构设计极为严谨，`spring-core` 不会反向依赖 `spring-beans`，`spring-beans` 不会依赖 `spring-context`，依赖方向严格单向——这使得按模块裁剪使用成为可能；
-- **Javadoc 质量极高**：每一个接口的方法、每一个重要参数，都有详尽的文档说明，包括该方法的契约（前置条件、后置条件）、允许为 null 的情况、线程安全性；
-- **大量使用设计模式**，且每次使用都有明确的意图，不是为了"显得高级"而过度设计。
+第三个位置留空是有意的。`postProcessBeforeInitialization` 在代理创建器里直接返回原对象，因为它拿到的对象还没执行 `@PostConstruct`，此时包装出的代理会在调用时看到半成品状态。有人为了"让 `@Transactional` 在 `@PostConstruct` 里也生效"而试图改写这个回调，方向是错的——需要事务的初始化逻辑应当移到一个独立 Bean 的方法里、由调用方触发，而不是靠提前生成代理。
 
----
+另一个容易误解的点是 `resolveBeforeInstantiation`。`AbstractAutowireCapableBeanFactory` 确实留了这个口子：若某个 `InstantiationAwareBeanPostProcessor` 在 `postProcessBeforeInstantiation` 里返回非 null，容器会直接把它当作最终实例，连构造器都不调用。但 AOP 的自动代理器没有用这个口子，因为它必须拿到已经实例化、已经注入完毕的对象才能生成有意义的代理。真正用这个口子的是需要"完全替换实例"的场景，例如某些远程调用代理或特殊的工厂式后处理器。
 
-## 第 6 章 Spring 与设计模式：框架的微观工艺
+### 7.5 为什么 @Transactional 靠 AOP 生效
 
-Spring 是学习设计模式落地应用的最佳案例库。以下是 Spring 中最核心的几个设计模式运用：
+把上面所有环节拼到一条链上，"`@Transactional` 靠 AOP 生效"就不再是一句口号，而是一条可以逐步验证的调用链。
 
-### 6.1 工厂方法模式：BeanFactory
+第一环，`@EnableTransactionManagement` 通过 `TransactionManagementConfigurationSelector` 导入两个配置类，其中一个 `ProxyTransactionManagementConfiguration` 注册了两个 Bean：`TransactionInterceptor`（通知，实现 `MethodInterceptor`）与 `BeanFactoryTransactionAttributeSourceAdvisor`（切面，持有一个 `TransactionAttributeSource`，其实现 `AnnotationTransactionAttributeSource` 负责把方法上的 `@Transactional` 解析成 `TransactionAttribute`）。
 
-`BeanFactory` 和 `ApplicationContext` 本质上就是一个"超级工厂"，`getBean()` 方法正是工厂方法的体现。容器封装了对象的创建细节（反射、参数解析、依赖注入），使用方只需要声明"我需要一个 `UserService`"，而不需要知道如何构造它。
+第二环，`AbstractAdvisorAutoProxyCreator` 在为某个 Bean 决定是否代理时，会调 `BeanFactoryAdvisorRetrievalHelper` 从容器里找出所有 `Advisor` 类型的 Bean——这一步会**提前初始化** Advisor Bean，即使它们原本不在预实例化范围内。这是为什么事务配置必须能被提前解析：如果 Advisor 依赖的 Bean 还没准备好，事务增强就装不上。
 
-### 6.2 代理模式：AOP 的实现基础
+第三环，`getAdvicesAndAdvisorsForBean` 用切点对目标类做匹配。`BeanFactoryTransactionAttributeSourceAdvisor` 的切点 `TransactionAttributeSourcePointcut` 只做一件事——判断这个类或方法上有没有事务属性。命中则进入代理创建，`ProxyFactory` 按 `proxyTargetClass` 决定用 JDK 动态代理还是 CGLIB。
 
-Spring AOP 的核心就是代理模式：在不修改目标对象的前提下，通过代理对象拦截方法调用，叠加横切逻辑。JDK 动态代理和 CGLIB 字节码增强是两种不同的代理实现技术，我们将在第 06 篇中深入分析。
+第四环，运行时调用进入代理，代理把调用交给 `TransactionInterceptor.invoke`。它根据方法的事务属性拿到 `TransactionAttribute`，调 `PlatformTransactionManager.getTransaction`。以 `DataSourceTransactionManager` 为例，`doBegin` 会关闭连接的自动提交、把 `ConnectionHolder` 绑定到 `TransactionSynchronizationManager` 的线程本地变量上。
 
-### 6.3 模板方法模式：消灭重复代码
+第五环，业务方法里若用 `JdbcTemplate`，它的 `DataSourceUtils.getConnection` 会先查线程本地变量，发现有绑定的连接就直接复用——这就是"同一个事务里所有数据库操作共用一个连接"的机制来源。
 
-`JdbcTemplate`、`RestTemplate`、`TransactionTemplate`——Spring 中大量以 `*Template` 结尾的类都是模板方法模式的应用。它们将算法骨架固定下来，把可变的步骤通过回调接口（`RowMapper`、`RequestCallback`、`TransactionCallback`）留给调用者实现。
-
-### 6.4 观察者模式：事件机制
-
-`ApplicationContext` 继承了 `ApplicationEventPublisher` 接口，配合 `ApplicationListener` 接口，构建了完整的观察者模式。`ContextRefreshedEvent`、`ContextClosedEvent` 等 Spring 内置事件允许插件和扩展点感知容器状态变化而无需直接耦合。
-
-### 6.5 策略模式：插件化扩展
-
-`ResourceLoader`、`PlatformTransactionManager`、`BeanNameGenerator`、`MergedBeanDefinitionPostProcessor`……Spring 大量地使用策略模式，将可变行为抽象成接口，允许第三方库（Hibernate、MyBatis、Jedis 等）以策略插件的方式接入 Spring 生态，而无需 Spring 了解这些第三方实现的细节。
+这条链的落点值得强调：事务的"传播行为"看起来像数据库特性，实际上只是代理链上的一次线程本地状态查询。`REQUIRED` 判断"当前线程有没有活动事务"，`REQUIRES_NEW` 判断"要不要把外层事务挂起"，`NESTED` 判断"要不要设置保存点"——三者都发生在 `AbstractPlatformTransactionManager` 的 Java 代码里，与数据库无关。正因为这一层是纯 Java 的，`@Transactional` 的失效场景才全部集中在"代理有没有被调用到"这件事上：同类内部调用、`private` 方法、`final` 类、异常被吞，本质上都是**调用没有经过代理**，或者代理没有把异常抛出来。各类失效场景的完整清单与大事务拆分的实践在 [[Java/SpringCore/07 Spring事务管理——声明式事务的传播行为与失效场景]] 里，这里只保留机制层面的结论。
 
 ---
 
-## 第 7 章 Spring Framework 6.x 的重要变化
+## 第 8 章 refresh() 的十二步
 
-### 7.1 Jakarta EE 命名空间迁移
+### 8.1 为什么是一个模板方法
 
-这是 Spring 6 最显著的破坏性变更，也是不可回避的历史债务清偿。
+`refresh()` 是 `AbstractApplicationContext` 里最"厚"的一个方法：它是容器启动的唯一入口，也是整个框架里唯一一处把十二个动作按固定顺序编排的地方。把它写成模板方法（template method）而不是一堆构造函数调用，是一个有意的设计选择——子类只能覆写钩子，不能改变顺序。
 
-Java EE 规范在 2019 年移交给 Eclipse Foundation 后更名为 Jakarta EE，同时 Eclipse Foundation 没有权利继续使用 `javax.*` 包名，所有 API 被迁移到 `jakarta.*` 命名空间。这意味着：
-
-- `javax.servlet.HttpServletRequest` → `jakarta.servlet.HttpServletRequest`
-- `javax.persistence.Entity` → `jakarta.persistence.Entity`
-- `javax.transaction.Transactional` → `jakarta.transaction.Transactional`
-
-Spring 6 强制要求 Jakarta EE 9（`jakarta.*`），这也是 **Spring Boot 3.x 要求 JDK 17+ 的根本原因**（不是因为 JDK 17 本身，而是因为 Jakarta EE 9 + Tomcat 10 + Hibernate 6 共同要求了 JDK 17 的最低版本）。
-
-### 7.2 AOT（提前编译）支持与 GraalVM Native Image
-
-Spring 6 是 Spring 生态支持 GraalVM Native Image 的关键里程碑。传统的 JVM 模式下，Spring 的大量机制依赖运行时反射（`Class.forName()`、`Method.invoke()`）——而 Native Image 在编译期就需要知道所有可能用到的反射调用，不支持动态反射。
-
-Spring 6 引入了 AOT（Ahead-Of-Time）处理阶段：在构建期分析 Spring 应用，生成反射 Hint 配置文件，将原本运行时才能确定的反射信息提前固化。这使得 Spring 应用能够被 GraalVM 编译成本地可执行文件，启动时间从秒级降至毫秒级，内存占用大幅降低。
-
-### 7.3 虚拟线程（Project Loom）支持
-
-Spring 6.1（对应 Spring Boot 3.2）引入了对 JDK 21 虚拟线程 的正式支持。虚拟线程是 JDK 21 的重量级特性，它允许创建数百万个轻量级线程，彻底改变了传统的"每请求一线程"的 I/O 模型。
-
-在 Spring Boot 3.2 中，只需一行配置即可启用：
-```yaml
-spring:
-  threads:
-    virtual:
-      enabled: true
+```java
+public void refresh() throws BeansException, IllegalStateException {
+    synchronized (this.startupShutdownMonitor) {
+        prepareRefresh();
+        ConfigurableListableBeanFactory beanFactory = obtainFreshBeanFactory();
+        prepareBeanFactory(beanFactory);
+        try {
+            postProcessBeanFactory(beanFactory);
+            invokeBeanFactoryPostProcessors(beanFactory);
+            registerBeanPostProcessors(beanFactory);
+            initMessageSource();
+            initApplicationEventMulticaster();
+            onRefresh();
+            registerListeners();
+            finishBeanFactoryInitialization(beanFactory);
+            finishRefresh();
+        }
+        catch (BeansException ex) {
+            // 启动失败要把已经造出来的半成品清掉，否则单例缓存里留下无法使用的对象
+            destroyBeans();
+            cancelRefresh(ex);
+            throw ex;
+        }
+    }
+}
 ```
 
-这会使 Tomcat、Spring MVC 的线程池都切换到虚拟线程模式，对于 I/O 密集型应用（数据库查询、HTTP 调用），吞吐量可以有数倍提升，且代码无需任何修改。
+**顺序即契约**。把任意两步对调，容器通常仍能启动，但会以极隐蔽的方式失效：某个后处理器没生效，某个 Bean 没被注入，某类事件丢了。这类问题的特征是"不报错但行为不对"，排查成本远高于启动失败。也正因如此，理解这十二步比理解任何一个模块的源码都更有杠杆——任何一个 Spring 的"为什么我的扩展没生效"，答案几乎都能回溯到某一步的时机。
 
----
-
-## 第 8 章 专栏学习路线图
-
-### 8.1 本专栏的内容组织逻辑
-
-理解了本文建立的宏观框架之后，后续各篇文章的组织逻辑就非常清晰了：
+十二步可以按"准备与定义、处理器注册、实例化与收尾"三段来记。第一段（1 到 5 步）解决"容器里有什么"，第二段（6 到 10 步）解决"谁来处理这些 Bean"，第三段（11 到 12 步）解决"什么时候把 Bean 造出来、什么时候对外宣告就绪"。下图中的箭头既表示执行顺序，也表示"上一步的产物是下一步的输入"。
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#6272a4', 'primaryTextColor': '#f8f8f2', 'primaryBorderColor': '#44475a', 'lineColor': '#bd93f9', 'secondaryColor': '#44475a', 'tertiaryColor': '#282a36', 'background': '#282a36', 'mainBkg': '#44475a', 'nodeBorder': '#6272a4', 'clusterBkg': '#282a36', 'titleColor': '#f8f8f2', 'edgeLabelBackground': '#44475a', 'fontFamily': 'monospace'}}}%%
-graph TD
-    classDef done fill:#50fa7b,stroke:#282a36,color:#282a36
-    classDef active fill:#ffb86c,stroke:#282a36,color:#282a36
-    classDef pending fill:#6272a4,stroke:#bd93f9,color:#f8f8f2
+%%{init: {'theme': 'dracula'}}%%
+flowchart TD
+    classDef stage1 fill:#44475a,stroke:#bd93f9,color:#f8f8f2
+    classDef stage2 fill:#6272a4,stroke:#bd93f9,color:#f8f8f2
+    classDef stage3 fill:#50fa7b,stroke:#282a36,color:#282a36
+    classDef stage4 fill:#ffb86c,stroke:#282a36,color:#282a36
 
-    A["01 全局架构与设计理念</br>（本文）"]:::done
-    B["02 BeanFactory与ApplicationContext的层次设计"]:::pending
-    C["03 Bean的定义与注册"]:::pending
-    D["04 Bean的生命周期全流程"]:::pending
-    E["05 依赖注入与三级缓存循环依赖"]:::pending
-    F["06 AOP：JDK代理与CGLIB"]:::pending
-    G["07 声明式事务与传播行为"]:::pending
-    H["08 事件机制与观察者模式"]:::pending
-    I["09 SpEL与属性解析"]:::pending
-    J["10 Spring扩展点全景"]:::pending
-    
-    A --> B
-    B --> C
-    C --> D
-    D --> E
-    E --> F
-    F --> G
-    B --> H
-    B --> I
-    E --> J
-    F --> J
+    S1["1 prepareRefresh 属性源与早期事件"]
+    S2["2 obtainFreshBeanFactory 加载定义"]
+    S3["3 prepareBeanFactory 环境与表达式解析器"]
+    S4["4 postProcessBeanFactory 子类钩子"]
+    S5["5 invokeBeanFactoryPostProcessors 改写定义"]
+    S6["6 registerBeanPostProcessors 注册后处理器"]
+    S7["7 initMessageSource 国际化"]
+    S8["8 initApplicationEventMulticaster 广播器"]
+    S9["9 onRefresh 内嵌容器创建"]
+    S10["10 registerListeners 监听器注册"]
+    S11["11 finishBeanFactoryInitialization 预实例化"]
+    S12["12 finishRefresh 生命周期与事件发布"]
+
+    S1 --> S2 --> S3 --> S4 --> S5 --> S6 --> S7 --> S8 --> S9 --> S10 --> S11 --> S12
+
+    class S1,S2,S3,S4 stage1
+    class S5,S6 stage2
+    class S7,S8,S9,S10 stage3
+    class S11 stage4
+    class S12 stage4
 ```
 
-**核心主线**（02 → 03 → 04 → 05 → 06 → 07）是 Spring 最核心的机制，建议按顺序阅读。扩展模块（08、09、10）可以在主线完成后选择性阅读。
+### 8.2 十二步逐项拆解
 
-### 8.2 源码阅读建议
+下表按执行顺序给出每一步的动作、失效后果与扩展点。"挂了会怎样"一列按"该步被跳过或抛异常"理解。
 
-本专栏会涉及大量源码分析。建议你在阅读之前做好以下准备：
+| 步骤 | 做什么 | 挂了会怎样 | 扩展点在哪 |
+| :--- | :--- | :--- | :--- |
+| 1 `prepareRefresh` | 记录启动时间、调用 `initPropertySources()`、`validateRequiredProperties()`、初始化早期监听器与早期事件列表、置 `active=true` | 必需属性缺失要等到注入时才暴露，错误信息离根因很远；早期事件全部丢失 | 覆写 `initPropertySources()` 注入自定义属性源，Web 环境就是这么把 `ServletConfig` 参数变成属性源的 |
+| 2 `obtainFreshBeanFactory` | 刷新或创建 `BeanFactory` 并加载定义。`AbstractRefreshableApplicationContext` 会新建 `DefaultListableBeanFactory`，`GenericApplicationContext` 只做标记不新建 | 定义没进来，后面十一步全是空转；表现为容器启动成功但没有任何 Bean | 覆写 `refreshBeanFactory()`、`loadBeanDefinitions()`、`customizeBeanFactory()` |
+| 3 `prepareBeanFactory` | 装 `ApplicationContextAwareProcessor` 与 `ApplicationListenerDetector`；注册 `environment` 单例、`systemProperties`/`systemEnvironment`；注册可解析依赖（BeanFactory、ResourceLoader、ApplicationEventPublisher、ApplicationContext）；装上 SpEL 的表达式解析器 | `@Autowired ApplicationContext` 注入失败；`@Value` 的 `#{}` 无法求值；`EnvironmentAware` 等回调不触发 | 不可覆写，但可通过第 4 步追加；`addBeanPostProcessor` 的入口在这里第一次打开 |
+| 4 `postProcessBeanFactory` | 子类钩子，用来补"与运行环境相关"的东西：Web 容器在这里注册 request/session scope 与 `ServletContextAwareProcessor` | Web 作用域不存在，`@RequestScope`/`@SessionScope` Bean 一创建就失败 | 所有 Web 版 `ApplicationContext` 的覆写点，Spring Boot 的 `ServletWebServerApplicationContext` 也在此扩展 |
+| 5 `invokeBeanFactoryPostProcessors` | 先执行 `BeanDefinitionRegistryPostProcessor`（按 `PriorityOrdered`、`Ordered`、其余三段），`ConfigurationClassPostProcessor` 在此解析 `@Configuration`/`@ComponentScan`/`@Import` 并生成大量新定义；再按同样三段执行普通 BFPP | 扫描、条件装配、占位符解析全部不发生；容器里只剩手工注册的定义 | 自定义 `BeanFactoryPostProcessor` 与 `BeanDefinitionRegistryPostProcessor`；相对顺序只能靠 `Ordered` 表达 |
+| 6 `registerBeanPostProcessors` | 实例化容器里所有 `BeanPostProcessor` 并按三段排序注册，最后把内部处理器（如 `ApplicationListenerDetector`）重新排到链尾 | 之后创建的 Bean 没有注入、没有代理、`@PostConstruct` 不执行；这类故障最难查，因为容器"看起来正常" | 自定义 `BeanPostProcessor`；排序用 `PriorityOrdered`/`Ordered`；这是 AOP 的挂载点 |
+| 7 `initMessageSource` | 取名为 `messageSource` 的 Bean；没有则创建 `DelegatingMessageSource` 委托父容器 | 国际化失效，`MessageSourceAware` 拿到一个空壳对象 | 声明名为 `messageSource` 的 Bean，或覆写 `initMessageSource()` |
+| 8 `initApplicationEventMulticaster` | 取名为 `applicationEventMulticaster` 的 Bean；没有则新建 `SimpleApplicationEventMulticaster`（同步直发） | 事件退化为同步调用；自定义线程池的异步事件静默失效 | 声明名为 `applicationEventMulticaster` 的 Bean，并给它配 `TaskExecutor` |
+| 9 `onRefresh` | 子类钩子，在单例创建前做环境准备；Spring Boot 的内嵌 Web 容器在这里被创建 | Web 容器不存在，所有依赖 `ServletContext` 的 Bean 初始化失败 | `ServletWebServerApplicationContext#onRefresh` 创建 Tomcat/Jetty/Undertow 实例 |
+| 10 `registerListeners` | 把容器里所有 `ApplicationListener` 注册到广播器，并补发第 1 步攒下的早期事件 | 早期事件丢失；监听器收不到随后的 `ContextRefreshedEvent` | 监听器排序由 `Ordered` 决定；`@EventListener` 由 `EventListenerMethodProcessor` 在 BPP 阶段适配 |
+| 11 `finishBeanFactoryInitialization` | 注册 `conversionService`、把内嵌值解析器指向 `Environment`、处理 `LoadTimeWeaver`、冻结配置、`preInstantiateSingletons` 实例化全部非懒加载单例、第二轮回调 `SmartInitializingSingleton` | 应用启动成功但单例未创建，首个请求集中创建，出现延迟尖刺；`SmartInitializingSingleton` 的回调是"全部就绪"语义的唯一保证 | 所有 `BeanPostProcessor` 在这条链上第一次真正批量生效；`@Lazy` 是唯一合法的逃逸方式 |
+| 12 `finishRefresh` | 清资源缓存、初始化 `lifecycleProcessor`、触发 `Lifecycle` 的 `onRefresh`（Boot 的 Web 服务器在这里真正 `start`）、发布 `ContextRefreshedEvent`、注册到 `LiveBeansView` | `@PostConstruct` 之后的生命周期编排不执行；Web 服务器不监听端口；`ContextRefreshedEvent` 不广播 | `SmartLifecycle`/`Phased` 控制启停顺序；`ApplicationListener<ContextRefreshedEvent>` 做启动后动作 |
 
-1. **配置本地 Spring Framework 源码环境**：从 GitHub 克隆 `spring-projects/spring-framework`，切换到 `6.1.x` 分支，在 IDE 中导入。Spring 使用 Gradle 构建，`gradlew eclipse` 或直接用 IntelliJ IDEA 导入即可；
-2. **关注核心类**：`DefaultListableBeanFactory`、`AbstractApplicationContext`、`AbstractBeanFactory`、`AnnotationConfigApplicationContext` 这四个类是理解整个 IoC 容器的核心入口；
-3. **善用 Debug 工具**：在 `AbstractBeanFactory#doGetBean` 方法打断点，以一个最小化 Spring 应用为起点，跟踪一个 Bean 从被请求到被返回的完整调用栈，往往比阅读文章更有收获。
+十二步里出现的处理器有三类：定义层面的 `BeanFactoryPostProcessor`、实例层面的 `BeanPostProcessor`、以及只关心某个回调的 `Aware` 接口。它们各自的触发位置、先后约束与自定义方式，在 [[Java/SpringCore/10 Spring扩展点全景——BeanPostProcessor、BeanFactoryPostProcessor与Aware接口]] 里有全景式的时序对照；这里只强调一点——三者的差别不是"用途不同"，而是"作用对象不同"：一个改配方，一个改成品，一个只交出环境句柄。
+
+### 8.3 顺序里的四条隐含约束
+
+十二步的顺序不是随手排的，下面四条约束解释了绝大部分"为什么偏偏是这样"。
+
+第一条：`prepareBeanFactory` 必须在 `invokeBeanFactoryPostProcessors` 之前。原因在依赖上——BFPP 的典型工作是解析占位符、替换属性值，而它需要 `Environment` 与表达式解析器已经就位。`prepareBeanFactory` 恰好是注册 `environment` 单例、装上 `StandardBeanExpressionResolver` 的地方。如果反过来，`PropertySourcesPlaceholderConfigurer` 会在一个还没有 `Environment` 的容器里工作。
+
+第二条：`invokeBeanFactoryPostProcessors` 必须在 `registerBeanPostProcessors` 之前。前者改的是定义，后者实例化的是处理器。`ConfigurationClassPostProcessor` 在第一步里通过扫描和解析 `@Configuration` 造出大量新定义，其中就包括用户声明的 `BeanPostProcessor`；如果先实例化处理器，这些刚被造出来的定义就赶不上这一轮注册。这就是**先有定义，再有处理器**的顺序来源。
+
+第三条：`registerBeanPostProcessors` 必须早于所有会 `getBean` 的步骤。第 7 到第 11 步都要取 Bean（`messageSource`、`applicationEventMulticaster`、Web 容器组件、全部单例），而 `getBean` 会走完整后处理器链。若处理器尚未注册，取出来的对象既没有注入也没有代理——最典型的症状是 `messageSource` 里 `@Autowired` 的字段全为 null，而容器启动不报任何错。
+
+第四条：`freezeConfiguration` 必须在预实例化之前。冻结之后，按类型查找的缓存不再重建，之后新注册的定义不会被类型查询看见。这个约束把"实例化阶段"变成了一个只读阶段：定义集合固定，单例逐个构造。它也让第 12 步之后的所有动态注册（例如某些运行时才决定的 Bean）必须走显式 API，而不能指望自动发现。
+
+### 8.4 onRefresh 与内嵌容器
+
+`onRefresh` 是十二步里最"空"的一步——在 `AbstractApplicationContext` 里它是个空方法，只在 Web 版实现里有内容。但正是这个空钩子，承载了 Spring Boot 最重要的行为之一：内嵌 Web 容器的创建发生在这里，而它的启动发生在第 12 步的 `Lifecycle` 回调里。这个"创建与启动分离"的安排有实际意义：容器对象必须先存在，才能把 `ServletContext` 注入给需要它的 Bean；而端口监听要等到全部单例就绪后才有意义。内嵌容器的参数与选型细节在 [[Java/SpringBoot/04 嵌入式Web容器——Tomcat、Jetty、Undertow的启动与配置]] 里，这里只标注它在协议中的位置。
+
+### 8.5 各步耗时占比的示例推算
+
+下面的占比是"按结构分解"的示例推算，不是基准测试数据。它的用途是给出一个判断顺序——哪些步骤值得优化，哪些不值得——而不是给出可引用的性能结论。真实占比随 Bean 数量、扫描路径、代理数量、Web 服务器启动开销大幅变化，若要实测，应当用 Spring 6 的 `ApplicationStartup`/`StartupStep` 机制（例如 `BufferingApplicationStartup`）采集每一步的真实耗时。
+
+| 步骤组 | 示例占比 | 成本主要来自 | 备注 |
+| :--- | :--- | :--- | :--- |
+| 环境与属性准备（1） | 低于 2% | 属性源数量 | 远程配置源（配置中心客户端）可能反超，它是一次网络往返 |
+| 定义加载与解析（2、5） | 15% 到 25% | 候选类数量、注解元数据规模 | 扫描包越宽越贵；`spring-context-indexer` 能削减这一段 |
+| 处理器注册（6） | 5% 到 12% | BPP 数量、条件装配分支数 | 条件求值会触发类加载，是隐藏成本 |
+| 单例创建（11） | 55% 到 75% | 单例数量、构造与注入复杂度 | 每个 Bean 都走完整 BPP 链，代理还要额外生成字节码 |
+| 收尾与事件（12） | 2% 到 8% | 监听器数量、Web 服务器启动 | 端口绑定在固定开销里占一块，与 Bean 数无关 |
+
+配一个粗略的推算模型：若应用有 400 个非懒加载单例，每个单例的创建、注入与后处理合计按 1 到 3 毫秒估算，第 11 步就是 0.4 到 1.2 秒；若扫描路径覆盖 2000 个候选类，按每个类 0.1 到 0.3 毫秒的字节码读取与注解解析估算，第 2、5 步合计 0.2 到 0.6 秒。两者相加已经接近 1 到 2 秒，这与"Spring Boot 应用启动要一两秒"的量级是吻合的。这类推算的用处在于排序：单例数量与扫描范围是两个可以动的旋钮，而属性源准备、事件收尾基本动不了。
 
 ---
 
-## 总结
+## 第 9 章 "Spring 重"的技术拆解
 
-本文从 J2EE 时代的困境出发，建立了理解 Spring 所需要的完整背景知识：
+### 9.1 启动慢的三个原因
 
-- **历史背景**：Spring 是对 EJB 过度复杂的直接反叛，以"让 POJO 回归本位"为核心主张；
-- **模块层次**：Spring Framework 是精心设计的多层模块体系，`spring-core` → `spring-beans` → `spring-context` 是不可动摇的核心依赖链；
-- **IoC 的本质**：控制反转是"依赖创建权的转移"，依赖注入是其实现手段，两者共同体现了依赖倒置原则（DIP）；
-- **AOP 的本质**：面向切面编程是对 OOP 处理横切关注点无能为力的补充，Spring AOP 通过运行时代理实现，有明确的使用边界；
-- **五大设计哲学**：选择权、包容性、向后兼容、API 品质、代码质量——这五条原则解释了 Spring 为什么能存活并持续繁荣 20 年；
-- **Spring 6.x 变化**：Jakarta EE 命名空间迁移、AOT 编译支持、虚拟线程集成是三个最重要的现代化升级。
+"Spring 重"这个评价混合了三件不同的事：启动慢、内存占用高、心智负担大。前两件可以技术拆解，第三件其实是设计取舍的结果。先拆启动慢。
 
-下一篇，我们将深入 IoC 容器的第一个核心问题：02 IoC 容器——BeanFactory 与 ApplicationContext 的层次设计。
+扫描是第一笔开销。注解驱动容器启动时要扫描 classpath 下的候选类，扫描过程用 ASM 读取 class 文件的字节码，解析注解元数据，判断是否符合候选条件（是否标注了 `@Component` 及其派生注解、是否是独立类、是否被 `@Conditional` 排除）。这笔开销与"候选类数量"成正比，而候选类数量往往与控制粒度无关——一个不小心把 `@ComponentScan` 的包写成了公司根包，扫描范围就会扩到几千个类，其中绝大多数永远不会成为 Bean。
+
+反射是第二笔。定义注册完成后，每个单例都要实例化、注入、执行回调，这些动作全部通过反射完成：`Constructor.newInstance`、`Field.set`、`Method.invoke`。反射本身不慢，慢在"调用点无法内联"以及"每次访问都要做可见性与类型检查"，再叠加 `setAccessible` 的一次性成本与 `Method` 对象的缓存查找。单例数量越多，这笔开销线性增长，而且它发生在第 11 步的串行循环里，无法并行摊薄。
+
+代理生成是第三笔。凡是被 AOP 增强的 Bean，都要在运行期生成一个新的类：CGLIB 用 `Enhancer` 生成子类字节码，JDK 动态代理用 `ProxyGenerator` 生成实现类字节码，然后 `defineClass` 加载进 Metaspace。生成的成本与"被代理的 Bean 数量"成正比，与"切点匹配的复杂度"也成正比——切点表达式越宽，匹配时要检查的类与方法就越多。很多应用启动慢的真实原因是切点写得太宽，`execution(* com.example..*.*(..))` 这种写法会把几乎所有 Bean 都纳入匹配计算。两种代理各自的生成过程与选择逻辑见 [[Java/SpringCore/06 AOP实现原理——JDK动态代理与CGLIB]]。
+
+把启动与内存两笔账画在一起，可以看到"重"这个印象其实来自两组完全不同的旋钮：上半支影响启动耗时，下半支影响常驻内存，两组的优化手段几乎不重叠。
+
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+flowchart TB
+    classDef root fill:#6272a4,stroke:#bd93f9,color:#f8f8f2
+    classDef branch fill:#ff79c6,stroke:#282a36,color:#282a36
+    classDef item fill:#44475a,stroke:#bd93f9,color:#f8f8f2
+
+    ROOT["Spring 重"]
+    ROOT --> T["启动时间"]
+    ROOT --> M["常驻内存"]
+    T --> T1["classpath 扫描"]
+    T --> T2["反射实例化与注入"]
+    T --> T3["代理字节码生成"]
+    T --> T4["类加载与校验"]
+    M --> M1["单例实例与作用域缓存"]
+    M --> M2["BeanDefinition 与注解元数据"]
+    M --> M3["代理类与 CGLIB 缓存"]
+
+    class ROOT root
+    class T,M branch
+    class T1,T2,T3,T4,M1,M2,M3 item
+```
+
+> [!note] 为什么这三个原因经常被归错账
+> 启动耗时里还有一笔开销常被忽略：类加载本身。扫描阶段只读字节码不加载类，但实例化、条件求值、注解反射都会触发真正的类加载与校验。一个 400 个 Bean 的应用，实际加载的类可能是数千个（含依赖库），这部分成本记在"扫描"或"反射"名下都不准确。用 JFR 或 `StartupStep` 按阶段切开看，才能知道时间究竟落在"读字节码""加载与校验""反射调用"还是"字节码生成"上。
+
+### 9.2 内存占用的两个来源
+
+内存这一侧容易被高估，也容易被低估。高估的是"容器本身占多少"，低估的是"元数据的固定税"。
+
+第一来源是 Bean 实例。容器持有的每个单例都是一份真实的对象图，`singletonObjects`、`earlySingletonObjects`、`singletonFactories` 三个缓存以及各类作用域代理都会持有引用。这部分内存与应用自身的对象模型成正比，容器本身几乎不放大它——一个 100MB 的服务，不会因为用了 Spring 就变成 300MB。
+
+第二来源是元数据，这部分才是 Spring 特有的固定税：每个定义对应一份 `BeanDefinition` 与一份合并后的 `MergedBeanDefinition`，每个类对应一份注解元数据（`MergedAnnotations` 及其内部的注解缓存），每个被扫描的类都有对应的 `Class` 对象以及被缓存下来的 `Method`/`Field` 反射对象，每个被代理的类还对应一个生成的代理类与 CGLIB 的缓存条目。按数量级推算：若容器管理 400 个 Bean、扫描 2000 个候选类，元数据按每个类 1KB 量级估算，就是数 MB 级别的常驻占用；这个数字随类数量线性增长，与类的业务重量无关。
+
+这里有一个反直觉的结论：**Bean 多比 Bean 大更伤内存**。Bean 大，放大的是第一来源，而第一来源本来是应用自己的对象图；Bean 多，放大的是第二来源，每个 Bean 都要交一份元数据税，还要在后处理器链上被遍历若干次。
+
+### 9.3 能减什么，不能减什么
+
+| 手段 | 省掉什么 | 代价 | 适用判据 |
+| :--- | :--- | :--- | :--- |
+| `@Lazy` / 全局懒初始化 | 第 11 步的预创建时间 | 首个请求的延迟尖刺；启动期的配置错误被推迟到运行期暴露 | 启动时间是硬指标，且流量有预热期 |
+| `@Conditional` 与 Profile 裁定义 | 定义数量，间接省扫描与实例化 | 配置分支变多，测试矩阵扩大 | 同一制品要部署到差异明显的环境 |
+| `spring-context-indexer` | classpath 扫描的开销 | 需要重新编译；只对扫描注册的 Bean 有效，手工注册与 `@Bean` 不受益 | 模块多、候选类多且相对稳定 |
+| AOT 与 Native Image | 解析、反射、代理生成的运行期成本 | 构建期变长；动态能力受限（运行期才确定的 Bean 与代理需要额外提示） | 冷启动敏感，且能接受构建期成本 |
+| 收窄切点表达式 | 代理生成的匹配计算与被代理类数量 | 少一层增强，需要确认业务不需要 | 大量 Bean 实际上不需要增强 |
+| 去掉用不到的 Starter 与自动配置 | 定义与后处理器数量 | 手工装配成本上升，升级时容易漏 | 依赖图里存在明显用不到的模块 |
+
+反过来，"不能减"的部分也要说清楚。容器的元数据与后处理器链不是可以拿掉的装饰，它们就是**机制本身**：没有 `BeanDefinition` 就没有"定义与实例分离"，没有后处理器链就没有 AOP 与注解注入。判据是——减掉之后，依赖注入与横切增强这两项能力是否还在。还在，就是优化；不在了，就是换了一个框架。
 
 ---
 
-> [!note] 参考资料
-> - [Spring Framework 官方文档 - Overview](https://docs.spring.io/spring-framework/reference/overview.html)
-> - Rod Johnson, *Expert One-on-One J2EE Design and Development* (2002)
-> - Martin Fowler, [Inversion of Control Containers and the Dependency Injection pattern](https://martinfowler.com/articles/injection.html) (2004)
-> - Robert C. Martin, *Clean Architecture* - SOLID Principles Chapter
+## 第 10 章 与 Spring Boot 的分界
+
+一句话可以说完这条分界：Spring Boot 加的是**自动装配与内嵌容器**两件事，核心容器仍然是本文讲的这一套东西。
+
+自动装配的本质是把"定义从哪来"这件事自动化：`@EnableAutoConfiguration` 通过 `ImportSelector` 把候选配置类导入，再由 `@Conditional` 家族筛选，最终交给 `ConfigurationClassPostProcessor` 解析成定义——用的还是第 8 章第 5 步那套机制。内嵌容器的本质是把"容器启动与 Web 服务器启动"合并成一条协议：`onRefresh` 创建、`finishRefresh` 启动，用的还是第 8 章第 9 步与第 12 步那两个钩子。Boot 没有替换容器，它只是替你把该注册的东西注册好、该选的默认值选好。
+
+理解了这一点，读 Boot 的源码会轻松很多：`SpringApplication.run` 最终会走到 `refresh()`，自动配置类会被当成普通配置类解析，条件装配发生在定义注册阶段，内嵌服务器挂在生命周期回调上。Boot 那一列的入口与分工见 [[Java/SpringBoot/00 专栏导览]]；它的启动流程、自动装配与内嵌容器各自展开在对应篇目，本文不再重复。
+
+---
+
+## 第 11 章 四个反例
+
+### 11.1 把 Spring 当注解集合
+
+最常见的误解是把框架等同于注解表：`@Component` 声明 Bean、`@Autowired` 注入、`@Transactional` 开事务、`@Async` 异步。背下这张表能写出能跑的代码，但一旦行为不符合预期，就没有任何解释力。
+
+注解在机制上的真实身份只有两个：一是元数据的入口，`@Component` 及其派生注解被扫描器读到时，唯一的作用是让注册表里多一条 `BeanDefinition`；二是后处理器的触发条件，`@Autowired` 被 `AutowiredAnnotationBeanPostProcessor` 读到才有意义，`@Transactional` 被 `AnnotationTransactionAttributeSource` 解析成 `TransactionAttribute` 才有意义。**注解本身不执行任何逻辑**，它是"给某个阶段的某个处理器看的标记"。理解了这一点，"为什么这个注解没生效"就变成了一个可推理的问题——去看对应的处理器有没有注册、有没有在那个阶段被调用。
+
+### 11.2 以为 @Component 扫描是容器的必需能力
+
+第二种误解更深一层：以为容器天生会扫包。事实是 `DefaultListableBeanFactory` 完全不知道扫描这回事，它只认识 `BeanDefinitionRegistry` 与 `BeanDefinition`。扫描能力来自定义来源这一侧——XML 时代的 `XmlBeanDefinitionReader`、注解驱动时代的 `ClassPathBeanDefinitionScanner`，以及 `ConfigurationClassPostProcessor` 里对 `@ComponentScan` 的处理。
+
+这条边界解释了很多现象：为什么 `new AnnotationConfigApplicationContext(MyConfig.class)` 与手工 `registerBeanDefinition` 的效果可以等价；为什么在只持有 `BeanFactory` 的场景里，扫描不会自动发生；为什么 `spring-context-indexer` 能通过替换"候选类从哪来"来优化启动——它替换的是定义来源，而不是容器。把扫描当成容器的内在能力，会导致一个错误的判断：以为"用了 Spring 就一定会有包扫描开销"，从而在只需要几个手工注册 Bean 的场景里也背上扫描成本。
+
+### 11.3 跳过 refresh() 直接读各模块源码
+
+第三种误解出现在读源码的方法上。很多人从 `spring-beans` 的 `doGetBean` 开始读，读通了创建流程，再读 `spring-aop` 的 `ProxyFactory`，再读 `spring-context` 的事件广播，三块都懂了，却拼不起来。
+
+原因在于 Spring 的行为不是由模块定义的，而是由启动协议的顺序定义的。同一个 `BeanPostProcessor`，在 `invokeBeanFactoryPostProcessors` 之前注册与之后注册，效果完全不同；同一个 `ApplicationListener`，在 `registerListeners` 之前被创建与之后被创建，收到的事件完全不同。脱离 `refresh()` 读源码，等于读了一堆"在某个时刻被调用的函数"，却不知道那个时刻在哪里。
+
+可行的读法是反过来：先把 `refresh()` 的十二步记住，再任选一个机制（代理、事件、事务、国际化），把它的入口挂回某一步，然后只读那一步及其下游的调用栈。这样读到的每一行代码都有明确的**时间坐标**，也能反过来解释为什么某一步必须排在那里。
+
+### 11.4 把模块数量当成框架重量
+
+第四种误解是把"模块多"等同于"运行时重"。模块之间是可选依赖：不用 Web 就不会引入 `spring-webmvc`，不用 ORM 就不会引入 `spring-orm`；反过来模块少也不代表轻，一个只依赖 `spring-context` 的应用同样要走完整的十二步、持有全部元数据。判断重量该看容器里有多少 Bean、多少后处理器、多少代理，而不是看依赖图上有几个方块。
+
+---
+
+## 结语
+
+把这篇的论证收束成三句话。
+
+模块的切法是一条依赖方向的纪律，不是一张功能清单。判断某个类该放在哪里，靠的是三条判据——契约里出现了谁的概念、删掉依赖方之后谁还可用、谁的修复节奏该独立；`core` → `beans` → `context` 的单向链，以及"Web 依赖容器、容器不知道 Web"的方向，都是这三条判据的推论，而非先验的美学。
+
+IoC 与 AOP 的交汇点只有一个，就是 `BeanPostProcessor` 的 `postProcessAfterInitialization`。容器在"实例已就绪、尚未交付"这个唯一的窗口上留了钩子，代理创建器占据了它，于是 `@Transactional`、`@Async`、`@Cacheable` 这些声明式能力都不需要修改业务代码。理解了这条缝，就理解了 Spring 为什么能在不侵入业务类的前提下叠加横切逻辑。
+
+`refresh()` 的十二步是容器启动的协议，顺序本身就是契约。任何"扩展点没生效"的疑问，最终都会落到某一步的时机上；任何"Spring 重"的抱怨，也应该拆成扫描、反射、代理生成与元数据四笔具体开销来讨论，而不是停留在一句印象。架构上没有免费的抽象，容器替应用承担了"装配"这层复杂性，代价就是启动时的这一笔固定支出——问题只在于这笔支出换来的东西是否值得，以及能不能用正确的旋钮把它压到可接受的范围。
+
+---
+
+## 参考资料
+
+1. Spring Framework Reference Documentation, "Spring Framework Overview": https://docs.spring.io/spring-framework/reference/overview.html
+2. Spring Framework Reference Documentation, "Container Overview": https://docs.spring.io/spring-framework/reference/core/beans/basics.html
+3. Spring Framework Reference Documentation, "Additional Capabilities of the ApplicationContext": https://docs.spring.io/spring-framework/reference/core/beans/context-introduction.html
+4. Spring Framework API, `AbstractApplicationContext`（6.2.x Javadoc）: https://docs.spring.io/spring-framework/docs/6.2.x/javadoc-api/org/springframework/context/support/AbstractApplicationContext.html
+5. Spring Framework API, `BeanPostProcessor`（6.2.x Javadoc）: https://docs.spring.io/spring-framework/docs/6.2.x/javadoc-api/org/springframework/beans/factory/config/BeanPostProcessor.html
+6. Spring Framework Reference Documentation, "Ahead of Time Optimizations": https://docs.spring.io/spring-framework/reference/core/aot.html
+7. Spring Boot Reference Documentation, "Servlet Web Applications": https://docs.spring.io/spring-boot/reference/web/servlet.html
+8. Rod Johnson, *Expert One-on-One J2EE Design and Development*, Wrox, 2002.
+9. Martin Fowler, "Inversion of Control Containers and the Dependency Injection pattern", 2004: https://martinfowler.com/articles/injection.html
 
 ---
 
 > [!note] 思考题
-> 1. `BeanFactory` 是 Spring IoC 容器的根接口，`ApplicationContext` 是其子接口，增加了事件发布、国际化、AOP 集成等功能。在什么场景下你会直接使用 `BeanFactory` 而非 `ApplicationContext`？Spring 文档建议'除非有明确理由，否则使用 ApplicationContext'——这个'明确理由'通常是什么？
-> 2. Spring 的 IoC 容器在启动时创建所有 singleton Bean（eager initialization）。如果一个 Bean 的初始化非常耗时（如预加载 100GB 数据），它会拖慢整个应用的启动时间。`@Lazy` 注解延迟 Bean 的初始化到首次使用时——但 `@Lazy` Bean 被另一个非 `@Lazy` Bean 依赖注入时，延迟初始化是否还有效？
-> 3. 循环依赖是 Spring IoC 中的经典问题。Spring 通过'三级缓存'解决 setter 注入的循环依赖，但无法解决构造器注入的循环依赖。三级缓存的三个 Map（`singletonObjects`、`earlySingletonObjects`、`singletonFactories`）各自存储什么？为什么 AOP 代理使得二级缓存不够，需要第三级缓存？
+> 1. 如果一个团队要把 `spring-tx` 的事务抽象与 `spring-jdbc` 的模板拆成两个独立发布的产品，依赖方向应当怎么定？把 `DataSourceTransactionManager` 留在 `spring-tx` 会破坏哪一条判据？
+> 2. `registerBeanPostProcessors` 里为什么要把 `PriorityOrdered`、`Ordered`、无序分三段执行，而不是一次性按 `getOrder()` 排序后顺序注册？如果只做一次排序，哪一类后处理器会失效？
+> 3. 请只用 `BeanFactory` 的 API（不借助 `ApplicationContext`）让一个自定义 `BeanPostProcessor` 生效，需要手工补齐哪些动作？补齐之后，你会失去哪些能力？
+> 4. 代理创建器在 `getEarlyBeanReference` 与 `postProcessAfterInitialization` 两处都会包装 Bean，这样设计解决了什么问题，又引入了什么风险？
+> 5. 若一个应用的启动时间是 3 秒，你会先测量哪一段？在拿到实测数据之前，为什么不宜直接给启动流程加 `@Lazy`？

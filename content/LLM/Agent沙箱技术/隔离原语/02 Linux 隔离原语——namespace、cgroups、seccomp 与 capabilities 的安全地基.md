@@ -1,8 +1,8 @@
 ---
 title: "Linux 隔离原语——namespace、cgroups、seccomp 与 capabilities 的安全地基"
 date: 2026-08-15
-tags: [Agent Sandbox, Linux, cgroups, io_uring]
-keywords: [CLONE_NEW, Container, Landlock, PSI, capabilities, namespaces, rootless, seccomp, user namespace]
+tags: [Agent Sandbox, Linux, cgroups]
+keywords: [CLONE_NEW, Container, Landlock, PSI, capabilities, namespaces, rootless, seccomp, user namespace, io_uring]
 aliases: [Linux隔离原语, namespace详解, cgroups详解, seccomp详解, 隔离三件套]
 ---
 

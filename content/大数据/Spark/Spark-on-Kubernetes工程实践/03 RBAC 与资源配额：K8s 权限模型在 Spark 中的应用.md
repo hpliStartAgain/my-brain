@@ -1,8 +1,8 @@
 ---
 title: "03 RBAC 与资源配额：K8s 权限模型在 Spark 中的应用"
 date: 2026-11-19
-tags: [Kubernetes, Spark, RBAC, 多租户]
-keywords: [ServiceAccount, RoleBinding, ResourceQuota, LimitRange, 命名空间, PriorityClass, 最小权限, 准入控制]
+tags: [Kubernetes, Spark, 多租户]
+keywords: [ServiceAccount, RoleBinding, ResourceQuota, LimitRange, 命名空间, PriorityClass, 最小权限, 准入控制, RBAC]
 aliases: []
 ---
 

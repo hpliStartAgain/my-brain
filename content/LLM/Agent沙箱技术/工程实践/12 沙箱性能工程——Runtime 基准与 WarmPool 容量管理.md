@@ -119,7 +119,7 @@ flowchart TD
 
 在评估多运行时沙箱的内存开销时，**必须以 PSS（Proportional Set Size）作为官方核算基准**：
 
-$$\text{PSS} = \text{USS} + \sum_{i=1}^{k} rac{\text{Shared Page}_i}{\text{Number of Processes Sharing Page}_i}$$
+$$\text{PSS} = \text{USS} + \sum_{i=1}^{k} \frac{\text{Shared Page}_i}{\text{Number of Processes Sharing Page}_i}$$
 
 PSS 的科学性在于其合理解构了共享库与虚拟化运行时的公共内存：当 $N$ 个沙箱共享某些只读动态链接库（如 libc）或内存页面时，PSS 会将共享部分均摊给各个实例，既避免了 RSS 将共享内存重复计算导致的虚高，又防止了 USS 完全忽略系统公共支撑开销导致的严重偏低。
 
@@ -211,9 +211,9 @@ flowchart LR
 
 | 运行时档位 | 端到端冷启动 P50 | 端到端冷启动 P99 | 纯运行时自举时延 | 相对 runc 放大比 |
 | :--- | :--- | :--- | :--- | :--- |
-| **标准容器 (runc)** | **$2.515\text{ s}$** | $4.120\text{ s}$ | 仅需 $pprox 15\text{ ms}$ | $1.0\times$ (基准) |
-| **虚拟内核 (gVisor)** | **$3.015\text{ s}$** | $4.850\text{ s}$ | 需 $pprox 515\text{ ms}$ | $1.2\times$ |
-| **微虚机 (Kata 3.x)** | **$4.016\text{ s}$** | $6.980\text{ s}$ | 需 $pprox 1516\text{ ms}$| $1.6\times$ |
+| **标准容器 (runc)** | **$2.515\text{ s}$** | $4.120\text{ s}$ | 仅需 $\approx 15\text{ ms}$ | $1.0\times$ (基准) |
+| **虚拟内核 (gVisor)** | **$3.015\text{ s}$** | $4.850\text{ s}$ | 需 $\approx 515\text{ ms}$ | $1.2\times$ |
+| **微虚机 (Kata 3.x)** | **$4.016\text{ s}$** | $6.980\text{ s}$ | 需 $\approx 1516\text{ ms}$| $1.6\times$ |
 
 #### 数据深度解读：
 从表面上看，Kata Containers 的冷启动耗时是 runc 的 $1.6\text{ 倍}$。然而深入物理耗时分解后可以发现，在端到端的 $4.016\text{ 秒}$ 耗时中，Kubernetes 平台的通用调度、CRD 调谐（约 $1.2\text{ 秒}$）以及盒内守护进程的探活握手（约 $1.3\text{ 秒}$）属于三种运行时的**公共固定成本**。
@@ -250,8 +250,8 @@ flowchart TD
 | 运行时档位 | 单实例静默空闲 PSS | 单实例静默空闲 RSS | 相对 runc 底噪放大比 | 单节点承载密度上限 ($448\text{G}$净空) |
 | :--- | :--- | :--- | :--- | :--- |
 | **标准容器 (runc)** | **$28.8\text{ MiB}$** | $45.2\text{ MiB}$ | $1.0\times$ (基准) | **$\ge 111$ 个槽位** (受业务配额主导) |
-| **虚拟内核 (gVisor)** | **$127.2\text{ MiB}$**| $178.6\text{ MiB}$ | **$4.4\times$** | **$pprox 105$ 个槽位** (开始侵蚀物理空间) |
-| **微虚机 (Kata 3.x)** | **$392.7\text{ MiB}$**| $468.1\text{ MiB}$ | **$13.6\times$** | **$pprox 93$ 个槽位** (密度大幅缩减) |
+| **虚拟内核 (gVisor)** | **$127.2\text{ MiB}$**| $178.6\text{ MiB}$ | **$4.4\times$** | **$\approx 105$ 个槽位** (开始侵蚀物理空间) |
+| **微虚机 (Kata 3.x)** | **$392.7\text{ MiB}$**| $468.1\text{ MiB}$ | **$13.6\times$** | **$\approx 93$ 个槽位** (密度大幅缩减) |
 
 这一组物理测量数据带来了极具震撼力的工程结论：**在完全不运行任何用户业务代码的静默状态下，单个 Kata 微虚机占用的宿主机物理内存是标准容器的近 14 倍！**
 
@@ -289,7 +289,7 @@ Kata Containers 采用 virtiofs 共享宿主机文件系统。在处理高频小
 | :--- | :--- | :--- | :--- | :--- |
 | **安全隔离防护上限** | 共享宿主内核，存在逃逸风险 | 拦截绝大多数高危系统调用 | 独立硬件辅助虚拟化硬隔离 | 承载不可信 AI 生成代码首选 Kata |
 | **单实例启动时延** | 毫秒级极速拉起 | 数百毫秒微延迟 | 秒级开销，需依赖预热池 | 对冷启动时延极其敏感的场景选 runc 或预热 Kata |
-| **物理常驻内存底噪** | 极小 ($pprox 28\text{ MiB}$) | 中等 ($pprox 127\text{ MiB}$) | 沉重 ($pprox 393\text{ MiB}$) | 资源高度受限场景严禁无节制创建 Kata 微虚机 |
+| **物理常驻内存底噪** | 极小 ($\approx 28\text{ MiB}$) | 中等 ($\approx 127\text{ MiB}$) | 沉重 ($\approx 393\text{ MiB}$) | 资源高度受限场景严禁无节制创建 Kata 微虚机 |
 | **密集文件 I/O 效率** | 原生零损耗 ($1.0\times$) | 损耗显著 ($2.8\times$) | 损耗严重 ($4.5\times$) | 涉及庞大依赖编译时需辅以内存加速 |
 | **系统调用生态兼容性** | $100\%$ 完整 Linux ABI | 约 $90\%$ 常用调用实现 | $100\%$ 真实 Linux 内核 | 需挂载特殊网络栈或设备驱动时首选 Kata |
 
@@ -333,8 +333,8 @@ stateDiagram-v2
 
 | 预热池运行状态 | 触发边界与运行特征 | 客户端感知 API 时延 | 首命令就绪 P50 时延 | 高并发并发 50 时交付 P99 |
 | :--- | :--- | :--- | :--- | :--- |
-| **状态一：冷启动 (Cold)** | 无可用预热池，沙箱需走全新生命周期自举 | $4.0 - 5.0\text{ s}$ | $pprox 4.0\text{ s}$ | 队列阻塞，P99 剧增至 $> 15\text{ s}$ |
-| **状态二：热池命中 (Warm Hit)** | 池内有处于待命就绪状态的空闲沙箱槽位 | **$1.012\text{ s}$** | **$2.200\text{ s}$** | **$pprox 5.6\text{ s}$ (表现高度线性平稳)** |
+| **状态一：冷启动 (Cold)** | 无可用预热池，沙箱需走全新生命周期自举 | $4.0 - 5.0\text{ s}$ | $\approx 4.0\text{ s}$ | 队列阻塞，P99 剧增至 $> 15\text{ s}$ |
+| **状态二：热池命中 (Warm Hit)** | 池内有处于待命就绪状态的空闲沙箱槽位 | **$1.012\text{ s}$** | **$2.200\text{ s}$** | **$\approx 5.6\text{ s}$ (表现高度线性平稳)** |
 | **状态三：击穿耗尽 (Exhausted)**| 突发流量超出预热容量，池内空闲槽位降为 0 | 瞬时回退至冷启动量级 | 回退至 $4.5 - 8.0\text{ s}$ | **$17.5 - 27.5\text{ s}$ (长尾严重劣化)** |
 
 #### 关键工程洞察：
@@ -374,7 +374,7 @@ $$\text{Slot}_{\text{low}} \ge Z \times \lambda_{\text{peak}} \times T_{\text{co
 
 以一个平均每秒涌入 5 个新 Agent 会话的业务场景为例，若底层微虚机自举就绪耗时为 $3.5\text{ 秒}$，安全系数取 $1.8$，则：
 
-$$\text{Slot}_{\text{low}} \ge 1.8 \times 5 \times 3.5 = 31.5 pprox 32\text{ 个空闲槽位}$$
+$$\text{Slot}_{\text{low}} \ge 1.8 \times 5 \times 3.5 = 31.5 \approx 32\text{ 个空闲槽位}$$
 
 若低水位线设为 32，高水位线（High Watermark）通常按 $1.5 \times \text{Slot}_{\text{low}}$ 设定（即 48 个槽位）。当空闲槽位因消费跌破 32 时，编排控制器立即向底层下发批次创建指令，确保新实例能够在池子彻底耗尽前完成就绪注水；而当流量退去空闲槽位堆积至 48 以上时，控制器触发优雅回收，杜绝无谓的物理内存闲置。
 
@@ -436,7 +436,7 @@ $$\sum \text{Pod.Spec.Containers.Resources.Requests} \le \text{Node.Allocatable}
 
 然而，当底层运行时切换为微虚机（Kata Containers）或虚拟内核（gVisor）时，这一经典模型会瞬间失效并引发生态灾难：
 - 调度器完全不知道，除了容器内部声明的 $512\text{ MiB}$，底层的 QEMU 虚拟机监视器、Guest 内核与 virtio 驱动还需要在宿主机侧**强制常驻近 $400\text{ MiB}$ 的物理底噪**；
-- 400 个 Kata 微虚机实际消耗的物理内存不仅是 $400 \times 512\text{ MiB} = 200\text{ GiB}$，还要额外加上 $400 \times 393\text{ MiB} pprox 153.5\text{ GiB}$ 的微虚机底噪！
+- 400 个 Kata 微虚机实际消耗的物理内存不仅是 $400 \times 512\text{ MiB} = 200\text{ GiB}$，还要额外加上 $400 \times 393\text{ MiB} \approx 153.5\text{ GiB}$ 的微虚机底噪！
 - 宿主机物理内存真实需求高达 $353.5\text{ GiB}$，远远冲破了物理节点 $200\text{ GiB}$ 的承载极限！
 
 ```
@@ -552,7 +552,7 @@ flowchart LR
 
 | SLI 黄金指标 | 精确度量口径与 Prometheus PromQL 表达式 | 生产告警阈值 | 治理与干预动作 |
 | :--- | :--- | :--- | :--- |
-| **热池命中率 (Hit Ratio)** | $rac{\text{sum}(\text{rate}(\text{sandbox\_requests\_warm\_hit}[5m]))}{\text{sum}(\text{rate}(\text{sandbox\_requests\_total}[5m]))}$ | $\le 95\%$ | 调高预热池低水位线容量配置，增加常驻槽位数 |
+| **热池命中率 (Hit Ratio)** | $\frac{\text{sum}(\text{rate}(\text{sandbox\_requests\_warm\_hit}[5m]))}{\text{sum}(\text{rate}(\text{sandbox\_requests\_total}[5m]))}$ | $\le 95\%$ | 调高预热池低水位线容量配置，增加常驻槽位数 |
 | **池耗尽等待时延 (Wait Duration)**| $\text{histogram\_quantile}(0.99, \text{rate}(\text{warmpool\_exhausted\_wait\_seconds\_bucket}[5m]))$ | $\ge 3.0\text{ s}$ | 紧急扩容节点池工作服务器，提升并发拉起算力 |
 | **端到端冷启动 P99 时延** | $\text{histogram\_quantile}(0.99, \text{rate}(\text{sandbox\_cold\_start\_seconds\_bucket}[5m]))$ | $\ge 8.0\text{ s}$ | 检查宿主机 CPU 调度负载与 virtiofs I/O 拥塞状态 |
 | **槽位周转率 (Turnover Rate)** | $\text{sum}(\text{rate}(\text{sandbox\_allocated\_slots\_total}[1h])) / \text{PoolCapacity}$ | 出现断崖骤降 | 排查控制面是否存在僵尸沙箱未优雅回收与泄漏 |

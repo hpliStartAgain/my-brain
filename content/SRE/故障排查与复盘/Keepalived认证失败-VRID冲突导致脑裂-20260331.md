@@ -1,8 +1,9 @@
 ---
 title: "Keepalived 认证失败 - VRID 冲突导致脑裂"
 date: 2026-03-31
-tags: [故障排查, 高可用]
-keywords: [keepalived, vrrp]
+tags: [SRE, 故障排查, 高可用, 运维]
+keywords: [keepalived, vrid, vrrp]
+aliases: ["Keepalived 脑裂", "VRID 冲突"]
 category: 网络故障
 severity: P1
 ---
@@ -20,6 +21,15 @@ Mar 31 14:07:59 ats-01 Keepalived_vrrp[1860191]: (VI_ATS) Entering MASTER STATE
 Mar 31 14:07:59 ats-01 Keepalived_vrrp[1860191]: (VI_ATS) Master received advert from 192.0.2.40 with higher priority 100, ours 70
 Mar 31 14:07:59 ats-01 Keepalived_vrrp[1860191]: (VI_ATS) Entering BACKUP STATE
 ```
+
+## 时间线
+
+| 时间 | 事件 |
+|---|---|
+| 2026-03-31 14:07:26 | ats-01 开始持续记录 `(VI_ATS) received an invalid passwd!` |
+| 2026-03-31 14:07:59 | 出现 `Receive advertisement timeout` → 进入 MASTER → 收到 192.0.2.40 更高优先级报文 → 退回 BACKUP |
+| 2026-03-31 14:27:10 | `tcpdump` 抓到 vrid 51 的三方报文：192.0.2.93 → 224.0.0.18、192.0.2.40 → 192.0.2.185 |
+| 2026-03-31 | 切换为单播模式，故障关闭 |
 
 ## 根因分析
 
@@ -45,18 +55,14 @@ Mar 31 14:07:59 ats-01 Keepalived_vrrp[1860191]: (VI_ATS) Entering BACKUP STATE
 
 **故障触发链路**：
 
-```
-192.0.2.93 发送 VRRP 报文 (vrid=51, 密码X)
-    ↓
-ats-01 收到报文，VRID 匹配
-    ↓
-使用本地密码 "********" 校验 → 失败
-    ↓
-丢弃报文 + 日志报错 "invalid passwd"
-    ↓
-合法报文被干扰，触发心跳超时
-    ↓
-误判主节点故障 → 抢占 MASTER → 脑裂风险
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+flowchart TD
+    T1["192.0.2.93 发送 VRRP 报文 (vrid=51, 密码X)"] --> T2["ats-01 收到报文，VRID 匹配"]
+    T2 --> T3["使用本地密码 #quot;********#quot; 校验 → 失败"]
+    T3 --> T4["丢弃报文 + 日志报错 #quot;invalid passwd#quot;"]
+    T4 --> T5["合法报文被干扰，触发心跳超时"]
+    T5 --> T6["误判主节点故障 → 抢占 MASTER → 脑裂风险"]
 ```
 
 ### 为何配置未变却突然故障
@@ -165,7 +171,7 @@ journalctl -u keepalived -f | grep -E 'MASTER|BACKUP|invalid'
 
 ## 预防措施
 
-1. **VRID 分配规范**：建立 VRID ���配表，避免随意使用默认值（50/51）
+1. **VRID 分配规范**：建立 VRID 分配表，避免随意使用默认值（50/51）
 2. **强制单播**：企业内网环境禁用组播，统一使用 unicast 模式
 3. **监控告警**：对 Keepalived 状态切换（BACKUP→MASTER）配置告警
 4. **网络隔离**：不同业务线使用独立 VLAN

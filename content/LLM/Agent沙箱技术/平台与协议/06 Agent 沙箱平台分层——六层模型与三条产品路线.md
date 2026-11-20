@@ -201,9 +201,10 @@ stateDiagram-v2
     Reclaiming --> PreAllocated: 异步擦除与重置完成
     Reclaiming --> [*]: 达到最大复用次数 / 销毁
 ```
-在容量调度层面，`PoolAutoscaler` 并非简单基于传统的 CPU/内存利用率进行水平伸缩，而是基于**排队论（Queuing Theory）中的 $M/M/c/K$ 模型**进行容量动态推导。设沙箱申请到达率服从泊松分布，平均到达率为 $\lambda$（个/秒），沙箱冷启动耗时为 $T_{	ext{cold}}$（秒），业务容忍的最大排队等待时间为 $	au$。为保障在突发流量洪峰下系统不发生击穿，预热池的目标动态安全水位 $S_{	ext{target}}$ 满足：
-$$S_{	ext{target}} = \lceil \lambda 	imes T_{	ext{cold}} + Z_{lpha} \sqrt{\lambda 	imes T_{	ext{cold}}} ceil$$
-其中 $Z_{lpha}$ 为对应服务等级协议（SLA）置信度（如 99.9% 概率不发生冷启动排队）的标准正态分布分位数。该算法使平台在业务波谷期自动收缩池容以节约物理内存，而在业务高频交互期精准维持最小安全水位。
+在容量调度层面，`PoolAutoscaler` 并非简单基于传统的 CPU/内存利用率进行水平伸缩，而是基于**排队论（Queuing Theory）中的 $M/M/c/K$ 模型**进行容量动态推导。设沙箱申请到达率服从泊松分布，平均到达率为 $\lambda$（个/秒），沙箱冷启动耗时为 $T_{\text{cold}}$（秒），业务容忍的最大排队等待时间为 $\tau$。为保障在突发流量洪峰下系统不发生击穿，预热池的目标动态安全水位 $S_{\text{target}}$ 满足：
+$$S_{\text{target}} = \lceil \lambda \times T_{\text{cold}} + Z_{\alpha} \sqrt{\lambda \times T_{\text{cold}}} 
+ceil$$
+其中 $Z_{\alpha}$ 为对应服务等级协议（SLA）置信度（如 99.9% 概率不发生冷启动排队）的标准正态分布分位数。该算法使平台在业务波谷期自动收缩池容以节约物理内存，而在业务高频交互期精准维持最小安全水位。
 
 ### 2.3 第 3 层：执行层与盒内数据面（Execution / Data Plane）
 

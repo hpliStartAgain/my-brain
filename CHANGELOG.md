@@ -570,6 +570,746 @@ Spark 内核系列最后两组一并处理：`01_核心概念与基础`（5 篇�
   14. **本地性上限有概率模型**：300 节点 / 3 副本 / executor 只覆盖 1/3 时单侧命中约 70%，叠加 HDFS 放置后典型分布是七成 / 两成 / 一成，而不是常说的"90% NODE_LOCAL"。
 - **验证**：`scripts/verify_batch.py --survey` 11 篇 PASS；`node ./quartz/bootstrap-cli.mjs build` exit 0（1237 篇 / 7116 文件 / 0 过滤）；死链 0（修掉导览里 08 一篇的引号导致的不匹配）；`converge_tags.py --apply` 收敛 5 篇（200→199）。
 
+### 整改第 18 批（C 类旧稿扩写第 18-20 组）：K8s API Server / SpringBoot / MyBatis（26 篇 + 3 导览同步）
+
+三列合计 95,619 → 350,187 字。其中 API Server 那一列又是 1:1 撞车（6 篇里 5 篇与 `Kubernetes架构深度剖析` 的 04/05/06 对应），按既有口径改定位为「安全配置与容量运维」，走综述口径；SpringBoot 与 MyBatis 是独立专栏，走标准深度口径。
+
+| 专栏 | 篇 | 原篇均 | 现篇均 | 行数 | 图 | 表 |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+| kubernetes之API Server | 6 | 3,568 | **9,794** | 3,142 | 9→30 | 22→56 |
+| SpringBoot | 10 | 3,699 | **14,645** | 8,105 | 16→49 | 36→101 |
+| MyBatis | 10 | 3,722 | **14,496** | 9,504 | 5→57 | 20→106 |
+
+- **API Server 那一列的改定位理由**：`Kubernetes架构深度剖析` 的第 04/05/06 篇已经把请求链路、三级安全防线、List-Watch 机制讲透，这 6 篇再写一遍就是重写同一批事实。改后每篇聚焦三样——配置与判据、症状与归因、与机制篇的分工，机制一律双链路由。其中第 06 篇（APF 与容量模型）是架构深度剖析没覆盖的空白，写得最足。
+- **本批纠正的实质错误（含 4 条推翻我自己的任务前提）**：
+  1. **`--v=4` 不是认证排查的第一步**（我任务书写错了）：认证失败的指纹是 error 级的 `Unable to authenticate the request`，`--v=4` 只额外暴露 OIDC 初始化与 JWKS 抓取。另有 audience 不匹配的错误串 `unable to match the audience` 不含 unauthorized 字样。
+  2. **`watch_cache_*` 这个指标族不存在**（我任务书引了）：真实的是 `apiserver_cache_list_*`、`apiserver_storage_objects`、`apiserver_watch_events_total`。
+  3. **`workload-leader-election` 不是默认对象名**（我任务书写了）：默认是 `leader-election` 层 + `system-leader-election` FlowSchema。
+  4. **`server.ssl.*` 在 3.5 并未废弃**（我任务书写了）：`Ssl` 类无 `@Deprecated`；3.1 起新增的是 `server.ssl.bundle` 与 `spring.ssl.bundle.*`。
+  5. **嵌入式容器的端口绑定不在 `onRefresh`**：`TomcatWebServer` 构造器设 `bindOnInit=false` 并摘掉 Connector，真正 bind 在 `finishRefresh` 的 `WebServerStartStopLifecycle.start()`——这解释了 `Tomcat initialized` 与 `Tomcat started` 两行日志之间为什么夹着全部单例 Bean 的创建（原稿写的是端口已绑定）。
+  6. **APF 只对 LIST 收税**：watch 是 long-running 请求，受理后不再占并发名额；真正吃配额的是初始 LIST、re-list 与过滤读。所以"保护控制面要给会触发大 LIST 的客户端限流"，而不是给 watch 限流。
+  7. **`spring.factories` 的"废弃"被说重了**：3.x 只把自动配置类迁到 `AutoConfiguration.imports`，`AutoConfigurationImportFilter`/`FailureAnalyzer`/`ApplicationContextInitializer` 仍走 `spring.factories`（`FailureAnalyzers` 就是活例子）——按"3.x 废弃 spring.factories"排查会找错方向。
+  8. **`logback.xml` 存在则 `logback-spring.xml` 永不被查找**（源码 `initializeWithConventions` 的分支顺序），不是"被忽略"。
+  9. **`discardingThreshold` 默认是 `queueSize/5`**（256 时 = 51），不是"80% 满"。
+  10. **`totalSizeCap` 只在 `maxHistory` 有值时生效**，且清理仅滚动时触发（`cleanHistoryOnStart` 例外）。
+  11. **`@MockBean` 自 3.4 起 deprecated**（替代 `@MockitoBean`），且两者找不到目标时**默认都静默新增**——差别只在 `enforceOverride=true` 能把沉默变失败。
+  12. **MyBatis 的 BATCH 模式"commit 也不发"是错的**：`BaseExecutor.commit` 顺序是 `clearLocalCache → flushStatements → transaction.commit`；真正丢数据的是 `close()` 走 `rollback` 的路径。
+  13. **二级缓存标准装饰器的顺序**：`BlockingCache` 在**最外层**（`setStandardDecorators` 最后一步创建），原稿画在最内层；且自定义 `type` 会**丢掉全部标准装饰器**（只补一个 `LoggingCache`）——这是"换 Redis 后配置失灵"的根因。
+  14. **延迟加载代理默认是 Javassist**（3.5.x 包内重定位内嵌），CGLIB 自 3.5.10 `@Deprecated`；会话关闭后 `ResultLoader` 是**新建 executor 开新连接**，不是抛"executor was closed"。
+  15. **`@Select` 注解不改写 `statementId`**：id 始终是「接口全限定名.方法名」，注解只给 SQL 文本。因此重载方法必然冲突（实测两种重载解析出同一命令名）。
+  16. **`MapperProxy` 的 `hashCode` 是处理器身份哈希、`equals` 恒为 false**；`methodCache` 挂在 `MapperFactoryBean` 之外随 `Configuration` 存活，所以热更新只有"整体重建 Configuration"一种形态。
+  17. **MyBatis-Plus 的同名 `statementId` 是静默失效**（`WARN ... ignoring this injection` 后返回 null），不是报错。
+- **顺带记下的一处跨篇不一致（待后续统一校对）**：`--min-request-timeout` 的官方 flag 说明是"在其之上取随机值作为连接超时"（默认 1800 秒，即 30-60 分钟），而 `Kubernetes架构深度剖析/06` 写的是"5 到 10 分钟"。两处需要择一修正，本批未动那一篇。
+- **验证**：`scripts/verify_batch.py` 三列 29 篇（26 + 3 导览）全 PASS；`node ./quartz/bootstrap-cli.mjs build` 待本批结束后统一执行；死链 0；`converge_tags.py` 待收敛。
+
+### 整改第 19 批（C 类旧稿扩写第 21 组）：Java/并发编程 全系列 17 篇 + 导览重写
+
+17 篇是**一个连续系列**（01-17），分布在 `content/Java/并发编程/` 下的四个子目录（`线程安全问题`/`volatile与内置锁`/`JUC工具`/`线程池`），编号连续。原稿 68,153 字（篇均 4,009），17 篇里 13 篇零 Mermaid、表只有 29 张。
+
+这一批的特点是**原稿的过时程度远超其他列**——多数内容停在 JDK 8 时代，而 JDK 15/14/21/24 恰好各改了一处关键实现。所以本批的最大价值不是扩写，是把过时知识逐条换掉。
+
+| 指标 | 整改前 | 整改后 |
+| :--- | ---: | --- |
+| 篇幅 | 68,153 字（篇均 4,009） | **252,204 字（篇均 14,835）/ 15,060 行** |
+| Mermaid | 4 张 | **96 张全 dracula** |
+| 表格 | 29 张 | **176 张** |
+
+**导览重写**：原导览的目录描述还是旧内容（"偏向锁的批量重偏向""happens-before 八大规则""volatile 读的 LoadLoad 屏障"），已全部按新稿改写；另补一段"读这一列的前提"提示，说明为什么这列有很多结论与流传说法相反。同时修掉一个死链（`中间件/Redis/00 专栏导览` → 实际在 `Redis设计与实现/00 专栏导览`）。
+
+**本批纠正的过时/错误说法（择要，共 50 余处，以下是最要紧的）**：
+1. **偏向锁早就不在了**：JDK 15（JEP 374）默认禁用、JDK 18 移除选项与实现；原稿把"锁升级树"当作现行为，实际只对 JDK 14 及更早成立。JDK 24 还把轻量级锁换成了 lock stack 实现。
+2. **AQS 在 JDK 14 被重写过**（JDK-8229442，单文件 +613/−1102 行）：教科书里的 `addWaiter`/`acquireQueued`/五值 `waitStatus` 属 JDK 13 及以前；现在是单一 `acquire(node,arg,shared,interruptible,timed,time)` 主循环 + 位编码 `status`，`PROPAGATE` 状态随之删除。
+3. **JMM 的"八大规则"是二手说法**：JLS 17.4.5 只有 4 条生成规则，跨线程能力来自 17.4.4 的 6 类 synchronizes-with（含常被漏掉的"默认值写→每线程首动作"）；且"主内存/工作内存"是 JSR-133 之前的旧模型，现 JLS 第 17 章已无此概念。
+4. **`hb` 不是时间线**：规范原文明确否认"hb 意味着 A 在 B 之前执行"。
+5. **`synchronized` 退出不是"StoreStore + StoreLoad"**：应表述为 acquire/release 语义（release 是 StoreStore + LoadStore）。
+6. **x86 上 flag/data 的可见性失败不能归因于 Store Buffer**：TSO 的写缓冲是 FIFO、store-store 不重排，MP 在 x86 上不可观察；真正来源是编译器重排与弱内存模型的非 FIFO 写缓冲。
+7. **`@sun.misc.Contended` 在 JDK 9 后已不存在**：迁到 `jdk.internal.vm.annotation.Contended`，且 `-XX:RestrictContended` 默认 true 时对用户类**静默失效**（实测偏移 16 → 加参数后 144）。
+8. **`StampedLock` 不 pin 载体线程**：JDK 21 的 `LockSupport.park` 委托 `VirtualThreads.park`；JDK 21 只有 `synchronized` 与 native/FFM 会 pin，前者已被 JDK 24 的 JEP 491 修掉。
+9. **`Semaphore` 的许可不会变负**：Java 的 `acquire` 路径在 `remaining < 0` 时不 CAS；负值语义来自 Dijkstra 的原始信号量。
+10. **`CopyOnWriteArrayList` 的锁不是 `ReentrantLock`**（JDK 9 起改为 `final Object lock`）；"读操作零屏障"也不成立。
+11. **`ArrayBlockingQueue` 至今是一把锁 + 两个 Condition**：两把锁的是 `LinkedBlockingQueue`（原稿写反）。
+12. **`ForkJoinPool` 的双端队列端点叫反了**：owner 读写 `top`、窃取者读 `base`；且 `join` 不阻塞线程这一条只对池内 worker 成立，外部线程（含 main）仍会 park。
+13. **`CompletableFuture` 的回调线程有三条规则**，不是"只在完成者线程"；`allOf` 要等全部完成才上报失败（`BiRelay` 要求两侧 result 均非 null），且只报一个、不取消其余。
+14. **`ConcurrentHashMap` 的 `computeIfAbsent` 在 JDK 8 会活锁**（同线程重入 `synchronized` 不阻塞、`binCount` 恒 0 导致 `for(;;)` 空转，JDK-8074374/8062841），JDK 9 起改为抛 `IllegalStateException`——排查手段从看 BLOCKED 变成看高 CPU 同帧。
+15. **`ThreadLocal` 泄漏的是 value 不是 key**；且 JDK 21 源码已用 `Reference.refersTo` 而不是 `e.get()==null`（后者会顺带给待回收 key 续命）。
+16. **`ScopedValue` 不能替代 `TransmittableThreadLocal`**：JDK 25 转正的 `ScopedValue` 只被 `StructuredTaskScope` 子线程继承，`ForkJoinPool` 等池化环境不支持——"新特性替代老方案"的叙事掩盖了这一点。
+17. **`ThreadPoolExecutor` 的 `maximumPoolSize` 是队列容量的从属参数**：无界队列的 `offer` 永不返回 false，扩容分支不可达；`Integer.MAX_VALUE` 还被 `& COUNT_MASK` 截断为 2^29−1。
+18. **`LongAdder` 的 cells 上限是 `n >= NCPU`**（源码），不是常说的"CPU 核数的两倍"。
+19. **`Unsafe` 的退场时间线**：JDK 23（JEP 471）`forRemoval`、JDK 24（JEP 498）默认 `warn`、JDK 26 或更晚 `deny`；且原子类走的是 `jdk.internal.misc.Unsafe`（免疫），属"半迁移"状态。
+20. **大量不可核实的基准数字被删除**：原稿里的 "Xeon E5-2680 / JDK 11 / 431x"、"5~10 倍"、"Disruptor 快 5-10 倍"等无出处数字全部替换为标注「量级判断」或「示例推算」的内容，部分替换为 subagent 在**本机实际跑出的实验数据**（如 4 线程 ×20 万 `volatile counter++` 丢 38%-44%、公平锁上 `tryLock()` 插队 500/500）。
+
+- **验证**：`scripts/verify_batch.py` 四个子目录 17 篇 + 导览全 PASS；死链 0；`node ./quartz/bootstrap-cli.mjs build` 待本批串收尾时统一执行。
+
+### 整改第 20 批（C 类旧稿扩写第 22 组）：Linux/网络协议栈与IO（10 篇全列达标 + 导览修正）
+
+这一列的特殊之处：**10 篇里 7 篇原稿已经够长（12,600-14,700 字）**，只是格式在早期批量扩写时被写坏了——整句整段加粗、末尾 ASCII 框图、个别灌水句式。真正的旧稿只有 3 篇（08/09/10，3,670-4,298 字）。
+
+所以本批分两种处理：
+- **3 篇重写**（08 io_uring/SO_REUSEPORT/多队列 NIC、09 容器网络、10 网络诊断），补到深度标准。
+- **4 篇修格式**（02/03/04/06）：把超过 12 字的加粗整体转普通文本（原加粗字符占比 4.4%-6.4%），删掉「值得注意的是」，其余内容不动——这些篇的技术内容本身没有过时。
+
+| 指标 | 整改前 | 整改后 |
+| :--- | ---: | --- |
+| 篇幅 | 126,481 字（篇均 12,648） | **140,959 字（篇均 14,095）/ 5,384 行** |
+| Mermaid | 39 张 | **59 张全 dracula** |
+| 表格 | 41 张 | **65 张** |
+
+- **导览修正**：补回缺失的 `# H1`；02 与 10 两行原来只有纯文本没有 `[[链接]]`，已补齐；日期更新；10 条目录描述全部按新稿内容改写。
+- **改格式的判定口径**（写下来备后续批次复用）：加粗 span 超过 12 个汉字视为「整句加粗」，直接去粗留文；短于等于 12 字的保留（多为术语与字段名）。这一列 4 篇按此处理，加粗占比从 4.4%-6.4% 降到 0.7%-1.3%，**正文一个字没删**。
+- **本批纠正的实质错误**：
+  1. **`retrans` 的斜杠不是"已重传/总重传"**：`retrans:a/b` 的分子是当前在途重传段数（`retrans_out`）、分母是连接生命周期累计重传数（`total_retrans`）。判据应是"分子是否长期不归零 + 分母的增长斜率"，不是单次绝对值。
+  2. **`Recv-Q` 的语义分裂**：LISTEN 下是 accept 队列长度、ESTAB 下是未读字节数；且"非零"不是判据，"单调增长不回落"才是。
+  3. **`ListenOverflows` 与 `ListenDrops` 是两件事**：前者计 accept 队列溢出、后者计 listen 队列满的总丢弃；只看一个会漏掉 SYN 打满半连接队列这一形态。
+  4. **`/proc/net/softnet_stat` 的三列读法**：处理数 / backlog 溢出丢弃 / `time_squeeze`——把"已在悬崖边"与"已开始丢包"分开。
+  5. **五级丢包位置共用一条分水岭**：前四级必有计数器增长，第五级（应用读得慢）**没有任何丢包计数**、只有队列长度在涨。这是"别把读得慢误修成加资源"的判据。
+  6. **`ip netns add` 的名字只是个挂载点**：内核不认识名字，所以 `ip netns list` 会漏掉容器的 netns；`nsenter -t <pid> -n` 才是可靠入口。
+  7. **`setns()` 不迁移已打开的 socket**，且 nsproxy 在线程组内共享——这解释了 `ip netns exec` 为什么必须先 fork 再 exec。
+  8. **`br_netfilter` 让桥接帧也过 FORWARD 链**：纯二层转发不等于绕过 netfilter，这是 Docker 隔离链能生效的前提，也是规则量大时的隐性开销。
+  9. **VXLAN 设备是一对多隧道端点**（与 veth 一对一相反），漏掉 `bridge fdb append` 的典型症状是"跨节点不通、同节点正常"。
+  10. **io_uring 的链式提交不成立**：accept 返回的新 fd 是 CQE 的结果，无法作为下一 SQE 的输入，所以"accept→recv→send 一条链"做不到；可行路径是 multishot accept + provided buffer ring。另 `IORING_OP_RECV_MULTISHOT` 是 6.0 而非 5.20，`SO_ATTACH_REUSEPORT_EBPF` 名字也写反过。
+  11. **`SO_REUSEPORT` 不消除锁竞争也不天然保证 CPU 局部性**：队列锁仍在（只是无跨进程争用），亲和要靠 BPF 选择器 + `SO_INCOMING_CPU`。
+- **验证**：`scripts/verify_batch.py` 11 篇（10 + 导览）全 PASS；死链 0。
+
+### 整改第 21 批（C 类旧稿扩写第 23-24 组）：Flink 双专栏 20 篇 + 2 导览重写
+
+仓库里有两个 Flink 专栏，都薄（各 10 篇、篇均约 4,000 字），而且**题材大量重叠**：时间与 Watermark、窗口、状态与 Checkpoint、SQL 四处都是两列各一篇。先做的是划界，再动手：
+
+| `Flink原理深度解析与性能优化` | `Flink从入门到实战` |
+| --- | --- |
+| 机制怎么实现（数据结构、调用链、状态机、算法） | 工程上怎么配、怎么集成、怎么排障 |
+
+每篇都要求显式声明边界：属本列职责的写透，属另一列的用一句 + 双链指过去。这一条写进了任务书，也写进了两篇导览。
+
+| 专栏 | 篇 | 原篇均 | 现篇均 | 行数 | 图 | 表 |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Flink 原理深度解析与性能优化 | 10 | 4,190 | **15,474** | 6,118 | 0→50 | 22→62 |
+| Flink 从入门到实战 | 10 | 4,040 | **15,571** | 6,666 | 0→50 | 22→90 |
+
+合计 82,304 → **310,461 字**；Mermaid **0 → 100 张全 dracula**；表 44 → **152 张**。
+
+- **实战列第 02 篇改了定位**：原题《快速上手：第一个 Flink 程序》不符合仓库"不写 Hello World"的规定，改写为《开发环境与依赖矩阵——版本、Scala 二进制兼容与 API 演进》。文件名保留，正文换成运行时三元组、`provided` scope、`planner-loader` 二选一、classloader 隔离、打包提交的九项检查清单——**一个 Flink 工程最先撞上的从来不是 API**。
+- **两个导览都重写了**：补回缺失的 `# H1`（两篇都少了这一行）；原理列 05、10 与实战列全部原目录行只有纯文本没有 `[[链接]]`，已补齐；日期更新；20 条目录描述全部按新稿内容改写。
+- **本批纠正的实质错误（含 3 条推翻我给 subagent 的任务前提）**：
+  1. **`max-buffers-per-gate` 这个配置键不存在**（我任务书写了）：实为 `max-buffers-per-channel` 与 `max-overdraft-buffers-per-gate`。
+  2. **`taskmanager.memory.network.max: 1gb` 是早期口径**（我任务书沿用了）：新版本文档该上限默认为无限制（infinite）。
+  3. **Barrier 不与数据分通道，credit 也不解决 checkpoint 受阻**（常见说法，我任务书未纠正）：屏障与数据共用队列与 buffer，反压必然拖慢对齐；真正的解法是 1.11 的非对齐快照（FLIP-76）。
+  4. **`FIRE_AND_PURGE` 不是窗口的默认行为**：1.20 `EventTimeTrigger` 只返回 `FIRE`，回收靠算子按"末尾 + 迟到容忍"注册的清理定时器。
+  5. **`Checkpoint 不支持改并行度、只有 Savepoint 支持`是错的**：两者都按 key group 重分配、都允许改并行度（≤ `maxParallelism`）；真正不可改的是 `maxParallelism`。
+  6. **`maxParallelism` 默认不是 128**：由 `computeDefaultMaxParallelism` 计算——并行度 ≤128 时 128，超过后 1.5 倍向上取 2 的幂，上限 32768。
+  7. **Flink 与 Kafka 的默认组合起不来**：`KafkaSinkBuilder` 把 `transaction.timeout.ms` 预置为 1 小时，而 broker 的 `transaction.max.timeout.ms` 默认 900秒——首个事务初始化即 `InvalidTxnTimeoutException`。这是"照文档写必然失败"的配置。
+  8. **`transactional.id` 冲突不是并行度变更引起的**：它由"前缀-子任务号-快照号"构成；真正的冲突源是前缀被两个作业实例共用（灰度、克隆回刷）。
+  9. **AM 内存计入 YARN 队列配额**，叠加 CapacityScheduler 的 `maximum-am-resource-percent` 默认 0.1——"队列空闲 90% 却停在 ACCEPTED"由此可复算。
+  10. **Per-Job 模式的断代**：1.11 引入 Application（FLIP-85）→ 1.15 废弃（FLINK-25999）→ 2.0 移除；`yarn.per-job-cluster.include-user-jar` 在 1.15 更名。
+  11. **K8s 上 `kubernetes.taskmanager.cpu` 与 slot 数不等价**：`.cpu` 默认 -1 表示取 slot 数，且 `limit-factor` 默认 1.0（limits = requests、无突发额度），所以"1 CPU 配 4 slot"会走 CFS 限流 → 反压指标指向下游 → 查不出原因。
+  12. **大量不可核实数字被清除**：原稿的"链提升吞吐 20%~50%"、"序列化约 100ns/条"、"Flink 吞吐损失 10-20%"、"1TB × 100MB/s = 170 分钟"等全部改为标注「示例推算」或「量级判断」，部分替换为可复算的算式。
+- **验证**：`scripts/verify_batch.py` 两列 22 篇（20 + 2 导览）全 PASS；`node ./quartz/bootstrap-cli.mjs build` **exit 0**（1237 篇 / 7048 文件 / 0 过滤）；死链 0；`converge_tags.py --apply` 收敛 50 篇（201→191）。
+
+### 整改第 22 批（C 类旧稿扩写第 25-26 组）：Trino（6 篇）+ Redis 设计与实现（10 篇）+ 2 导览同步
+
+两列都是独立专栏、无撞车问题，走标准深度口径。
+
+| 专栏 | 篇 | 原篇均 | 现篇均 | 行数 | 图 | 表 |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 中间件/Trino | 6 | 4,066 | **14,809** | 3,887 | 4→32 | 20→58 |
+| 中间件/Redis/Redis设计与实现 | 10 | 4,052 | **15,150** | 7,611 | 4→57 | 20→126 |
+
+合计 64,918 → **240,359 字**；Mermaid 8 → **89 张全 dracula**；表 40 → **184 张**。
+
+- **两个导览同步**：日期更新；Trino 导览补了「这一列解决什么问题」一段（MPP 的三条硬约束如何传导到查询）并重写 6 条目录描述；Redis 导览重写 10 条目录描述。两篇导览的加粗都超了标（Trino 11.3%），已收敛到术语级。
+- **本批纠正的实质错误（择要，两列合计 60 余处）**：
+  1. **Trino 没有内建 Coordinator HA**：原稿称 400+ 已有共享状态存储的 Active-Standby（`query-tracker.enabled`/`query-state-store-provider=jdbc`）——不存在该机制。当前版本 Coordinator 仍是单点，社区形态是 Trino Gateway + 多集群，故障瞬间在跑的查询必失败。
+  2. **`query.max-concurrency` 这个属性名是错的**：真实名是 `query.max-concurrent-queries`（且源码已标 `@Deprecated`，现代做法走 Resource Group）。旧名写了不报错也不生效。
+  3. **`query.max-total-memory-per-node` 配了会导致 Worker 起不来**：它在 `NodeMemoryConfig.@DefunctConfig` 里。
+  4. **Reserved Pool 是 372（2022-03）移除的**，不是"400+"。
+  5. **Trino 没有 SQL hint**：`SqlBase.g4` 里没有 `HINT` token，原稿的 `/*+ USE_BROADCAST_JOIN(...) */` 是不生效的注释。
+  6. **动态过滤传的是 Domain 不是 BloomFilter**：原稿"1MB 存 1000 万 hash、假阳率 1%"是编造数字；Bloom 是 ORC 的表属性。
+  7. **`task.driver-timeout` 不存在**（原稿引用），Trino 配置里没有任何 `driver.*`；Driver 的执行配额由调度器传入。
+  8. **Redis 的 Hash listpack 阈值是 512 不是 128**：`hash-max-listpack-entries` 自 5.0/6.0 起默认即 512；128 是 ZSet 与 Set 的值。这个错误在两篇里都出现过。
+  9. **Redis 哈希函数在 4.0 已换成 SipHash-1-2**（每进程随机种子，为防 HashDoS），不是 MurmurHash2。
+  10. **`maxmemory` 的淘汰时间预算是 500 微秒不是 25ms**：25ms 是过期清理慢周期的 CPU 占比，两者常被混为一谈。
+  11. **LFU 的递增概率原稿错了整整一个数量级**：正确式是 `p = 1/((counter−5)·logfactor+1)`。
+  12. **`everysec` 的真实代价**：主线程在后台 fsync 未完成时会**推迟 write 最多 2 秒**（`aof_flush_postponed_start`），超时才 `aof_delayed_fsync++`——所以"最坏丢 1 秒"应修正为"1 秒 + 推迟窗口"。
+  13. **混合持久化是 4.0 引入但 5.0 才默认开启**（原稿把两件事混成一句）。
+  14. **`repl_backlog` 在 7.x 已不是单块环形数组**：改为与副本输出缓冲共享的 `replBufBlock` 块链表 + `rax` 索引，配置值是裁剪目标而非硬上限。
+  15. **切换丢数据有两种形态**：除了"主库没传播的尾巴"，还有"从库 offset 超过新主 `second_replid_offset` 时被判定为分叉 → 全量覆盖"。
+  16. **Sentinel 选举是双条件**（已知 Sentinel 数 +1 的绝对多数 **且** ≥ quorum），不只是"多数票"。
+  17. **`dynamic-hz` 的方向写反了**（原稿说繁忙时降低频率，实际是 `server.hz *= 2` 上调）；同理原稿把 `afterSleep` 放在循环末尾，实际在分发 fired 事件之前。
+  18. **MULTI 与 Lua 执行期间不处理 I/O**：原稿隐含"能处理"，实际全程不回事件循环、零 I/O；只有超过 `busy-reply-threshold`（默认 5000ms）后才周期性放行 `allow-busy` 命令。
+  19. **`lag` 反映的是 ACK 新鲜度不是数据差**（≤1 秒就显示 0），判断从库落后必须自算 `master_repl_offset − slaveN.offset`。
+  20. **`listpack` 能反向遍历**：`backlen` 就是为反向遍历设的，`lpPrev` 每步 O(1)；真实代价是没有 `zltail`（定位尾部 O(N)）与无随机访问。
+- **验证**：`scripts/verify_batch.py` 两列 18 篇（16 + 2 导览）全 PASS；`node ./quartz/bootstrap-cli.mjs build` **exit 0**（1237 篇 / 7042 文件 / 0 过滤）；死链 0；`converge_tags.py --apply` 收敛 13 篇（191→188）。
+
+### 整改第 23 批（C 类旧稿扩写第 27 组）：Spark-SQL 深度解析与性能调优（12 篇）
+
+这一列是本轮唯一**没有撞车**的 Spark 专栏：`读书笔记-spark内核`（48 篇）拆的是执行层（RDD/调度/Shuffle/内存/容错），**完全没有覆盖优化器**——Catalyst、CBO、AQE、Whole-Stage CodeGen、向量化执行，这是另一套机制。所以按标准深度写足。
+
+| 指标 | 整改前 | 整改后 |
+| :--- | ---: | ---: |
+| 篇幅 | 45,530 字（篇均 3,794，全库最薄） | **177,365 字（篇均 14,780）/ 8,001 行** |
+| Mermaid | 约 4 张 | **65 张全 dracula** |
+| 表格 | 约 22 张 | **112 张** |
+
+- **本批纠正的实质错误（择要）**：
+  1. **`spark.sql.codegen.hugeMethodLimit` 默认是 65535 不是 8000**（我任务书和网络流传版本都错）。8000 是 HotSpot 的 JIT 阈值，只作为源码文档里的推荐值。
+  2. **`spark.sql.execution.sortBasedAggregationThreshold` 这个配置不存在**；聚合回退由 `spark.sql.objectHashAggregate.sortBased.fallbackThreshold`（默认 128）控制。
+  3. **`spark.sql.optimizer.rewriteDistinctAggregates` 不存在**：`RewriteDistinctAggregates` 是无条件执行的规则，只能靠改 SQL 形状影响其开销。
+  4. **Trino 式的"先写 commit log 再调 sink"在 Spark 里是反的**，反之亦然——见下一批。
+  5. **`SortAggregateExec` 自 3.3 起默认支持 CodeGen**，不是融合边界；`SortExec` 经 `BlockingOperatorWithCodegen` 也参与融合。
+  6. **动态过滤传的是 Domain 不是 BloomFilter**；`EXPLAIN` 里 `PushedFilters` 显示 `Pushed` 不等于"数据源真的过滤了行"（可能是行组级）。
+  7. **Trino 无 SQL hint（`SqlBase.g4` 无 `HINT` token）不是 Spark 的事**，但 Spark 这一列同样发现原稿引用了不存在的 hint 语法。
+  8. **AQE 的 `parallelismFirst` 默认 true 时 `advisoryPartitionSizeInBytes` 失效**——这是"我配了 64MB 为什么没合并"的头号原因，原稿完全没提。
+  9. **`coalescePartitions.minPartitionNum` 在 4.x 已 deprecated**；`maxShuffledHashJoinLocalMapThreshold` 默认 0 使 SMJ→SHJ 的自动转换**默认不发生**。
+  10. **Spark 并没有广泛的 SIMD**：所谓"向量化"主要是"批量处理 + 紧凑列存"，真正的指令级优化非常有限——原稿夸大成"SIMD 的力量"，已如实改写（与 ClickHouse/DuckDB 的差距写清）。
+  11. **一堆虚构 API 被删除**：`batch.markFiltered(rowId)`、`batch.filter(selected)`、`spark.sql.execution.enableHashAggregation` 都不存在；Spark 没有 selection vector，批次内不做位图过滤。
+  12. **4.0 起 `ansi.enabled` 默认 true、`legacy.timeParserPolicy` 默认 `CORRECTED`、`mapKeyDedupPolicy` 默认 `EXCEPTION`**——原稿三条全错。
+- **导览同步**：补了「这一列解决什么问题」一段（说明 CBO 默认关、`parallelismFirst` 默认 true、`hugeMethodLimit` 真实值这三个"不在任何教程第一页"的默认值），重写 12 条目录描述。
+- **验证**：`verify_batch.py` 13 篇（12 + 导览）全 PASS；构建 exit 0；死链 0。
+
+### 整改第 24 批（C 类旧稿扩写第 28-30 组）：Spark 三个撞车列改运维判据口径（30 篇）
+
+这三列与 `读书笔记-spark内核`（48 篇，已定稿）**约 90% 撞车**：
+
+| 专栏 | 撞车的内核分组 |
+| :--- | :--- |
+| `Spark-RDD核心原理解析`（9 篇） | 01_核心概念与基础 + 04_存储与容错机制（缓存） |
+| `Spark-容错与状态管理深度解析`（10 篇） | 04_存储与容错机制 |
+| `Spark-Shuffle与内存管理机制深度解析`（11 篇） | 05_Shuffle核心机制 + 04_存储与容错机制（内存） |
+
+按 Spark 调度列的先例统一改定位为**「执行层的运维判据与故障形态」**，走 survey 口径（8,000-10,000 字 / 350+ 行）：内核系列回答"机制怎么实现的"，这三列回答"它在真实作业里怎么表现、什么阈值、出问题先看哪里"。每篇开头必须写明"机制见内核某篇"并双链路由。
+
+**但其中 5 篇例外**：`容错/04-08`（Streaming checkpoint 结构、WAL/2PC、State Store、RocksDB、TTL）是 `Spark-Structured-Streaming流处理深度解析` 专栏**没有覆盖**的存储与提交层，所以这 5 篇走标准深度口径（12,000-16,000 字）。
+
+| 专栏 | 篇 | 原篇均 | 现篇均 | 图 | 表 |
+| :--- | ---: | ---: | ---: | ---: | ---: |
+| Spark-RDD核心原理解析 | 9 | 4,154 | **9,980** | 43 | 79 |
+| Spark-容错与状态管理深度解析 | 10 | 4,180 | **12,217** | 53 | 92 |
+| Spark-Shuffle与内存管理机制深度解析 | 11 | 5,156 | **9,904** | 53 | 87 |
+
+合计 135,900 → **320,950 字**；Mermaid 8 → **149 张全 dracula**；表 40 → **258 张**。
+
+- **本批纠正的实质错误（择要，其中 3 条推翻了我的任务书口径）**：
+  1. **我把 Flink 的 TTL API 当成了 Spark 的**（我的任务书）：`UpdateType`、`StateVisibility`、`ttl.incrementalCleanup`、`cleanupFullSnapshot`、RocksDB TTL compaction filter 在 Spark 里**全部不存在**。Spark 的 `TTLConfig` 只有一个 `ttlDuration` 字段，续期固定"写即重置"、可见性固定"过期即不可见"，而且**只能用于 `ProcessingTime`**——EventTime 挂 TTL 直接抛 `STATEFUL_PROCESSOR_INCORRECT_TIME_MODE_TO_ASSIGN_TTL`。这一条是本轮我自己犯得最深的一个错。
+  2. **我把 Celeborn 写成了"原 Uniffle"**（我的任务书）：两者毫无继承关系——Celeborn 源于阿里云 EMR（2022-10 进孵化、2024-04 成 TLP），Uniffle 源于腾讯（2025-03 成 TLP）。
+  3. **`spark.sql.execution.offHeap.enabled` 这个键不存在**（我的任务书）：真实键是 `spark.sql.columnVector.offheap.enabled`（2.3.0 起，默认回落到 `spark.memory.offHeap.enabled`）。
+  4. **`spark.memory.fraction` 的版本装反了**：1.6 是 0.75，**2.0 起才是 0.6**——原稿反着写。
+  5. **预留 300MB 没有专用账户**：它只从 M 的基数里扣减，不是"给 SparkContext/BlockManager 的专用内存"。
+  6. **`spark.shuffle.spill` 自 1.6.0 起被忽略、4.0.0 显式 deprecated**——设了只打一条 "Not used anymore"。
+  7. **`OFF_HEAP` 的磁盘位是打开的**：`StorageLevel(true,true,true,false,1)`，堆外池放不下会落 `spark.local.dir`——不是"堆外绝不碰盘"。
+  8. **`unpersist` 默认就不阻塞**（`blocking: Boolean = false`），原稿把默认值说反。
+  9. **File Sink 的原子性不来自 rename**：3.0 起是清单式（`ManifestFileCommitProtocol.commitJob` → `fileLog.add` 一次追加），`addBatch` 首句按 `batchId <= 最新清单号` 整批跳过；"临时文件 + 原子 rename"是 2.x 旧实现。
+  10. **`_spark_metadata` 属于 File sink，不是 File source 的 WAL**；三个"WAL"要拆开（`sources/<id>` / `_spark_metadata` / 已不存在的 `receivedData/`）。
+  11. **Spark 4.x 内置 Kafka sink 的 `commit`/`abort` 是空实现、`useCommitCoordinator=false`**，所以它只能给到至少一次；`transactional.id` 与 `transaction.timeout.ms` 只在 `foreachBatch` 自管事务时才有意义（`transactional.id` 加 partition 后缀是 Flink 的做法）。
+  12. **RocksDB 的 changelog checkpointing 是 3.5 引入且默认关闭**、`minDeltasForSnapshot` 默认 **2** 不是 200。
+  13. **`hash shuffle` 在 4.x 已移除**、`tungsten-sort` 只是 `sort` 的别名、`spark.buffer.pageSize` 没有固定的 64MB 默认（按池容量推算，夹 1MiB-64MiB）。
+  14. **`spark.memory.useLegacyMode` 在 2.0 移除、实现 3.0 删除**，4.x 设置无效。
+- **三个导览全部重写**：RDD 导览补「这一列怎么读」并改 9 条描述；容错导览原本**结构是坏的**（3 个重复表头、文件名用反引号不是 `[[链接]]`），整体重写；Shuffle 导览收敛加粗并重写 11 条描述。
+- **验证**：`verify_batch.py --survey` 三列 33 篇（30 + 3 导览）全 PASS；构建 exit 0（1237 篇 / 7031 文件）；死链 0；`converge_tags.py --apply` 收敛 6 篇（188→186）。
+- **本批合计**：42 篇，181,430 → **498,315 字**。
+
+### 整改第 25 批（C 类旧稿扩写第 31 组）：大数据/Hive（12 篇 + 导览重写）
+
+Hive 这一列没有撞车——仓库里没有 Hive 的内核系列，`大数据/Hadoop/Yarn` 讲的是 YARN 资源调度，与 Hive 的编译/优化/执行栈不重叠。所以按标准深度写足。
+
+| 指标 | 整改前 | 整改后 |
+| :--- | ---: | ---: |
+| 篇幅 | 50,064 字（篇均 4,172） | **177,005 字（篇均 14,750）/ 7,970 行** |
+| Mermaid | 约 5 张 | **66 张全 dracula** |
+| 表格 | 约 24 张 | **96 张** |
+
+- **导览整篇重写**：原导览的目录表**全部没有 `[[链接]]`**（只有纯文本标题），序号还加了粗。已重写为带链接的 12 行表 + 「这一列写什么」+ 版本口径三段。
+- **本批纠正的实质错误（择要，其中 8 条推翻了我的任务书口径）**：
+  1. **Hive 里 CBO 在 RBO 之前跑，而且 RBO 的后置规则能推翻 CBO**（我的任务书写反了，多数二手资料也写反）。溯源：`CalcitePlanner` 是 `SemanticAnalyzer` 子类、只覆写 `genOPTree()`，CBO 在其中完成并把结果回写 AST，之后 RBO 才在 `analyzeInternal` 第 7 步开跑。
+  2. **`hive.cbo.join.reorder.*` 这一组配置在 Hive 里不存在**（我的任务书照搬了 Spark 的 `spark.sql.cbo.joinReorder.*`）；Hive 用 Calcite 的启发式重排、没有 DP 阈值。
+  3. **`HiveJoinCostModel`/`HiveAggregateCostModel` 不是独立类**（我的任务书虚构）：实际是 `HiveCostModel` 的 `getJoinCost`/`getAggregateCost` + 子类 `HiveDefaultCostModel`（MR）/`HiveOnTezCostModel`（Tez）。
+  4. **`SimpleGenericUDF` 这个类不存在**（我的任务书虚构）：javadoc allclasses 在 1.2.2/2.3.9/3.1.3/4.0.1/4.1.0 均无此类；"自动类型推导"实际是**老接口** `GenericUDFBridge` 的反射推导。文中单设一节「考据：一个不存在的类」把核对路径写出来。
+  5. **`DefaultRuleRegrouping` 不存在**：`Optimizer` 是线性 `if (hive.optimize.*)` 注册、单遍 `for` 循环，**没有分组、没有不动点迭代**。
+  6. **`hive.server2.delegation.token.*` 与 `hive.query.redaction` 不存在**（我的任务书引用）：真实开关是 `metastore.cluster.delegation.token.*`，脱敏唯一入口是 `hive.exec.query.redactor.hooks` 且作用域仅 `job.xml`。
+  7. **`hive.optimize.cp` / `hive.optimize.pruner` 在 4.0 已不存在**：`ColumnPruner` 无条件注册、`PartitionPruner` 只受 `hive.optimize.ppd` 控制。
+  8. **`hive.enforce.bucketing` 在 2.x 已由 HIVE-12331 移除**：原稿把它当反模式处置项，对 4.x 已是安慰剂。
+  9. **Hive 4.0 已移除 Hive on Spark**：`hive.execution.engine` 合法取值只有 `mr, tez`（3.1.3 还有 spark）；默认值仍是 `mr`，但注释明写 MR 已弃用。
+  10. **Hive 用 Tez 时中间数据落本地盘（`PERSISTED`）不是内存直传**：边算边传的 `EPHEMERAL` 在 Tez API 里仍是 `@Unstable`。
+  11. **ORC 的 stripe 默认 64MB 不是 256MB**；**Hive 写 Parquet 的默认压缩其实是 UNCOMPRESSED**（parquet-java 取 codec 顺序是 `parquet.compression` → Hadoop 输出压缩 → 无，`hive.exec.compress.output` 默认 false；Snappy 是 Spark 侧的默认）。
+  12. **HS2 的默认 Thrift 服务是 `TThreadPoolServer` 不是 `TThreadedSelectorServer`**；handler 池用 `SynchronousQueue`（无排队），失败形态是 Thrift 直接关连接。
+  13. **`hive.server2.max.concurrent.operations` 与 `hive.server2.async.resultset.*` 不存在**；`session.check.interval` 在 3.1.3 是 6 小时、4.0.1 是 15 分钟（`idle.session.timeout` 从 7 天收到 4 小时）。
+  14. **Hive 的全局编译锁**（`hive.driver.parallel.compilation` 默认 false、`compile.lock.timeout=0` 无限等）——这条解释了"CPU 只用了三成、YARN 空着、但连不上"的因果链，原稿完全没有。
+  15. **`tez.runtime.io.sort.mb` 默认 100 不是 512**；Tez 0.10.2 默认 GC 是 `UseParallelGC` 不是 G1。
+  16. **`hive.skewjoin.key` 的语义是同 key 在 join 算子中出现的行数**，与 Reducer 数无关。
+- **11 张虚构/错误配置键被删除或更正**（含 `hive.optimize.cp`、`hive.optimize.pruner`、`SessionState` 的 session/Operation 归属错位、`TThreadedSelectorServer` 等）。
+- **验证**：`verify_batch.py` 13 篇全 PASS；死链 0；构建 exit 0。
+
+### 体裁裁定：`SRE/故障排查与复盘` 从 C 类清单移出（15 篇）
+
+`scripts/audit_columns.py` 把它列为"篇均 1,945 字、14 篇"的偏薄专栏，但这是**审计工具的口径误判**。
+
+它里面每篇都是一次真实生产事故的复盘或一份 SOP，标题就写明对象与日期（`dn-018-THP-khugepaged-死锁-根因分析-20260506`、`Keepalived认证失败-VRID冲突导致脑裂-20260331`、`NameNode崩溃复盘-QJM写超时与KDC-UDP丢包-20260320`）。这类文档的读者是"下次遇到同样问题时值班的人"，需要的是能快速定位到证据位置，不是论述深度。把 `NameNode长GC事故深度分析` 从 3,751 字扩到 12,000 字，只可能靠补机制背景——而那些背景在 `大数据/Hadoop` 与 `Linux` 专栏里已有承载，补进来就是重复。
+
+**结论：本列改列为「故障复盘与 SOP」体裁豁免，不设字数下限，按「时间线 / 证据链 / 根因 / 改进项」四项检视，只做格式整备。** 裁定理由已写进 `专栏质量审计报告-2026-11-19.md` 的「体裁例外」表，成为第四种体裁口径。
+
+格式整备实际做的事（15 篇）：
+
+- **ASCII 框图全部转 Mermaid**：不止审计工具报的 4 篇，实际有 10 篇含「节点 + 箭头」式框图（`DataNode坏盘` 的 11 节点故障链、`dn-018` 的锁链图、`Hive-Tez` 的三张失败链、`NameNode崩溃复盘` 的 QJM 调用链、`SOP-RHEL8` 的两分支排查流程图等）。**保留了真正属于命令与日志输出的 `│`/`↓`/`←`**（KASAN 调用栈、`/proc` 路径清单、shell 注释）。
+- **修复 7 个文件的围栏未闭合**——这是我自己的过失：先前批量给 Mermaid 补 dracula 用的正则 `re.sub(r'```mermaid\n(.*?)```', ...)`，在围栏本身未闭合的文件里会一路吞到下一个 ``` 为止，把中间的正文裹进代码块。已全部修复，并做全库围栏配对复核。**教训：批量改围栏时必须先验围栏平衡，改完再验一次。**
+- **修 4 处粘贴损坏**：`Redis UDF` 那篇的 `mvn` 行与收尾围栏被并成一行、`limits` 两条并一行、FD 监控脚本 4 行压成 1 行、`curl` 续行与 `fi` 并一行；`Keepalived` 一处解码错字。
+- **tags 与 aliases 逐篇补齐**：`RHEL8` 那篇原本 tags 为空；`cgroups` 这类全站低频词降入 `keywords`。`date` 一律沿用原文（事故复盘有自己的时间属性，不改成入库日）。
+- **3 篇加 `> [!warning] 待补充`**：`Kerberos` 缺改进项与验证判据、`SOP-RHEL8` 缺内核升级回退条件、`SOP-THP` 缺参数恢复与上游服务拉起顺序。**不含编造内容**——缺什么就写缺什么。
+- **双链与围栏复核**：全列 51 条 `[[...]]` 零死链；36 个 Mermaid 块用 `mermaid@11` 实际渲染成 SVG 验证（0 失败，且先做了坏语法的反向自检，排除 parse 宽松）。
+
+### 顺手修掉的全库两个渲染缺陷
+
+审计围栏时发现另外两篇（都不在本批范围内）有围栏不配对，属既有问题，一并修了：
+
+- `云原生/OpenStack/09 Glance 镜像服务——镜像流水线与制作实战.md`：`cloud-init 在开机时按固定顺序跑四个阶段，理解阶段顺序是排障的前提：```mermaid` ——围栏**粘在正文行尾**，导致整个 Mermaid 图不渲染。已拆成独立行。
+- `云原生/OpenStack/15 自动化与开发——CLI、SDK 与脚本化运维.md`：python 块已正常收尾后又多了一个裸围栏，后面的正文被吞进代码块。已删除。
+
+修完做全库复核：**1237 篇围栏 0 不配对**。
+
+### 整改第 26 批（C 类旧稿扩写第 32-33 组）：Linux/内存管理（10 篇）+ Redis进阶教程（10 篇）
+
+两列的处理方式不同，因为它们的旧稿损坏程度不同。
+
+#### `Linux/内存管理`：5 篇只修格式、1 篇小补、4 篇重写
+
+| 篇 | 原字数 | 现字数 | 处理方式 |
+| :--- | ---: | ---: | :--- |
+| 01-04 | 12,033-13,102 | 12,172-13,664 | **只修格式**（整句加粗 4.8%-10.5% → 0.2%-1.4%，正文一字未删） |
+| 05 | 11,288 | 15,978 | 修格式 + 补五块实质内容（水位算术、swappiness、vmstat 判据、回收失败链、cgroup 四档） |
+| 06-09 | 2,218-5,338 | 13,541-15,962 | 按标准深度重写 |
+| 10 | 4,361 | 15,504 | 按标准深度重写 |
+
+这一列的图与表从 0 张 Mermaid、约 24 张表长到 **31 张 Mermaid + 91 张表**。
+
+- **格式修复的验证方式**（这次做严了）：把新旧两版各自 `s/\*\*//g` 后逐字节比对，**三篇 `identical=True`**——除了星号一个字符都没动。这条比"我看着没删"可靠得多，记下来备后续批次用。
+- **本批纠正的实质错误（择要）**：
+  1. **`vm.swappiness` 的扫描比例写反了**：原稿的 `(200 - swappiness)/2` 与它自己的表格矛盾；内核文档的口径是 `swappiness : (200 - swappiness)`（100 时才是 1:1）。而且 `swappiness` 的语义是"换出匿名页与换出文件页的相对 IO 成本假设"，不是"swap 倾向"。
+  2. **水位间距按万分之一伸缩不是千分比**：`watermark_scale_factor=10` 对应 0.1%，且真实公式是 `gap = max(min/4, managed × scale/10000)`，启动初值 `4×√(lowmem_kbytes)`。
+  3. **`oom_score` 有三层**：内部分数 `1000×占比 + adj`（可为负）、对外读数 `(1000+内部分数)×2/3`、`adj` 是**加法**不是乘法。原稿把内部分数当最终值，并说 `-1000` 返回 `ULONG_MAX`（实际是 `LONG_MIN`，语义是"不参与比较"）。
+  4. **K8s 的 `oom_score_adj` 公式用的是 requests 不是 limits**：Guaranteed/NodeCritical `-997`、BestEffort `1000`、Burstable `1000-1000*requests/nodeCapacity`。
+  5. **memcg 无人生还时不 panic 而是僵死**：`out_of_memory()` 返回 false → charge 失败 → 6.x 缺页兜底只打印 `Huh VM_FAULT_OOM leaked out to the #PF handler` 并重试。原稿说"所有进程都豁免 → 内核只能 panic"，那只是全局 OOM。
+  6. **PID 1 不被杀不是因为 `oom_score_adj=-1000`**：真正原因是 `oom_unkillable_task()` 的 `is_global_init()`。
+  7. **容器 working set 不是 active RSS**：是 `memory.current - inactive_file`，且含内核内存与 page cache。
+  8. **`drop_caches` 治不了 swap 抖动**：它只丢文件缓存，对匿名页与 swap 无效，反而制造主缺页。
+  9. **THP 的默认值不能照抄上游 Kconfig**：上游默认 `always`，但发行版多数改 `madvise`，只能读现场 `/sys`。另外 **THP 开启会让 Redis 的降 COW 优化直接失效**（`dismissObject()`/`dismissMemoryInChild()` 在 THP 下直接 return），这是"关 THP"比"省 COW 内存"更硬的理由。
+  10. **`innodb_huge_pages` 是 Percona/MariaDB 的变量名**，MySQL 8.0 是 `large_pages`；JVM 的 THP 路线与显式大页路线是两套独立参数，原稿混用了。
+
+#### `Redis进阶教程`：10 篇全部重写
+
+与已定稿的 `Redis设计与实现`（10 篇，篇均 15,150 字）划界：那列写内部实现（SDS、字典、跳表、事件循环、RDB/AOF、复制、Cluster），这列写**使用与运维**（类型用法、事务/Lua、缓存模式、热大 key、分布式锁、消息队列、Pipeline、模块、生产运维）。机制一律一句结论 + 双链路由。
+
+| 指标 | 整改前 | 整改后 |
+| :--- | ---: | ---: |
+| 篇幅 | 42,030 字（篇均 4,203） | **152,549 字（篇均 15,254）/ 6,610 行** |
+| Mermaid | 约 5 张 | **45 张全 dracula** |
+| 表格 | 约 25 张 | **104 张** |
+
+- **本批纠正的实质错误（择要）**：
+  1. **`MULTI/EXEC` 与 Lua 都没有"全或无"**：它们只提供隔离性（单线程保证不插入），执行期错误是"该条失败、其余照常生效"，没有 undo log。原稿把"单条命令原子"推广成"事务原子"，这条推广链必须拆掉。
+  2. **`lua-time-limit` 不是执行时间上限**，只是"开始报忙"的阈值；超时后只剩 `SCRIPT KILL`（**前提是没写过数据**）与 `SHUTDOWN NOSAVE`。7.0 起改名 `busy-reply-threshold`。
+  3. **`EVALSHA` 的 NOSCRIPT 会在故障转移后集中爆发**：脚本缓存不随数据持久化，7.0 起效果复制使从库缓存天然为空——副本升主后所有 `EVALSHA` 一起失败。
+  4. **Pipeline 省的是 RTT 不是执行时间**，因此加速比取决于 RTT 与执行时间的比值；而且 service 端输出缓冲**普通客户端默认不限制**（`client-output-buffer-limit 0 0 0`），真实风险是涨穿 `maxmemory` 触发淘汰，形成"批顶高水位→淘汰业务数据→回源→水位更高"的自伤回路。
+  5. **`XAUTOCLAIM` 接管后，原消费者的迟到 `XACK` 会抹掉接管者的 PEL 记录**——"B 崩溃 + A 迟到确认"才触发的静默丢消息，本列 07 篇写进了边界。
+  6. **Stream 的 PEL 与裁剪是两本脱钩的账**：PEL 不受 `MAXLEN` 约束、不是独立键所以内存策略对它无效；这是最隐蔽的内存泄漏。
+  7. **`PUBLISH` 返回 0 是正常结果**（没有订阅者），不是投递失败。原稿把它当"2 个订阅者收到了"的语义讲反了。
+  8. **Redis 8.0 起 RediSearch/RedisJSON 并入内核**（Redis Stack 2025-05 的 8.0 GA 合并），"要搜索先装 Stack"只在 8.0 前成立。
+  9. **`--bigkeys` 不是"会阻塞"而是"总量代价"**：四千万键约 40 万批、`-i 0.1` 要跑十几小时；真正长阻塞的是 `MEMORY USAGE SAMPLES 0`。
+  10. **`fencing token` 的号源必须跨故障单调**：`INCR` 在故障转移后可能回退，号源本身得靠 DB 序列/etcd revision/zxid。
+- **一个系统性缺陷值得单独记**：这批原稿里有 **5 篇的"思考题"是从相邻篇串过来的**（02 存的是分布式锁的题、05 存的是 HLL/Bitmap 的题、06 存的是 GEO 的题、07 存的是客户端连接池的题、09 存的是 Function/ACL 的题）。说明早期的批量生成把思考题写错了位置。已在各篇换成贴合本篇主题的 5-6 条。
+- **验证**：`verify_batch.py` 两列 22 篇（20 + 2 导览）全 PASS；死链 0；全库 1237 篇围栏 0 不配对；`converge_tags.py --apply` 收敛 4 篇（185→184）；构建 exit 0。
+
+### 整改第 27 批（C 类旧稿扩写第 34-35 组）：Nginx（15 篇）+ Elasticsearch（8 篇）
+
+两列都没有撞车：仓库里没有第二份 Nginx 专栏，`云原生/服务网格/03 Envoy` 只在与 Nginx 对照时引用；ES 与 `中间件/Milvus` 的分界是"通用搜索引擎 + 向量检索" vs "专用向量库"，交叉处一句话划界。所以都按标准深度写足。
+
+| 专栏 | 篇 | 原篇均 | 现篇均 | 行数 | 图 | 表 |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 中间件/Nginx | 15 | 4,245 | **15,109** | 10,413 | 1→80 | 约 30→145 |
+| 中间件/Elasticsearch | 8 | 4,337 | **15,415** | 5,121 | 0→44 | 约 20→69 |
+
+合计 98,371 → **349,970 字**；Mermaid **1 → 124 张**；表 **50 → 214 张**。
+
+- **两个导览都重写了**：Nginx 导览原本有 ASCII 树状图、加粗 17.8%、还引了一个未核实的 W3Techs 占比数字，已改成带 `[[链接]]` 的六部分地图；ES 导览同步更新。
+- **本批纠正的实质错误（择要，其中 9 条推翻了我的任务书口径）**：
+  1. **`lua-resty-limit-traffic` 不依赖 cosocket**（我的任务书说它依赖）：它只用 `lua_shared_dict`，所以计数器能在 `log_by_lua` 里用。统一判据改成"看 `lua-resty-*` 源码里有没有 `ngx.socket`/`ngx.sleep`"。
+  2. **`limit_req` 的 `delay=n` 语义写反了**（我的任务书）：不是"前 n 个延迟、超过立即拒"，而是"积压不超过 n 时不延迟、超过才排队"。源码三处 `burst×1000`、`delay×1000`、`nodelay→极大值` 可复核。
+  3. **`rate=10r/s` 与 `60r/m` 不等价**：后者内部值是 1000（1r/s），前者 10000，差十倍。
+  4. **FST 自 7.3 起走 off-heap 不是常驻堆**（我的任务书）：`hybridfs` 对词项字典做 mmap，`FieldReader` 注释明写 "Initialize FST always off-heap"。而且 **Lucene 的块树索引显式关闭后缀共享**（`suffixRAMLimitMB(0)`），"FST 靠共享后缀压缩词典"这个流行说法套在 Lucene 上不成立。
+  5. **translog 是在 Lucene 索引处理之后、确认之前写的**（我的任务书说"先写 translog 再写 buffer"，方向反了）。
+  6. **`_primary` preference 在 8.x 已移除**（6.1 弃用、7.0 移出）；"写后读不到"的根因是 refresh 默认 1 秒，`_primary` 本来就治不了。
+  7. **`$upstream_response_time` 包含建连**（我的任务书说"建立连接后"）：它与 `connect_time` 共用同一个 `start_time`。
+  8. **`$request_time` 包含慢速上传**（我的任务书说不含请求体）：`r->start_sec` 在请求结构体分配（读到首批字节）时就记录。
+  9. **"请求带 Authorization 或 Cookie 默认不缓存"不成立**（我的任务书）：核 `ngx_http_upstream_cache()` 源码，缓存入口只检查方法掩码、bypass 谓词与 key，没有身份头判断。那是配置模板的惯例而非语言行为。
+  10. **`real-ip` 插件优先级是 23000 不是 2931**；`cors` 是 4000 不是 4；`authz-casbin` 是 2560 不是 600。
+  11. **APISIX 3.x 的 `admin_listen` 默认是 `0.0.0.0:9180`**，安全来自 `allow_admin` 白名单，不是"默认只监听 127.0.0.1"。
+  12. **APISIX 3.x 网关本体实例对等、不做互选主**；选主在 Ingress Controller（K8s Lease）侧。
+  13. **BM25 是 ES 5.0 起默认**（不是 7.0）；7.0 换的是 `hits.total` 的 `relation` 结构。
+  14. **`moving_avg` 在 8.0 已移除**（6.4 弃用）、**`Rollup` 在 8.11 已弃用**。
+  15. **`accept_mutex` 自 1.11.3 起默认关闭**、**`keepalive_requests` 自 1.19.10 起默认 1000**、**`worker_cpu_affinity auto` 是 1.9.10 才支持的**。
+  16. **`alias` 路径穿越的正则防御是死规则**：进入 location 的 `$uri` 已经把 `..` 折掉了，所以 `location ~* (\.\./)` 永远不命中。真正的穿越只可能由 `alias` 前缀替换"造"出 `..`。
+  17. **`X-XSS-Protection` 已过时**：现代浏览器移除了 XSS Auditor，OWASP 建议设 `0` 或不下发。
+  18. **"`no live upstreams` = 连接数耗尽"是错的**：它表示组内 peer 全部被标记不可用（摘除/超时），与连接数无关。
+  19. **`grep "502" error.log` 找不到东西**：502 是 access 日志的 `$status`，error_log 里通常没有这个字样。
+- **一处特别值得记的验证方式**：写 07 篇 location 匹配的那个 subagent，**在 macOS 上用源码编译了 nginx 1.27.4（`--with-debug`、系统 PCRE2）来做实测**，而不是引用二手资料。它据此纠正了"精确匹配是哈希表 O(1)"（实为三叉查找树）、"正则 location 内不能再嵌套"（实测可嵌）、"子层 `^~` 能赢外层正则"（实测输给外层正则）等几条。这是本批质量最高的一次取证。
+- **验证**：`verify_batch.py` 两列 25 篇（23 + 2 导览）全 PASS；死链 0；全库围栏 0 不配对；`converge_tags.py --apply` 收敛 5 篇（184→183）；构建 exit 0。
+
+### 整改第 28 批（C 类旧稿扩写第 36-37 组）：Linux/文件系统（10 篇）+ Milvus（6 篇）
+
+| 专栏 | 篇 | 原篇均 | 现篇均 | 行数 | 图 | 表 |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Linux/文件系统 | 10 | 4,364 | **15,141** | 6,233 | 0→51 | 约 28→90 |
+| 中间件/Milvus | 6 | 4,531 | **14,728** | 3,540 | 0→30 | 约 18→61 |
+
+合计 70,826 → **239,785 字**；Mermaid **0 → 81 张全 dracula**；表 **46 → 151 张**。
+
+- **`Linux/文件系统/01` 只修格式**（14,314 字已达标，加粗 4.0% 偏高）。这篇的验证做得最严：去加粗前后 `s/\*\*/g` 逐字节比对 + sha256 一致，**文件恰好少 92 字节 = 23 个 span × 4 个星号**，正文一个字符没动。
+- **处理了一处撞车**：`Linux/文件系统/04 Page Cache` 与已定稿的 `Linux/内存管理/04 Page Cache` 是同一主题。划界为「内存账 vs 文件系统承诺链」——内存那篇写 `MemAvailable`、脏页水位、`Cached` 含 tmpfs；文件系统这篇写 per-BDI 回写线程、四个同步接口的承诺矩阵、`fsync` 的六个失守位置。两篇开头互相声明分工。
+- **本批纠正的实质错误（择要，其中 5 条推翻了我的任务书口径）**：
+  1. **`sync()` 在 Linux 上比 POSIX 更强的保证**（我的任务书说它"不保证等待设备缓存"）：man 7 sync(2) 明确 "Linux waits for I/O completions"，真实缺口在别处——返回 `void`、错误不可见、按文件系统逐个遍历导致遍历窗口之后的并发写不在本轮覆盖内。
+  2. **`MAP_SHARED` 的脏页 `fsync` 是管得到的**（我的任务书说 mmap 不归 fsync 管）：脏页就在同一个 `address_space` 上；真正不受覆盖的是 `MAP_PRIVATE` 的 CoW 页与 `fsync` 返回后的并发重脏化。而 `msync(MS_ASYNC)` 自 2.6.19 起近似 no-op。
+  3. **`/sys/fs/xfs/*/stats/*` 里没有 `prealloc_extents`**（我的任务书要求观察它）：核过主线 `fs/xfs/xfs_stats.c` 的字段表确认无此行，改为 `xfs_spaceman prealloc` 与 `xfs_bmap -vp` 的 `u` 标记。
+  4. **建索引不是 DataNode 干的**（我的任务书说"DataNode 上跑"）：封段/写 binlog 在 DataNode，建索引任务由 **IndexNode** 执行。
+  5. **Milvus 的 `nlist` 是段级的不是全表的**：索引按 sealed segment 构建，所以 `4√N` 里的 N 是段内向量数（512MB 段约 17 万条），按全表 1 亿算出的 `nlist≈40000` 与文档建议区间 `[32,4096]` 差一个数量级。
+  6. **CFQ 从未进入 blk-mq**，它随 legacy 单队列块层整体退役（4.21/5.0 同一版本改号前后）；blk-mq 是 **3.13（2013）** 不是 5.0。网上大量「CFQ vs Deadline」的对比文章已经过时。
+  7. **`barrier`/`nobarrier` 在 v4.19 已被移除**，现代内核只警告并忽略；屏障已下沉到块层的 `REQ_PREFLUSH`/`REQ_FUA`。
+  8. **`ext4` 的 `data=journal` 已被内核文档标记废弃**（计划 2028-01 移除），且禁用 delalloc 与 O_DIRECT。
+  9. **`ext4` 的 `i_mode` 位值**：原稿写成 `0100/0040/0120` 这类八进制截断混二进制的值，全错；已按 `S_IF*` 真值改为二进制。
+  10. **`dataCoord.segment.sealProportion` 默认是 0.12 不是 0.75**；`queryNode.cache.cacheSize` 在 2.3 起改名 `queryNode.cache.memoryLimit`（2 GiB）；`queryNode.segmentLoadThreadPoolSize` 与 `QUERY_NODE_USE_MMAP` 都不存在。
+  11. **Milvus 不支持主键去重**：`insert` 重复主键会产生两份都可检索的实体，只有 `upsert` 有覆盖语义。
+  12. **`range search` 的度量方向分层**：L2/JACCARD/HAMMING 是 `range_filter ≤ d < radius`，IP/COSINE 是 `radius < s ≤ range_filter`，写反则空集或全量。
+  13. **Milvus 默认一致性等级是 Bounded Staleness 不是 Session**；`WeightedRanker` 内部用 arctan 归一化，不是"需要自己归一化"。
+- **两个导览都更新了**：文件系统导览重写 10 条描述；Milvus 导览原本把序号加粗且缺定位段，一并修掉。
+- **验证**：`verify_batch.py` 两列 18 篇（16 + 2 导览）全 PASS；死链 0；`converge_tags.py --apply` 收敛 17 篇（183→179）；构建 exit 0（1237 篇 / 7008 文件）。
+
+### 整改第 29 批（C 类旧稿扩写第 38-40 组）：MySQL 两列（19 篇）+ 范文列格式整肃（15 篇）
+
+这一批做了三件事，其中第三件是**推翻了我自己上一轮的一个判断**。
+
+#### 一、`MySQL架构与底层原理`（9 篇）：撞车列改口径
+
+仓库里其实有**四个** MySQL 专栏。开工前核对发现 `读书笔记-Mysql内核架构`（19 篇）已经是每篇 12,000+ 字的定稿，而 `MySQL架构与底层原理` 与它重合 **8/10**：全局架构↔01、Buffer Pool↔04、日志/WAL↔07+15、MVCC↔12、索引结构↔11、行格式↔10、隔离级别↔12、复制↔13。只有「查询优化器」是那边没有的。
+
+所以按 Spark 调度的先例改定位，走 **survey 口径 8,000-10,000 字**，写成「DBA / 运维视角的运行期判据」——机制一句结论 + 双链，重点给指标名、阈值与"先动哪个旋钮"。三列新分工：
+
+| 专栏 | 写什么 | 篇数 |
+| :--- | :--- | ---: |
+| `读书笔记-Mysql内核架构` | 源码级机制（已定稿） | 19 |
+| `MySQL架构与底层原理` | DBA 运行期判据（本批改口径） | 9 |
+| `MySQL进阶使用` | 应用开发者视角（本批重写） | 10 |
+
+结果：4,408 → **9,851 字/篇**（区间 8,000-10,000），图 0→50，表 28→81。
+
+#### 二、`MySQL进阶使用`（10 篇）：全部重写
+
+4,419 → **15,742 字/篇**（标准深度 12,000-16,000），图 0→52，表 24→108。与架构列的分工举例写进了导览：同一个话题两列问的问题不同——索引那列问"碎片率怎么体检"、这列问"复合索引列序怎么排"。
+
+- **本批纠正的实质错误（择要，其中 6 条推翻了我的任务书口径）**：
+  1. **`WAIT FOR EXECUTED` 这个语句不存在**（我的任务书）：核 8.0.27/8.4 release notes 与手册全文 grep 均为 0 命中。真实实现是 **`WAIT_FOR_EXECUTED_GTID_SET()`**（5.7.5 起）；8.4 移除的是 `WAIT_UNTIL_SQL_THREAD_AFTER_GTIDS()`。
+  2. **`DATETIME` 是 5 字节不是 8 字节**：8 字节是 `DATETIME(6)`。
+  3. **utf8mb4 下 `VARCHAR` 长度前缀的分界在 63/64 不是 255/256**：因为前缀按**最大字节长度**算，`VARCHAR(63)` 是 252 字节、`VARCHAR(64)` 是 256 字节。"255/256 分界"只在 latin1 下成立。
+  4. **`ALGORITHM=INSTANT` 的行版本上限 64 是贯穿 8.0.12 至今的口径**，不是"8.0.29 之前有"；8.0.29 起加的是 `TOTAL_ROW_VERSIONS` 跟踪与任意位置增删列。
+  5. **`Innodb_history_list_length` 在社区版 `SHOW GLOBAL STATUS` 里没有**（那是 Percona 分支的变量名）：正确入口是 `INNODB_METRICS.trx_rseg_history_len`。
+  6. **`Innodb_adaptive_hash_*` 状态变量在 8.0 不存在**；`innodb_additional_mem_pool` 已于 5.7 移除（8.0 残留会导致启动失败）。
+  7. **`innodb_undo_tablespaces` 在 8.0.14 起不可配置**，「在线增加 undo 表空间」要走 `CREATE UNDO TABLESPACE`，不是调那个变量。
+  8. **`READ UNCOMMITTED` 在 InnoDB 里是空档位**——实现上等同 RC，不存在真正的脏读。
+  9. **「RC 没有间隙锁」要打折**：外键检查与唯一键重复检查仍保留间隙锁。这条很重要，否则会把"改 RC 就能消除死锁"当结论。
+  10. **`sys.schema_table_statistics` 的列是 `rows_fetched` 不是 `rows_read`**（核过 sys 视图定义）。
+  11. **`information_schema.INNODB_LOCKS` / `INNODB_LOCK_WAITS` 在 8.0 已移除**，必须改用 `performance_schema.data_locks` / `data_lock_waits`。原稿的 SQL 在 8.0 会直接报错。
+  12. **`--master-data` 在 8.0.26 起改名 `--source-data`**；`mysqlpump` 8.0.34 弃用、8.4 移除。
+  13. **`Sending data` 状态不代表网络传输**：它是"读行+处理+发送"三合一，网络是 `Sending to client`。
+  14. **`max_length_for_sort_data` 8.0.20 起废弃**，不再决定排序路径。
+  15. **`log_slow_extra` 与 `log_output=TABLE` 互斥**：附加字段只对 `FILE` 目的地生效，选表等于放弃 8.0 最实用的诊断能力。
+  16. **`min_examined_row_limit` 对所有慢查询生效**，不只是"未走索引"那一路——它会把"等锁五秒只扫一行"这类最需要现场的慢查询一起滤掉。
+- **`log_queries_not_using_indexes` 的正确用法**写清了：它记录"没走索引"，而小表全表扫是正常的，直接开会淹没真问题；必须配 `min_examined_row_limit`。
+- **验证**：`verify_batch.py` 两列 21 篇（19 + 2 导览）全 PASS（架构列带 `--survey`）；死链 0；标签收敛 changed 0（说明本批用的都是已有受控标签）；构建 exit 0。
+
+#### 三、范文列（`分布式架构/数据密集型系统架构实战`，14 篇）：整肃格式，并修正上一轮的判断
+
+上一轮我把它判成「第五种体裁：范文规格 7,000-9,000 字」，理由是 `AGENTS.md` 点名的范本 `11 数据拆分之困` 实测 7,940 字。这个判断的**字数部分成立，但我说它"只做格式整改、正文不动"，实际漏了两类真缺陷**：
+
+1. **加粗 6.5%-11.4%**（整句整段加粗）。已按「超过 12 个汉字去星号、文字全保留」+ 密度收到 1.4 处/千字，**去星号 185+ 处，逐篇 sha256 校验 `s/\*\*/g` 后与原文完全一致——零删字**。
+2. **结语是纯复述**：`## 总结` 写成"核心知识可以归纳为以下主线：1. … 8. …"，逐条复述各章结论，占全文 10.7%-14.2%。这正是 `AGENTS.md` 明令的「结语灌水」。已改写为"收敛到一两个取舍判断"，现占 3.0%-5.9%。14 篇里 `> [!info] 专栏结语`（292 字整栏复述）也被清掉了。
+3. **`## 摘要` / `> [!abstract] 摘要` 不符合骨架规范**，统一改成 `**摘要：**` 加粗段落，并把"文章从 X 切入、讲透 Y、最后给出 Z"这种目录式摘要改写成"问题 → 关键判断 → 落点"。
+4. **全列 15 篇 Mermaid 都没有 dracula**（含被点名的范本第 11 篇）——补了 **78 处** `%%{init: {'theme': 'dracula'}}%%`。
+5. **全角感叹号 2 处**已修。
+
+**所以我上一轮说的"这一列只有加粗一个问题"是错的。**体裁口径（不参与字数扩写）成立，但格式整改的范围要包含结语、摘要形态与 Mermaid 主题。
+
+一个仍然存在、且**我决定不修**的偏差：整改后部分篇目行数掉到 478-498，低于 500。原因是删掉 8-16 条结语复述项的机械结果，正文一行没少。要回到 500+ 只能灌水，与整改目标冲突，所以保留现状——这一列的行数口径按"约 480-580 行"记，不按 500 硬卡。
+
+### 整改第 30 批（C 类旧稿扩写第 41-42 组）：Java/OOP设计模式（10 篇）+ Hadoop/Yarn（9 篇）
+
+| 专栏 | 篇 | 原篇均 | 现篇均 | 行数 | 图 | 表 |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Java/OOP设计模式 | 10 | 4,706 | **14,657** | 8,207 | 0→54 | 约 20→92 |
+| 大数据/Hadoop/Yarn | 9 | 4,806 | **15,067** | 5,554 | 0→45 | 约 22→99 |
+
+合计 90,314 → **282,185 字**；Mermaid **0 → 99 张**；表 **42 → 191 张**。
+
+- **两列都改掉了原来的"图鉴式"写法**：OOP 列原稿是"动机+代码+用途"的模式图鉴，改成按"这个模式封装的变体点是什么、不这样写会退化成什么样、什么时候不该用"组织；YARN 列原稿是架构介绍，改成"一次应用提交会依次碰到什么"的判据链、加一条故障排查顺序表放进导览。
+- **本批纠正的实质错误（择要，其中 6 条推翻了我的任务书口径）**：
+  1. **`yarn.nodemanager.resource.memory.overhead` / `cgroups.memory-allocation-type=hard` 不存在**（我的任务书）：真正生效的是 `CgroupsLCEResourcesHandler`；容器上限就等于申请量，Spark 的 `memoryOverhead` 已并入申请。
+  2. **CPU 硬限的开关不是 `cpu-hard-limit-enable`**（我的任务书）：3.3.5 与 3.5.0 文档均无此项，真正开关是 `strict-resource-usage`，拼错名会被**静默忽略**。
+  3. **cgroups v2 支持是 3.5 起不是 3.4**（我的任务书）：3.4.0 文档无 v2 条目，3.5.0 才出现 `v2.enabled`/`v2.mount-path`；`YARN-11669` 仍在 In Progress。
+  4. **`spark.yarn.am.memory` 是 client 模式用的**（我的任务书写成 cluster 模式）：cluster 模式用 `spark.driver.memory` + `spark.driver.memoryOverhead`。
+  5. **`yarn.app.mapreduce.am.max-attempts` 与 `yarn appattempts` 都不存在**（我的任务书）：正确是 `mapreduce.am.max-attempts` 与 `yarn applicationattempt -list`。
+  6. **`RMAppLivelinessMonitor` 在 3.3.6 不存在**（我的任务书）：RM 侧只有两个 `AMLivelinessMonitor` 实例。
+  7. **`yarn.scheduler.minimum-allocation-mb` 默认是 1024 不是 512**——这直接改变了 Spark executor 的内存换算表（4g 堆 → 4506MiB → 规整到 5120MiB）。
+  8. **`max-completed-applications` 在 3.3.x 是 1000 不是 10000**（2.x 才是 10000）；而且 **`-1` 不是"永不清理"**——清理循环条件恒真，会在链表上先撞下标越界，两个循环都没跑完，内存只增不减。
+  9. **AM 发现 RM 切换不是靠 `Reboot` 指令**：`AMCommand.AM_RESYNC/AM_REBOOT` 在源码里已废弃且非主路径；真实机制是 RM 重启后注册表为空，旧 AM 下次 `allocate` 收到 `ApplicationMasterNotRegisteredException`，MR 侧固定三步重新注册。
+  10. **`work-preserving-recovery` 的键名末尾是 `enabled` 不是 `enable`**，写错即静默忽略；且它默认 true 但还需 `recovery.enabled=true` 才生效。
+  11. **Container 的实际状态名与我 brief 里写的不一致**：3.3.6 是 `LOCALIZING`→`SCHEDULED`→`RUNNING`→`EXITED_WITH_SUCCESS/FAILURE`→`DONE`，且 `CONTAINER_RESOURCES_CLEANINGUP` 在转换表里**没有入边**——照状态名搜日志搜不到是正常的。
+  12. **`yarn.nodemanager.delete.threads` 真名是 `delete.thread-count`**（默认 4），写错静默用默认值。
+  13. **`FileSystemRMStateStore` 不能用于 HA**：只有 `ZKRMStateStore` 支持 fencing；文件系统版两个 RM 各写各的。
+  14. **LCE 在非安全模式下默认以 `nobody` 运行**（`nonsecure-mode.limit-users` 默认 true），所谓"用户级文件隔离"并不成立。
+  15. **`java.util.Observer` 是 JDK 9 已弃用**，而且它的实际遍历顺序与自己的 javadoc 矛盾（`javap -c` 实测为逆序）。
+  16. **`ThreadLocalRandom` 根本没走 `ThreadLocalMap`**：它是静态单例 + `Thread.threadLocalRandomSeed` 字段 + `Unsafe`，绕开 `Random` 的 `AtomicLong` CAS。
+  17. **`StringBuilder` 不是 GoF 的 Builder、`HashMap` 不是享元、`ClassLoader` 双亲委派不是责任链**——这三条是"给 JDK 类贴模式标签"的典型误读，都单列纠正了。
+  18. **`java.io.File` 是组合模式的失败样本**：不只是 `list()` 返回 `null`，而是复合语义对 `size`/`delete`/`list` 全部不成立（实测目录 `length()` 报 96 字节、非空目录 `delete()` 静默 false）。
+- **一处特别扎实的取证**：YARN 04 篇的状态机是拿 Hadoop 3.3.6 的 javadoc 与 `ContainerImpl.java` 源码逐项对出来的——`ContainerState` 17 个值、`RMContainerState` 9 个值、`ContainerExitStatus` 的 -100~-109、`ContainerLaunch.java` 的 `.exitcode` 回收，全部落到方法级。
+- **验证**：`verify_batch.py` 两列 21 篇（19 + 2 导览）全 PASS；死链 0；`converge_tags.py --apply` 收敛 6 篇（179→178）；构建 exit 0（1237 篇 / 6947 文件）。
+
+### 整改第 31 批（C 类旧稿扩写第 43-44 组）：Leveldb（5 篇）+ Java/SpringCore（10 篇）
+
+| 专栏 | 篇 | 原篇均 | 现篇均 | 行数 | 图 | 表 |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 中间件/Leveldb | 5 | 5,105 | **9,691**（survey 口径） | 2,049 | 0→24 | 12→38 |
+| Java/SpringCore | 10 | 5,164 | **14,480** | 8,202 | 0→51 | 22→92 |
+
+合计 77,165 → **193,262 字**；Mermaid **0 → 75 张**；表 **34 → 130 张**。
+
+#### 一、`Leveldb`：又是一个撞车列，改口径
+
+`深入浅出存储引擎/09 LevelDB 源码剖析——MemTable、SSTable 与 Compaction.md` 已经 **13,659 字定稿**，一篇覆盖了本列 01-04 的全部内容。所以本列不再写源码剖析，改走 **survey 口径 8,000-10,000 字**，定位成 **RocksDB 在生产里的调优与选型判据**：三笔放大账怎么算、写停怎么发生、读放大怎么被压下去、compaction 策略怎么选、`rocksdb.stats` 怎么读。
+
+一个遗留：五篇的**文件名保持原样**（`02 MemTable 与 SkipList.md` 等），但 frontmatter 的 `title` 已改成新定位（如「写缓冲的容量与 flush 时机——写停是怎么发生的」）。这样 `[[双链]]` 不断，页面标题也读者友好。五篇 + 导览保持一致。
+
+- **本批纠正的实质错误（其中 3 条推翻了我的任务书口径）**：
+  1. **`optimize_filters_for_hits` 是"最后一层不建过滤器"**（我的任务书说"只对最后一层建"）：官方注释是 *not store filters for the last level*。
+  2. **写放大的几何级数我用错了**（我的任务书）：`1/(1-1/T)` 是**容量比/空间放大下界**（T=10 → 1.11），不是重写次数；单层重写次数要按"层容量 ×T → 停留时间 ×T → 期间被上层推 T 次"的因果链单独推。
+  3. **`@Configuration` 的 `proxyBeanMethods` 在 Framework 6.2 javadoc 里默认仍是 `true`**（我的任务书说 Spring 6 默认 false）：默认关闭的是 Boot 的 `@AutoConfiguration`（它自带 `proxyBeanMethods = false`）。
+  4. **`block_cache_type` 已不存在**：旧 `ClockCache` 因未修复缺陷被移除，`NewClockCache` 现在只返回 LRU；要 CLOCK 语义得用 `HyperClockCacheOptions`。
+  5. **`bloom_locality` 现在只对 PlainTable 前缀 bloom 生效**，不是 block-based table 的分块开关。
+  6. **`max_background_compactions` / `max_background_flushes` 在 5.x 起已废弃**，语义变成"设置任一即合成 `max_background_jobs = 两者之和"——照原稿的建议值配会拿到比默认更小的并发。
+  7. **BS 树写放大不能按"记录字节 ÷ 页大小"算**（那会算出 40 倍的错数），必须摊到整页记录头上，实际是 2-4 倍。
+  8. **`universal` 的 `max_size_amplification_percent` 默认 200 的语义是"三倍"**（100 字节的库最多占 300 字节），不是常见资料说的"2 倍"。
+  9. **RocksDB 8.4 起 `level_compaction_dynamic_level_bytes` 默认开启**，这改变了容量推导规则。
+
+#### 二、`SpringCore`：机制视角，与另外两列划清
+
+仓库里有三个 Spring 相关列，边界写进了导览：
+
+| 专栏 | 写什么 |
+| :--- | :--- |
+| **`SpringCore`（本批）** | **机制**：容器内部怎么实现、回调在第几步、源码级调用链 |
+| `Java/SpringBoot`（10 篇，已定稿） | 应用层怎么用：启动、自动装配、条件装配、内嵌容器、配置、Starter、Actuator、日志、测试、3.x |
+| `Java/OOP设计模式/09`（已定稿） | **模式视角**：框架为什么必须这么用 |
+
+- **本批纠正的实质错误（其中 5 条推翻了我的任务书口径）**：
+  1. **`@AfterReturning` 实际在 `@After` 之前执行**（我的任务书写成 `@After` 在前）：`ReflectiveAspectJAdvisorFactory` 的比较器确实把 `@After` 登记在前面，但同文件注释明确说明 `@After` 走 `finally` 块，所以实际调用在后面。这条反直觉结论成了 06 篇的核心论证。
+  2. **「`transactionInfoHolder` 这个 ThreadLocal 栈是嵌套传播的基础」是错的**（我的任务书）：栈只记"这一层调用的属性与管理器是谁"，**判断有没有事务靠资源侧 `isExistingTransaction`**（查 `ConnectionHolder.isTransactionActive()`）。用双 `DataSource` 的反例可以证伪。
+  3. **`@Aspect` 不落到 `AspectJExpressionPointcutAdvisor`**（我的任务书）：那个类是"表达式 + 现成 Advice"，实际产物是 `InstantiationModelAwarePointcutAdvisorImpl`。
+  4. **自动代理走 `ProxyFactory` 不是 `AspectJProxyFactory`**：后者是编程式入口，两者收归同一层 `AdvisedSupport`。
+  5. **`spring-web` 本身不依赖 `spring-context`**：它只依赖 core/beans + micrometer-observation，依赖 context 的是 `spring-webmvc`。
+  6. **原稿的模块依赖图有四条边方向画反**：`context→aop`、`context→expression`、`jdbc→tx`、`context→web` 全错，实际是 `aop→context`、`expression→context`、`tx→jdbc`。
+  7. **`@Async` 与 `@Transactional` 在循环依赖上表现不同**：前者走 `AbstractAdvisingBeanPostProcessor`（实现了 `SmartInstantiationAwareBeanPostProcessor` 但**没重写 `getEarlyBeanReference`**），所以必抛 "in its raw version"；后者走 `AbstractAutoProxyCreator`（重写了），能解。
+  8. **`getSingleton(beanName)` 单参等价于 `allowEarlyReference=true`**；真正传 `false` 的是 `doCreateBean` 末尾那处。
+  9. **`"NESTED 在部分数据库退化为 REQUIRED"是错的**：驱动不支持保存点时抛 `NestedTransactionNotSupportedException`，不会静默退化。
+  10. **`"CGLIB 无法感知接口上的注解"是错的**：那是属性源查找顺序（`getMostSpecificMethod` 命中实现类方法）的问题，与代理类型无关。
+  11. **「容器只缓存 32 个 SpEL 表达式」是错的**：6.x 是 `new ConcurrentHashMap<>(256)` 且**无淘汰无上限**。
+  12. **`#{}` 不是 SpEL 语法**：它是 `StandardBeanExpressionResolver` 的模板前后缀，直接 `parseExpression("#{1+1}")` 会抛 EL1043E。
+  13. **`@Value` 失效的原因不是"占位符配置器没注册"**：没有配置器时缺键会**静默注入字面量 `${key}`**，反而不会失败。
+  14. **`@Value` 在构造器参数上有效**，失效的是构造器**体内**读尚未注入的字段。
+  15. **`is not eligible for getting processed by all BeanPostProcessors` 的观测窗口只在步骤 7**：步骤 6（BFPP 阶段）提前创建的对象**连警告都没有**。
+- **本批的实测取证**：09 篇 SpEL 在本机（Spring 6.2.18 / OpenJDK 17 / Apple M4）实测了全部语言示例与报错码——解析 430ns、求值 270-300ns、resolver 命中 222ns、冷路径 3.9μs（约 18 倍）、解释 46ns vs 编译 1.9ns（约 24 倍）、编译拐点约 3,000 次求值。05 篇实测了 500 个非循环 Bean 下 `getEarlyBeanReference` 调用 **0 次**，以及 `@Lazy` 调用 8.5ns vs 直连 0.24ns。
+- **验证**：`verify_batch.py` 两列 17 篇（15 + 2 导览）全 PASS（Leveldb 带 `--survey`）；死链 0；`converge_tags.py --apply` 收敛 9 篇（178→176）；构建 exit 0（1237 篇 / 6943 文件）。
+
+### 整改第 32 批（C 类旧稿扩写第 45-46 组）：大数据/安全与认证（8 篇）+ Hadoop/HDFS（10 篇）
+
+| 专栏 | 篇 | 原篇均 | 现篇均 | 行数 | 图 | 表 |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 大数据/安全与认证 | 8 | 5,438 | **14,961** | 5,351 | 0→42 | 约 22→78 |
+| 大数据/Hadoop/HDFS | 10 | 6,003 | **15,283** | 6,244 | 0→53 | 约 28→99 |
+
+合计 103,534 → **272,525 字**；Mermaid **0 → 95 张**；表 **50 → 177 张**。
+
+- **两列都按"链路"重组**：安全列原稿是八个独立的技术介绍，改成「一个请求带着身份穿过大数据平台的八跳」——导览里放了一条最有用的单条经验（401 = 身份没认出来、403 = 认出来但没权限）和四类例外的分流；HDFS 列原稿是架构介绍，改成「一次读/写会依次碰到什么」，导览里放了一条故障排查顺序表。
+- **本批纠正的实质错误（择要，其中 6 条推翻了我的任务书口径）**：
+  1. **HDFS-8286 跟锁无关**（我的任务书说它把路径操作改成细粒度锁）：那是一个 2015 年提出、至今 Open 的 JIRA，标题是 *Scaling out the namespace using KV store*，讨论元数据存储介质。而且 **`FSDirWriteLock` 在 branch-2.7/2.8/3.0/3.3/3.4/trunk 全都不存在**，3.4/trunk 的 `FSDirectory` 注释明写 `dirLock` 已移除、统一用 `namesystem.fsLock`。
+  2. **`dfs.datanode.block-pool.id` 不存在**（我的任务书）：块池 ID 不是配置输入，是注册响应里的 `NamespaceInfo` 返回值；盘上的 `BP-` 目录只是物证。
+  3. **`dfs.namenode.sync.edits` 不存在**：改用真实存在的 `dfs.namenode.edits.noeditlogchannelflush`，并标注它是老版本键、禁止上生产。
+  4. **`dfs.namenode.soft-lease-limit-ms`/`hard-lease-limit-ms` 键名不准**：硬限在 HDFS-14758 后是 `dfs.namenode.lease-hard-limit-sec`，**默认从 1 小时降到 20 分钟**。
+  5. **`ranger.plugin.<svc>.enabled` 不存在**：插件启停由组件侧接入点决定（`dfs.namenode.inode.attributes.provider.class` 等），发行版只是把这些包装成一个开关。
+  6. **HDFS 全量块汇报是 6 小时不是 1 小时**：`dfs.blockreport.intervalMsec` 默认 21600000。
+  7. **`dfs.datanode.disk.check.interval.ms` 不存在**：3.x 是 `VolumeChecker` 的异步检查（最小间隔/超时/并发卷数三约束）。
+  8. **`dfs.datanode.max.replication.streams` 是虚构属性**：真实键在 NameNode 侧 `dfs.namenode.replication.max-streams`（2）与 `-hard-limit`（4）。
+  9. **`ReplicationMonitor` 在 3.x 已并入 `BlockManager.RedundancyMonitor`**，队列是 `LowRedundancyBlocks`，周期键是 `dfs.namenode.redundancy.interval.seconds`。它的**五级优先级判据**也不是"副本少+路径靠前"（"路径靠前"不存在），而是按副本比例与分布算。
+  10. **NameNode 判死 DataNode 是 630 秒（10.5 分钟）**：`2 × recheck(300s) + 10 × 心跳(3s)`。原稿写 5 分 30 秒。
+  11. **1PB / 64MB 是 1,678 万块**，原稿写 16,384——差了一千倍。
+  12. **"三副本达到九个九"**：那串百分数是七个九，且无出处，已删。
+  13. **`Subject.getSubject` 在 JDK 23 起抛异常、SecurityManager 在 JDK 24 永久禁用**——这条对 UGI 的实现路径有实质影响，01 篇给了一条从 JDK 22 到 25 的完整版本链。
+  14. **`RFC 7465` 是 TLS 的 RC4 禁令**，不是 Kerberos 的；Kerberos 侧弃用 DES/RC4 的依据是 **RFC 6649**。
+  15. **`kadmin: ktadd` 只导出当前密钥、不递增 `kvno`**：真正的轮换要 `cpw -randkey -keepold` → 分发 → `kdb5_util purgekeys`。
+  16. **Delegation Token 与 Forwardable Ticket 是两件事**：Token 由服务端 HMAC 签发，与 `FORWARDABLE` 无关。
+  17. **Knox 返回的是 307 不是 302**；而且**Knox 没有企业版**（原稿称外部 Session 存储是"企业版支持"）。
+  18. **`yarn.log-aggregation` 的删除动作跑在 MapReduce JobHistoryServer 进程里**（`AggregatedLogDeletionService`）——只部署 ATSv2 的 Spark 集群**默认没有人删日志**。这条原稿完全没提。
+  19. **日志聚合目录权限是代码常量不是配置**：根 `01777`（sticky）、应用目录 `0770`；原稿给的 `yarn.nodemanager.remote-app-log-dir.permissions` 这个键**不存在**。
+  20. **`yarn.resourcemanager.max-completed-applications` 是 1000 不是 10000**（10000 是 ATS 的 `generic-application-history.max-applications`）。
+- **三个"配置项根本不存在"的清单**（本批一共查出 8 个虚构或失效的键）：`yarn.nodemanager.remote-app-log-dir.retain-seconds`、`yarn.nodemanager.log-aggregation.debug-enabled`、`yarn.timeline-service.enable-rest-http-auth`、`yarn.timeline-service.domain.*`、`dfs.datanode.disk.check.interval.ms`、`dfs.datanode.max.replication.streams`、`dfs.namenode.sync.edits`、`ranger.plugin.<svc>.enabled`。
+- **验证**：`verify_batch.py` 两列 20 篇（18 + 2 导览）全 PASS；死链 0；标签收敛 changed 0（说明本批用的都是已有受控标签）；构建 exit 0（1237 篇 / 6907 文件）。
+
+### 整改第 33 批（C 类旧稿扩写第 47-48 组）：大数据/HBase（10 篇）+ MySQL内核设计与实现（11 篇）
+
+| 专栏 | 篇 | 原篇均 | 现篇均 | 行数 | 图 | 表 |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 大数据/HBase | 10 | 6,434 | **15,005** | 6,003 | 0→57 | 约 30→107 |
+| 中间件/MySQL/MySQL内核设计与实现 | 11 | 12,900 | **15,937** | 10,387 | 部分→39 | 保守→148 |
+
+合计 206,240 → **325,367 字**。
+
+- **两列的工作性质完全不同**：HBase 是 10 篇全薄（3,233-9,260），全部扩写；MySQL 内核是老的 docx 书笔记，**11 篇里只有 4 篇偏薄，其余是格式问题**——于是拆成"扩写 4 篇 + 格式修复 6 篇 + 结构修复 2 篇 + 内容损伤修复 1 篇"四类任务分头做。
+
+#### 一、`HBase`：全列扩写
+
+十篇按"一次读/写会依次碰到什么"重组：为什么被造出来 → 数据模型 → 三角协作 → Store 内部 → 写入链路 → 读取链路 → compaction → 分裂与均衡 → 故障恢复 → 调优收口。最薄的 06 篇（读取链路，原 3,233 字）扩到 15,864。
+
+- **本批纠正的实质错误（其中 4 条推翻了我的任务书口径）**：
+  1. **`hbase.client.meta.cache.ttl` 不存在**（我的任务书）：在 branch-1.4/2.0/2.4/2.5 的 `hbase-default.xml` 与 `HConstants` 里都查不到。2.x 的 meta 缓存没有定时过期，靠 `NotServingRegionException` 这类错误驱动失效。
+  2. **BigTable 的 master 并非"只做元数据"**（我的任务书）：论文 5.1 节明确它负责 tablet 分配、server 增删检测、负载均衡与 GFS 文件回收。差异在状态存放——BigTable 收敛在 METADATA tablet，HBase 拆成 ZK 会话 + `hbase:meta` + procedure store 三处，收敛过程就是 RIT。
+  3. **`hbase.regionserver.blockcache.size` / `blockcache.policy` / `four-tier` 权重 / `offheap.bucketcache.size` 都不存在或已废弃**：`CombinedBlockCache` 是按 `BlockCategory` **物理分流**到 L1/L2，不是优先级。
+  4. **`hbase:bucketcache` 的体积参数语义陷阱**：`hbase.bucketcache.size` 在两个区间里分别是"MB"与"堆的比例"，填错方向后果相反。
+  5. **`RowKey` 上限是 32,767 字节不是 64KB**：`HConstants.MAX_ROW_LENGTH = Short.MAX_VALUE`。
+  6. **原稿的 RowKey 存储放大算错了**：放大是「行数 × 每行列数 × 键长」，不是「行数 × 键长」——而且**数据块编码只在 HFile 层抵消，MemStore/WAL/RPC 全程是原始格式**，没有编码收益。
+  7. **`KeyValue` 的 `Maximum` 是 255 不是 15**，`Delete(8)` 不是"删除整行所有版本"；HBase 没有单一"删整行"标记，行删除在服务端展开成各列族的 `DeleteFamily`。
+  8. **`hbase:meta` 的 znode 存的是序列化结构不是 `host:port` 字符串**。
+  9. **2.x 的 procedure store 有两代**：2.0-2.2 是 `MasterProcWALs`，2.3 起是 RegionProcedureStore（内部 Region、`proc:d` 列）。
+  10. **`hbase.hregion.max.filesize` 的演进是 256MB（0.90）→ 1GB（0.92）→ 10GB（0.94）**，不是原稿说的"0.94 之前 256MB"。
+  11. **"2.x 引入 jitter"不准确**：`hbase.hregion.max.filesize.jitter` 在 1.4 的 `ConstantSizeRegionSplitPolicy` 里就有（默认 0.25）。
+  12. **`hbase:normalizer` 不是 2.x 的系统表**，而是 Master 内的 `SimpleRegionNormalizer`，且它按**大小**归一不按个数。
+  13. **`hbase.regionserver.blockcache` 的 Bloom 只对单行查询生效**：`passesBloomFilter` 里有 `isGetScan()` 判断，范围 Scan 不吃这层红利。
+  14. **「2.x 的 `hbase.master.distributed.log.replay` 默认 true」不成立**（我的任务书）：DLR 及其三个配置在 **2.0 就被移除**了。2.x 的等价能力是「并行 WAL 分裂 + Region 打开时各自重放」，没有总开关。
+  15. **`hbase backup`（HBackup）在 2.0-2.5 不存在**：HBASE-19407 在 2.0 前整体移除，2.6 才回归。原稿把它当既有能力讲。
+  16. **快照不是"对每个 HFile 创建硬链接"**（原稿）：HDFS 不支持硬链接；快照时刻不建任何链接，只写 manifest；`HFileLink` 是 clone/restore 时才创建的引用文件。
+  17. **WAL 分裂在 2.5 默认走 procedure 分发不是 ZK**：`hbase.split.wal.zk.coordinated` 默认 `false`，ZK 路径是 opt-in（1.x 口径）。
+  18. **`hbase.replication.rpc.timeout` 在 2.5 不存在**：每次复制调用受 `hbase.rpc.timeout`（60000ms）约束。
+  19. **`hbase.meta.replica.count` 在 2.4 起废弃**，且 `hbase.meta.replicas.use` 默认 false——加了 meta 副本不等于客户端会读。
+
+#### 二、`MySQL内核设计与实现`：格式与结构修复为主
+
+这是仓库里最老的一批 docx 书笔记。11 篇里 7 篇字数本来就够（12,642-22,123），但**几乎全都有格式问题**，还藏着两处严重破损。
+
+- **两处严重破损（这是本批最重要的发现）**：
+  1. **8.2 有正文被吞进未闭合代码块**：L345 的 ` ```c ` 缺闭合，导致 **L346-428（整个 8.2.4 InnoDB 行锁小节、`lock_t` 字段表、`CREATE TABLE` 示例）全被吞进 C 代码块**，要到 L429 才闭合。另外 L130 有一行多余的 ` ```text `。修好后那段正文才重新变回 prose，`verify_batch` 也因此才开始统计到它里面的一处「值得注意的是」。**这是本仓库第三次出现这一类事故**（前两次是我自己批量改围栏造成的），所以这次顺手做了一次**全库扫描**：奇偶围栏不配对 0 处，"超长代码块内含中文散文特征" 0 处。
+  2. **9.2 的"结语占比 29.6%"是误报**：`verify_batch.py` 用的正则把标题 ≤20 字的「总结」当结语章，而文件里有个 docx 转换残留的重复 H2 `## 9.2 MySQL组复制与总结`，把后面 4,626 字技术正文全划进了结语。**真正的 9.3 总结只有 344 字（2.03%）**。改掉重复标题后自动达标，正文一字未删。
+- **9.1 有一整节重复了两遍**（`### 9.1.3 半同步` 出现两次），已合并。9.1 还有一处 **Mermaid 围栏嵌套错误**（` ```mermaid ` 里又开了一个 ` ```mermaid `），整块图无法渲染，已重画。
+- **9.2 的 docx 转换残渣清理**：删了 3 个重复 H1（`# 9.2 第9章 …`、`# 第9章 MySQL高可用实现`）、3 行 docx 页眉（裸的 `MySQL内核设计与实现`）、2 处裸页码、4 句转换器元说明（「由于原文在图9-10 之后还有一段文字…」「至此，第9章…已完整转换。」）、2 个拼接接缝生成的假章节（`## 9.2 组复制（续）`、`### 9.2.1 …（续）`）。**净删 190 个 CJK 字，逐行核实这 190 字 100% 来自残渣行，技术正文零删除**。标题从 4 个 H1 收敛到 1 个，层级 `{1:1, 2:2, 3:7, 4:10, 5:4}`，无跳级。
+- **9.2 还有四处内容损伤**：一句重复半句的"卡带"（「只有到达不过这里有一个问题，只有到达learn 阶段」）、一处被截断的 C 函数（`handle_simple_ack_prepare` 缺 `}`，**已按 MySQL 8.0 上游源码 `xcom_base.cc` 交叉核对补全**，真实结尾是 `return can_propose; } }`）、一处重复起句、一段丢了主语的孤立残段（「生成WriteSet 元素。…」补成「事务在提交时生成WriteSet 元素」，`rg` 确认 9.1 里没有这段可归位，删掉就是丢掉全库唯一一份技术结论）。
+- **8.1/8.2 的标题结构重建**：8.1 有 `## MySQL可重复读隔离级别的幻读问题` 未编号、`# 8.1.6 组提交` 与 `# 8.1.7 分布式事务` 错用 H1；8.2 有两个 H1、两个重复的 `## 8.2.6 互斥锁`、编号缺 8.2.1/8.2.2 且从 8.2.7 跳到 8.2.9。重建后两篇都是单 H1、编号连续（8.1.1-8.1.7 / 8.2.1-8.2.7），交叉引用同步更新。8.2 顺带从 16,593 压到 15,787（-806，删的全是重复整句与占位，没做同义改写凑数）。
+- **8.2 的图 8-11 从 ` ```text ` 节点名转储恢复成 Mermaid 流程图**（信息来自转储里的 A1-A4/B1-B4 步骤标签与正文对 `THR_LOCK` 四队列的描述，未编造关系）。4 处「（图表省略…）」占位按"补不出来就删"处理——原书是图片，13 种 `TL_*` 模式的兼容矩阵无法从正文复原。
+- **本批纠正的其他实质错误**：
+  1. **`index->is_covering()` 在 MySQL 5.6/5.7/8.0 源码里都不存在**（我的任务书）：覆盖判定在 SQL 层，链路是 `HA_KEYREAD_ONLY` → `keys_for_keyread` → `covering_keys.intersect(part_of_key)` → `set_keyread(true)`。
+  2. **8.0 顶层没有 `handler/` 目录**（我的任务书）：接口在 `sql/handler.h` + `sql/handler.cc` + `sql/dd/`。而且 `sql_select.cc` 从 **5.7** 就开始拆了，不是 8.0。
+  3. **`n_core` 在 8.0 源码里叫 `n_user_defined_cols`**，MariaDB 分支才叫 `n_core_fields`。
+  4. **页目录不是"每 6-8 条记录一个 slot"**：精确机制是每条记录头 `n_owned` 4 位、每槽 1-8 条，涨到 9 时 `page_dir_split_slot` 拆成 4+5。
+  5. **"Berkeley DB 是 InnoDB 前身"是错的**（两者无血缘）；Oracle 2005 年收购的是 Innobase Oy。
+  6. **`rpl_semi_sync_master_timeout` 默认是 10000 毫秒不是 10 秒**；8.0.26 起改名 `rpl_semi_sync_source_timeout`。
+  7. **`last_committed`/`sequence_number` 不是分别"在准备阶段/Flush 阶段获取"**：两者由 `get_dependency()` 一次算出后写入 GTID 事件。
+  8. **`gtid_executed` 的区间空洞有一个正常成因**：并发回滚烧号，不一定是异常。
+  9. **`slave_parallel_workers` 的 8.0 默认已是 4**（改名 `replica_parallel_workers`），`replica_parallel_type` 已废弃。
+  10. **长度编码整数里 `0xFB` 是 NULL 标记不是数值 251**：251 只能编码成 `FC FB 00`。
+  11. **握手包低 16 位 `0xF7FF` 里没有 `CLIENT_PLUGIN_AUTH`**，它在高 16 位 `0x81FF` 内。
+  12. **"8.0 客户端连 5.7 会失败"方向反了**：失败的是旧驱动连 8.0；8.0 连 5.7 可由服务端 `AuthSwitchRequest` 切回。
+- **验证**：`verify_batch.py` 两列 22 篇（20 + 2 导览）全 PASS；死链 0；全库围栏与"正文被吞"扫描 0 处；`converge_tags.py --apply` 收敛 2 篇（176→176）；构建 exit 0（1237 篇 / 6903 文件）。
+
+### 整改第 34 批（C 类旧稿扩写第 49-50 组）：Spark设计与实现（9 篇）+ Java/Netty（10 篇）+ **全库 LaTeX 转义事故修复（17 篇）**
+
+| 专栏 | 篇 | 原篇均 | 现篇均 | 行数 | 图 | 表 |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 大数据/Spark设计与实现 | 9 | 8,842 | **15,340** | 5,635 | →50 | →70 |
+| Java/Netty | 10 | 11,114 | **12,882** | 7,278 | →48 | →79 |
+
+266,718 → **266,895 字**（两列内部重整，总量基本持平——Spark 列大幅扩写，Netty 列主要补欠账）。
+
+#### 一、`Spark设计与实现`：教材骨架定位
+
+仓库里已有**六个** Spark 专栏（RDD 核心原理 9 篇、调度 10 篇、Shuffle 与内存 11 篇、容错与状态 5 篇、内核解析 47 篇、Structured Streaming 12 篇）全部定稿。所以这一列不能写专题深挖，改为**教材式的体系化讲解**（它本来就是一本书的笔记，按"逻辑计划 → 物理计划 → Shuffle → 缓存 → 容错 → 内存"的章节顺序），每篇开头一句声明边界、机制细节双链到对应专题专栏。
+
+最薄的两篇补得最多：`7.0 数据缓存机制`（6,050 → 15,894）、`4.0 物理执行计划`（6,825 → 15,865）。
+
+- **本批纠正的实质错误（其中 3 条推翻了我的任务书口径）**：
+  1. **`spark.memory.pageSize` 不是 Spark 的公开配置**（我的任务书）：4.x 配置文档里查无此项，源码里是 `spark.buffer.pageSize`，未设置时由池容量与核数推算、夹在 1-64 MiB。真实的页表是 13 位页号 + 27 位偏移，即 8192 页、单页 128 MiB、1 TiB 逻辑空间。
+  2. **`ShuffleDependency` 不是在 `DAGScheduler.getShuffleDependencies` 时创建的**（我的任务书）：它随 shuffle 类 RDD 构造产生，`DAGScheduler` 只是沿血缘找到它来切 Stage；`registerShuffle` 在 map task 执行前由 `shuffleHandle` 惰性触发。
+  3. **`localCheckpoint` 是切断血缘的**（我的任务书）：只是不落可靠存储，executor 丢失即作业失败。原稿把它当成"不切断血缘的缓存增强"。
+  4. **`round(shuffleDependency)` 之外的 4×4=16 重试乘法有机制出处**：`TaskSetManager` 随 stage attempt 新建，所以 task 失败计数归零。但 `FetchFailed` 不扣 task 预算（`TaskSetManager` 把该分区标成功、整个 TaskSet 置 zombie），`ExecutorLostFailure` 是否扣预算取决于 `exitCausedByApp`。
+  5. **"FetchFailed 会重算整个 map 阶段"不准确**：只 `unregisterMapOutput` 丢失的那几个 map 分区 + 整个下游 result stage attempt 作废重做。
+  6. **`unpersist(blocking=true)` 不是默认**：2.4.7 是 true、3.2.3 起是 false。
+  7. **`Dataset.cache()` 默认 `MEMORY_AND_DISK`**，不是 `RDD.cache()` 的 `MEMORY_ONLY`——这是"DataFrame 缓存为什么更省"之外的另一处易混。
+  8. **`spark.cleaner.ttl` 在当前源码里已不存在**：改述 `ContextCleaner` 弱引用 + `spark.cleaner.periodicGC.interval`（30 分钟）。
+  9. **`spark.speculation.multiplier`/`quantile` 现行默认是 3/0.9**，不是旧文档的 1.5/0.75；`spark.checkpoint.compress` 现行默认 true。
+  10. **`spark.yarn.applicationMaster.waitForSparkContextInitialization` 现行文档不存在**：真实键 `spark.yarn.am.waitTime`（100s）。
+
+#### 二、`Java/Netty`：只差 240-1,200 字的"欠账"
+
+十篇原本 10,832-11,760，08 篇 13,481。**补的不是篇幅而是源码级细节与边界**——比如 `ChannelConfig` 的各项默认值出处、`ByteBuf` 扩容的真算法（`CALCULATE_THRESHOLD=4 MiB`）、`refCnt` 的位编码（raw=真实计数×2、奇数表示已死）、`addLast0` 的四步指针改写、`LengthFieldBasedFrameDecoder` 的 `lengthAdjustment` 偏大导致双方互等的推演。
+
+- **本批纠正的实质错误**：
+  1. **`SO_BACKLOG` 默认不是 128 而是 `NetUtil.SOMAXCONN`**（回退 200）；**`TCP_NODELAY` 默认不是 false**，构造时即 true。
+  2. **`io.netty.eventLoopMaxBlockingTime` 在 4.1 源码中不存在**：原稿说"内置阻塞检测"，实际 `lastExecutionTime` 服务于静默期。`BlockingTaskHandler` 这个类也不存在。
+  3. **`MpscArrayQueue`/`MpscLinkedQueue` 改为 4.1 实际的 `MpscUnboundedArrayQueue`/`MpscChunkedArrayQueue`**。
+  4. **"16 核预分配 512 MB 直接内存"是错的**：Arena 不预分配 Chunk，Arena 数是 `min(2×核数, 预算/chunk/6)`。
+  5. **08 篇的加粗从 9.4% 压到 1.6%**：97 处 → 32 处，最长 span 从 56 汉字降到 12。顺带把 4.3 节的 17 行 ASCII 框线图改成 Markdown 表格；Varghese 论文年份 1996 → **1997**（IEEE/ACM ToN 5(6):824-834）。
+
+#### 三、**全库 LaTeX 转义事故修复（本批最重要的发现）**
+
+`08 Netty高性能之道` 的子 agent 发现：**`\t`、`\f`、`\b` 在某个生成环节被当成转义序列解释了**，所以 LaTeX 里的 `\text{...}` 变成了 `TAB+ext{...}`、`\frac` 变成 `FF+rac`、`\big` 变成 `BS+ig`。KaTeX 会直接渲染报错。
+
+**这解释了我一直在构建命令里过滤掉的 `LaTeX-incompatible` 与 `unicodeTextInMathMode` 告警**——那些告警不是噪音，是这个事故的信号。
+
+- **范围**：全库 71 个文件含控制字符，但其中绝大多数是 `数据结构与算法` 列**代码块内的 TAB 缩进（合法）**。严格区分"代码块外"后是 **17 文件、54 行、81 处**。
+- **修复**：`\x08`→`\b`、`\x09`→`\t`（仅代码块外）、`\x0b`→`\v`、`\x0c`→`\f`、`\x00`→`\0`、`\x07`→`\a`。**`\n`/`\r` 无法安全逆推（与真实换行混淆），未动**。
+- **校验**：改前改后逐文件比对**围栏数与 CJK 字数完全不变**（17/17 通过），代码块外控制字符残留 **0**。因为是机械替换，这是最关键的安全证据——`围栏数与字数双不变` 说明没有文字被吞进代码块或丢失。
+- **效果**：构建**零 LaTeX 告警**（`Filtered out 0 files`）。
+
+#### 四、其他清理
+
+- `Spark 1.0` 的 9 条 `[Image 55 on Page 17]` 图片占位与 `MySQL 4.0` 的 3 处图像引用索引已清（都是文末的"图片引用清单"callout，正文图注在原位保留）；顺带修 `4.0` 的两个错用 H1 与一处 `### 4.5 总结` 层级。
+- `Spark 3.0` 的抽取残渣：`页面范围：58-130 / 本部分：3/4`、重复的 `distinct()` 整小节（同图号同结论，抽取器在分页点重吐）、18 处 `![图3.23](描述：...)` 破图语法（`![]()` 里不是路径而是中文"描述"，描述已并入图注）。文末截断在「使用DataSet、Data」处，删残句并补 150 字本章收束。
+- `Spark 5.0` 的 `treeAggregate` 段落被抽取吞掉（正文「性能更好的 `treeAgg`」直接接「（2）参数存储问题」），按上下文补写一段机制说明并加了 `> [!note] 补写说明` 明确标注。
+- **验证**：`verify_batch.py` 两列 19 篇全 PASS；死链 0；`converge_tags.py --apply` 收敛 5 篇（176→175）；构建 exit 0 且零 LaTeX 告警（1237 篇 / 6853 文件）。
+
+### 整改第 35 批（C 类旧稿扩写第 51-52 组 + 收尾）：9 篇尾巴补齐 · **C 类清单全部收口**
+
+| 文件 | 专栏 | 前 | 后 |
+| :--- | :--- | ---: | ---: |
+| `04 垃圾回收——三色标记与混合写屏障` | Golang/Go运行时进阶与底层机制 | 11,999 | **12,336** |
+| `07 G1 收集器——Region 化内存与混合回收` | Java/JVM/对象生命周期与GC | 11,501 | **12,290** |
+| `01 Agent 沙箱全景——威胁模型、六层技术栈与逻辑演进` | LLM/Agent沙箱技术 | 11,189 | **12,102** |
+| `08 系统调用开销与用户态优化——vDSO、seccomp 与零系统调用` | Linux/性能优化 | 11,997 | **12,508** |
+| `10 结语——存储引擎的六组权衡` | 中间件/深入浅出存储引擎 | 11,972 | **12,270** |
+| `04 Calico深度解析` | K8s/kubernetes网络原理与插件 | 11,673 | **12,357** |
+| `05 Cilium深度解析` | 同上 | 11,680 | **12,365** |
+| `06 Service底层实现——kube-proxy、iptables与IPVS` | 同上 | 11,675 | **12,240** |
+| `07 NetworkPolicy与CoreDNS` | 同上 | 11,598 | **12,540** |
+
+- **补的都是源码级细节，不是篇幅**：`runtime.gcStart` 的 `gcTrigger` 三种来源与 `test()` 判定、`gcPercentHeapGoal` 与 `memoryLimitHeapGoal` 取小的公式；G1 的 Humongous 严格判定（`word_size > region_size/2`）与 `RSet` 的卡级/对象级精度、`G1ScanHRForRegionClosure` 的 chunk 认领与 `_scanned_to` 去重；seccomp 的 `SECCOMP_RET_*` 六种动作的代价差与 `TRACE` 和 ptrace 的 `PTRACE_EVENT_SECCOMP` 双次上下文切换耦合；Calico 的 MTU 级联（1500 → IPIP 1480 → VXLAN 1450）与 PMTUD 黑洞；Cilium 的 `Endpoint`/`Identity` 一对多与 `pod-template-hash` 造成的身份膨胀；`kube-ipvs0` 的 /32 绑定 → `arp_ignore=0` → ARP flux → `ipvs.strictARP` 的链条。
+- **本批纠正的实质错误**：
+  1. **CoreDNS 的插件链顺序不是 Corefile 书写顺序**（原稿错）：链序由**编译期 `plugin.cfg`** 决定（展开为固定指令数组），Corefile 只决定启用哪些插件与参数。`cache` 在 `kubernetes`/`forward` 之前、`loop` 在 `forward` 之前都有机制原因，而**顺序排错时故障是静默的**。
+  2. **`kube-proxy` 只生成 Masq 后端的理由是控制权不是性能**：它无权改业务节点的主机网络配置，所以 `IPVS` 的 DR/Tunnel 模式在它的实现里用不上。"换 IPVS 能少一跳"是流行误读。
+  3. **`NetworkPolicy` 的 egress 到 1.8 才进 beta**：此前只有入站侧，各 CNI 的出站实现普遍晚于入站，留下"Ingress 拦得干净、Egress 什么也没拦"的假象。
+  4. **`policyTypes` 三态语义的改写陷阱**：补一行空 `egress: []` 就把策略从"只入站"变成"双向全拒"。
+  5. **`kube-proxy` 的 nftables 后端版本**：按 KEP-3866，1.29 alpha / 1.31 beta / 1.33 GA。
+- **一处登记为体裁例外**：`存储引擎/10 结语` 12,270 字但只有 402 行（30 字/行的紧凑长句体）。审计报告 §7 的「行数 <500 但字数达标」例外表已扩到 7 文件，与 `存储引擎/01`（419 行 / 13,913 字）、`ETCD 04`（398 行）同类——**要回到 500 行只能拆句灌水，不做**。
+- **验证**：9 篇中 8 篇 PASS + 1 篇登记例外；构建 exit 0 且零 LaTeX 告警（1237 篇 / 6845 文件）。
+
+### **C 类清单收口核验**
+
+| 口径 | 篇数 | 未达下限 |
+| :--- | ---: | ---: |
+| 技术深度（12,000-16,000 / 500+ 行） | 784 | 0 |
+| 数据结构与算法（≥6,000） | 98 | 0 |
+| 综述与选型 / 机制已被内核覆盖（8,000-10,000） | 92 | 0 |
+| 故障复盘与 SOP / 范文规格 | 体裁豁免 | — |
+| **合计** | **974**（不含译文/电子书/导览/index） | **0** |
+
+52 个 C 类专栏、441 篇旧稿，经 52 个批次全部收口。
+
 ## 2026-11-08
 
 ### Agent 沙箱技术专栏全量重构（彻底拔除非权威私货，全面对齐工业级权威开源基准）

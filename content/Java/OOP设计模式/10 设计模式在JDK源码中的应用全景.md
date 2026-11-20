@@ -1,723 +1,668 @@
 ---
 title: "设计模式在JDK源码中的应用全景"
-date: 2026-03-04
+date: 2026-11-19
 tags: [IO, Java, OOP, 并发编程, 设计模式]
-keywords: [JDK, 享元, 代理, 工厂方法, 模板方法, 源码, 策略, 组合, 装饰器, 观察者, 迭代器, 适配器, 集合框架]
+keywords: [java.io, FilterInputStream, available, Reader Writer 两棵树, Comparator, Runnable, Callable, Iterator, Spliterator, ThreadPoolExecutor, Executors 工厂方法, CompletableFuture, ThreadLocal, ThreadLocalRandom, Collections 包装, 虚拟线程]
 aliases: []
 ---
 
 # 设计模式在JDK源码中的应用全景
 
-## 摘要
+**摘要：**
 
-JDK 是 Java 开发者每天都在使用的标准库，其源码代表了 Java 语言创始团队对面向对象设计的最直接诠释。与 Spring 的"框架扩展点"视角不同，JDK 源码的设计模式更多体现在"语言级别的抽象"——集合框架（Collection Framework）的迭代器、装饰器、组合和享元；`java.io` 的装饰器体系；`java.util.concurrent` 的策略、模板方法和命令；`java.lang` 的单例与享元；反射与代理机制。本文以模式为线索，系统梳理 JDK 各核心模块中的设计模式应用，既是对本专栏前九篇知识的融会贯通，也是形成"在日常使用的 API 中识别设计模式"这一直觉能力的训练。每个案例不仅标注模式类型，还深入分析"为什么 JDK 在这里选择了这种模式，而不是其他方案"——这是理解设计权衡的关键。
-
----
-
-## 第 1 章 集合框架（java.util）：模式的集中地
-
-### 1.1 迭代器模式：Iterable + Iterator 的语言级支持
-
-集合框架中最直接体现迭代器模式的是 `Iterable<T>` 和 `Iterator<T>` 这对接口。几乎所有的集合类（`List`、`Set`、`Queue`、`Map` 的键/值/条目集合）都实现了 `Iterable<T>`，从而支持 `for-each` 语法糖。
-
-**为什么 `Iterable` 和 `Iterator` 要分成两个接口，而不是合并为一个？**
-
-```java
-// 如果将两者合并（反例）
-public interface IterableCollection<T> {
-    boolean hasNext();
-    T next();
-    // 集合本身同时充当迭代器，只能维护一个遍历状态
-}
-
-// 问题：无法同时进行两次独立的遍历
-IterableCollection<String> list = ...;
-// 以下会互相干扰，因为两个"迭代器"共享同一个迭代状态
-for (String a : list) {         // 遍历 1
-    for (String b : list) {     // 遍历 2（与遍历 1 共享状态，结果不可预期）
-        ...
-    }
-}
-```
-
-分离的设计允许**每次调用 `iterator()` 返回一个新的、独立的迭代器对象**，每个迭代器维护自己的当前位置，多个迭代器可以独立遍历同一个集合，互不干扰。这是迭代器模式"将遍历状态与集合数据分离"的核心思想。
-
-**`Spliterator`（Java 8）：为并行而生的增强迭代器**
-
-`Spliterator`（Splittable Iterator）是 Java 8 为 Stream API 引入的增强迭代器，在 `Iterator` 的顺序遍历基础上增加了两个关键能力：
-
-```java
-public interface Spliterator<T> {
-    boolean tryAdvance(Consumer<? super T> action);  // 处理一个元素，返回是否还有元素
-    Spliterator<T> trySplit();                        // 尝试将自身分裂为两半（并行化的基础）
-    long estimateSize();                              // 估计剩余元素数量（用于任务分配）
-    int characteristics();                            // 描述数据特性（有序、唯一、不可变等）
-}
-```
-
-`trySplit()` 是并行化的关键——`ForkJoinPool` 通过反复调用 `trySplit()` 将一个大的 `Spliterator` 分割成多个小的，分配给不同的工作线程并行处理。`ArrayList` 的 `Spliterator` 实现通过下标范围分割（`[lo, mid)` 和 `[mid, hi)`），而 `LinkedList` 的实现则必须遍历到中点再分割，效率较低——这解释了为什么 `LinkedList` 的 `parallelStream()` 性能往往不如 `ArrayList`。
-
-### 1.2 组合模式：树形结构的统一处理
-
-JDK 集合框架中，`Collection`、`List`、`Set`、`Queue` 的接口层次就是组合模式的体现，但最典型的组合模式应用是在文件系统相关 API（`java.nio.file`）中：
-
-```java
-// java.nio.file.Files 的树形遍历：目录（组合节点）和文件（叶节点）统一处理
-Files.walkFileTree(Paths.get("/"), new SimpleFileVisitor<Path>() {
-    @Override
-    public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-        // 处理文件（叶节点）
-        System.out.println("FILE: " + file);
-        return FileVisitResult.CONTINUE;
-    }
-    
-    @Override
-    public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
-        // 处理目录（组合节点）进入前
-        System.out.println("DIR:  " + dir);
-        return FileVisitResult.CONTINUE;
-    }
-});
-```
-
-`SimpleFileVisitor` 的结构是访问者模式（Visitor）与组合模式（Composite）的结合——树形文件结构是组合模式，`FileVisitor` 是访问者。`FileVisitResult` 的返回值（`CONTINUE`、`SKIP_SUBTREE`、`TERMINATE`）是责任链模式中"是否继续传递"的控制机制在树遍历中的体现。
-
-### 1.3 享元模式：Integer 缓存与 String 池
-
-JDK 中最著名的享元模式实现有两处，每位 Java 开发者都曾遭遇过它们引起的"迷惑行为"：
-
-**`Integer` 缓存（IntegerCache）**：
-
-```java
-// Integer.valueOf() 的内部实现（JDK 源码，已简化）
-public static Integer valueOf(int i) {
-    if (i >= IntegerCache.low && i <= IntegerCache.high) {  // 默认 [-128, 127]
-        return IntegerCache.cache[i + (-IntegerCache.low)]; // 返回缓存的共享对象
-    }
-    return new Integer(i);  // 超出缓存范围：创建新对象
-}
-```
-
-这就是为什么 `Integer a = 127; Integer b = 127; a == b` 结果是 `true`（指向同一个缓存对象），而 `Integer a = 128; Integer b = 128; a == b` 结果是 `false`（分别是新创建的不同对象）。`[-128, 127]` 是最常用的整数范围，缓存这些值可以避免大量重复的装箱操作，节省堆内存。可以通过 JVM 参数 `-XX:AutoBoxCacheMax=<size>` 扩大缓存上限。
-
-类似的缓存机制在 `Long`（`[-128, 127]`）、`Short`（`[-128, 127]`）、`Byte`（全范围，即所有 `[-128, 127]`）、`Character`（`[0, 127]`）中也有实现；`Boolean` 只有两个值，`TRUE` 和 `FALSE` 是静态常量，天然享元。
-
-**`String` 常量池（String Pool）**：
-
-```java
-String s1 = "hello";              // 字面量：从 String 常量池获取（享元）
-String s2 = "hello";              // 同一个字面量：复用池中的对象
-String s3 = new String("hello");  // 显式 new：绕过池，堆中新建对象
-
-System.out.println(s1 == s2);     // true：同一个常量池对象
-System.out.println(s1 == s3);     // false：s3 是堆中的新对象
-System.out.println(s1 == s3.intern()); // true：intern() 将 s3 放入池（或返回已有池对象）
-```
-
-String 常量池的享元设计依赖于 `String` 的**不可变性（Immutability）**——这是享元模式成立的必要条件：共享对象必须是不可变的，否则一个"使用者"修改了共享对象，所有其他使用者都会受到影响。`String` 的不可变性（`final char[]`，无任何修改 API）不只是为了线程安全，更是享元模式能够安全实施的保证。
-
-### 1.4 装饰器模式：Collections 工具类的包装器
-
-`java.util.Collections` 提供了一系列静态工厂方法，返回原集合的"增强包装版本"——这是装饰器模式的标准实现：
-
-```java
-// 只读包装（不可修改装饰器）
-List<String> original = new ArrayList<>(Arrays.asList("a", "b", "c"));
-List<String> readOnly = Collections.unmodifiableList(original);
-readOnly.add("d");  // 抛出 UnsupportedOperationException
-
-// 线程安全包装（同步装饰器）
-List<String> syncList = Collections.synchronizedList(original);
-// syncList 的所有方法都加了 synchronized 同步块
-
-// 单元素包装（不可变单元素集合）
-Set<String> singleton = Collections.singleton("only");
-
-// 空集合包装（不可变空集合，类型安全的空集合）
-List<String> empty = Collections.emptyList();
-```
-
-以 `Collections.unmodifiableList()` 返回的内部类 `UnmodifiableList` 为例，它是一个典型的装饰器：
-
-```java
-// Collections.UnmodifiableList（JDK 源码，已简化）
-static class UnmodifiableList<E> extends UnmodifiableCollection<E> implements List<E> {
-    final List<? extends E> list;  // 被装饰的原始列表
-    
-    UnmodifiableList(List<? extends E> list) {
-        super(list);
-        this.list = list;
-    }
-    
-    // 读操作：委托给原始列表
-    public E get(int index)          { return list.get(index); }
-    public int indexOf(Object o)     { return list.indexOf(o); }
-    public List<E> subList(int from, int to) {
-        return new UnmodifiableList<>(list.subList(from, to));  // 子列表也是不可修改的
-    }
-    
-    // 写操作：拒绝并抛出异常
-    public void add(int index, E element)      { throw new UnsupportedOperationException(); }
-    public E set(int index, E element)         { throw new UnsupportedOperationException(); }
-    public E remove(int index)                 { throw new UnsupportedOperationException(); }
-    public void sort(Comparator<? super E> c)  { throw new UnsupportedOperationException(); }
-}
-```
-
-装饰器的特征完全吻合：持有被装饰对象的引用（`list`）、实现相同的接口（`List<E>`）、增强（这里是限制）被装饰对象的行为。调用方不需要知道得到的是原始列表还是包装列表——接口完全一致，只是部分行为被拦截。
-
-> [!warning] Collections.unmodifiableList 不是深度不可变
-> `unmodifiableList()` 只是防止通过包装器修改列表结构（增删），但如果列表元素本身是可变对象，仍然可以通过 `get()` 获取元素后修改它的内部状态。真正的深度不可变需要元素对象本身也是不可变的（如用 `record` 或 `@Value` 的 DTO），或使用 Java 9+ 的 `List.of()`（禁止 `null`，元素和列表都是不可变的）。
+JDK 是一份被发布过三十年的代码，它的形状更多由约束决定，而不是由偏好决定。本文不逐条清点「JDK 用了哪些模式」，而是挑出五个最有说服力的落点，回到设计者当年的处境里看选择：`java.io` 的两棵流树如何被 JDK 1.1 的编码问题逼出来，`FilterInputStream` 这个空壳装饰器为什么必须存在，`available()` 为什么只敢承诺「估算」；`Comparator`、`Runnable`、`Callable` 如何把行为变成可传递的值，`@FunctionalInterface` 之后显式策略类为什么还在；`Iterator` 与 `Iterable` 为什么必须拆成两个类型，`Spliterator` 的前缀拆分契约给并行流留下了哪些坑；`Executor` 三层接口如何体现接口隔离，`ThreadPoolExecutor` 的四个钩子为什么是模板方法的教科书案例，而 `Executors` 的工厂方法把无界队列与 `Integer.MAX_VALUE` 藏在了名字背后；`ThreadLocal` 的变量实际存在 `Thread` 对象里，线程池下的泄漏从哪里来，`ThreadLocalRandom` 又靠什么绕开了 CAS 竞争。每一节都补上历史包袱与现代替代，最后用三个被贴错标签的类收束：`StringBuilder`、`HashMap`、双亲委派。读源码，读出的是约束下的选择，不是无约束的正确答案。
 
 ---
 
-## 第 2 章 java.io / java.nio：装饰器的极致应用
+## 第 1 章 标准库的设计者被什么约束
 
-### 2.1 InputStream 体系：装饰器链的经典范本
+### 1.1 三个不能被回退的发布窗口
 
-`java.io` 的 I/O 流体系是教科书级别的装饰器模式应用，每一个流对象都可以被包裹在另一个流对象中，形成功能叠加的装饰器链：
+1996 年 1 月 Java 1.0 发布时，标准库里只有字节流；1997 年 2 月的 1.1 补上了 `Reader`/`Writer` 与字符编码；1998 年 12 月的 1.2 才有集合框架；2002 年的 1.4 给出 NIO，2011 年的 Java 7 补上 `Files`/`Paths`；并发包要等到 2004 年的 Java 5。这些年份不是背景装饰，它们决定了每一处模式选择当时可用的语言材料：1.0 没有默认方法，装饰器只能落成抽象类加一个字段；1.5 之前没有泛型，`Collections.checkedXxx` 只能把类型检查推迟到运行时；Java 5 之前没有 `Callable`，命令模式在 JDK 里就长期只有 `Runnable` 这一个既无返回值、又不能抛受检异常的半成品。
 
-```
-InputStream（抽象基类，Component）
-├── FileInputStream（具体组件：从文件读取原始字节）
-├── ByteArrayInputStream（具体组件：从字节数组读取）
-├── PipedInputStream（具体组件：从管道读取）
-└── FilterInputStream（抽象装饰器）
-    ├── BufferedInputStream（装饰器：添加缓冲区，减少系统调用次数）
-    ├── DataInputStream（装饰器：添加读取 int/long/double 等基本类型的能力）
-    ├── PushbackInputStream（装饰器：添加"退回已读字节"的能力）
-    └── CheckedInputStream（装饰器：添加校验和计算能力）
-```
+把这些节点串起来看，会得到一个不太舒服的结论：标准库不是一次设计出来的，它被若干次不可回退的发布切成了地层。地层的性质是，上面一层可以压着下面一层，却不能把下面那层挖掉重铺。所以今天读 JDK 源码，读到的大部分不是最优解，而是「当时条件下可以接受、之后又无法反悔」的那个解。
 
-通过组合，可以叠加多种功能：
+### 1.2 三条约束
 
-```java
-// 组合多个装饰器：从文件读取，带缓冲，且能读取 Java 基本数据类型
-DataInputStream dis = new DataInputStream(
-    new BufferedInputStream(
-        new FileInputStream("data.bin")
-    )
-);
-int value = dis.readInt();    // 读取 4 字节并解析为 int
-double d   = dis.readDouble(); // 读取 8 字节并解析为 double
-```
+第一条是**二进制兼容**。已发布的公开签名不能改，公开类不能随便换父类，接口不能增加抽象方法——Java 8 之前连默认方法这个工具都没有。这条约束的直接后果是：模式一旦选错，唯一的补救方式是在旁边再开一条新路，把旧路标成弃用。`Reader` 之于 `InputStream`、`Callable` 之于 `Runnable`、`CompletableFuture` 之于 `Future`，都是这样长出来的第二棵树。
 
-**这里选择装饰器而不是继承的原因是什么？**
+第二条是契约必须让所有实现者都能满足。`InputStream.available()` 的文档只承诺一个「不受阻塞即可读取的字节数的估算值」，estimate 这个词不是措辞上的谨慎，而是接口向 `InflaterInputStream` 这类实现妥协的结果：解压流在真正读到末尾之前，根本无法知道解压后还剩多少字节。契约一放宽，调用方就失去了依赖它的权利，这笔债要由二十年后每一个想拿它分配缓冲区的人来还。
 
-如果用继承来叠加功能，需要为每种组合单独创建子类：
-- `BufferedFileInputStream`
-- `DataBufferedFileInputStream`
-- `CheckedBufferedFileInputStream`
-- `DataCheckedBufferedFileInputStream`
-- ...
+第三条是标准库不能假设调用者是谁。同一套 `java.io` 要服务命令行脚本、应用服务器和 IDE 插件，所以它不能自带全局线程池、全局配置之类的隐性依赖。这条在 `ThreadLocal` 与 `CompletableFuture` 上被打破了一半：前者把状态挂在线程对象上，后者默认借用 `ForkJoinPool.commonPool()`，两处都成了后来被反复讨论的设计债。
 
-M 种功能就需要 2^M 个子类——组合爆炸。装饰器模式通过运行时组合，只需 M 个装饰器类，就能表示 2^M 种功能组合。这是"组合优于继承"在 I/O 系统中的完美诠释。
+### 1.3 五个落点
 
-### 2.2 Reader/Writer 体系：字符流装饰器
+图 1 把这五个落点按定型年份排在一条时间轴上，并把每一处可观察到的代价与它的现代替代并排放。排在一起看，会发现一条规律：JDK 里的模式很少被推翻，多数是被绕过去——新的 API 在旁边长出来，旧的继续提供服务，两套并存二十年。
 
-字符流（`Reader`/`Writer`）与字节流结构完全对称，同样是装饰器体系：
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+flowchart TD
+    A["JDK 1.0 · 1996<br/>只有字节流"] --> IO["java.io 装饰器族"]
+    B["JDK 1.1 · 1997<br/>字符编码进入标准库"] --> IO
+    C["JDK 1.2 · 1998<br/>集合框架"] --> IT["Iterator 与 Iterable"]
+    D["Java 5 · 2004<br/>JSR 166"] --> EX["Executor 体系"]
+    E["Java 8 · 2014<br/>Lambda 与 Stream"] --> FN["Comparator 与函数式接口"]
+    F["JDK 1.2 · 1998<br/>线程上下文"] --> TL["ThreadLocal"]
 
-```java
-// 从文件读取，自动检测编码，带缓冲
-BufferedReader reader = new BufferedReader(
-    new InputStreamReader(
-        new FileInputStream("data.txt"), 
-        StandardCharsets.UTF_8
-    )
-);
+    IO --> P1["可观察的代价<br/>available 只承诺估算"]
+    IT --> P2["可观察的代价<br/>fail-fast 只做尽力检测"]
+    EX --> P3["可观察的代价<br/>工厂方法隐藏队列与上限"]
+    FN --> P4["可观察的代价<br/>契约正确性交给调用方"]
+    TL --> P5["可观察的代价<br/>存储挂在 Thread 上"]
 
-// InputStreamReader 是字节流到字符流的桥接（适配器模式！）
-// 它将 InputStream（字节流）适配为 Reader（字符流）的接口
-// BufferedReader 再装饰 Reader，添加 readLine() 等便利方法
+    P1 --> N1["NIO / Files / transferTo"]
+    P2 --> N2["Spliterator 与并行流"]
+    P3 --> N3["虚拟线程 · JDK 21"]
+    P4 --> N4["显式策略类仍在框架层"]
+    P5 --> N5["ScopedValue · 预览"]
 
-String line;
-while ((line = reader.readLine()) != null) {
-    System.out.println(line);
-}
+    classDef old fill:#6272a4,stroke:#44475a,color:#f8f8f2
+    classDef burden fill:#ff5555,stroke:#44475a,color:#f8f8f2
+    classDef modern fill:#50fa7b,stroke:#44475a,color:#282a36
+    class A,B,C,D,E,F old
+    class P1,P2,P3,P4,P5 burden
+    class N1,N2,N3,N4,N5 modern
 ```
 
-这里 `InputStreamReader` 同时体现了两个模式：
-- **适配器模式**：将 `InputStream`（字节接口）适配为 `Reader`（字符接口），两个接口不兼容，通过适配器转换；
-- 它同时也是一个**组件**，可以被 `BufferedReader` 装饰。
+| 落点 | 定型年份 | 当年要解的约束 | 留下的包袱 | 现代替代 |
+| --- | --- | --- | --- | --- |
+| `java.io` 装饰器族 | 1.0 / 1.1 | 1.0 只认字节，1.1 才把编码纳入标准库 | `available()` 只承诺估算、关闭责任沿链传播、嵌套顺序无类型保护 | NIO 的 `Channel` + `Buffer`、`Files` 静态方法、`transferTo` |
+| `Iterator` 与 `Iterable` | 1.2 | 遍历状态必须从容器里拆出来，`for-each` 要适用于所有容器 | fail-fast 只做尽力检测，不是并发安全 | `Spliterator` 与并行流 |
+| `Comparator`、`Runnable`、`Callable` | 1.2 / 1.0 / 5 | 把行为变成可传递、可排队的值 | 契约正确性外置给调用方，编译器只能查签名 | 函数式接口与显式策略类并存 |
+| `Executor` 体系 | 5 | 线程创建昂贵，需要池化与任务排队 | 工厂方法隐藏无界队列与线程上限 | 虚拟线程 |
+| `ThreadLocal` | 1.2 | 隐式上下文传递，避免污染方法签名 | 存储挂在 `Thread` 上，线程池复用时泄漏 | `ScopedValue`（预览） |
 
-一个类在不同的视角下，可以对应不同的设计模式——模式不是非此即彼的标签，而是从特定角度描述设计的视角。
+表 1 的读法是先看第二列，再看第四列：某个落点定型的年份决定了它的形状，它留下的包袱又决定了后来替代品的方向。`java.io` 的装饰器链之所以被 `Channel` + `Buffer` 取代，正是因为链式的顺序语义无法被类型系统约束；`Spliterator` 之所以必须存在，正是因为 `Iterator` 的「一次一个元素」没法并行。至于模式本身，装饰器与代理、适配器的判据在 [[04 结构型模式（上）——代理、适配器与装饰器]] 里已经拆过，这里不再重复，只补 JDK 特有的那部分约束。
 
 ---
 
-## 第 3 章 java.util.concurrent：并发包中的设计模式
+## 第 2 章 java.io：装饰器族与它没还完的债
 
-### 3.1 AbstractQueuedSynchronizer：模板方法模式的精髓
+### 2.1 两棵树的由来
 
-`AbstractQueuedSynchronizer`（AQS）是 Java 并发包最重要的基础类，`ReentrantLock`、`CountDownLatch`、`Semaphore`、`ReentrantReadWriteLock` 都基于它构建。AQS 的设计是模板方法模式在并发编程中最深刻的应用。
+JDK 1.0 的 I/O 只认字节。1997 年的 1.1 要处理中文、日文、俄文，必须先解决「字节到字符」的映射，而 1.0 的 `InputStream.read()` 没有编码概念，`int` 返回值只够表达 0 到 255 以及 -1。更麻烦的是多字节编码：一个字符可能横跨两次 `read()` 的边界，解码器必须持有「半个字符」的状态。这两件事都没法塞进 `InputStream` 的既有契约而不破坏兼容，于是标准库另起一棵 `Reader`/`Writer` 树，再用 `InputStreamReader` 把两棵树接起来。
 
-AQS 将同步器的通用逻辑（FIFO 等待队列管理、线程的 park/unpark、自旋重试）固化在父类中，将"什么叫做获取同步器成功"和"什么叫做释放同步器"定义为子类需要覆写的方法：
+所以 `InputStreamReader` 在模式上确实是一个适配器，但它的存在理由不是教科书里那句「接口不兼容所以要适配」，而是「1.0 的接口无法在保持兼容的前提下容纳编码状态」。这两句话的区别很重要：前一句是事后归纳，后一句是当事人当时的处境。图 2 画的是两棵树的形状，注意 `FilterInputStream` 这一层的特殊位置——它不在功能分支上，而在装饰分支的根部。
+
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+flowchart LR
+    subgraph BYTE ["字节流树 · JDK 1.0"]
+        IS["InputStream"] --> FIS["FileInputStream 等具体组件"]
+        IS --> FI["FilterInputStream<br/>把每个方法转发给字段 in"]
+        FI --> BI["BufferedInputStream"]
+        FI --> DI["DataInputStream"]
+        FI --> PI["PushbackInputStream"]
+    end
+    subgraph CHAR ["字符流树 · JDK 1.1"]
+        RD["Reader"] --> FR["FileReader"]
+        RD --> BR["BufferedReader"]
+        RD --> IR["InputStreamReader"]
+    end
+    IR -.->|"解码：字节到字符"| IS
+    classDef base fill:#6272a4,stroke:#44475a,color:#f8f8f2
+    classDef deco fill:#ff79c6,stroke:#44475a,color:#282a36
+    class IS,RD base
+    class FI,BI,DI,PI,BR,IR deco
+```
+
+两棵树的代价直接写在了类型系统里：没有任何类型能表达「这是一个字符流」，只能靠类名与继承位置辨认；`FileReader` 长期使用平台默认编码，直到 JDK 11 才补上带 `Charset` 的构造器，而默认编码被固定为 UTF-8 要等到 JDK 18 的 JEP 400；`Reader` 一侧也没有 `available()` 的对应物，只有一个语义更弱的 `ready()`，它只回答「下一次读会不会阻塞」，连估算值都不给。
+
+### 2.2 FilterInputStream 为什么是一个空壳
+
+`FilterInputStream` 把 `InputStream` 的每个方法原样转发给字段 `in`，自己不加任何功能：
 
 ```java
-// AQS 中定义的"可变步骤"（子类按需覆写）
-public abstract class AbstractQueuedSynchronizer {
-    
-    // 独占模式：尝试获取（子类覆写，定义"什么情况下算获取成功"）
-    protected boolean tryAcquire(int arg) {
-        throw new UnsupportedOperationException();
-    }
-    
-    // 独占模式：尝试释放
-    protected boolean tryRelease(int arg) {
-        throw new UnsupportedOperationException();
-    }
-    
-    // 共享模式：尝试获取（≥0 表示成功）
-    protected int tryAcquireShared(int arg) {
-        throw new UnsupportedOperationException();
-    }
-    
-    // 共享模式：尝试释放
-    protected boolean tryReleaseShared(int arg) {
-        throw new UnsupportedOperationException();
-    }
-    
-    // AQS 的"固化骨架"：acquire 的完整流程（子类不需要也不应该覆写这部分）
-    public final void acquire(int arg) {
-        // 1. 先尝试直接获取（调用子类覆写的 tryAcquire）
-        // 2. 如果失败，将当前线程封装为 Node 加入 CLH 等待队列
-        // 3. 在队列中自旋或 park 等待
-        // 4. 等被唤醒后，再次尝试 tryAcquire
-        if (!tryAcquire(arg) && acquireQueued(addWaiter(Node.EXCLUSIVE), arg)) {
-            selfInterrupt();
-        }
-    }
+public class FilterInputStream extends InputStream {
+    protected volatile InputStream in;   // 装饰器必须持有的被装饰者
+
+    public int read() throws IOException { return in.read(); }    // 全部转发
+    public int available() throws IOException { return in.available(); }
+    public void close() throws IOException { in.close(); }        // 连关闭都转发
 }
 ```
 
-`ReentrantLock` 的公平锁和非公平锁，对 `tryAcquire()` 的实现有本质差异：
+它在装饰器模式里扮演的是抽象装饰者（Decorator）的角色，存在的唯一意义是提供一个「可以被继续包装的位置」。为什么是抽象类而不是接口？因为 1.0 的接口不能带实现，而装饰器需要一整套默认的委托行为。GoF 书里装饰器实现 `Component` 接口，在 JDK 里只能写成「继承 `InputStream` 抽象类 + 持有一个 `InputStream` 字段」，同一个模式被语言能力改写成了另一个形状。这是本篇第一个反复出现的主题：模式的落地形态由语言给了什么决定，不是由模式定义决定。
+
+空壳的代价是这一层可以被违反。`FilterOutputStream.close()` 就不只是转发：它先 flush，再关闭底层流，flush 失败时仍尝试关闭并把两个异常按 suppressed 挂起来。也就是说，装饰器族里每个类都可以自行决定哪些方法真转发、哪些方法改写，而这个差异不会出现在类型上，调用方只能读源码或读文档。
+
+### 2.3 顺序即语义
+
+装饰器链最容易被低估的一点是：**顺序即语义**，而编译器不会替你看这个顺序。同样三层包装，换个顺序就是另一个程序。表 2 列了四种典型写法，紧随其后的代码给出最容易出错的两处。
+
+| 写法 | 能力由谁决定 | 语义差异 | 典型误用 |
+| --- | --- | --- | --- |
+| `new BufferedInputStream(new DataInputStream(fis))` | 最外层，只有 `read()` | 缓冲在解码之外，`readInt()` 根本不可见 | 以为「套了缓冲就有缓冲」，实际拿不到 `readInt()` |
+| `new DataInputStream(new BufferedInputStream(fis))` | 最外层，`readInt()` 可用 | 每次 `readInt()` 从 8KB 缓冲区取 4 字节 | 无，这是正确写法 |
+| `new PushbackInputStream(new BufferedInputStream(fis))` | 最外层，`unread()` 可用 | 回退发生在缓冲层之上，语义正确 | 反过来包，`unread()` 影响不到已被缓冲的字节 |
+| `new CheckedInputStream(new GZIPInputStream(fis), crc)` | 最外层，校验和可读 | 校验的是解压后的字节 | 与内层校验压缩字节的写法混用，校验和对不上 |
 
 ```java
-// ReentrantLock.FairSync：公平锁的 tryAcquire
-protected final boolean tryAcquire(int acquires) {
-    final Thread current = Thread.currentThread();
-    int c = getState();
-    if (c == 0) {
-        // 关键区别：hasQueuedPredecessors() 检查等待队列中是否有其他线程
-        // 如果有，即使当前没有线程持有锁，也不抢占（尊重等待顺序）
-        if (!hasQueuedPredecessors() && compareAndSetState(0, acquires)) {
-            setExclusiveOwnerThread(current);
-            return true;
-        }
-    } else if (current == getExclusiveOwnerThread()) {
-        // 重入：持有锁的线程再次获取，只增加计数
-        setState(c + acquires);
-        return true;
-    }
-    return false;
+// 正确：解码在外、缓冲在内，readInt 每次只碰内存里的缓冲区
+DataInputStream good = new DataInputStream(
+        new BufferedInputStream(new FileInputStream("data.bin")));
+
+// 错误：缓冲在外，能力只剩 read()，想拿 readInt 得往下强转，强转出来的对象又不带缓冲
+BufferedInputStream bad = new BufferedInputStream(
+        new DataInputStream(new FileInputStream("data.bin")));
+
+// 回退必须放在缓冲之外：反过来的话，BufferedInputStream 已经把字节读进自己的数组，
+// PushbackInputStream 的 unread 只能回退到它自己那层，调用方看到的仍是重复字节
+PushbackInputStream push = new PushbackInputStream(
+        new BufferedInputStream(new FileInputStream("token.txt")), 1);
+```
+
+顺序之外还有一处历史包袱，是装饰器数量本身的膨胀。类并不会爆炸（一个装饰器一个类），爆炸的是调用点：业务代码里到处出现四层嵌套，IDE 的类型推断帮不上忙，异常栈里全是包装器的方法帧，而顺序错了照样编译通过。这就是「组合优于继承」在工程上要付的代价——灵活性从编译期移到了运行期，约束从类型系统移到了人的记忆里。
+
+### 2.4 历史包袱：available()、close()、mark/reset
+
+`available()` 的契约是估算，各家实现给出的东西完全不是一个量级，表 3 是笔者从 JDK 17 源码里核对过的对照。
+
+| 实现 | `available()` 返回 | 能否当「剩余字节数」用 |
+| --- | --- | --- |
+| `FileInputStream` | 文件剩余字节数（精确，但只是快照） | 大致可以，仍应处理读到 -1 的情况 |
+| `BufferedInputStream` | 缓冲区剩余（`count - pos`）加上底层的 `available()` | 不能，底层可能返回 0 或 1 |
+| `InflaterInputStream` | 未到末尾返回 1，到末尾返回 0 | 完全不能，文档明说不要依赖它 |
+| `ZipInputStream` | 当前条目未读完返回 1，读完返回 0 | 不能，它描述的是条目状态 |
+| `Reader` 一侧 | 没有对应方法，只有 `ready()` | 连估算都没有 |
+
+`available()` 之所以只能这样，是因为「可读字节数」在解压、解密、字符解码这三类流上根本没有定义——输入侧压缩了多少字节，和输出侧还能产生多少字节，没有线性关系。接口要给所有实现留活路，就只能把话说到最虚。调用方如果拿它去 `new byte[in.available()]`，在文件流上碰巧对，在压缩流上就退化成每次读 1 字节。
+
+还有一处不常被提起的约定，藏在读方法自己的返回值里。`read()` 返回 `int` 是为了给 -1 留位置，实现上必须把 `byte` 扩成 0 到 255 的 `int`，调用方每次都要先判断是不是 -1；而 `read(byte[], int, int)` 只有在 `len == 0` 时才可能返回 0，其余情况要么至少读到一个字节，要么返回 -1。同一个「读」的动作，在两套签名下的返回值语义并不相同：前者用 -1 表达 EOF，后者用 0 表达「你要求读的长度是 0」。1.0 时代没有 `Optional`、也没有 `ByteBuffer`，这是唯一可行的写法，代价是每个写 I/O 的人都要在循环里额外记住一条规则。
+
+`close()` 的问题在责任链而不是实现。`FilterInputStream.close()` 直接转发，于是关闭动作沿着包装链一层层往里走，这套机制成立的前提是每一层都老实地转发、且重复关闭是幂等的。现实里两个前提都会破：第三方流可能覆写 `close()` 却不调用 `super.close()`；`try-with-resources` 在显式关闭外层之后又会去关内层，于是同一个底层句柄被关两次。更要命的是关闭后再读的行为没有统一约定——多数实现抛 `IOException`，但那是实现选择，不是接口承诺。
+
+`mark()`/`reset()`/`markSupported()` 是一组**可选操作**。`InputStream` 默认不支持标记，`BufferedInputStream` 支持，`PushbackInputStream` 不支持，而 `FilterInputStream` 只把 `markSupported()` 转发给底层。于是「能不能 mark」这个问题，答案取决于整条链的最内层是什么流，以及 `mark` 与缓冲的相对位置；`readlimit` 也只是「标记最多能活多远」的建议值。三个可选方法，加上链式顺序，构成了 I/O 里最难靠读代码判断行为的一片区域。
+
+### 2.5 现代替代：Channel、Files、transferTo
+
+NIO 在 2002 年的 Java 1.4 进场，思路换了一整套：不再用包装类叠功能，而是把「数据放在哪里」和「怎么搬运」拆开——数据放在 `Buffer` 里，搬运交给 `Channel`；编码交给显式的 `CharsetDecoder`，不再是流对象自带的默认行为。
+
+```java
+// 搬运显式：读多少、写多少、要不要零拷贝，都在调用处看得见
+try (FileChannel in = FileChannel.open(src, StandardOpenOption.READ);
+     FileChannel out = FileChannel.open(dst, StandardOpenOption.WRITE,
+                                        StandardOpenOption.CREATE)) {
+    in.transferTo(0, in.size(), out);   // 能否走 sendfile 由操作系统与文件系统决定
 }
 
-// ReentrantLock.NonfairSync：非公平锁的 tryAcquire
-protected final boolean tryAcquire(int acquires) {
-    return nonfairTryAcquire(acquires);
-}
-
-final boolean nonfairTryAcquire(int acquires) {
-    final Thread current = Thread.currentThread();
-    int c = getState();
-    if (c == 0) {
-        // 非公平：不检查等待队列，直接 CAS 抢锁（可能插队）
-        if (compareAndSetState(0, acquires)) {
-            setExclusiveOwnerThread(current);
-            return true;
-        }
-    }
-    // 重入逻辑同上...
-    return false;
+// 编码显式：默认行为不再参与决策
+try (BufferedReader r = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
+    r.lines().forEach(System.out::println);   // 注意：返回的 Stream 也持有文件句柄
 }
 ```
 
-两种实现仅在 `tryAcquire()` 上有差异，AQS 的等待队列管理、线程 park/unpark 完全复用——这正是模板方法模式的力量：**变化的部分（竞争策略）下放到子类，不变的部分（队列管理）由父类统一实现**。
+把这两套东西与装饰器链放在一起看，能看出替代品为什么长成另一个样子。`Channel` + `Buffer` 把状态机的复杂度摆到明面上（`flip()`/`clear()`/`compact()` 各有含义），换来的好处是顺序不再是隐含语义：没有链，也就没有链的错序。`Files` 用静态方法把「打开、装饰、关闭」这套模板收进库，`Files.newBufferedReader(path, charset)` 一行就把编码、缓冲、关闭全定了。`InputStream.transferTo(OutputStream)` 是 JDK 9 补的兜底办法，内部就是 8KB 缓冲的循环搬运，让「复制一个流」不用再手写 while 循环。
 
-### 3.2 Callable 与 FutureTask：命令模式的异步版本
+代价也要说清楚。`InputStreamReader` 的解码错误默认用替换字符处理，坏字节静默变成 `U+FFFD`；`CharsetDecoder` 默认是 REPORT，会抛 `MalformedInputException`，想静默还得自己设 `onMalformedInput`。前者的「方便」正是后者要显式选择的那个策略，也就是说，装饰器把策略藏进了构造函数，NIO 把策略摆到了调用点。
 
-`Callable<V>` 是 `Runnable` 的有返回值版本，两者都是命令接口——将一段操作封装为对象，提交给执行器（`ExecutorService`）异步执行：
+---
 
-```java
-// Callable：有返回值的命令接口
-public interface Callable<V> {
-    V call() throws Exception;
-}
+## 第 3 章 把行为变成值：Comparator、Runnable、Callable
 
-// Runnable：无返回值的命令接口
-public interface Runnable {
-    void run();
-}
+### 3.1 Comparator：策略的最小完整形态
 
-// ExecutorService：命令的执行者（Invoker）
-ExecutorService executor = Executors.newFixedThreadPool(4);
-
-// 提交命令：返回 Future（凭证，用于获取异步结果）
-Future<Integer> future = executor.submit(() -> {
-    Thread.sleep(1000);
-    return 42;  // 异步计算结果
-});
-
-// 主线程做其他事...
-
-// 需要结果时，通过 Future 阻塞获取
-Integer result = future.get();  // 等待异步完成，获取 42
-```
-
-`FutureTask<V>` 同时实现了 `Runnable` 和 `Future<V>`——它既可以被提交给 `ExecutorService` 执行（作为 `Runnable`），又可以被其他线程查询结果（作为 `Future`）。这是命令模式（封装操作）与状态模式（RUNNING / COMPLETING / NORMAL / EXCEPTIONAL / CANCELLED）的结合。
-
-### 3.3 Comparator：策略模式的函数式演进
-
-`Comparator<T>` 是集合排序中的策略接口，定义了"两个对象如何比较大小"这一可变算法：
+`Comparator` 从 1.2 起就在集合框架里，与 `Comparable` 分工明确：`Comparable` 是「自然顺序」，绑在类上，一个类只能有一种；`Comparator` 是「外部可替换的比较算法」，一个类可以有无数种。这个分工本身就是策略模式的核心——把变化点从类型定义里拿出来，交给调用方在调用点传入。
 
 ```java
-// Comparator 是一个函数式接口（策略接口）
-@FunctionalInterface
-public interface Comparator<T> {
-    int compare(T o1, T o2);
-    // 还有大量 default 方法用于组合策略...
-}
-
-// 策略的使用：不同排序策略，不需要修改 sort 调用代码
-List<Employee> employees = getEmployees();
-
-// 策略一：按薪资降序
-employees.sort(Comparator.comparingDouble(Employee::getSalary).reversed());
-
-// 策略二：按部门升序，相同部门按姓名升序（策略组合）
+// 策略在调用点传入，排序算法本身不关心比较逻辑
 employees.sort(Comparator.comparing(Employee::getDepartment)
                          .thenComparing(Employee::getName));
 
-// 策略三：自定义多级排序（Lambda 即策略）
-employees.sort((e1, e2) -> {
-    int deptCompare = e1.getDepartment().compareTo(e2.getDepartment());
-    if (deptCompare != 0) return deptCompare;
-    return Double.compare(e2.getSalary(), e1.getSalary());  // 同部门按薪资降序
+// 同一个策略接口的三种承载形式
+Comparator<String> byLen = Comparator.comparingInt(String::length);  // lambda 派生
+Comparator<String> ci    = String.CASE_INSENSITIVE_ORDER;            // JDK 自带的显式策略
+Comparator<String> safe  = Comparator.nullsFirst(byLen);             // 策略组合
+```
+
+Java 8 给 `Comparator` 加了一批 `default` 与 `static` 方法——`reversed`、`thenComparing`、`comparing`、`naturalOrder`、`nullsFirst` 等等——这件事的意义比「加了几个方法」大得多：策略从「若干互相独立的实现类」变成了「可以代数式派生的值」。GoF 时代的策略模式，策略数量是类的数量；函数式之后，策略数量是组合的数量。策略模式的一般形态与「策略 vs 状态」的判据见 [[06 行为型模式（上）——策略、模板方法与观察者]]，这里只关心它在 JDK 里被压成了什么形状。
+
+有一条容易被踩的边界，是 `Comparable` 与 `Comparator` 对「相等」的定义可以不同。`BigDecimal` 的 javadoc 明确写着它的自然顺序与 `equals` 不一致：`new BigDecimal("1.0")` 与 `new BigDecimal("1.00")` 的 `equals` 为 false，`compareTo` 却是 0。于是同一对对象放进 `HashSet` 是两个元素，放进 `TreeSet` 变成一个。策略外置之后，「什么叫相等」的定义权也随之外置了，判重、去重、分组这些看似与比较无关的操作，都会被比较器的语义悄悄改写。
+
+### 3.2 Runnable 与 Callable：同一个命令，两笔签名债
+
+`Runnable` 在 1.0 就有，那时候它只是 `Thread` 构造器的参数，命令模式的「接收者」就是线程本身。真正让 `Runnable` 变成命令对象的是 1.5 的 `Executor`：任务可以被排队、被延时、被取消、被记录，命令模式的全部价值——把一次请求变成一个可存储、可传递的对象——这时才兑现。同一个接口，换了调用环境，模式里的角色才完整，这说明模式不是接口的固有属性，而是「接口加上谁在调它」的关系。
+
+`Callable` 的出现是一笔签名债的结果。`Runnable.run()` 不能抛受检异常，于是「提交一个可能失败的任务」在类型上就无法表达。为什么不在 `Runnable` 上加 `throws Exception`？因为它是 1.0 的公开接口，改签名会同时破坏二进制兼容与源码兼容——所有实现类都得跟着改，所有调用点都得处理一个原本不存在的受检异常。标准库的选择是另立 `Callable`，再用 `Executors.callable(Runnable)` 做适配，这是适配器模式在 JDK 里最小的一个样本：一个方法，一次接口翻译。
+
+有了返回值，才需要「提货单」，于是有了 `Future`。`Future` 的五个方法（`cancel`、`isCancelled`、`isDone`、两个 `get`）把「提交」与「取结果」在时间上拆开，这个拆开带来了两个经典问题：`cancel(true)` 只能靠中断协作，任务不响应中断就停不下来（`Thread.stop` 早已弃用）；`submit` 会把任务包装成 `FutureTask`，任务抛出的异常被存进 `Future` 内部，而不是交给线程的 `UncaughtExceptionHandler`——调用方如果只 `submit` 不 `get`，异常就此蒸发。`execute` 与 `submit` 的这一点差别，是生产环境里最常见的一类「静默失败」。
+
+### 3.3 函数式接口是策略的语法糖，但不是全部
+
+`@FunctionalInterface` 不是语法糖本身，它只是一个编译期断言：接口有且仅有一个抽象方法。真正的语法糖是 lambda 与目标类型推导——它们让「**策略是一个值**」这件事的成本降到接近于零，`list.sort((a, b) -> a.id() - b.id())` 不再需要 `class IdComparator implements Comparator`。这也让策略的替换门槛几乎消失，同时带来一个反向问题：既然策略这么便宜，什么时候还需要写一个显式的策略类？
+
+判据不在「代码长短」，在策略的生命周期。表 4 是笔者在实践中用的分法。
+
+| 承载形式 | 适用场景 | 代价 |
+| --- | --- | --- |
+| lambda | 无状态、单方法、就地使用 | 无法命名复用，栈信息弱，不能承载配置 |
+| 匿名类 | 需要捕获局部状态且只在一处 | Java 8 之后基本被 lambda 取代 |
+| 枚举 | 策略集合有限，需要按名字查找或序列化 | 不能携带实例状态，扩展要改源码 |
+| 显式类 + 注册表 | 需要注入依赖、多个方法、可被容器发现 | 类数量与配置成本 |
+
+更实用的三条判据是：策略是否需要被「发现」（配置、注解、名字查找）；是否需要状态与生命周期（连接、计数器、线程池）；是否需要被多个调用方共享或被测试替身替换。三条里只要中一条，lambda 就不够用。反过来看框架层，`HandlerMapping`、`ViewResolver`、Jackson 的序列化器都还是显式类，原因正是它们需要被容器发现并装配——函数式接口解决了「策略是一个值」，没解决「策略需要被找到」。Spring 侧的同一条线索见 [[09 设计模式在Spring中的应用全景]]。
+
+### 3.4 契约外置的代价：TimSort 的那句异常
+
+把算法外置成策略，也把一部分正确性责任外置给了调用方。`Comparator` 的契约要求反对称与传递性，编译器只能检查签名，检查不了这两条。TimSort 从 Java 7 起取代了对象数组的旧归并排序，它的合并阶段一旦发现比较结果不自洽，就会直接抛异常：
+
+```java
+// 用减法实现比较，简洁但会溢出；溢出时符号翻转，传递性随之被破坏
+Comparator<Point> bad = (a, b) -> a.x - b.x;
+
+list.sort(bad);
+// 数据量超过插入排序阈值、进入归并阶段后：
+// java.lang.IllegalArgumentException: Comparison method violates its general contract!
+```
+
+这句异常值得记住，因为它把「模式把变化点外置」的代价说得最直白：策略模式让排序算法不必知道比较逻辑，代价是排序算法再也没法保证结果正确，只能在事后发现不自洽时报错。命令模式同理，`submit` 之后的异常要调用方自己去 `get`；装饰器同理，链的顺序要调用方自己保证。模式换来的灵活性，账都要有人付，多数时候付账的是调用方。
+
+顺带说一句命令模式在全盛期的样子。带撤销栈、带事务脚本、带宏录制的命令，需要命令对象持有接收者、持有可逆操作、能被组合成一棵树，这些形态在框架层更常见，见 [[07 行为型模式（中）——责任链、命令与迭代器]]。JDK 里的 `Runnable` 是一个被削到最小的命令，只剩「可执行」这一件事。
+
+---
+
+## 第 4 章 Iterator 与 Iterable：把一个动作拆成两种类型
+
+### 4.1 为什么必须分开
+
+集合是数据结构，迭代器是游标。若把两者合成一个接口，一个容器就只能有一个遍历位置：嵌套遍历互相干扰，把遍历位置存起来稍后再用也不可能。分开之后，`iterator()` 每次返回一个独立的游标，一容器多游标，互不干扰。用图书馆打比方：书是集合，借阅卡是迭代器；你读同一本书读到第 3 页，不会让另一个人的借阅卡也停在第 3 页，图书馆本身更不会因此只剩第 3 页之后的书。
+
+更关键的是 `Iterable` 与 `for-each` 的关系。增强 for 循环对 `Iterable` 调 `iterator()`，对数组走下标，这是编译期就定下来的规则——所以「可迭代」是一种类型能力，「迭代」是一次有状态的会话。分离的收益在于，集合可以只实现 `iterator()`，而 `forEach`、`spliterator` 这类默认方法由接口提供，容器不必逐个实现。
+
+```java
+// for-each 只是语法：编译器把它展开成显式的迭代器调用
+for (String s : list) { use(s); }
+
+for (Iterator<String> it = list.iterator(); it.hasNext(); ) {
+    String s = it.next();   // 每次 next() 都可能抛 ConcurrentModificationException
+    use(s);
+}
+```
+
+顺带交代一段遗留。`Enumeration` 是 1.0 的接口，方法名是 `hasMoreElements()`/`nextElement()`，没有 `remove`，命名冗长。1.2 的集合框架另立了 `Iterator`，但旧接口不能删，于是 `Vector`/`Hashtable` 被改成同时提供两者：`elements()` 返回 `Enumeration`，`iterator()` 返回 `Iterator`。这类「新旧并存」在 JDK 里不是例外而是常态，它是第 1 章那条二进制兼容约束的直接产物。
+
+### 4.2 fail-fast 是尽力而为，不是并发安全
+
+`ArrayList` 的迭代器持有一个 `expectedModCount`，与容器里的 `modCount` 比对，不等就抛 `ConcurrentModificationException`。这个机制常被误读成「集合线程不安全，所以并发改会抛异常」，事实是：它既不是线程安全保证，也不是只在并发下触发。
+
+```java
+List<String> list = new ArrayList<>(List.of("a", "b", "c"));
+for (String s : list) {
+    if (s.equals("b")) list.remove(s);   // 单线程也会抛：迭代器看到的 modCount 变了
+}
+```
+
+抛出点也值得注意：异常发生在「下一次检查」时——`next()`、`remove()`、`forEachRemaining()` 里——而不是在修改发生的那一刻。所以它叫 fail-fast 而不是「并发检测」：修改可能早就发生了，只是恰好在下一次遍历时才被发现，这套机制只能算**尽力而为**的检测，并不承诺任何并发正确性。正确做法是用 `iterator.remove()`、`removeIf()`，或改用 `CopyOnWriteArrayList` 这类写时复制的容器。
+
+`removeIf` 值得单独看一眼，它是「把遍历与修改收进库」的正面例子：默认实现用 `iterator()` 遍历，命中条件时调 `iterator.remove()`，一次遍历、一次修改，`expectedModCount` 与 `modCount` 始终同步。JDK 8 之后新增的命令式集合操作大多是这个套路——不是绕开 fail-fast，而是把「边遍历边改」挪进库里，让调用方没有机会写错。`forEachRemaining` 则是另一个方向的优化：把逐个 `next()` 的虚调用合并成一次调用，遍历大集合时能省下可观的分派开销。
+
+### 4.3 Spliterator 的拆分契约
+
+到了 Java 8，遍历要并行，`Iterator` 的「一次取一个」成了瓶颈：要并行就得能把剩余元素切成互不重叠的若干块。`Spliterator` 为此而生，它的核心不是多了一个方法，而是多了一条契约：
+
+```java
+public interface Spliterator<T> {
+    // 契约：返回的 Spliterator 覆盖「当前待遍历元素的前缀」，剩余部分留在自己身上；
+    // 返回 null 表示不再拆（已经足够小，或数据结构不支持）
+    Spliterator<T> trySplit();
+    boolean tryAdvance(Consumer<? super T> action);
+    long estimateSize();
+    int characteristics();    // 位掩码，见下
+}
+```
+
+**前缀**这两个字是并行的地基：前缀与剩余不重叠、不漏，任务切分才能保证每个元素恰好被处理一次。`characteristics()` 返回的位掩码也不是装饰，`ORDERED`（0x10）、`DISTINCT`（0x1）、`SORTED`（0x4）、`SIZED`（0x40）、`NONNULL`（0x100）、`IMMUTABLE`（0x400）、`CONCURRENT`（0x1000）、`SUBSIZED`（0x4000）各有消费方：`SIZED` 决定并行时能否预估工作量、能否预分配数组；`ORDERED` 决定 `forEachOrdered` 有没有意义；`SORTED` 让 `sorted()` 在比较器一致时退化为空操作；`DISTINCT` 让 `distinct()` 走捷径。谎报这些位不会在编译期报错，只会在运行时给出错误结果，而 `estimateSize()` 只是估算，只有 `SIZED` 才承诺精确。
+
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+flowchart TD
+    A["ArrayList<br/>下标区间 lo..hi"] -->|"取中点，O(1)"| A1["前缀 lo..mid"]
+    A --> A2["剩余 mid..hi"]
+    B["LinkedList<br/>只有节点游标"] -->|"把前缀节点搬进数组"| B1["Object[] 批次，从 1024 起"]
+    B --> B2["游标前移，剩余仍在链上"]
+    A1 --> C["并行流的任务切分"]
+    A2 --> C
+    B1 --> C
+    B2 --> C
+```
+
+图 3 对比了两种典型实现，这是「数据结构决定并行度」最硬的一处证据。`ArrayList` 的 `Spliterator` 按下标区间二分，`trySplit` 是 O(1)；`LinkedList` 的 `trySplit` 必须把前缀节点一个个搬进 `Object[]`，批次从 1024 开始增长、上限 2 的 25 次方，每次拆分本身就要线性遍历。所以 `linkedList.parallelStream()` 常常比串行还慢，慢的不是并行框架，是拆分。
+
+### 4.4 并行流的成本账
+
+并行流默认跑在 `ForkJoinPool.commonPool()` 上，并行度是处理器数减一。这个默认值带来三个必须知道的事实：阻塞型任务会占住工作线程，拖垮整个 JVM 里所有用默认池的并行流；有副作用的 lambda（在 `forEach` 里改外部集合）在并行下不再安全；`forEachOrdered` 为了保序会把并行收益吃掉大半。拆分本身也有成本，元素少、任务轻的时候，切分与合并的开销超过并行节省的时间。
+
+归纳一下适用边界：数据结构支持低成本拆分（数组、区间、树），操作无状态且计算量足够大，才值得上并行流；链表、IO、锁竞争、需要保序，都不适合。这条判据和 JDK 的设计意图是一致的——`Spliterator` 把「能不能拆」交给数据结构回答，而不是让并行框架去猜。
+
+把几代遍历接口排在一起看，分工与代价就清楚了（表 5）。
+
+| 类型 | 定位 | 代价 |
+| --- | --- | --- |
+| `Enumeration` | 1.0 遗留，Vector/Hashtable 时代的游标 | 方法名冗长，无 `remove` |
+| `Iterator` | 1.2 的游标，`for-each` 的基础 | 只能单向，`remove` 是可选操作 |
+| `ListIterator` | `List` 专用，可双向、可改元素 | 只服务 `List` |
+| `Spliterator` | Java 8，可拆分、可并行的遍历 | 拆分契约复杂，特征位必须诚实 |
+| `Stream` | 声明式管道，延迟求值 | 一次性消费，调试与复用困难 |
+
+---
+
+## 第 5 章 Executor 体系：接口分层与模板方法
+
+### 5.1 三层接口是接口隔离的样本
+
+2004 年的 Java 5 引入了 `java.util.concurrent`，其中 `Executor` 只有一个方法 `execute(Runnable)`。这个极简设计是接口隔离原则（ISP）最干净的样本：只想要「执行」的调用方，不该被迫看见 `shutdown`、`submit`、`invokeAll` 这些生命周期方法。`ExecutorService` 才补上生命周期与任务提交，`ScheduledExecutorService` 再补上延时与周期。三层逐级加能力，每一层的调用方只依赖自己需要的部分。
+
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+flowchart TD
+    E["Executor<br/>execute(Runnable)"] --> ES["ExecutorService<br/>submit / invokeAll / shutdown"]
+    ES --> SES["ScheduledExecutorService<br/>schedule / scheduleAtFixedRate"]
+    ES --> TPE["ThreadPoolExecutor<br/>四个 protected 钩子"]
+    SES --> STPE["ScheduledThreadPoolExecutor<br/>DelayedWorkQueue"]
+    E -.->|"JDK 21"| VT["newVirtualThreadPerTaskExecutor"]
+```
+
+图 4 里那条虚线是这套分层最大的回报：JDK 21 的虚拟线程执行器只需要实现 `Executor/ExecutorService`，调用方代码一行不用改。接口分对了，替换实现就是换一个对象。
+
+`Executor` 为什么是接口而不是抽象类？因为它只有一个方法，接口更轻，且 Java 8 之后 `Executor e = Runnable::run` 这种写法让「执行策略」也能用 lambda 表达。这里可以提炼一条判据：需要共享实现时用抽象类（`AbstractList`、`AbstractQueuedSynchronizer`），只需要约定能力时用接口（`Executor`、`Comparator`、`Iterator`）。JDK 里这两类都有，区别不在风格，在「有没有骨架要复用」。
+
+`AbstractExecutorService` 正好把这两类结合了一次。它把 `submit`、`invokeAll`、`invokeAny` 这些「用 `execute` 拼出来」的方法实现好，把 `execute` 本身留给子类：`submit` 的全部实现就是 `newTaskFor(task)` 之后调一次 `execute(ftask)`。于是 `ExecutorService` 是接口，「用 `execute` 实现 `submit`」这套骨架由抽象类提供，第三方只要实现一个方法就能拿到完整的 `ExecutorService`。接口约定能力、抽象类复用骨架，两者从不冲突，JDK 在这套并发框架里把分工划得很干净。
+
+### 5.2 ThreadPoolExecutor 的四个钩子
+
+`ThreadPoolExecutor` 是模板方法模式的教科书案例。父类把「取任务、执行任务、线程退出、状态迁移」这套骨架写死在 `runWorker` 与 `processWorkerExit` 里，把四个**钩子**留给子类覆写：
+
+| 扩展点 | 定义位置 | 何时被调用 | 常见误用 |
+| --- | --- | --- | --- |
+| `beforeExecute` | `ThreadPoolExecutor` | 每个任务执行前 | 在里面抛异常，任务不执行且工作线程退出 |
+| `afterExecute` | `ThreadPoolExecutor` | 任务正常或异常结束后 | 只处理 `thrown == null` 的分支，漏掉任务失败 |
+| `terminated` | `ThreadPoolExecutor` | 状态进入 TERMINATED 时 | 在 `shutdown()` 之后立刻断言已完成 |
+| `newTaskFor` | `AbstractExecutorService` | `submit` 把任务包装成 `Future` 时 | 覆写后只处理 `Callable`，漏掉 `Runnable` 分支 |
+
+```java
+// 前三个钩子在 ThreadPoolExecutor，最后一个在 AbstractExecutorService
+class MonitoredPool extends ThreadPoolExecutor {
+    @Override protected void beforeExecute(Thread t, Runnable r) { /* 打点：任务开始 */ }
+    @Override protected void afterExecute(Runnable r, Throwable t) { /* t 非空即任务抛了异常 */ }
+    @Override protected void terminated() { /* 池真正结束，可以释放外部资源 */ }
+    @Override protected <T> RunnableFuture<T> newTaskFor(Callable<T> c) { /* 换成自定义 FutureTask */ }
+}
+```
+
+表 6 里有两处容易踩空的行为细节，值得展开。其一，`beforeExecute` 抛异常会让当前工作线程以「突然退出」的方式结束，任务不执行、`afterExecute` 不调用，池随后补一个新线程——所以钩子里的代码必须自己兜住异常。其二，任务本身抛异常时 `afterExecute` 仍会被调用，且 `thrown` 非空，但如果任务是被 `submit` 提交的，异常先被 `FutureTask` 存住，`afterExecute` 拿到的 `thrown` 反而是 null，得去 `Future.get()` 里取。
+
+钩子为什么是 `protected` 方法而不是可传入的回调接口？两个原因叠在一起：Java 5 没有 lambda，回调接口意味着每次构造池都要传一个对象；钩子与池的生命周期强绑定，用继承表达最直接，且零分配。这也是「模板方法」与「策略」的选择判据：扩展点少、与对象生命周期绑定、不需要运行期替换时用继承；扩展点多、需要多实现并存、需要运行期切换时用组合。JDK 在同一个类里两种都用了——钩子是继承的 `protected` 方法，拒绝策略是组合的 `RejectedExecutionHandler`，分工清楚。
+
+### 5.3 Executors 的工厂方法隐藏了什么
+
+`Executors` 提供了一批静态工厂方法，名字好记、参数少，代价是配置决策被藏进了实现里。以最常用的两个为例：
+
+```java
+// 名字只承诺「线程数固定」，实现里还有两个不固定的决定
+public static ExecutorService newFixedThreadPool(int nThreads) {
+    return new ThreadPoolExecutor(nThreads, nThreads,
+                                  0L, TimeUnit.MILLISECONDS,
+                                  new LinkedBlockingQueue<Runnable>());  // 无界，容量 Integer.MAX_VALUE
+}
+
+// 名字承诺「复用空闲线程」，实现里线程数上限是 int 的最大值
+public static ExecutorService newCachedThreadPool() {
+    return new ThreadPoolExecutor(0, Integer.MAX_VALUE,
+                                  60L, TimeUnit.SECONDS,
+                                  new SynchronousQueue<Runnable>());
+}
+```
+
+| 工厂方法 | 展开后的关键参数 | 隐藏的代价 | 什么时候该自己 new |
+| --- | --- | --- | --- |
+| `newFixedThreadPool(n)` | 核心=最大=n，无界 `LinkedBlockingQueue`，keepAlive 0 | **无界队列**让拒绝策略永不触发，任务堆积到 OOM；核心线程默认不回收 | 任务量不可控、需要背压时 |
+| `newCachedThreadPool()` | 核心 0，最大 `Integer.MAX_VALUE`，`SynchronousQueue`，60 秒空闲回收 | 线程数实际上无上限，突发流量可以拉起成千上万线程 | 任务短小、并发量有外部限制时 |
+| `newSingleThreadExecutor()` | 核心=最大=1，无界队列，外面还套了一层不可重配置的委托 | 串行加无界队列，吞吐被单线程锁死 | 需要顺序保证但任务量可控时 |
+| `newScheduledThreadPool(n)` | `DelayedWorkQueue` 无界，最大 `Integer.MAX_VALUE` | 延迟任务堆积，最大线程数没有实际约束 | 定时任务需要限并发时 |
+| `newWorkStealingPool()` | 独立的 `ForkJoinPool`，并行度默认处理器数 | 阻塞任务会卡住工作线程，任务需可分治 | 分治型、CPU 密集型任务 |
+
+表 7 里最重要的是最后一列的判据：这些工厂方法适合「任务量可控、失败可容忍」的场景，一旦任务由外部流量驱动，队列长度和线程上限就是必须显式决定的参数，应该直接 `new ThreadPoolExecutor(...)`。文档其实写了「shared unbounded queue」，问题在于工厂名只承诺了线程数固定，绝大多数调用方不会去读那半句。这是工厂方法这个模式最容易被忽略的一面：它用命名换来了可读性，同时把多个相互约束的配置参数一并固化，调用方失去了调整的入口。`ThreadPoolExecutor` 的七个参数如果交给调用方逐个传，就是 Builder 该出现的场合，判据见 [[03 创建型模式（下）——建造者与原型模式]]；JDK 没给 Builder，只给了四个构造器重载，那是 2004 年的 API 习惯。
+
+还有一处反直觉的执行顺序，写在 `execute` 里：线程数未达核心数就新建线程；达到核心数后任务先进队列；只有队列满了才把线程数扩到最大值；仍失败才走拒绝策略。也就是说，核心线程数是常驻规模，最大线程数是「队列满了之后的应急」——很多人以为是「核心满了就扩到最大」，方向正好反了。这个顺序解释了为什么无界队列的池永远扩不到最大线程数：队列不会满，扩容分支永远走不到。
+
+### 5.4 队列与拒绝策略的耦合
+
+拒绝策略（`RejectedExecutionHandler`）有四个现成实现：`AbortPolicy`（抛异常，默认）、`CallerRunsPolicy`（在提交线程里执行）、`DiscardPolicy`（静默丢弃）、`DiscardOldestPolicy`（丢掉队列里最老的任务再重试）。默认选 `AbortPolicy` 是对的，因为它让失败可见；`CallerRunsPolicy` 能形成天然的**背压**，代价是阻塞提交方，如果提交方本身也在池里跑，就会拖慢整条链路；两个 `Discard` 系列只适合「丢了也不影响正确性」的指标与日志。
+
+这里必须把队列和拒绝策略放在一起看：有界队列加 `AbortPolicy` 才能形成背压，无界队列会让所有拒绝策略变成死代码。表 6 里那几个工厂方法的隐患，本质上是队列选择已经把拒绝策略废掉了，而调用方以为自己还有一层保护。
+
+与拒绝策略配套的是关闭语义，这一对方法经常被混用。`shutdown()` 把状态置为 SHUTDOWN：不再接新任务，但队列里的任务会继续执行完；`shutdownNow()` 置为 STOP：中断工作线程，并把队列里尚未执行的任务取出来作为返回值交还给你。前者是「让我把手上的事做完」，后者是「现在就停」，但两者都不保证正在运行的任务立刻结束——`shutdownNow()` 只能发中断，任务不响应中断就停不下来。所以正常关闭的写法是 `shutdown()` 之后 `awaitTermination()` 并检查返回值；只调 `awaitTermination()` 而不先 `shutdown()`，会一直等到超时。
+
+### 5.5 从 Future 到 CompletableFuture
+
+`Future` 只有五个方法，能表达「取一个结果」，表达不了「完成后接着做 A，再基于 A 做 B」。要组合只能三种写法：阻塞 `get`、轮询 `isDone`、或者嵌套回调。前两种浪费线程，第三种就是回调地狱。`CompletableFuture` 在 Java 8 进场，把这三种写法替换成链式组合：
+
+```java
+// 组合取代嵌套：每一步都是「在前一步的结果上声明下一步做什么」
+CompletableFuture.supplyAsync(() -> fetchOrder(id), ioPool)
+        .thenApply(Order::userId)
+        .thenCompose(uid -> CompletableFuture.supplyAsync(() -> loadUser(uid), ioPool))
+        .exceptionally(ex -> User.anonymous())         // 异常必须显式接住，否则静默丢失
+        .thenAccept(user -> render(user));
+```
+
+它的内部结构值得看一眼，因为这是观察者模式的现代形态。每个 `CompletableFuture` 是一个节点，依赖它的节点注册在内部的**完成栈**上；当结果被设置时，`postComplete` 沿栈依次触发下游。与 `java.util.Observable` 相比，差别不在「有没有观察者」，而在结构：`Observable` 是被观察者持有一个 `Vector<Observer>`，通知顺序未定义，事件只能是一个 `Object`；`CompletableFuture` 是每个节点持有自己的依赖链，通知按依赖关系有序进行，值有类型。观察者模式从「一个主题广播给一群监听者」演变成了「一条计算链按依赖传递」，这才是它今天在 JDK 里的主要存在形式。
+
+几个必须知道的坑：`thenApply` 里的函数在「完成上游的那个线程」上同步执行，如果不是 `Async` 变体，IO 线程会顺手把后续计算也做了；默认的异步执行器是 `ForkJoinPool.commonPool()`（并行度小于 2 时退化为每个任务一个线程），阻塞任务必须传自定义 `Executor`；`join()` 抛 `CompletionException` 而 `get()` 抛 `ExecutionException`；`allOf` 返回 `CompletableFuture<Void>`，结果要自己从各个 future 里取。JDK 19 起 `Future` 补了 `state()`、`resultNow()`、`exceptionNow()` 三个方法，能区分 RUNNING/SUCCESS/FAILED/CANCELLED，但组合能力仍然要靠 `CompletableFuture`。
+
+### 5.6 虚拟线程推翻的那个假设
+
+JDK 21 的虚拟线程（JEP 444）推翻了一个从 1.0 起就没变过的假设：线程昂贵。线程池存在的两个理由——复用昂贵的线程、限制并发数——第一个失效了，第二个并没有消失。`Executors.newVirtualThreadPerTaskExecutor()` 每个任务一个虚拟线程，池化这件事本身从「性能必需」变成了「反模式」；但「同时最多做多少件事」这个约束还在，只是从池大小转移到了信号量、连接池、限流器这些真正表达资源上限的地方。
+
+约束没变的部分同样要留意：虚拟线程仍然是 `Thread` 对象，`ThreadLocal` 依然生效，量大之后每线程一份的存储成本会被放大；在 JDK 21 上，`synchronized` 块内的阻塞会钉住载体线程，后续版本才逐步消除这一限制。这也正好说明第 5.1 节那套接口分层的价值：`Executor` 的定义没有假设线程是昂贵的，所以虚拟线程可以直接顶替实现，而调用方不用知道脚下换了一层。
+
+---
+
+## 第 6 章 ThreadLocal 与 ThreadLocalRandom：存储模型而非模式
+
+### 6.1 变量真正的存放位置
+
+`ThreadLocal` 常被当成一种设计模式来讲，其实它更接近一个存储模型：变量不在 `ThreadLocal` 对象里，而在 `Thread` 对象里。`Thread` 有一个包级私有字段 `ThreadLocal.ThreadLocalMap threadLocals`，`ThreadLocal` 实例只是这张表的 key。`get()` 的实际动作是「取出当前线程，再拿自己当 key 去查那张表」，所以同一个 `ThreadLocal` 在不同线程上读到不同的值，是因为表不同，而不是对象不同。
+
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+flowchart LR
+    T["Thread 对象"] --> M["threadLocals<br/>ThreadLocalMap"]
+    M --> E["Entry<br/>key 为弱引用 · value 为强引用"]
+    TL["ThreadLocal 实例"] -.->|"作为 key 查表"| M
+    T --> S["threadLocalRandomSeed<br/>threadLocalRandomProbe"]
+    S -.->|"Unsafe 直接读写"| R["ThreadLocalRandom 单例"]
+```
+
+图 5 里两条线并排画，是为了说明一件容易被忽略的事：`ThreadLocalRandom` 根本没有用 `ThreadLocal`。它把种子直接放在 `Thread` 的两个字段 `threadLocalRandomSeed`、`threadLocalRandomProbe` 里，用 `Unsafe` 读写，名字里的「ThreadLocal」指的是「每线程一份状态」，不是「用 `ThreadLocal` 实现」。
+
+`ThreadLocalMap` 本身也不是 `HashMap`。它用开放寻址加线性探测，容量必须是 2 的幂，阈值是容量的三分之二；`ThreadLocal` 的散列值靠每次递增 `0x61c88647` 的斐波那契散列生成，目的是让 key 分布得足够均匀、减少探测次数。这些细节平时用不到，却解释了一件事：`ThreadLocalMap` 是为「每个线程上条数不多、访问极频繁」这个场景专门写的小表，不是通用容器，所以它既没有链表也没有树化，清理只能靠在探测过程中顺带清扫。
+
+`ThreadLocal` 要解决的问题很实在：把一个上下文（用户身份、事务、跟踪号）从入口传到最深处，又不愿意让每一层方法签名都多一个参数。它把「线程」变成了一个隐式参数。代价在第 1 章已经提过——标准库不该假设调用者是谁，而这个隐式通道一旦被框架和业务代码同时使用，排查问题的难度会成倍上升。
+
+### 6.2 线程池下的泄漏
+
+`ThreadLocalMap` 的 `Entry` 继承 `WeakReference<ThreadLocal<?>>`，key 是弱引用，value 是强引用。这个不对称是有意为之：`ThreadLocal` 实例通常由框架持有，若 key 是强引用，框架卸载后就永远回收不掉。但弱引用只解决了 key，value 还在。当 `ThreadLocal` 对象被回收，`Entry` 的 key 变成 null，value 却仍被 `Entry` 强引用，而 `Entry` 又在 `Thread` 的表里——只有等这个线程下一次 `set`/`get`/`remove` 时，`expungeStaleEntry` 与 `cleanSomeSlots` 才会顺带清掉这些陈旧条目。清理是启发式的，不保证发生。
+
+```java
+static final ThreadLocal<byte[]> BUF = new ThreadLocal<>();
+
+pool.execute(() -> {
+    BUF.set(new byte[1 << 20]);       // 每提交一次，就在某个池线程的 map 上挂 1MB
+    try { handle(); }
+    finally { BUF.remove(); }         // 不写这一行，线程活多久就泄漏多久
 });
 ```
 
-Java 8 为 `Comparator` 增加了大量 `default` 方法（`reversed()`、`thenComparing()`、`comparing()`），使得策略对象可以被**函数式组合**——一个排序策略可以在原有基础上派生出新策略，而不需要创建新的实现类。这是函数式编程思想与策略模式的深度融合。
+在线程池里，「线程活多久」等于「池存活多久」，所以这里的不清理不是「延迟回收」，而是**永久占用**。修复方式很朴素：`finally` 里 `remove()`，或者用 `try-with-resources` 包一层。`ThreadLocal.withInitial` 只解决初始化，不解决泄漏。还有一个更隐蔽的变体：`InheritableThreadLocal` 的复制发生在 `Thread` 构造时，而池线程是复用的，子任务拿到的上下文来自「创建池线程的那个线程」，不是「提交任务的线程」——所以 MDC、跟踪号这类东西在线程池里必须靠装饰器（提交时把上下文搬进任务）或者专门的传递库。
+
+### 6.3 ThreadLocalRandom 绕开了什么
+
+`java.util.Random` 的种子是一个 `AtomicLong`，每次 `next()` 都要 CAS 更新。多个线程共享一个 `Random` 实例时，CAS 会在同一个缓存行上反复失败重试，争用越激烈越慢。`ThreadLocalRandom` 的做法是：种子放在 `Thread` 里，每个线程只动自己的那份，用 `Unsafe` 直接读写，既没有 CAS，也没有跨线程的可见性开销，**无竞争**的路径就是这么来的。
+
+它的实现细节比「每线程一份种子」多两点。第一，初始化时种子由 `(线程 id << 1) + GOLDEN_GAMMA` 累加得到，保证周期最大化且各线程种子不同；第二，`probe` 字段提供一个非零散列值，用于 `ForkJoinPool` 等场景里按线程分散选择，避免线程刚创建时集中抢同一个位置。这些都是「特化换性能」的手法：`ThreadLocalRandom` 不能被继承、不能 `setSeed`（直接抛 `UnsupportedOperationException`）、不能跨线程共享。
+
+最后一点常被忽略：`current()` 返回的是一个静态单例，把它存到字段里再给别的线程用不会报错，但实际取随机数时读的是「调用线程」自己的种子，语义就漂移了。它不是线程安全问题的反面教材，而是「隐式依赖当前线程」这个设计取向的必然结果。
+
+### 6.4 继承与作用域
+
+把上下文传递的几种方式放在一起看，取舍就清楚了（表 8）。显式参数最笨但最诚实；`ThreadLocal` 最方便但泄漏风险随线程生命周期放大；`InheritableThreadLocal` 在池化环境里基本不可用；`ThreadLocalRandom` 是特化到极致的个例；JDK 21 预览的 `ScopedValue`（JEP 446）则想同时拿到「不污染签名」和「有明确作用域」两个好处——绑定在作用域内只读，作用域结束即失效，天然适合虚拟线程与结构化并发。它还是预览特性，能不能成为标准要看后续版本的取舍。
+
+| 机制 | 存储位置 | 能否跨线程 | 线程池下 | 代价 |
+| --- | --- | --- | --- | --- |
+| 显式参数 | 调用栈 | 天然 | 天然 | 签名污染，层层透传 |
+| `ThreadLocal` | `Thread.threadLocals` | 不能 | 必须 `finally` 清理 | 泄漏风险随线程寿命放大 |
+| `InheritableThreadLocal` | 同上，构造时复制 | 只向子线程 | 线程复用后失效 | 上下文来源容易误判 |
+| `ThreadLocalRandom` | `Thread` 的种子字段 | 不能 | 每线程一份，无泄漏 | 不可注入、不可共享 |
+| `ScopedValue`（预览） | 作用域 | 只读，可跨结构化并发 | 作用域关闭即失效 | 仍是预览特性 |
 
 ---
 
-## 第 4 章 java.lang 与反射：代理与工厂
+## 第 7 章 Collections 的三层包装
 
-### 4.1 java.lang.reflect.Proxy：JDK 动态代理
+### 7.1 unmodifiableXxx 是视图
 
-`java.lang.reflect.Proxy` 是 JDK 动态代理的实现，在前面章节（OOP 04）已有详细分析，这里从 JDK 源码角度补充其内部机制：
+`Collections.unmodifiableList(list)` 返回的是一个**视图**，不是拷贝。原始列表后续的修改会穿过包装器被看到，因为包装器只是把读操作转发过去；写操作一律抛 `UnsupportedOperationException`。这一点在名字里没有体现，`unmodifiable` 说的是「不能通过我改」，不是「不会变」。
 
 ```java
-// Proxy.newProxyInstance() 的核心逻辑（JDK 11+ 简化版）
-public static Object newProxyInstance(ClassLoader loader,
-                                       Class<?>[] interfaces,
-                                       InvocationHandler h) {
-    // 1. 根据接口列表在缓存中查找（或生成）代理类
-    //    代理类继承 Proxy，实现所有指定接口，每个方法的实现都委托给 h.invoke()
-    Class<?> cl = getProxyClass0(loader, interfaces);
-    
-    // 2. 获取代理类的构造器（接受 InvocationHandler 参数）
-    final Constructor<?> cons = cl.getConstructor(constructorParams);
-    
-    // 3. 通过构造器创建代理实例，传入 InvocationHandler
-    return cons.newInstance(new Object[]{h});
+List<String> raw  = new ArrayList<>(List.of("a", "b"));
+List<String> view = Collections.unmodifiableList(raw);
+raw.add("c");                       // 合法，view 立刻看到 c
+
+// 真正的不可变是拷贝：List.of 与 List.copyOf 都不接受 null，也不反映后续修改
+List<String> frozen = List.copyOf(raw);
+```
+
+还有两个细节。`unmodifiableList` 的实现类会按底层是否实现 `RandomAccess` 分成两支，`subList` 返回的仍是不可修改视图；`implNote` 里写明，若参数已经是不可修改包装，方法会直接把参数返回，所以层层包装不会叠加，也不会让你用类型判断出「包了几层」。视图的代价很轻（一次转发，JIT 通常能内联），换来的是同一份数据的多个视角；真正不可变（`List.of`、`List.copyOf`）换的是拷贝成本与更强的承诺。享元与不可变的判据见 [[05 结构型模式（下）——外观、桥接、组合与享元]]，这里只提一句：视图能成立，靠的正是「被包装者愿意被共享」。
+
+### 7.2 synchronizedXxx 的锁在哪里
+
+`Collections.synchronizedList(list)` 返回的包装器里，每个方法都 `synchronized (mutex)`，而 `mutex` 默认就是包装器自己。所以锁在包装器对象上，不在底层列表上，也不在调用方身上。这带来两个必须记住的后果。
+
+其一，迭代不安全。迭代器是从底层列表拿的，`iterator()`、`hasNext()`、`next()` 三个动作之间没有锁保护，文档明确要求调用方自己 `synchronized`，而且必须锁在返回的那个包装器上。其二，复合操作不安全。`if (!list.isEmpty()) list.remove(0)` 是两个独立加锁的动作，中间可以插进别的线程。
+
+```java
+List<String> sync = Collections.synchronizedList(new ArrayList<>());
+List<String> frozen = Collections.unmodifiableList(sync);
+
+synchronized (sync) {                 // 锁必须加在持有 mutex 的那一层
+    for (String s : frozen) { use(s); }
+}
+
+synchronized (frozen) {              // 锁错对象：迭代期间底层仍可能被其他线程修改
+    for (String s : frozen) { use(s); }
 }
 ```
 
-生成的代理类字节码（通过 `javap` 反编译）大致如下：
+这套包装的历史动因，是 1.2 的集合框架要把「同步」从容器实现里拆出来：`Vector`/`Hashtable` 把 `synchronized` 写在每个方法上，导致单线程也付锁的代价，新的框架选择默认不同步，需要时再包一层。这个决定本身是对的，**串行化**的代价被还给了需要的调用方。但它也制造了一个长期的错觉：`synchronizedXxx` 看起来线程安全，实际上只在单方法层面安全，多方法组合与迭代都要调用方自己补锁。现代替代是 `ConcurrentHashMap`、`CopyOnWriteArrayList`、`ConcurrentLinkedQueue` 这类真正的并发容器——它们保证的是并发语义，不是把每个方法串起来。
 
-```java
-// 代理类（JVM 运行时动态生成，名如 $Proxy0）
-public final class $Proxy0 extends Proxy implements UserService {
-    private static final Method m1;  // equals
-    private static final Method m2;  // toString
-    private static final Method m3;  // getUserById（业务方法）
-    
-    static {
-        m3 = Class.forName("UserService").getMethod("getUserById", Long.class);
-        // ... 其他方法的 Method 对象初始化
-    }
-    
-    public User getUserById(Long id) {
-        try {
-            // 将调用委托给 InvocationHandler.invoke()
-            return (User) super.h.invoke(this, m3, new Object[]{id});
-        } catch (RuntimeException | Error e) {
-            throw e;
-        } catch (Throwable e) {
-            throw new UndeclaredThrowableException(e);
-        }
-    }
-}
+### 7.3 checkedXxx 给泛型擦除打补丁
+
+`Collections.checkedList(list, String.class)` 返回的包装器在 `add`、`set`、`addAll` 这些写路径上做 `instanceof` 检查，类型不对就抛 `ClassCastException`。它是 Java 5 随泛型一起加的，针对的是一个很具体的问题：泛型在运行时被擦除，把一个 `List<String>` 传给遗留 API 再拿回来，编译器什么都检查不了，错误类型可能一直躺到某次读取才炸。`checkedXxx` 把爆炸点从「读取处」提前到「写入处」，这是有价值的快速失败。
+
+它的边界也很清楚：只在写入时检查，读路径不检查，已经存在的错误元素不会被清理；每次写多一次类型判断。把它当成「校验外部数据」的工具是误用，它拦的是类型错误，不是数据错误。
+
+### 7.4 包装顺序决定语义
+
+三种包装可以叠，叠的顺序决定语义。`unmodifiableList(synchronizedList(list))` 是「对外不可变、内部同步」，每次读也要抢锁；`synchronizedList(unmodifiableList(list))` 的外层锁保护的是一个永远不允许写的对象，同步开销白付，而真正的写入仍然发生在底层，没人拦。判断顺序的方法很简单：问一句「谁需要这把锁」，锁要加在真正承载并发访问的那一层，而且调用方之后必须拿同一个对象当锁。图 6 按「要解决什么问题」把几种包装的分工重新排了一遍。
+
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+flowchart TD
+    Q{"需要解决什么"} -->|"只读视图"| U["unmodifiableXxx<br/>底层仍可变"]
+    Q -->|"单方法线程安全"| S["synchronizedXxx<br/>锁在包装器自身"]
+    Q -->|"拒绝错误类型写入"| C["checkedXxx<br/>写时检查"]
+    Q -->|"真正不可变或高并发"| M["List.copyOf 与并发容器"]
 ```
 
-`InvocationHandler` 接口是整个动态代理机制的策略接口——它定义了"当代理方法被调用时做什么"，不同的 `InvocationHandler` 实现可以实现不同的横切逻辑（日志、缓存、事务……）。
+五种选择的语义与代价见表 9。
 
-### 4.2 Runtime.getRuntime()：单例的系统级应用
-
-`java.lang.Runtime` 是 JDK 中最原始的单例模式实现之一：
-
-```java
-// Runtime 的单例实现（JDK 源码）
-public class Runtime {
-    private static final Runtime currentRuntime = new Runtime();  // 饿汉式单例
-    
-    private Runtime() {}  // 私有构造器：禁止外部创建
-    
-    public static Runtime getRuntime() {
-        return currentRuntime;
-    }
-    
-    // 实例方法：获取可用 CPU 核心数、执行外部命令、添加 JVM 关闭钩子等
-    public int availableProcessors() { return Runtime.availableProcessors0(); }
-    public void addShutdownHook(Thread hook) { ... }
-}
-```
-
-`Runtime` 代表 JVM 进程本身——进程是单一的，`Runtime` 自然也应该是单例。这里用饿汉式初始化（类加载时立即创建），不需要懒加载，因为 JVM 启动后 `Runtime` 必然会被使用。
-
-### 4.3 Enum：设计模式界的"天选之子"
-
-Java `enum` 类型在语言层面提供了对多种设计模式的原生支持：
-
-**单例模式**：每个枚举常量在 JVM 中有且仅有一个实例，由 JVM 保证（`readObject()` 也无法打破），是实现单例的最佳方式：
-
-```java
-// 枚举单例：线程安全、防反射攻击、防序列化破坏
-public enum DatabaseConnectionPool {
-    INSTANCE;
-    
-    private final DataSource dataSource;
-    
-    DatabaseConnectionPool() {
-        this.dataSource = createDataSource();
-    }
-    
-    public Connection getConnection() throws SQLException {
-        return dataSource.getConnection();
-    }
-}
-```
-
-**策略模式**：枚举可以为每个常量定义不同的抽象方法实现，天然是一个策略注册表：
-
-```java
-// 枚举策略：每个枚举常量实现不同的算法
-public enum DiscountType {
-    NONE {
-        @Override public double apply(double price) { return price; }
-    },
-    VIP {
-        @Override public double apply(double price) { return price * 0.9; }
-    },
-    SUPER_VIP {
-        @Override public double apply(double price) { return price * 0.8; }
-    },
-    FLASH_SALE {
-        @Override public double apply(double price) { return price * 0.5; }
-    };
-    
-    public abstract double apply(double price);
-}
-
-// 使用：直接通过枚举值选择策略，不需要 if-else
-double finalPrice = DiscountType.VIP.apply(originalPrice);
-```
-
-**状态模式**：如果状态之间的迁移逻辑较简单（只是不同状态下的不同行为，没有复杂的迁移条件），可以用枚举替代完整的状态类体系：
-
-```java
-public enum TrafficLight {
-    RED {
-        @Override public TrafficLight next() { return GREEN; }
-        @Override public int duration() { return 60; }
-    },
-    GREEN {
-        @Override public TrafficLight next() { return YELLOW; }
-        @Override public int duration() { return 45; }
-    },
-    YELLOW {
-        @Override public TrafficLight next() { return RED; }
-        @Override public int duration() { return 5; }
-    };
-    
-    public abstract TrafficLight next();   // 状态迁移
-    public abstract int duration();        // 当前状态持续时间（秒）
-}
-```
+| 包装 | 语义 | 每次调用的代价 | 不解决的问题 |
+| --- | --- | --- | --- |
+| `unmodifiableXxx` | 只读视图，底层仍可变 | 一次转发 | 元素可变、底层仍在变 |
+| `synchronizedXxx` | 每个方法一把锁，mutex 为包装器自身 | 串行化 | 迭代与复合操作仍需外部锁 |
+| `checkedXxx` | 写入时检查元素类型 | 一次 `instanceof` | 已有错误元素、读路径不检查 |
+| `List.of` / `List.copyOf` | 真正不可变（拷贝，拒绝 null） | 一次拷贝 | 不能包装已有对象 |
+| 并发容器 | 并发语义（分段、无锁、写时复制） | 依实现而定 | 语义是并发，不是不可变 |
 
 ---
 
-## 第 5 章 工厂方法遍布 JDK
+## 第 8 章 三个被贴错标签的类
 
-### 5.1 静态工厂方法：Java 惯用法
+### 8.1 StringBuilder 不是 GoF 的 Builder
 
-JDK 中"静态工厂方法"（Static Factory Method，Effective Java 第 1 条）是比构造器更优秀的对象创建方式，大量存在于 JDK API 中：
-
-```java
-// 集合的静态工厂（Java 9+）
-List<String> list  = List.of("a", "b", "c");         // 不可变列表
-Set<String>  set   = Set.of("x", "y", "z");           // 不可变集合
-Map<String, Integer> map = Map.of("one", 1, "two", 2); // 不可变映射
-
-// 时间 API 的静态工厂（java.time，Java 8+）
-LocalDate  today    = LocalDate.now();
-LocalDate  birthday = LocalDate.of(1990, 3, 15);
-LocalDate  fromStr  = LocalDate.parse("2026-03-04");
-Instant    now      = Instant.now();
-Duration   twoHours = Duration.ofHours(2);
-
-// NIO 的静态工厂
-Path  path    = Path.of("/tmp/data.txt");              // Java 11+
-Path  path2   = Paths.get("/tmp", "data.txt");
-
-// Optional 的静态工厂
-Optional<String> present = Optional.of("value");
-Optional<String> empty   = Optional.empty();
-Optional<String> nullable = Optional.ofNullable(null);  // 可能为 null 时用这个
-```
-
-静态工厂方法相比 `new` 的优势：
-1. **有意义的名字**：`LocalDate.of(1990, 3, 15)` 比 `new LocalDate(1990, 3, 15)` 表意更清晰；
-2. **不必每次创建新对象**：可以缓存（享元）、复用实例（如 `Boolean.valueOf(true)` 返回 `Boolean.TRUE` 常量）；
-3. **可以返回子类型**：返回类型是接口，具体实现对调用方透明（如 `List.of()` 返回的具体类不是 `ArrayList`，而是专门优化的不可变列表实现）。
-
-### 5.2 DriverManager.getConnection()：工厂方法选择实现类
-
-JDBC 的 `DriverManager.getConnection()` 是工厂方法模式的经典案例——调用方只需提供数据库 URL，工厂方法根据 URL 的协议前缀（`jdbc:mysql://`、`jdbc:postgresql://`）自动选择对应的 Driver 实现：
+`StringBuilder` 常被列进「JDK 里的建造者模式」。它不是。GoF 的 Builder 有两个要件：构建过程与最终表示分离（同一套步骤能产出不同表示），以及有一个指导者（Director）负责编排步骤、最后由 `build()` 交出产品。`StringBuilder` 只有一个可变缓冲区，`append` 是累积，`toString()` 是导出一份快照，没有 Director、没有步骤编排、没有「同一过程产不同产品」。
 
 ```java
-// 调用方完全不需要知道使用哪个 Driver 实现类
-Connection conn = DriverManager.getConnection(
-    "jdbc:mysql://localhost:3306/mydb",
-    "root",
-    "password"
-);
+// Builder：步骤由调用方编排，build 之前每一步返回的都是「半成品配置」
+HttpRequest req = HttpRequest.newBuilder(uri)
+        .header("Accept", "application/json")
+        .timeout(Duration.ofSeconds(3))
+        .GET()                        // 最后一步决定产品的种类
+        .build();
+
+// StringBuilder：一个可变序列，导出的是快照，没有「产品类型」这一步
+String s = new StringBuilder().append("a").append(1).toString();
 ```
 
-`DriverManager` 维护了一个 `Driver` 注册表（`CopyOnWriteArrayList<DriverInfo>`），各个数据库驱动在加载时通过 `DriverManager.registerDriver(new com.mysql.cj.jdbc.Driver())` 将自己注册进来（Java 6+ 通过 `ServiceLoader` 自动注册，驱动 JAR 中的 `META-INF/services/java.sql.Driver` 文件声明驱动类名）。
+JDK 里名字带 `Builder` 的类，多数是「配置累积 + 冻结」的退化形态（`ProcessBuilder`、`HttpRequest.Builder`、`Locale.Builder`），它们的价值在于把可选参数从构造器里挪出来，而不是「用同一套步骤产出不同表示」。判据就一句：有没有「同一套步骤、不同产品」的需求。没有，就不是 Builder，叫它「可变累积器」或「配置收集器」更准确。
 
-`DriverManager.getConnection()` 遍历注册表，依次尝试每个 `Driver.connect(url, info)`，第一个返回非 `null` 连接的 Driver 胜出。这是**工厂方法模式 + 服务定位器（Service Locator）模式**的组合。
+### 8.2 HashMap 不是享元
 
----
+享元的核心是「内部状态共享，外部状态由调用方持有」，目标是让对象数量不随使用次数增长。`HashMap` 共享的是引用——任何容器存进去的都是引用，这是 Java 对象模型的基础，不是享元；它的本职是散列表，用 `hashCode` 定位桶。把 `HashMap` 说成享元，等于把「容器」和「共享」混成了一件事。
 
-## 第 6 章 JDK 模式全景总结
+真正的享元落点有几个共同特征：对象不可变、按值复用、复用能实际减少对象数量。`Integer` 缓存（默认 -128 到 127，可用 `java.lang.Integer.IntegerCache.high` 调整上限）、`Boolean.TRUE`/`FALSE`、`String` 常量池、`Collections.emptyList()` 返回的共享空列表、`Optional.empty()`，都属于这一类。这里要顺手纠正一个常见说法：`String` 的不可变性在 JDK 9 之后由 `byte[] value` 加一个 `coder` 字段实现（JEP 254 紧凑字符串），不再是 `final char[]`，但「不可变」这个前提没变，享元能成立仍然靠它。另外，`Integer` 缓存只在装箱路径上生效，`new Integer(127)` 永远是新对象（该构造器 JDK 9 已标记弃用）。
 
-### 6.1 JDK 中的 23 种 GoF 模式索引
+### 8.3 一张「23 种模式」索引表的代价
 
-| GoF 模式 | JDK 中的典型应用 | 涉及的 JDK 类/接口 |
+把 23 种 GoF 模式逐个对上 JDK 里的类，做出一张对照表，看起来很像「全景」，实际是把读源码降级成了**贴标签**。标签贴错的地方，恰好是最需要理解的地方。
+
+`ClassLoader` 的双亲委派经常被说成责任链。责任链的判据是：链上每个处理者有独立处理逻辑，处理不了就沿 `next` 引用传给下一个。双亲委派的结构不是这样：每个 `ClassLoader` 持有的是 `parent`，加载时先向上委托，父加载器抛 `ClassNotFoundException` 之后再回退到自己 `findClass`，方向是先上后下，且没有 `next` 链。它更接近「树形委托 + 缓存 + 回退」，而它真正的设计意图是命名空间隔离——同一个类名被不同加载器加载出来就是两个类。用「责任链」概括它，正好把这个意图盖掉了。
+
+`java.util.Observer` 被列成观察者模式的范本，这一条不能算错，但它是反面教材。`Observable` 是类不是接口（不能多继承），通知顺序未定义，`changed` 标志与通知不是一一对应，事件只能传一个 `Object`。JDK 9 明确弃用它们，文档给出的理由就是这几条，并建议改用 `java.beans`、`java.util.concurrent` 的事件结构或 `java.util.concurrent.Flow`。一个模式被固化进标准库，却用错了抽象（该用接口的地方用了类），二十年后就只能被弃用——这是「标准库里的模式」最真实的一种历史包袱。
+
+表 10 把这几种误读与对应的判据并排放在一起。
+
+| 常见说法 | 判据 | 更准确的说法 |
 | --- | --- | --- |
-| **单例** | Runtime、Desktop | `Runtime.getRuntime()` |
-| **工厂方法** | Collection 工厂、JDBC DriverManager | `List.of()`、`DriverManager.getConnection()` |
-| **抽象工厂** | XML 解析工厂 | `DocumentBuilderFactory`、`SAXParserFactory` |
-| **建造者** | StringBuilder、Stream.Builder | `StringBuilder`、`Stream.Builder<T>` |
-| **原型** | 所有实现 Cloneable 的类 | `Object.clone()` |
-| **适配器** | Arrays.asList、InputStreamReader | `Arrays.asList()`（数组→List）、`InputStreamReader` |
-| **装饰器** | I/O 流体系、Collections 工具类 | `BufferedInputStream`、`Collections.unmodifiableList()` |
-| **代理** | JDK 动态代理 | `java.lang.reflect.Proxy` |
-| **外观** | javax.faces（JSF）、类库 API 层 | `javax.xml.parsers.DocumentBuilder` |
-| **桥接** | JDBC 接口与驱动实现分离 | `java.sql.Connection`、具体驱动实现 |
-| **组合** | Swing 组件树、NIO 文件树 | `java.awt.Container`、`Files.walkFileTree()` |
-| **享元** | Integer/Long/Short/Byte/Char/Bool 缓存、String 池 | `Integer.valueOf()`、`String.intern()` |
-| **模板方法** | AQS、AbstractList | `AbstractQueuedSynchronizer`、`AbstractList.sort()` |
-| **策略** | Comparator、ThreadPoolExecutor 的拒绝策略 | `Comparator`、`RejectedExecutionHandler` |
-| **观察者** | Swing 事件监听、java.util.Observable | `EventListener`、`java.util.Observer` |
-| **迭代器** | 所有集合的 Iterator、Spliterator | `Iterator<T>`、`Spliterator<T>` |
-| **责任链** | ClassLoader 双亲委派 | `ClassLoader.loadClass()` |
-| **命令** | Runnable、Callable、FutureTask | `java.lang.Runnable`、`java.util.concurrent.Callable` |
-| **状态** | Thread 状态机 | `Thread.State` 枚举 |
-| **中介者** | ExecutorService（调度线程和任务）| `java.util.concurrent.ExecutorService` |
-| **备忘录** | Serialization（对象状态序列化/反序列化）| `java.io.Serializable` |
-| **访问者** | Files.walkFileTree 的 FileVisitor | `java.nio.file.FileVisitor` |
-| **解释器** | java.util.regex（正则表达式引擎）| `Pattern`、`Matcher` |
-
-### 6.2 ClassLoader 双亲委派：责任链的特殊变体
-
-`ClassLoader` 的双亲委派机制（Parent Delegation Model）是责任链模式在类加载领域的特殊应用，值得单独分析：
-
-```java
-// ClassLoader.loadClass() 的双亲委派逻辑（JDK 源码，已简化）
-protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
-    // 1. 先检查是否已经加载过（缓存）
-    Class<?> c = findLoadedClass(name);
-    if (c == null) {
-        try {
-            if (parent != null) {
-                // 2. 委托给父类加载器（责任链向上传递）
-                c = parent.loadClass(name, false);
-            } else {
-                // 3. 父加载器为 null，使用 Bootstrap ClassLoader
-                c = findBootstrapClassOrNull(name);
-            }
-        } catch (ClassNotFoundException e) {
-            // 4. 父加载器找不到：不是错误，由当前加载器尝试
-        }
-        
-        if (c == null) {
-            // 5. 父加载器无法加载：当前加载器自己查找
-            c = findClass(name);
-        }
-    }
-    return c;
-}
-```
-
-双亲委派的方向与普通责任链相反：**普通责任链是从链头向链尾传递**，而双亲委派是**从子向父向上委托**，只有父加载器无法处理时，才回退到子加载器自己处理。这种"反向责任链"保证了 Java 核心类（如 `java.lang.String`）始终由 Bootstrap ClassLoader 加载，防止用户自定义的同名类"污染"标准类库——这是 Java 安全模型的基础之一。
+| `StringBuilder` 是建造者 | 同一套步骤能否产出不同表示 | 可变累积器，没有 Director 与产品分离 |
+| `HashMap` 是享元 | 对象数量是否随使用次数下降 | 散列表，共享的是引用而非值对象 |
+| 双亲委派是责任链 | 是否持有 `next` 并沿链传递 | 树形委托加缓存，先向上再回退 |
+| `FutureTask` 是状态模式 | 状态是否对象化并改变行为 | 内部状态机，状态是 int 常量 |
+| `java.util.Observer` 是范本 | 抽象是否可扩展 | 是观察者，但 JDK 9 已弃用 |
 
 ---
 
-## 第 7 章 从 JDK 看模式应用的三个层次
+## 第 9 章 结语：约束比模式更值得学
 
-### 7.1 语言机制层：模式被固化为语法
+把这五个落点串起来，能提取出三条比「认识多少种模式」更耐用的判据。
 
-某些模式已经被 Java 语言本身内化，不需要手动实现：
+第一，模式在标准库里落地时，形状由语言能力决定。1.0 没有默认方法，装饰器只能写成抽象类加字段；1.5 之前没有泛型，类型检查只能推迟到运行时；Java 5 之前没有 lambda，钩子只能用继承而不是回调。今天回头看觉得笨拙的写法，多数是当时唯一可行的写法。
 
-- **迭代器**：`for-each` 语法是语言级别的迭代器支持；
-- **单例**：`enum` 常量是语言保证的单例；
-- **命令**：Lambda 表达式是语言级别的匿名命令对象；
-- **观察者**：Java 的事件监听机制（`EventListener` 体系）是语言惯用法。
+第二，契约的宽松度就是实现的自由度，代价是调用方不能依赖。`available()` 只承诺估算，`Iterator` 的 `remove` 是可选操作，`Spliterator` 的特征位靠实现者诚实申报——接口把话说到最虚，是为了让所有实现都活得下去，这笔账最后记在调用方的判断力上。
 
-### 7.2 标准库层：模式被固化为 API
-
-某些模式以标准 API 的形式提供，开发者直接使用，无需了解背后的模式：
-
-- **享元**：`Integer.valueOf()`、`String.intern()`；
-- **装饰器**：整个 `java.io` 流体系；
-- **模板方法**：AQS、`AbstractList` 等 Abstract 类；
-- **策略**：`Comparator`、`ExecutorService` 的拒绝策略。
-
-### 7.3 框架层：模式被固化为扩展点
-
-框架（如 Spring）在标准库的基础上，将更复杂的模式固化为扩展点，供应用开发者按需覆写：
-
-- **模板方法**：`JdbcTemplate` 的各种回调接口；
-- **观察者**：`BeanPostProcessor`、`ApplicationListener`；
-- **策略**：`HandlerMapping`、`ViewResolver`。
+第三，结构一旦发布，就**只能加不能改**，所以标准库的设计错误会以「新接口加适配器」的方式长期共存。`Reader` 之于 `InputStream`、`Callable` 之于 `Runnable`、`CompletableFuture` 之于 `Future`、虚拟线程之于线程池，都是同一个模式：不动旧的，在旁边长新的，两边一起提供服务。理解了这一点，读 JDK 源码时就不会再去问「为什么不直接改掉」，而会去问「当年是什么挡着它改」。
 
 ---
 
-## 总结：专栏回顾与设计哲学
+## 参考资料
 
-至此，整个 OOP 设计模式专栏全部完成。从 SOLID 原则到 23 种 GoF 模式，再到 Spring 和 JDK 的工业级应用全景，有几个贯穿始终的核心洞察值得铭记：
-
-**第一，模式是解决问题的手段，不是目的**。每种模式都针对特定的"坏味道"：`if-else` 泥潭（策略）、继承爆炸（装饰器/桥接）、紧耦合（观察者/中介者）、状态散落（状态机）……认识到问题，才能选择正确的模式，而不是"为了用模式而用模式"。
-
-**第二，"组合优于继承"是现代 Java 设计的主基调**。策略模式、装饰器模式、组合模式都体现了这一原则——通过在运行时组合对象，比编译期的继承体系更灵活、更可测试。Java 8 的函数式接口让"策略对象"可以用 Lambda 直接表达，进一步降低了组合的成本。
-
-**第三，设计模式是一种共同语言**。当你说"这里用了责任链"，团队中理解设计模式的每个人都能立刻理解架构意图；当你 review 代码时，识别出"这里其实是状态模式但用 if-else 实现的"，就能提出有价值的重构建议。模式是工程师之间高效沟通设计意图的词汇。
-
-**第四，理解模式在 JDK 和 Spring 中的应用，是提升代码阅读能力的捷径**。`AQS` 不再是神秘的并发黑箱，而是模板方法模式的精妙应用；`JdbcTemplate` 不再只是"简化 JDBC 的工具类"，而是模板方法 + 策略的有机结合；`DispatcherServlet` 的请求处理流程不再难以理解，因为它遵循中介者 + 责任链 + 适配器的清晰脉络。
-
----
-
-> [!note] 参考资料
-> - GoF,《Design Patterns: Elements of Reusable Object-Oriented Software》, 1994
-> - Joshua Bloch,《Effective Java》3rd ed.（静态工厂方法、枚举、Builder 等多个模式的 Java 最佳实践）
-> - OpenJDK 源码（GitHub: openjdk/jdk）
-> - Java SE 21 API Documentation（Oracle Docs）
-> - Doug Lea,《Java Concurrency in Practice》（AQS 的设计哲学）
+1. Gamma E., Helm R., Johnson R., Vlissides J. *Design Patterns: Elements of Reusable Object-Oriented Software*. Addison-Wesley, 1994.
+2. Bloch J. *Effective Java*（第 3 版）. Addison-Wesley, 2018.
+3. OpenJDK 源码仓库（JDK 17 与 JDK 21 分支）：<https://github.com/openjdk/jdk>
+4. Java SE 21 API 文档：<https://docs.oracle.com/en/java/javase/21/docs/api/index.html>
+5. JEP 444: Virtual Threads：<https://openjdk.org/jeps/444>
+6. JEP 446: Scoped Values（Preview）：<https://openjdk.org/jeps/446>
+7. JEP 400: UTF-8 by Default：<https://openjdk.org/jeps/400>
+8. Goetz B. 等. *Java Concurrency in Practice*. Addison-Wesley, 2006.
+9. Lea D. *Concurrent Programming in Java: Design Principles and Patterns*（第 2 版）. Addison-Wesley, 1999.
 
 ---
 
 > [!note] 思考题
-> 1. Martin Fowler 在《重构》中提出'先写简单代码，遇到变化时再通过重构引入设计模式'。但在大型团队中，如果每个人都'先简单后重构'，代码库很快会变成一团乱麻。在团队规模和代码规模增长时，预先设计（Up-front Design）和渐进式设计（Emergent Design）如何取得平衡？
-> 2. 函数式编程（Lambda、Stream、Optional）的流行使得某些设计模式变得'过时'——策略模式可以用 Lambda 替代，迭代器模式可以用 Stream 替代，观察者模式可以用响应式流替代。在 Java 8+ 项目中，还有哪些 GoF 模式仍然不可替代？函数式编程是否能完全取代面向对象的设计模式？
-> 3. 在微服务架构中，传统 GoF 设计模式（面向单进程内的对象协作）的适用范围缩小。取而代之的是分布式设计模式（如断路器、服务发现、Saga、CQRS）。你认为 GoF 设计模式在微服务时代最大的价值体现在哪里——是在单个服务内部的代码组织，还是在理解分布式模式背后的设计哲学？
+> 1. `available()` 的契约只承诺估算。如果把它改成「精确返回可读字节数」，哪些实现类会无法满足这条契约，它们又该拿什么替代？
+> 2. `Reader`/`Writer` 另起一棵树是为了容纳编码状态。如果改用 `Channel` 加显式 `CharsetDecoder`，被省掉的复杂度转移到了哪里？
+> 3. `Executors` 的工厂方法隐藏了队列容量与线程上限。如果让你设计一个新的池工厂，会把哪些参数暴露出来，用重载还是 Builder？
+> 4. `ThreadLocalRandom` 把种子放进 `Thread` 字段、绕开 `ThreadLocalMap` 来换性能。这种特化手法在什么情况下不能复制到业务代码里？
+> 5. `Spliterator` 的特征位靠实现者自觉申报，谎报 `SIZED` 会让并行流给出错误结果。为什么 JDK 不在运行时做校验？
+> 6. 虚拟线程让「池化线程」失去意义之后，`Executor` 体系里还有哪些假设仍然成立，哪些需要重新表述？

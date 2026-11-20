@@ -1,8 +1,8 @@
 ---
 title: "NameNode长GC事故深度分析：JVM内存管理与Linux Swap的致命交互"
 date: 2026-07-26
-tags: [SRE]
-aliases: []
+tags: [SRE, JVM, GC, 故障排查]
+aliases: ["NameNode 长 GC", "G1 与 Swap 交互"]
 ---
 
 ## 引言
@@ -34,6 +34,7 @@ aliases: []
 Scan RS阶段成为性能杀手的关键原因在于内存页被换出到Swap分区后的访问延迟爆炸。
 
 ```mermaid
+%%{init: {'theme': 'dracula'}}%%
 sequenceDiagram
     autonumber
     participant G1 as "G1 GC线程"
@@ -61,9 +62,11 @@ sequenceDiagram
     end
 ```
 
+
 ### 2.2 故障时间轴演进
 
 ```mermaid
+%%{init: {'theme': 'dracula'}}%%
 timeline
     title "NameNode故障演进时间轴"
     01点35分 : "业务负载激增（Open操作+471%）"
@@ -80,9 +83,11 @@ timeline
              : "NameNode进程退出"
 ```
 
+
 ### 2.3 负载特征分析
 
 ```mermaid
+%%{init: {'theme': 'dracula'}}%%
 xychart-beta
     title "NameNode关键操作数趋势（01:00 - 02:00）"
     x-axis ["01:00", "01:15", "01:30", "01:35", "01:40", "01:50", "02:00"]
@@ -90,6 +95,7 @@ xychart-beta
     bar [10296, 54785, 19483, 58772, 69809, 1345, 64859]
     line [10296, 54785, 19483, 58772, 69809, 1345, 64859]
 ```
+
 
 **图表解读**：
 - **01:35 - 01:40**：`open`操作呈现爆炸式增长，这是导致内存压力和触发并发标记的直接诱因。
@@ -132,6 +138,7 @@ Linux使用虚拟内存机制，每个进程拥有独立的虚拟地址空间。
 #### 4.1.2 内存页的类型与回收
 
 ```mermaid
+%%{init: {'theme': 'dracula'}}%%
 flowchart TD
     A["内存回收决策"] --> B{"页面类型"}
     B -->|"File-backed Pages"| C["有文件后备存储"]
@@ -145,11 +152,13 @@ flowchart TD
     H --> F
 ```
 
+
 #### 4.1.3 LRU算法机制
 
 Linux使用双LRU列表管理内存页：
 
 ```mermaid
+%%{init: {'theme': 'dracula'}}%%
 flowchart TD
     A["LRU列表结构"] --> B["File LRU"]
     A --> C["Anonymous LRU<br>（JVM堆内存在此）"]
@@ -163,6 +172,7 @@ flowchart TD
     E --> H["直接回收或写回文件"]
     G --> I["写入Swap然后回收"]
 ```
+
 
 页面老化过程：新分配的页面进入Active列表，长时间未访问则移至Inactive列表，最终被回收。
 
@@ -186,6 +196,7 @@ G1将堆内存划分为多个大小相等的Region（区域）。对于本案例
 RSet的作用是记录"谁引用了我"，使得GC时只需扫描RSet而非整个老年代。RSet采用多级数据结构：
 
 ```mermaid
+%%{init: {'theme': 'dracula'}}%%
 flowchart TD
     A["RSet结构层次"] --> B["Level 1: Sparse PRT<br>（稀疏每区域表）"]
     A --> C["Level 2: Fine-Grained PRT<br>（细粒度每区域表）"]
@@ -196,18 +207,20 @@ flowchart TD
     D --> G["全局位图，每个bit代表一个Region<br>适用于引用非常多的情况"]
 ```
 
+
 #### 4.2.3 Scan RS过程与Swap的致命交互
 
 Scan RS阶段需要遍历Collection Set中每个Region的RSet，找出所有指向Collection Set的引用。如果RSet或相关对象所在的页面被Swap Out，整个过程将变为：
 
-```
-正常情况：
-  Scan RS → 访问RSet数据结构 → 内存访问 → 纳秒级延迟
-
-Swap介入：
-  Scan RS → 访问RSet数据结构 → Page Fault → 磁盘I/O → 毫秒级延迟
-                                     ↑
-                                 延迟放大100万倍
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+flowchart TD
+    subgraph "正常情况"
+        N1["Scan RS"] --> N2["访问RSet数据结构"] --> N3["内存访问"] --> N4["纳秒级延迟"]
+    end
+    subgraph "Swap介入"
+        S1["Scan RS"] --> S2["访问RSet数据结构"] --> S3["Page Fault"] --> S4["磁盘I/O"] -->|延迟放大100万倍| S5["毫秒级延迟"]
+    end
 ```
 
 ### 4.3 vm.swappiness参数深度解析
@@ -236,6 +249,7 @@ Swap介入：
 #### 4.4.2 Major Page Fault的处理流程与代价
 
 ```mermaid
+%%{init: {'theme': 'dracula'}}%%
 sequenceDiagram
     participant CPU as "CPU"
     participant MMU as "内存管理单元"
@@ -255,6 +269,7 @@ sequenceDiagram
     Kernel->>Kernel: "更新页表"
     Kernel-->>CPU: "返回用户态，继续执行"
 ```
+
 
 **总耗时**：毫秒级（vs内存访问的纳秒级）
 **放大倍数**：约100,000～1,000,000倍
@@ -326,6 +341,7 @@ HADOOP_NAMENODE_OPTS="...
 ### 5.4 AlwaysPreTouch的作用机制
 
 ```mermaid
+%%{init: {'theme': 'dracula'}}%%
 flowchart LR
     subgraph "不使用AlwaysPreTouch"
         A["JVM启动"] --> B["申请200GB虚拟地址空间"]
@@ -346,6 +362,7 @@ flowchart LR
         N --> O["后续GC不会触发Page Fault<br>（页已在内存）"]
     end
 ```
+
 
 **注意**：`AlwaysPreTouch`会显著增加JVM启动时间（200GB可能需要几分钟），但这是防止内存被Swap的关键措施。
 
@@ -492,6 +509,7 @@ ps -o min_flt,maj_flt -p <pid>
 Card Table是RSet的基础设施，将堆内存划分为512字节的Card，每个Card用1字节表示其状态（clean/dirty）。当发生跨Region引用时，对应的Card被标记为dirty。
 
 ```mermaid
+%%{init: {'theme': 'dracula'}}%%
 flowchart LR
     subgraph "堆内存"
         A["512B Card 0"] --> B["512B Card 1"]
@@ -514,6 +532,7 @@ flowchart LR
         N --> O["更新RSet"]
     end
 ```
+
 
 ### 8.3 NameNode的特殊性分析
 

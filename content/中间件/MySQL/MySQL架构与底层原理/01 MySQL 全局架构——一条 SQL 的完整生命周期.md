@@ -1,650 +1,543 @@
 ---
 title: "MySQL 全局架构——一条 SQL 的完整生命周期"
-date: 2026-03-02
-tags: [InnoDB, MySQL, 存储引擎, 软件架构]
-keywords: [SQL执行流程]
-aliases: [MySQL全局架构, SQL生命周期]
+date: 2026-11-19
+tags: [MySQL, InnoDB, 性能优化, 数据库]
+keywords: [慢查询定位, performance_schema, Handler_read, optimizer_trace, 运行期判据]
+aliases: []
 ---
 
 # 01 MySQL 全局架构——一条 SQL 的完整生命周期
 
-**摘要：** 理解 MySQL 的全局架构，是深入学习其任何一个子系统的前提。本文以一条 SELECT 和一条 UPDATE 的完整执行流程为线索，沿着"连接层 → Server 层（解析器 → 预处理器 → 优化器 → 执行器）→ 存储引擎层"的路径，逐层拆解每一层的职责边界、输入输出和关键数据结构。重点回答三个问题：Server 层与存储引擎之间通过什么接口交互？为什么 MySQL 选择了"插件式存储引擎"这条独特的架构路线？一条写入语句比查询语句多经历了哪些额外步骤？理解了这张全局地图，后续专栏中对 Buffer Pool、Redo Log、MVCC、B+Tree 等子系统的深度解析才有坐标可循。
+**摘要：**
+
+一条 SQL 慢下来，极少能用「语句写错了」一句话交代清楚：连接建立、语句解析、计划生成、引擎取数、日志落盘、结果返回，六个环节各有独立的资源与等待对象，各自暴露的计数器也不是同一套。机制层的拆解已经细到源码，本篇换一个提问方式——不看数据在内部怎样流动，只看时间停在哪一段，以及停住时哪些计数器的差值会动。
+
+全文按六个环节切分，每一节给出可观测点、判据口径与该查的 `performance_schema` 表，并点明该环节的判据在哪些条件下会失效；随后讨论三层观测工具（`SHOW STATUS`、`performance_schema`、`sys` schema）各自的开销与盲区，8.0 移除查询缓存之后观测面发生了什么变化，三个让人「看不出慢在哪」的配置成因，以及把累计计数器当瞬时值、把 `Slow_queries` 当结论这几类反例。判据的排布遵循同一条原则：非零即定性的硬指标在前，指标间的比例关系居中，经验阈值断后，三者不混用。读完应当能回答两个问题：一条慢 SQL 该先看哪个计数器；当所有计数器都正常时，该怀疑观测链本身哪里没打开。
 
 ---
 
-## 第 1 章 为什么要从全局架构讲起
+## 第 1 章 换一个提问方式：从「怎么走」到「停在哪」
 
-### 1.1 盲人摸象的风险
+### 1.1 机制讲清了，问题还是定位不了
 
-多数开发者对 MySQL 的认知是碎片化的：知道"InnoDB 用的是 B+Tree"，但不知道一条 SQL 是怎么从网络层到达 B+Tree 的；知道"Redo Log 保证持久性"，但不知道 Redo Log 在整个写入链路中的哪个环节被写入、与 Binlog 的关系是什么；知道"MVCC 实现了可重复读"，但不知道 ReadView 是在查询执行的哪个阶段被创建的。
+线上一条按主键的点查，测试环境的响应时间是 3 毫秒，生产环境是 2.7 秒，SQL 文本没有改，索引没有掉，执行计划还是 `const`，慢日志里 `Rows_examined` 与 `Rows_sent` 都是 1，`Lock_time` 接近于零。按「SQL 写得好不好」这条线索，这条语句找不到任何可优化的地方，但它确实慢，而且慢得稳定。
 
-这些碎片化的知识在面对复杂问题时会失效。比如：一条 UPDATE 语句执行成功了，但从库的数据没有同步过来——要排查这个问题，你需要知道写入流程中 Redo Log 和 Binlog 的两阶段提交（2PC）协议，而理解 2PC 的前提是知道 Server 层和存储引擎层各自负责写哪种日志、它们的写入顺序是什么。
+问题不在语句，在提问方式。「SQL 怎么写才快」是一个关于代码的问题，读执行计划、看索引覆盖就能回答；「这条 SQL 的时间花在哪一段」是一个关于运行期状态的问题，只有计数器能回答。一条语句从进入服务端到把结果交回客户端，要依次穿过六个环节，每个环节等待的东西完全不同：连接环节等的是文件描述符、认证插件与线程；解析环节等的是 CPU；优化环节等的是统计信息；执行环节等的是缓冲池、磁盘与行锁；日志环节等的是 redo 空间与 fsync；返回环节等的是网络带宽与客户端的消费速度。六段里任何一段被拖住，最终呈现给用户的都是「这条 SQL 慢」，而 `Slow_queries` 只是在末尾加一，对定位没有任何信息量。
 
-全局架构就是那张"地图"。有了地图，才能在后续深入每个模块时，始终知道自己"身处何处"、"上下游是谁"。
+机制层面的拆解在 [[中间件/MySQL/读书笔记-Mysql内核架构/01. MySQL总体架构：Server层与存储引擎的插件化设计|读书笔记 01：总体架构]] 里已做到源码级，本篇不重复，只在需要解释判据成因时给一句结论并指过去。
 
-### 1.2 MySQL 架构的三层模型
+### 1.2 六个环节的切分口径
 
-MySQL 的架构可以清晰地划分为**三层**，每一层有明确的职责边界：
+本文所说的「环节」按两件事切分：可独立观测、可独立失效，与代码模块的划分并不一致——解析器与预处理共同的风险是「同一条语句被反复解析」，观测共用 `Com_*`，所以合成一段；日志环节在代码上属于 InnoDB，决定的却是提交延迟而非取数延迟，所以必须拆开。
 
-| 层级 | 名称 | 核心职责 | 关键组件 |
-|------|------|----------|----------|
-| 第一层 | **连接层（Connection Layer）** | 管理客户端连接、认证授权、线程复用 | 连接器（Connector）、线程池（Thread Pool） |
-| 第二层 | **Server 层（SQL Layer）** | SQL 解析、优化、执行的全部逻辑 | 解析器、预处理器、优化器、执行器、查询缓存（8.0 已移除） |
-| 第三层 | **存储引擎层（Storage Engine Layer）** | 数据的存储、读取和事务管理 | InnoDB、MyISAM、Memory 等 |
-
-这三层的关系是**自上而下的调用链**：连接层接收客户端请求，交给 Server 层处理 SQL 逻辑，Server 层在需要读写数据时，通过一组标准化的接口（Handler API）调用存储引擎层。
+这样切分后，每一段都对应一组互不重叠的计数器，判据不必借用别段指标，也不会出现「一个数字既能解释 A 又能解释 B」的模糊地带。图中虚线连到各段的主要可观测点。不妨把六个环节看成一条流水线上的六个工位：工位之间没有缓冲，任何一站积压都会拖慢整条线的节拍，而用户手里只有一个「总耗时」。
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#4A90D9', 'primaryTextColor': '#fff', 'primaryBorderColor': '#2A6CB8', 'lineColor': '#5C6BC0', 'secondaryColor': '#81C784', 'tertiaryColor': '#FFB74D', 'background': '#1e1e2e'}}}%%
-graph TD
-    subgraph "第一层：连接层"
-        C1["MySQL Client</br>(mysql, JDBC, Go driver...)"]
-        C2["连接器</br>认证 + 权限校验"]
-        C3["线程管理</br>(线程池/一连接一线程)"]
-    end
-
-    subgraph "第二层：Server 层"
-        QC["查询缓存</br>(MySQL 8.0 已移除)"]
-        P["解析器 (Parser)</br>词法分析 + 语法分析"]
-        PP["预处理器 (Preprocessor)</br>语义校验 + 权限检查"]
-        O["优化器 (Optimizer)</br>生成执行计划"]
-        E["执行器 (Executor)</br>调用存储引擎接口"]
-    end
-
-    subgraph "第三层：存储引擎层"
-        H["Handler API</br>标准化接口"]
-        I["InnoDB</br>事务 + 行锁 + MVCC"]
-        M["MyISAM</br>表锁 + 全文索引"]
-        MEM["Memory</br>内存表"]
-    end
-
-    C1 --> C2
-    C2 --> C3
-    C3 --> QC
-    QC -->|"缓存未命中"| P
-    P --> PP
-    PP --> O
-    O --> E
-    E --> H
-    H --> I
-    H --> M
-    H --> MEM
-
-    classDef conn fill:#4A90D9,stroke:#2A6CB8,color:#fff
-    classDef server fill:#5C6BC0,stroke:#3F51B5,color:#fff
-    classDef engine fill:#81C784,stroke:#4CAF50,color:#fff
-    classDef api fill:#FFB74D,stroke:#F57C00,color:#333
-
-    class C1,C2,C3 conn
-    class QC,P,PP,O,E server
-    class I,M,MEM engine
-    class H api
+%%{init: {'theme': 'dracula'}}%%
+flowchart LR
+    A["连接<br/>TCP 握手 / 认证 / 线程"] --> B["解析<br/>词法 / 语法 / 预处理"]
+    B --> C["优化<br/>计划生成 / 代价估算"]
+    C --> D["执行<br/>引擎取数 / Server 计算"]
+    D --> E["日志<br/>redo 写入 / 提交刷盘"]
+    E --> F["返回<br/>组包 / 网络发送"]
+    A -.-> O1["Threads_connected<br/>Aborted_connects"]
+    B -.-> O2["Com_* 计数器<br/>digest 表"]
+    C -.-> O3["stage/sql/statistics<br/>optimizer_trace"]
+    D -.-> O4["Handler_read_*<br/>Innodb_rows_read"]
+    E -.-> O5["Innodb_log_waits<br/>Innodb_os_log_fsyncs"]
+    F -.-> O6["Bytes_sent<br/>SUM_ROWS_SENT"]
 ```
 
-这张图需要注意两个关键点：
+只读语句没有日志环节——普通 `SELECT` 既不写 redo 也不写 binlog，它的判据只有五段；写入语句六段齐全，而且第五段常常才是主要矛盾。这个差别决定了排查的第一步不是看指标，而是确认语句类型：如果慢的是查询却去翻 redo 指标，等于拿体温计量血压。
 
-**第一，Server 层是所有存储引擎共享的。** 无论底层用的是 InnoDB 还是 MyISAM，SQL 解析、优化、执行的逻辑都在 Server 层完成。存储引擎不参与 SQL 的解析和优化，它只负责按照 Server 层的指令"存数据"和"取数据"。
+### 1.3 一条贯穿本文的案例
 
-**第二，存储引擎层是可插拔的。** Server 层通过 Handler API 与存储引擎交互，这组接口是固定的。只要一个存储引擎实现了这组接口，就可以接入 MySQL。这就是 MySQL 与 Oracle、PostgreSQL 等数据库的根本架构差异——后者的存储引擎与 SQL 层是紧耦合的，无法替换。
+案例取自订单库，三张语句覆盖三类典型形态，后续各章反复引用同一条，不再换例子。
 
----
+- 语句 A（点查）：`SELECT id, user_id, amount, status FROM orders WHERE id = ?`
+- 语句 B（范围加排序）：`SELECT id, user_id, amount FROM orders WHERE status = ? AND created_at >= ? ORDER BY created_at DESC LIMIT 100`
+- 语句 C（批量写）：`UPDATE orders SET settled = 1, settled_at = NOW() WHERE id IN (...)`，每批 500 个主键
 
-## 第 2 章 连接层：从 TCP 握手到线程分配
-
-### 2.1 连接的建立过程
-
-当你在终端输入 `mysql -h 127.0.0.1 -P 3306 -u root -p` 时，发生了以下步骤：
-
-1. **TCP 三次握手**：MySQL Server 默认监听 3306 端口，客户端与之建立 TCP 连接。
-2. **协议握手**：TCP 连接建立后，MySQL Server 主动向客户端发送一个握手包（Handshake Packet），包含协议版本号、服务器版本、线程 ID、认证挑战串（salt）等信息。
-3. **身份认证**：客户端根据挑战串和用户输入的密码，计算出认证响应（通常使用 `caching_sha2_password` 或 `mysql_native_password` 插件），发送给服务器。服务器查询 `mysql.user` 表验证用户名和密码。
-4. **权限加载**：认证通过后，连接器从权限表中读取该用户的所有权限信息，缓存在内存中。**此后这个连接内的所有操作，权限判断都基于这份缓存**——即使管理员在另一个连接中修改了该用户的权限，已建立的连接也不受影响，直到下次重新连接。
-
-> [!warning] 生产避坑
-> 权限的这个缓存行为意味着：如果你修改了某个用户的权限并希望立即生效，需要让该用户的现有连接断开重连。`FLUSH PRIVILEGES` 只刷新权限表到缓存，但不会影响已建立连接中已加载的权限副本。对于长连接（如连接池中的连接），这一点尤其容易忽视。
-
-### 2.2 连接的管理：长连接 vs 短连接
-
-**短连接**：每次执行 SQL 都重新建立连接、执行完立刻断开。TCP 握手、认证、权限加载的开销在每次请求中都会重复，对于高并发场景来说代价很高。
-
-**长连接**：客户端与 MySQL 建立一次连接后保持不断开，后续的 SQL 通过同一个连接发送。绝大多数生产应用都使用长连接（通常通过连接池管理）。
-
-但长连接有一个潜在问题：**内存持续增长**。MySQL 在执行查询过程中，使用的临时内存（排序缓冲区、JOIN 缓冲区、结果集缓冲区等）是**管理在连接对象中的**。这些内存在 SQL 执行结束后不一定会立刻释放回操作系统，而是留在连接的内存池中以备复用。如果一个长连接执行了大量的复杂查询（尤其是涉及大数据量排序的查询），连接占用的内存会不断膨胀。
-
-解决方案有两种：
-
-1. **定期断开长连接**：连接池通常有 `maxLifetime` 配置（如 HikariCP 默认 30 分钟），到期后主动关闭连接，重新建立。
-2. **执行 `mysql_reset_connection`**（MySQL 5.7+）：这个命令可以重置连接的状态（清理临时表、释放锁、重置会话变量），并释放连接占用的额外内存，但**不需要重新认证**——比断开重连轻量得多。
-
-### 2.3 线程模型：一连接一线程 vs 线程池
-
-MySQL 社区版（Community Edition）采用**一连接一线程（Thread-per-Connection）** 模型：每个客户端连接分配一个独立的操作系统线程来处理请求。当连接空闲时，线程挂起等待（但仍然占用操作系统资源）；连接断开后，线程可以被回收到线程缓存中供后续连接复用（由 `thread_cache_size` 参数控制缓存的线程数量）。
-
-这个模型的优势是实现简单，每个连接的处理逻辑是顺序的，不需要考虑复杂的异步调度。但当连接数达到数千甚至上万时，大量线程的上下文切换会消耗可观的 CPU 资源，内存占用也会失控——每个线程的默认栈大小是 256KB（由 `thread_stack` 参数控制），一万个连接就需要 2.5GB 仅用于线程栈。
-
-MySQL Enterprise Edition 和 Percona Server 提供了**线程池（Thread Pool）** 功能：用一组固定数量的工作线程来服务所有连接，通过事件驱动的方式复用线程。这种模型在高连接数场景下能显著降低上下文切换的开销，但引入了额外的调度复杂度。
-
-> [!info] 核心概念
-> 理解线程模型的意义在于：你在 `SHOW PROCESSLIST` 中看到的每一行，就是一个连接对应的线程。当你看到大量线程处于 `Sleep` 状态时，它们并没有在执行 SQL，但仍然占用着操作系统资源。这也是为什么连接池配置（`maxPoolSize`）需要谨慎——并不是"越大越好"。
+`orders` 表的索引情况是刻意设计的：主键 `id`，联合索引 `(user_id, created_at)`，`status` 上没有任何索引。于是语句 B 的谓词 `status = ?` 天然用不上索引，它的 Handler 指纹会带明显的全表扫描特征；语句 A 的 Handler 指纹则应该几乎只有 `Handler_read_key`。两种指纹的对照，就是第 6 章判据的来源。
 
 ---
 
-## 第 3 章 Server 层：从 SQL 文本到执行计划
+## 第 2 章 观测的三层工具与它们的开销
 
-### 3.1 查询缓存：一个被历史淘汰的设计
+### 2.1 第一层：全局计数器与必须做差的读法
 
-在 MySQL 8.0 之前，Server 层在解析 SQL 之前会先查询缓存（Query Cache）：如果完全相同的 SQL 文本之前执行过，且涉及的表没有被修改，就直接返回缓存的结果。
+`SHOW GLOBAL STATUS` 给出的几乎全是自实例启动以来的**累计值**，这既是优点也是陷阱：查询代价极低，任何时刻都能读一次；单次读数却只回答「历史上发生过多少次」，回答不了「现在以多快的速度发生」。判断某环节是否正在恶化，唯一的正确用法是两次读数做差。
 
-这个功能看起来很美好，但在生产中几乎总是弊大于利：
+差分有三条纪律。先读 `Uptime`：全局状态变量存在内存里，重启会全部清零，`Uptime` 小于采样间隔就直接放弃这组数据。再固定采样间隔，太短被抖动淹没，太长把故障窗口抹平，线上常用 10 秒到 60 秒。最后保证两次采样用同一条语句、同一组字段。
 
-1. **失效粒度太粗**：只要表上发生了任何写操作（INSERT / UPDATE / DELETE），该表相关的**所有**缓存条目都会被清除。对于读写混合的 OLTP 系统，缓存几乎永远处于反复失效的状态。
-2. **匹配条件太严格**：SQL 文本必须**完全一致**（包括大小写、空格、注释），`SELECT * FROM users` 和 `select * from users` 是两个不同的缓存键。
-3. **并发瓶颈**：查询缓存的访问需要加全局互斥锁（`query_cache_mutex`），高并发下锁争用反而拖慢了性能。
+直接读 `performance_schema.global_status` 比 `SHOW GLOBAL STATUS` 更适合做差，因为它是一张普通表，可以用一条语句精确挑出关心的字段，也方便脚本按列取值。
 
-MySQL 8.0 直接移除了查询缓存功能。这是一个值得思考的架构决策：**数据库层面的通用缓存很难做好，因为失效策略太难精确控制。** 应用层的缓存（如 Redis）可以根据业务逻辑精确控制缓存的粒度和失效时机，效果远好于数据库层面的"通杀式"缓存。
+```sql
+-- 采样脚本：同一语句跑两次，用后一次减前一次；Uptime 必须一起读
+SELECT NOW() AS ts, Uptime,
+       Threads_connected, Threads_running, Max_used_connections,
+       Connections, Aborted_connects, Connection_errors_max_connections,
+       Com_select, Com_stmt_prepare, Com_stmt_execute, Prepared_stmt_count,
+       Handler_read_key, Handler_read_rnd_next, Handler_read_rnd,
+       Innodb_rows_read, Innodb_buffer_pool_reads,
+       Innodb_log_waits, Innodb_os_log_written, Innodb_os_log_fsyncs,
+       Bytes_sent, Slow_queries
+FROM performance_schema.global_status
+WHERE VARIABLE_NAME IN (
+  'Uptime',
+  'Threads_connected','Threads_running','Max_used_connections',
+  'Connections','Aborted_connects','Connection_errors_max_connections',
+  'Com_select','Com_stmt_prepare','Com_stmt_execute','Prepared_stmt_count',
+  'Handler_read_key','Handler_read_rnd_next','Handler_read_rnd',
+  'Innodb_rows_read','Innodb_buffer_pool_reads',
+  'Innodb_log_waits','Innodb_os_log_written','Innodb_os_log_fsyncs',
+  'Bytes_sent','Slow_queries');
+```
 
-### 3.2 解析器（Parser）：从文本到语法树
+`sys.metrics` 把常用状态变量按类型整理成四列结果集，便于做采集项，字段覆盖面不及直接读 `global_status`。
 
-查询缓存未命中（或 MySQL 8.0+ 直接跳过缓存），SQL 文本会进入**解析器**。解析器的工作分为两步：
+### 2.2 第二层：按线程与按语句的事件
 
-**词法分析（Lexical Analysis）**：将 SQL 文本拆分成一个个"词元（Token）"。比如 `SELECT name FROM users WHERE id = 1` 会被拆分为：`[SELECT] [name] [FROM] [users] [WHERE] [id] [=] [1]`。MySQL 的词法分析器是手写的（不是用 Lex/Flex 等工具生成的），因为手写可以针对 SQL 语法做特定优化。
+`performance_schema` 把运行期发生的事情分成三类事件：语句事件（`events_statements_*`）、阶段事件（`events_stages_*`）、等待事件（`events_waits_*`）。三者的关系是包含关系——一条语句包含若干阶段，一个阶段包含若干等待，所以排查的顺序也是自上而下：先按语句摘要找到可疑语句，再下钻到它的阶段耗时，最后才看它卡在哪种等待上。
 
-**语法分析（Syntax Analysis）**：根据 MySQL 的语法规则，将词元序列组装成一棵**抽象语法树（AST, Abstract Syntax Tree）**。MySQL 使用 Bison（GNU 的 YACC 替代品）来定义语法规则，语法规则文件是 `sql/sql_yacc.yy`——这个文件有一万多行，是 MySQL 源码中最大的单个文件之一。
+这一层有三个必须记住的细节。时间单位是皮秒，`TIMER_WAIT` 除以 10 的 12 次方才是秒。线程标识有两套，`performance_schema.threads` 里的 `THREAD_ID` 是内部编号，`PROCESSLIST_ID` 才对应 `SHOW PROCESSLIST` 那一列，不映射就会查到别人的数据。摘要表依赖 `statements_digest` 消费者，它在 8.0 默认是 YES，不过每条线程的历史默认只留 10 行（`performance_schema_events_statements_history_size`），更长的窗口要开 `events_statements_history_long`，那是另一张表和另一份内存。
 
-如果 SQL 文本不符合语法规则，解析器会在这一步报错。比如 `SELCT name FROM users`（拼写错误）会得到经典的 `ERROR 1064 (42000): You have an error in your SQL syntax`。
+开销方面，真正决定成本的不是 instrument 有多少个（默认状态下大多数是开着的），而是消费者与历史表的行数上限：`history_long` 每多留一行就是多占一份内存，`events_waits_history_long` 这种按等待事件逐条记录的表尤其贵。量级的示例推算见第 10 章。
 
-解析器的输出是一棵 AST，这棵树的结构大致如下：
+### 2.3 第三层：已经封装好的视图
+
+`sys` schema 是一组建立在 `performance_schema` 与 `information_schema` 之上的视图，价值在于常用的 join、排序与百分比已经算好。`sys.statement_analysis` 按摘要列出执行次数、总延迟、扫描行数与临时表数量；`sys.statements_with_full_table_scans` 直接给出「没走索引的执行占比」；`sys.processlist` 把线程、当前语句、当前等待与事务状态拼成一行；`sys.innodb_lock_waits` 配好了锁等待双方的信息；`sys.memory_global_by_current_bytes` 与 `sys.io_global_by_wait_by_latency` 分别回答内存和 I/O 花在哪里。
+
+这层的代价很低，不过前提必须说清：视图只是把 `performance_schema` 已采到的数据重新排列，p_s 没开或消费者关掉，视图会安静地返回空集而不报错，空集被当成「没问题」是排查中最常见的一次误判。
+
+| 维度 | 第一层：`SHOW GLOBAL STATUS` | 第二层：`performance_schema` | 第三层：`sys` schema |
+| :--- | :--- | :--- | :--- |
+| 数据形态 | 实例级累计计数器 | 语句、阶段、等待三级事件 | 对 p_s 预聚合的视图 |
+| 粒度 | 实例 | 线程、语句、摘要 | 语句、会话、等待、内存 |
+| 回答什么问题 | 总量与方向对不对 | 具体是谁慢、慢在哪一段 | 现成的排名与百分比 |
+| 观测代价 | 极低，随时可查 | 中，取决于消费者与历史行数 | 低，但视图本身要跑聚合 |
+| 主要盲区 | 无线程与语句归属，重启清零 | 解析段没有独立事件，历史默认只留 10 行 | p_s 没采到的它也没有 |
+| 典型入口 | `global_status`、`sys.metrics` | `events_statements_summary_by_digest`、`data_lock_waits` | `statement_analysis`、`statements_with_full_table_scans` |
+
+三层工具的选择顺序可以收成一张图：先做差定向，再下钻到语句，最后用现成视图确认；若视图返回空集，回头检查观测链本身。
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#4A90D9', 'primaryTextColor': '#fff', 'primaryBorderColor': '#2A6CB8', 'lineColor': '#5C6BC0', 'secondaryColor': '#81C784', 'tertiaryColor': '#FFB74D'}}}%%
-graph TD
-    Q["SELECT Statement"]
-    SEL["Select List</br>[name]"]
-    FROM["From Clause</br>[users]"]
-    WHERE["Where Clause"]
-    CMP["比较表达式</br>id = 1"]
-    COL["Column: id"]
-    VAL["Value: 1"]
-
-    Q --> SEL
-    Q --> FROM
-    Q --> WHERE
-    WHERE --> CMP
-    CMP --> COL
-    CMP --> VAL
-
-    classDef stmt fill:#4A90D9,stroke:#2A6CB8,color:#fff
-    classDef clause fill:#5C6BC0,stroke:#3F51B5,color:#fff
-    classDef expr fill:#81C784,stroke:#4CAF50,color:#fff
-    classDef leaf fill:#FFB74D,stroke:#F57C00,color:#333
-
-    class Q stmt
-    class SEL,FROM,WHERE clause
-    class CMP expr
-    class COL,VAL leaf
+%%{init: {'theme': 'dracula'}}%%
+flowchart TD
+    Q["现象：某类请求变慢"] --> S1["第一层：读全局计数器并做差<br/>判断是全局恶化还是局部"]
+    S1 --> D1{"全局计数器同时恶化?"}
+    D1 -->|"是"| S2["第二层：按线程与摘要下钻<br/>找到具体语句与阶段"]
+    D1 -->|"否"| S3["第三层：先看现成视图<br/>确认是否只有少数语句异常"]
+    S2 --> S3
+    S3 --> D2{"视图返回空集?"}
+    D2 -->|"是"| S4["回头检查观测链<br/>p_s 与消费者是否打开"]
+    D2 -->|"否"| S5["进入环节判据"]
 ```
-
-> [!note] 设计哲学
-> 解析器**只关心语法是否正确，不关心语义是否合理**。比如 `SELECT name FROM nonexistent_table` 在解析阶段不会报错——因为语法是合法的。"表是否存在"这个问题由下一步的预处理器来检查。
-
-### 3.3 预处理器（Preprocessor）：语义校验
-
-AST 构建完成后，进入**预处理器**阶段。预处理器的职责是**语义校验**，主要包括：
-
-1. **对象存在性检查**：验证 SQL 中引用的表、列、函数是否存在。如果表不存在，报 `ERROR 1146 (42S02): Table 'xxx' doesn't exist`。
-2. **列歧义解决**：当多表 JOIN 时，如果 SELECT 列表中的列名在多个表中都存在且没有指定表名前缀，预处理器会报列歧义错误。
-3. **权限预检查**：检查当前用户对涉及的表和列是否有相应的权限（SELECT / INSERT / UPDATE 等）。
-4. **通配符展开**：将 `SELECT *` 展开为具体的列名列表。
-
-预处理器会将 AST 进一步丰富和规范化——比如将 `*` 替换为实际的列列表、为列名添加表名限定符、解析别名等——然后将处理过的 AST 传递给优化器。
-
-### 3.4 优化器（Optimizer）：从"做什么"到"怎么做"
-
-优化器是 Server 层中最复杂、最核心的组件。它的输入是预处理后的 AST（描述了"要做什么"），输出是**执行计划（Execution Plan）**（描述了"怎么做"）。
-
-为什么需要优化器？因为**同一条 SQL 可以有多种执行方式**，而不同执行方式的性能可能相差几个数量级。以一个简单的两表 JOIN 为例：
-
-```sql
-SELECT * FROM orders o JOIN users u ON o.user_id = u.id WHERE u.age > 25;
-```
-
-至少有以下几种执行策略：
-
-- **策略 A**：先全表扫描 `users` 找出 `age > 25` 的用户，对每个用户去 `orders` 表通过 `user_id` 索引查找订单
-- **策略 B**：先全表扫描 `orders`，对每条订单去 `users` 表通过主键查找用户，再判断 `age > 25`
-- **策略 C**：如果 `users.age` 有索引，先通过索引找出 `age > 25` 的用户 ID，再批量到 `orders` 中查找
-
-优化器的任务就是在这些可能的策略中，选出**代价最低**的那一个。
-
-#### 3.4.1 逻辑优化：等价变换
-
-在评估物理执行方式之前，优化器会先对 AST 进行一系列**等价变换**，在不改变语义的前提下简化查询。常见的逻辑优化包括：
-
-**常量折叠（Constant Folding）**：
-```sql
--- 优化前
-WHERE a = 1 AND b = a + 1
--- 优化后（a 已确定为 1，b 的条件可以直接计算）
-WHERE a = 1 AND b = 2
-```
-
-**谓词下推（Predicate Pushdown）**：将过滤条件尽可能下推到离数据源最近的地方执行，减少中间结果集的大小。
-
-```sql
--- 优化前：先 JOIN 再过滤
-SELECT * FROM orders o JOIN users u ON o.user_id = u.id WHERE u.age > 25;
--- 优化后：先过滤 users 再 JOIN（减少 JOIN 的数据量）
-SELECT * FROM orders o JOIN (SELECT * FROM users WHERE age > 25) u ON o.user_id = u.id;
-```
-
-**子查询转换**：将某些子查询转换为等价的 JOIN 形式。比如 `IN (SELECT ...)` 在特定条件下可以被转换为 `semi-join`，性能通常更好。
-
-**外连接消除**：如果 LEFT JOIN 的结果中右表的列没有被使用，且 WHERE 条件已经隐式排除了右表为 NULL 的情况，优化器可以将 LEFT JOIN 降级为 INNER JOIN，从而获得更多的优化空间。
-
-#### 3.4.2 物理优化：Cost Model
-
-逻辑优化之后，优化器进入**物理优化**阶段，核心工作是**为每个表选择最优的访问方法（Access Method）**和**确定多表 JOIN 的顺序**。
-
-MySQL 使用一个**基于代价的优化器（Cost-Based Optimizer, CBO）**，其核心是一套**代价模型（Cost Model）**。代价模型将每种操作量化为一个代价值（cost），然后比较不同执行方案的总代价，选择代价最小的方案。
-
-代价模型中的关键参数存储在 `mysql.server_cost` 和 `mysql.engine_cost` 两张系统表中：
-
-| 代价参数 | 默认值 | 含义 |
-|----------|--------|------|
-| `row_evaluate_cost` | 0.1 | 评估一行数据的 CPU 代价 |
-| `key_compare_cost` | 0.05 | 比较一次索引键值的 CPU 代价 |
-| `memory_temptable_create_cost` | 1.0 | 创建内存临时表的代价 |
-| `memory_temptable_row_cost` | 0.1 | 向内存临时表写入一行的代价 |
-| `disk_temptable_create_cost` | 20.0 | 创建磁盘临时表的代价 |
-| `disk_temptable_row_cost` | 0.5 | 向磁盘临时表写入一行的代价 |
-| `io_block_read_cost` | 1.0 | 从磁盘读取一个数据页的 I/O 代价 |
-| `memory_block_read_cost` | 0.25 | 从 Buffer Pool 读取一个数据页的代价 |
-
-优化器根据这些参数和表的统计信息（行数、索引基数 Cardinality、数据分布直方图等），估算每种执行方案的总代价。比如，对于全表扫描：
-
-$$
-\text{Cost}_{\text{全表扫描}} = \text{页数} \times io\_block\_read\_cost + \text{行数} \times row\_evaluate\_cost
-$$
-
-对于通过索引查找再回表：
-
-$$
-\text{Cost}_{\text{索引扫描}} = \text{索引扫描页数} \times io\_block\_read\_cost + \text{回表次数} \times io\_block\_read\_cost + \text{匹配行数} \times row\_evaluate\_cost
-$$
-
-当回表次数足够多时，索引扫描的代价可能超过全表扫描——这就是优化器"选择不用索引"的数学原因。
-
-> [!warning] 生产避坑
-> 优化器的代价估算依赖于统计信息的准确性。如果表数据发生了大量变更但统计信息没有更新，优化器可能基于过时的统计信息做出错误的决策。定期执行 `ANALYZE TABLE` 更新统计信息是保持查询性能稳定的基本功。MySQL 8.0 的持久化统计信息（`innodb_stats_persistent = ON`，默认开启）相比之前有了显著改善，但在极端数据倾斜的场景下仍可能不准。
-
-#### 3.4.3 JOIN 顺序选择
-
-对于多表 JOIN，不同的表连接顺序会产生截然不同的中间结果集大小。假设有三张表 A（100 行）、B（10000 行）、C（1000 行），`A JOIN B JOIN C` 有 3! = 6 种排列顺序。如果先 JOIN 小表再 JOIN 大表，中间结果集更小，后续 JOIN 的代价更低。
-
-当 JOIN 的表数量为 N 时，可能的排列数是 N!，这是一个阶乘级增长。当 N 较大时（比如超过 10 张表），穷举所有排列的代价太高。MySQL 对此采用了两种策略：
-
-1. **当表数量 ≤ `optimizer_search_depth`（默认 62，但实际受限于内部启发式算法）时**：使用穷举搜索，评估所有排列组合的代价。
-2. **当表数量较多时**：使用贪心算法（greedy search），每一步选择当前代价最小的表加入 JOIN 序列，不保证全局最优但效率高。
-
-### 3.5 执行器（Executor）：驱动执行计划的引擎
-
-优化器输出的执行计划是一棵操作树（Operator Tree），树的每个节点代表一个操作（如表扫描、索引查找、排序、JOIN 等）。执行器的职责是**按照执行计划，逐步调用存储引擎接口获取数据，并完成上层的计算逻辑**。
-
-在 MySQL 8.0 之前，执行器使用的是经典的 **火山模型（Volcano Model / Iterator Model）**：执行计划树中的每个算子实现一个 `next()` 方法，上层算子调用下层算子的 `next()` 来逐行获取数据，数据像火山岩浆一样从叶子节点（表扫描）"冒泡"到根节点（返回给客户端）。
-
-火山模型的优点是实现简单、内存友好（一次只处理一行，不需要物化完整的中间结果集）。缺点是**每行数据都需要通过虚函数调用逐层传递，函数调用的开销在处理海量数据时变得显著**。
-
-MySQL 8.0.14 引入了 **Hash Join** 算法，8.0.18 开始在更多场景中使用。MySQL 8.0.33 进一步引入了**迭代器执行模型（Iterator Executor）**，用更现代的迭代器框架替代了部分老旧的执行路径，为后续的向量化执行（Vectorized Execution）等优化奠定了基础。
-
-#### 3.5.1 执行器与存储引擎的交互模式
-
-执行器调用存储引擎的方式是**逐行的（row-by-row）**。以一个简单的全表扫描为例：
-
-```
-执行器                    存储引擎（InnoDB）
-  |                           |
-  |-- ha_rnd_init() -------->|   // 初始化全表扫描
-  |                           |
-  |-- ha_rnd_next() -------->|   // 读取第一行
-  |<---- 返回一行数据 --------|
-  |                           |
-  |-- ha_rnd_next() -------->|   // 读取下一行
-  |<---- 返回一行数据 --------|
-  |                           |
-  |   ... 循环直到没有更多行 ...|
-  |                           |
-  |-- ha_rnd_end() --------->|   // 结束扫描
-```
-
-对于索引扫描，接口略有不同：
-
-```
-执行器                    存储引擎（InnoDB）
-  |                           |
-  |-- ha_index_init() ------>|   // 初始化索引扫描
-  |                           |
-  |-- ha_index_read_map() -->|   // 通过索引键值定位第一行
-  |<---- 返回一行数据 --------|
-  |                           |
-  |-- ha_index_next() ------>|   // 读取索引中的下一行
-  |<---- 返回一行数据 --------|
-  |                           |
-  |   ... 循环 ...            |
-  |                           |
-  |-- ha_index_end() ------->|   // 结束扫描
-```
-
-注意这个交互模式的一个重要含义：**Server 层不知道数据在磁盘上是怎么组织的，也不知道索引的内部结构**。它只知道"调用 `ha_index_read_map()` 传入一个键值，存储引擎会返回一行数据"。这种解耦就是 Handler API 的设计意图。
 
 ---
 
-## 第 4 章 存储引擎层：Handler API 与插件化架构
+## 第 3 章 连接环节：慢在建立，不在执行
 
-### 4.1 Handler API：Server 层与存储引擎的契约
+### 3.1 可观测点
 
-Handler API 是一组约定好的 C++ 虚函数接口，定义在 `sql/handler.h` 中。每个存储引擎都需要继承 `handler` 基类并实现这些虚函数。核心接口可以分为以下几类：
+连接环节的耗时发生在语句事件开始之前，`performance_schema` 的语句表看不到它，`events_stages_*` 里也没有对应阶段，这一点不记住就会陷入「语句都不慢、用户就是慢」的僵局。可用的观测量有三类：连接类（`Connections`、`Aborted_connects`、`Connection_errors_*`）、线程类（`Threads_connected`、`Threads_running`、`Threads_created`、`Threads_cached`）、TLS 类（`Ssl_accepts`、`Ssl_finished_accepts`）。建连的绝对耗时只能靠客户端计时：连续建连若干次取平均与分位数，再与长连接下的语句延迟对照。
 
-| 接口类别 | 关键方法 | 功能 |
-|----------|----------|------|
-| **表操作** | `create()`, `open()`, `close()`, `delete_table()` | 创建、打开、关闭、删除表 |
-| **行读取** | `rnd_next()`, `index_read_map()`, `index_next()`, `index_prev()` | 全表扫描、索引定位、索引顺序/逆序扫描 |
-| **行写入** | `write_row()`, `update_row()`, `delete_row()` | 插入、更新、删除一行 |
-| **事务控制** | `external_lock()`, `start_stmt()`, `commit()`, `rollback()` | 加锁、事务提交、事务回滚 |
-| **索引管理** | `add_index()`, `drop_index()`, `index_flags()` | 创建索引、删除索引、查询索引能力 |
-| **统计信息** | `info()`, `records()`, `estimate_rows_upper_bound()` | 提供行数、索引基数等统计信息 |
+### 3.2 四类失效形态与判据
 
-这套接口的设计体现了一个重要的抽象原则：**Server 层以"行"为基本单位与存储引擎交互，不涉及"页"、"B+Tree"、"事务日志"等存储引擎内部概念**。换句话说，对于 Server 层来说，存储引擎是一个"行存取器"——你给它一个键值，它返回一行数据；你给它一行数据，它负责存好。至于底层用 B+Tree 还是哈希表还是 LSM-Tree 来组织数据，Server 层完全不关心。
+连接环节的「慢」有四种互不相同的成因，判据也不同。
 
-### 4.2 为什么 MySQL 选择了插件式存储引擎
+| 失效形态 | 关键指标 | 判据口径 | 该看哪张表 |
+| :--- | :--- | :--- | :--- |
+| 连接数打满 | `Connection_errors_max_connections`、`Threads_connected`、`Max_used_connections` | 前者非零即已发生拒绝，这是硬判据；后者长期高于 `max_connections` 的八成说明容量告急，属经验口径 | `global_status`、`sys.metrics` |
+| 握手或认证失败 | `Aborted_connects`、`Connection_errors_*` | `Aborted_connects` 在涨而 `Connections` 平稳，说明连接没走完认证就断了 | `global_status` |
+| 反向 DNS 拖慢 | 新建连接耗时（客户端计时） | 单次建连稳定多出毫秒级，且开销与新连接数成正比 | 客户端计时、`Aborted_connects` |
+| TLS 握手开销 | `Ssl_accepts`、`Ssl_finished_accepts` | 两者差值大说明握手失败；`Ssl_accepts` 增速等于新建连接增速，说明每条连接都在做完整握手 | `global_status` |
 
-这是一个值得深思的架构决策。PostgreSQL、Oracle、SQL Server 等主流数据库都没有采用插件式存储引擎——它们的存储引擎与 SQL 层是紧密耦合的。MySQL 的这个设计有其历史原因，也有其代价。
+`max_connections` 打满这条线的判据最清晰：**`Connection_errors_max_connections` 一旦非零**，就是已经打满，不必算比例。此时 `Threads_connected` 贴着 `max_connections` 形成高位平台，`Threads_running` 却未必高——大量连接只是占着位置。两个指标是否分离，正是「连接数不够」与「执行能力不够」的分界。
 
-**历史原因：** MySQL 最初使用的存储引擎是 ISAM（后来演变为 MyISAM），它不支持事务。当需要事务支持时，MySQL 团队没有重写 MyISAM，而是选择了与第三方公司 Innobase Oy 合作，将 InnoDB 以插件的方式接入。这种"不替换旧引擎，而是允许新引擎共存"的策略，催生了插件式架构。
+线程模型只留一句结论：社区版一连接一线程，线程栈与连接缓冲随连接数线性增长，机制见 [[中间件/MySQL/读书笔记-Mysql内核架构/01. MySQL总体架构：Server层与存储引擎的插件化设计|读书笔记 01]] 的「连接管理」一节。
 
-**优势：** 不同的存储引擎可以针对不同的场景做极致优化。InnoDB 专注于事务型 OLTP 场景，MyISAM 适合读密集型场景（尽管现在已不推荐使用），Memory 引擎适合临时数据的快速存取。用户可以在同一个 MySQL 实例中，为不同的表选择不同的存储引擎。
+### 3.3 DNS 反解：最容易被忽略的固定成本
 
-**代价：** 插件式架构意味着 Server 层和存储引擎层之间必须通过抽象接口交互，这带来了两个问题：
+`skip_name_resolve` 默认为 OFF，每个新建连接都要把客户端 IP 反向解析成主机名，再与权限表的 `Host` 字段比对。正常情况下这是亚毫秒级，但 DNS 响应一变慢或超时，每条新建连接就稳定多出几毫秒到数秒，这笔开销与业务、数据量都无关，表现为「所有请求都慢一点，慢日志却很干净」。
 
-1. **优化受限**：Server 层的优化器无法利用存储引擎的内部信息。例如，优化器不知道 InnoDB 的 B+Tree 叶子节点是双向链表连接的，也不知道某些数据已经在 Buffer Pool 中缓存——它只能通过存储引擎提供的统计信息（行数、索引基数）来做粗略的代价估算。
-2. **功能边界模糊**：某些功能（如排序、分组、JOIN）应该在 Server 层做还是在存储引擎层做？Handler API 的设计决定了这些操作主要在 Server 层完成，存储引擎只负责按顺序"吐出"数据行。这意味着 InnoDB 即使内部能做更高效的排序，也无法绕过 Server 层的排序逻辑。
+判据不是某个计数器而是对照：新建连接耗时显著高于长连接下的语句耗时，且固定差值不随数据量变化，就该怀疑反解。处置是把 `skip_name_resolve` 设为 ON，代价是权限表里用主机名写的授权规则失效，须改用 IP 或网段，多租户环境动手前要先盘点授权表。8.0 早期版本可用 `host_cache` 观察缓存内容，该表在后继版本已废弃，以对应版本文档为准。
 
-> [!note] 设计哲学
-> MySQL 的插件式存储引擎是一个"历史选择"多于"最优设计"的架构决策。随着 InnoDB 成为事实上唯一的生产级存储引擎（MySQL 8.0 的系统表也已全部迁移到 InnoDB），这层抽象的价值在下降，而代价一直存在。但推倒这层抽象需要对 MySQL 进行根本性的重构，短期内不太可能发生。
+### 3.4 SSL 与认证插件：8.0 之后绕不开的两笔开销
 
-### 4.3 InnoDB 为什么成为默认存储引擎
+完整 TLS 握手是 CPU 密集操作，`require_secure_transport=ON` 时不可避免。`Ssl_accepts` 与 `Ssl_finished_accepts` 的差值反映握手失败，两者增速与新建连接增速同步说明每次建连都在重做握手——长连接把这笔成本摊薄到接近零，短连接要为每个请求付一次。
 
-MySQL 5.5 将 InnoDB 设为默认存储引擎，取代了此前的 MyISAM。这不是一个随意的决定，而是因为 InnoDB 在绝大多数生产场景中都是更好的选择：
+认证插件在 8.0 之后也变了：`caching_sha2_password` 是默认插件，首次认证要走 RSA 公钥交换或缓存路径，比 `mysql_native_password` 的一步式校验重，而 8.4 移除了后者，退路不再存在。这两笔成本都只落在建连耗时里。
 
-| 特性 | InnoDB | MyISAM |
-|------|--------|--------|
-| **事务支持** | 完整支持 ACID | 不支持 |
-| **锁粒度** | 行级锁（Row-level Locking） | 表级锁（Table-level Locking） |
-| **崩溃恢复** | 通过 Redo Log 自动恢复 | 依赖表修复工具 `myisamchk`，可能丢失数据 |
-| **外键约束** | 支持 | 不支持 |
-| **MVCC** | 支持（ReadView + Undo Log） | 不支持 |
-| **聚簇索引** | 数据按主键聚簇存储 | 数据文件与索引文件分离 |
-| **全文索引** | 5.6+ 支持 | 支持 |
-| **压缩** | 支持页级压缩 | 支持表级压缩 |
+### 3.5 参数与代价
 
-MyISAM 的"优势"——全文索引和 `COUNT(*)` 的极速返回（MyISAM 在表头维护了精确的行数）——在 InnoDB 的改进和硬件发展面前已经不构成选型依据。**在 2026 年，除非有非常特殊的理由，否则永远应该使用 InnoDB。**
+| 参数 | 8.0 默认 | 调大的代价 | 调小的代价 | 触发判据后怎么动 |
+| :--- | :--- | :--- | :--- | :--- |
+| `max_connections` | 151 | 线程与内存线性上涨，超过并发能力后排队更严重 | 提前触发拒绝，应用侧直接报错 | 先压连接池上限，再考虑是否调整 |
+| `skip_name_resolve` | OFF | 主机名授权规则失效，需改用 IP 或网段 | 每个新连接都要反解，建连抖动 | 长连接占比高时打开 |
+| `thread_cache_size` | 自动（-1） | 空闲线程常驻，内存占用上升 | 线程反复创建销毁，CPU 抖动 | 结合 `Threads_created` 增速判断 |
+| `wait_timeout` | 28800 | 空闲连接长期占位，连接池回收滞后 | 误杀安静中的长事务与连接 | 必须大于连接池的 `maxLifetime` |
 
 ---
 
-## 第 5 章 一条 SELECT 的完整生命周期
+## 第 4 章 解析环节：`Com_*` 计数器在说什么
 
-现在让我们把前面所有组件串联起来，追踪一条 SELECT 语句从客户端发出到返回结果的完整路径。
+### 4.1 可观测点
 
-```sql
-SELECT name, email FROM users WHERE id = 42;
-```
+解析环节没有独立的阶段事件，也没有「解析耗时」这一列，判据只能建立在计数器的速率关系上。可用的是 `Com_*` 一族（`Com_select`、`Com_stmt_prepare`、`Com_stmt_execute`、`Com_stmt_close`、`Com_stmt_reprepare`）、`Questions` 与 `Queries` 的差值（后者包含存储过程内部执行的语句），以及 `Prepared_stmt_count` 这个瞬时量。
 
-### 5.1 阶段一：连接层
+单条语句的解析成本是微秒级，除非语句极长或被反复重解析，否则不足以成为瓶颈；这一环真正的风险在于**总量**——连接频繁新建、同一条 SQL 被反复解析而不复用，CPU 会被均匀磨掉一层，表现为「每条 SQL 都不慢，整机吞吐上不去」。
 
-1. 客户端通过已建立的 TCP 长连接发送 SQL 文本
-2. 连接器验证连接状态正常（未超时、未被 KILL）
-3. 从连接的线程上下文中获取当前用户的权限缓存
+### 4.2 短连接风暴的指纹
 
-### 5.2 阶段二：Server 层
-
-4. **（MySQL 8.0 之前）查询缓存**：以 SQL 文本为键查找缓存，未命中则继续
-5. **解析器**：词法分析将 SQL 拆分为 Token，语法分析构建 AST
-6. **预处理器**：验证 `users` 表是否存在、`name`/`email`/`id` 列是否存在、当前用户是否有 `SELECT` 权限
-7. **优化器**：
-   - 发现 `WHERE id = 42` 命中了主键，选择主键索引扫描（`type: const`）
-   - 不需要排序、不需要临时表
-   - 生成执行计划：通过主键索引直接定位到 `id = 42` 的行
-8. **执行器**：
-   - 调用 InnoDB 的 `ha_index_read_map()`，传入键值 `id = 42`
-   - InnoDB 返回完整的行数据
-   - 执行器从返回的行中提取 `name` 和 `email` 列
-   - 将结果写入客户端的网络发送缓冲区
-
-### 5.3 阶段三：存储引擎层（InnoDB）
-
-当执行器调用 `ha_index_read_map(id = 42)` 时，InnoDB 内部的处理过程是：
-
-9. 在聚簇索引的 B+Tree 中，从根页开始，逐层比较键值，定位到 `id = 42` 所在的叶子页
-10. 检查该叶子页是否在 Buffer Pool 中：
-    - **如果在**：直接从内存中读取，无需磁盘 I/O
-    - **如果不在**：从磁盘读取该 16KB 的数据页到 Buffer Pool，再从中读取目标行
-11. **MVCC 可见性判断**：如果当前事务处于 `REPEATABLE READ` 隔离级别，InnoDB 需要检查该行的 `trx_id`（事务 ID）是否对当前事务的 ReadView 可见。如果该行正在被其他事务修改且未提交，InnoDB 会沿着 Undo Log 的版本链找到一个对当前事务可见的历史版本
-12. 将可见版本的完整行数据返回给 Server 层
+短连接的代价不只是握手：每个新连接都要重新解析语句、重新生成计划、重新加载权限缓存。指纹很有辨识度：`Connections` 与 `Com_select` 同斜率上涨，每连接语句数（`Com_select` 增量除以 `Connections` 增量）接近 1，`Threads_created` 跟着涨说明线程缓存也没命中。长连接加连接池则是 `Connections` 平稳、`Com_*` 随业务起伏。
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#4A90D9', 'primaryTextColor': '#fff', 'primaryBorderColor': '#2A6CB8', 'lineColor': '#5C6BC0', 'secondaryColor': '#81C784', 'tertiaryColor': '#FFB74D'}}}%%
+%%{init: {'theme': 'dracula'}}%%
 sequenceDiagram
-    participant Client as "MySQL Client"
-    participant Conn as "连接器"
-    participant Parser as "解析器"
-    participant Opt as "优化器"
-    participant Exec as "执行器"
-    participant InnoDB as "InnoDB"
-    participant BP as "Buffer Pool"
-    participant Disk as "磁盘"
-
-    Client->>Conn: "SELECT name, email FROM users WHERE id=42"
-    Conn->>Parser: "传递 SQL 文本"
-    Parser->>Parser: "词法分析 + 语法分析 → AST"
-    Parser->>Opt: "传递 AST"
-    Opt->>Opt: "选择主键索引扫描, 生成执行计划"
-    Opt->>Exec: "传递执行计划"
-    Exec->>InnoDB: "ha_index_read_map(id=42)"
-    InnoDB->>BP: "查找 id=42 所在的数据页"
-    alt "数据页在 Buffer Pool 中"
-        BP-->>InnoDB: "返回数据页（内存读取）"
-    else "数据页不在 Buffer Pool 中"
-        BP->>Disk: "读取 16KB 数据页"
-        Disk-->>BP: "返回数据页"
-        BP-->>InnoDB: "返回数据页"
+    participant App as "应用"
+    participant SQL as "MySQL"
+    Note over App,SQL: 短连接：每个请求重建一次
+    App->>SQL: "TCP 握手 + TLS + 认证"
+    SQL-->>App: "握手完成，Connections 加一"
+    App->>SQL: "一条 Com_select"
+    App->>SQL: "断开"
+    Note over App,SQL: 长连接：建连成本被摊薄
+    App->>SQL: "一次建连"
+    loop 每个请求
+        App->>SQL: "一条 Com_select"
     end
-    InnoDB->>InnoDB: "MVCC 可见性判断"
-    InnoDB-->>Exec: "返回 (name, email) 行数据"
-    Exec-->>Client: "返回结果集"
 ```
+
+判据是一个比值而不是一个绝对值：**每连接语句数接近 1**，就说明连接复用没有生效，问题在连接池配置或客户端的连接生命周期管理，而不在 SQL。
+
+### 4.3 预处理语句泛滥
+
+服务端预处理会把解析结果缓存复用，代价是每条语句占一份内存。`Prepared_stmt_count` 逼近 `max_prepared_stmt_count`（默认 16382）后，新的预处理直接失败，报错常被应用层当成「无法执行」，误判成连接问题。判据看两处：与上限的比值，以及 `Com_stmt_prepare` 与 `Com_stmt_execute` 的比值——后者远大于前者说明全是「准备一次执行一次」，缓存没复用还多付一次分配。具体是哪几条语句占着名额，查 `performance_schema.prepared_statements_instances`。
+
+`Com_stmt_reprepare` 非零且持续增长，说明执行计划被反复作废后重建，常见诱因是统计信息变化、DDL 或表结构变更，它会把解析与优化的成本合并成一条隐性的慢路径。
+
+### 4.4 摘要表：找「重复」而不是找「慢」
+
+摘要表把同一类语句的执行合成一行，判读靠两个字段的组合：`COUNT_STAR` 很高而 `AVG_TIMER_WAIT` 很低的是重复劳动，单条不值得优化，乘以执行次数吃掉的 CPU 却可观；`COUNT_STAR` 不高而 `AVG_TIMER_WAIT` 很高的才是传统意义上的慢语句。两类问题处置方向完全不同，把前者当后者去改写 SQL 通常毫无收益。
+
+| 现象 | 指标 | 判据口径 | 该看哪张表 |
+| :--- | :--- | :--- | :--- |
+| 短连接风暴 | `Connections`、`Com_select`、`Threads_created` | 三者同斜率上涨，每连接语句数接近 1 | `global_status` |
+| 预处理语句泛滥 | `Prepared_stmt_count`、`Com_stmt_prepare` | 前者逼近 `max_prepared_stmt_count`；后者远多于执行次数 | `global_status`、`prepared_statements_instances` |
+| 计划反复重编 | `Com_stmt_reprepare` | 非零且持续增长 | `global_status` |
+| 重复劳动吃 CPU | `COUNT_STAR`、`AVG_TIMER_WAIT` | 次数极高但单次极短的摘要 | `events_statements_summary_by_digest` |
 
 ---
 
-## 第 6 章 一条 UPDATE 的完整生命周期
+## 第 5 章 优化环节：用 `rows` 偏差度量「统计信息可不可信」
 
-写入语句的流程比查询复杂得多，因为需要保证数据的**持久性（Durability）**和**崩溃恢复能力**。我们以这条 UPDATE 为例：
+### 5.1 可观测点
+
+优化环节在阶段事件里有明确位置：`stage/sql/statistics` 对应行数估算与代价比较，`stage/sql/preparing` 对应预处理与子查询展开。某条语句的优化耗时取这两个阶段的累计时间；要看优化器为什么这么选，打开 `optimizer_trace`，它在 `information_schema.OPTIMIZER_TRACE` 里留下候选计划的 `cost_info` 与每张表的 `rows`。8.0.18 之后还有更直接的路：`EXPLAIN ANALYZE` 同时打印估算行数与实际行数，偏差一眼可见。
+
+### 5.2 判据：偏差十倍以上，统计信息就不可信
+
+这是本篇最重要的一条判据。优化器的决策全部建立在行数估算上，估算来自索引基数与采样统计；数据分布剧烈变化而统计信息没跟上，估算就会系统性偏离，计划随之偏离。判断偏离是否严重不需要复杂推导，把估算与实际放在一起即可：
 
 ```sql
-UPDATE users SET name = '李四' WHERE id = 42;
+-- 估算与实测并排：注意 actual rows 与 rows 的差距，而不是只看耗时
+EXPLAIN ANALYZE
+SELECT id, user_id, amount
+FROM orders
+WHERE status = 'PAID' AND created_at >= '2026-10-01'
+ORDER BY created_at DESC
+LIMIT 100;
 ```
 
-### 6.1 Server 层的处理（与 SELECT 类似）
+输出里每个迭代器都带 `(cost=... rows=...)` 与 `(actual time=... rows=... loops=...)` 两段（措辞以对应版本文档为准）。**`actual rows` 与 `rows` 相差十倍以上**时，统计信息就应当列为不可信，此时讨论加索引、改写法都没有意义，优化器根本没看到真实分布。十倍是经验门槛：三到五倍在小表上常见，不构成结论；十倍以上通常意味着把走索引误判成走全表，或者相反。
 
-前半段与 SELECT 基本相同：解析 → 预处理 → 优化（确定通过主键索引定位目标行）→ 执行器开始调用存储引擎。
+要打开完整决策链，`optimizer_trace` 先看 `join_optimization` 下的 `rows_estimation`（每张表的 `rows` 与 `cost`），再看 `considered_execution_plans` 里被放弃方案的 `cost_info`。被放弃方案只贵一点点，说明是临界误判，修统计信息或调代价常量都可能翻转；差一个数量级，说明估算已彻底失真。追踪缓冲有上限（`optimizer_trace_max_mem_size`，默认 1 MB），超限会被截断并标出，残缺的追踪不能用来下结论。
 
-### 6.2 InnoDB 层的写入流程
+### 5.3 优化环节自身也会慢
 
-当执行器调用 InnoDB 的 `ha_update_row()` 时，InnoDB 内部经历以下关键步骤：
+优化不是免费的：表越多候选连接顺序越多，子查询越多搜索空间越大，谓词越复杂 range 优化器尝试次数越多。判断「是不是优化本身慢」只需看一个占比——`stage/sql/statistics` 的累计时间占语句总时间的比例。经验口径下超过一成值得看一眼，超过三成基本可以确定问题在优化环节。
 
-**第一步：加锁**
+这时处置方向与「SQL 执行慢」完全不同：减少单条语句的 JOIN 表数、把复杂子查询拆成多步、把 `IN` 列表收敛成临时表或连接，都比调索引有效。代价模型怎么算、连接顺序怎么搜，见 [[中间件/MySQL/MySQL架构与底层原理/09 MySQL 查询优化器——从代价模型到执行计划的决策过程|本列 09 篇]]，这里只给判据。
 
-InnoDB 对 `id = 42` 这行记录加**排他锁（X Lock）**。在 `REPEATABLE READ` 隔离级别下，加的是行级记录锁（Record Lock）。锁信息存储在 InnoDB 的锁系统（lock_sys）中，直到事务提交或回滚时才释放。
+### 5.4 修复动作与它们的代价
 
-**第二步：读取旧值并写 Undo Log**
+| 判据 | 观测手段 | 处置动作 | 动作的代价 |
+| :--- | :--- | :--- | :--- |
+| `rows` 估算与实际差十倍以上 | `EXPLAIN ANALYZE` 的 `actual rows` 与 `rows` | `ANALYZE TABLE` 刷新统计 | 采样期间读放大，大表耗时以分钟计 |
+| 分布倾斜导致估算失真 | `information_schema.COLUMN_STATISTICS` | 建直方图（8.0） | 额外维护统计信息，写入略增 |
+| 采样页数不足 | `innodb_stats_persistent_sample_pages` | 调大采样页数 | `ANALYZE` 更慢，统计信息更占空间 |
+| 优化阶段耗时占比高 | `stage/sql/statistics` 占比 | 拆查询、减表数 | 业务侧改动，需应用配合 |
+| 临界决策反复翻转 | `optimizer_trace` 的 `considered_execution_plans` | 固定执行计划或改写语句 | 固定计划会随数据变化失效，需定期复核 |
 
-在修改数据之前，InnoDB 需要把**修改前的旧值**写入 Undo Log。Undo Log 有两个作用：
-- **事务回滚**：如果事务最终 ROLLBACK，Undo Log 中记录了旧值，可以将数据恢复到修改前的状态
-- **MVCC 版本链**：其他并发事务如果需要读取这行数据的旧版本，可以通过 Undo Log 的版本链找到
+---
 
-**第三步：修改 Buffer Pool 中的数据页**
+## 第 6 章 执行环节：`Handler_read_*` 的指纹读法
 
-InnoDB 在 Buffer Pool 中找到 `id = 42` 所在的数据页（如果不在 Buffer Pool 中，先从磁盘加载），直接在内存中修改 `name` 字段为 `'李四'`。此时数据页变成了**脏页（Dirty Page）**——内存中的数据与磁盘上的数据不一致。
+### 6.1 为什么计数器能反推访问路径
 
-**第四步：写 Redo Log（WAL）**
+Server 层与存储引擎之间的接口以「行」为单位，取法只有有限几种：按数据文件顺序读、按键值定位、按索引顺序读下一条、按索引逆序读上一条、按已知行位置回读。每种取法在 `Handler_read_*` 里都有独立计数器，这组计数器的比例关系直接刻画了访问路径的形状。索引怎么组织、页怎么分裂见 [[中间件/MySQL/读书笔记-Mysql内核架构/11. InnoDB 索引：B+Tree 的工程实现与分裂合并哲学|读书笔记 11]]，这里只关心取法。取数之外还有一层可见性判断，Undo 版本链被长事务拖长时，这部分开销同样算在执行环节，机制见 [[中间件/MySQL/读书笔记-Mysql内核架构/12. InnoDB 事务实现：ACID 的内核代价与 MVCC 的时间旅行|读书笔记 12：MVCC]]。
 
-修改数据页的同时（实际上是在修改之前或之后），InnoDB 将这次修改对应的 Redo Log 记录写入 **Redo Log Buffer**。Redo Log 记录的是"对数据页做了什么修改"的物理日志（比如"在第 N 号页、偏移量 M 处，将字节从 X 改为 Y"）。
+### 6.2 七种读法的语义与指纹
 
-这就是 **WAL（Write-Ahead Logging）** 协议的体现：**先写日志，再写数据**。数据页可以稍后才刷回磁盘（由后台的刷脏线程完成），但 Redo Log 必须在事务提交时保证已经持久化到磁盘。这样即使在脏页刷盘之前 MySQL 崩溃了，重启后也能通过重放 Redo Log 来恢复所有已提交的修改。
+MySQL 8.0 里 `Handler_read_*` 一共有七个计数器，经典教材常提其中六个，`Handler_read_last` 是后加的，用于逆序取尾部。
 
-> [!info] 核心概念
-> **为什么不直接将修改后的数据页刷到磁盘？** 因为数据页的修改是**随机 I/O**——`id = 42` 的页可能在磁盘的某个位置，`id = 43` 的页可能在完全不同的位置。随机 I/O 在机械硬盘上非常慢（寻道时间约 10ms）。而 Redo Log 是**顺序追加写入**的——每次只是在日志文件的末尾追加一条记录，顺序 I/O 的性能比随机 I/O 高两个数量级。WAL 协议的本质是**用顺序写 Redo Log 替代随机写数据页，将随机 I/O 延迟到后台异步执行**。
+| 计数器 | 读法 | 典型指纹 | 该查什么 |
+| :--- | :--- | :--- | :--- |
+| `Handler_read_first` | 读索引第一条 | 全索引扫描 | 能否用覆盖索引减少回表 |
+| `Handler_read_key` | 按键值定位 | 点查、等值查询 | 命中次数低说明谓词没用上索引 |
+| `Handler_read_last` | 读索引最后一条 | `ORDER BY ... DESC` 取尾部 | 逆序扫描是否有更优索引 |
+| `Handler_read_next` | 按索引顺序读下一条 | 范围扫描 | 扫描行数与返回行数的比值 |
+| `Handler_read_prev` | 按索引逆序读上一条 | 逆序范围扫描 | 同上，注意方向 |
+| `Handler_read_rnd` | 按行位置随机读 | 排序后回读 | `filesort` 与临时表 |
+| `Handler_read_rnd_next` | 读数据文件下一条 | 全表扫描 | `type=ALL`、缺索引 |
 
-**第五步：写 Binlog**
+读这组计数器的关键是比例结构而不是单个值。语句 A 的增量应几乎全落在 `Handler_read_key` 上，`rnd_next` 为零；语句 B 因 `status` 无索引，增量大量落在 `rnd_next` 上。**按主键点查却让 `Handler_read_rnd_next` 增长**，说明索引或计划出了问题，先看 `EXPLAIN` 的 `type` 与 `key`，不要急着改语句。
 
-如果开启了 Binlog（主从复制和数据恢复都依赖 Binlog，生产环境几乎总是开启），Server 层的执行器会将这条 UPDATE 对应的 Binlog 事件写入 **Binlog Cache**（内存缓冲区）。
+### 6.3 三个可直接用的判据
 
-注意：Redo Log 是 InnoDB 存储引擎层的日志，Binlog 是 Server 层的日志。这两种日志由不同的层级管理，但必须保持一致性——后面会讲到的两阶段提交协议就是解决这个问题的。
+第一个判据是占比：`Handler_read_rnd_next` 占 `Handler_read_*` 增量的多数，说明全表扫描是主要取数方式，对应 `sys.statements_with_full_table_scans` 里的 `no_index_used_pct`。第二个判据是索引命中率：`Handler_read_key` 相对于 `rnd_next` 极低，同时 `SUM_NO_INDEX_USED` 非零，说明谓词没有用上索引，常见原因譬如隐式类型转换、函数包裹列、联合索引的最左前缀没被满足。第三个判据是排序回读：`Handler_read_rnd` 显著增长而 `Sort_merge_passes` 同步上涨，说明排序在磁盘上做了多轮归并，临时表已经落到磁盘。
 
-**第六步：事务提交（两阶段提交）**
+第四个判据是引擎层**读放大**：`Innodb_rows_read` 与摘要表的 `SUM_ROWS_EXAMINED` 比值远大于 1，说明读进来的行大半被过滤，谓词下推不到位。缓冲池命中看 `Innodb_buffer_pool_reads` 与 `read_requests` 的比值，结构性解释见 [[中间件/MySQL/读书笔记-Mysql内核架构/04. InnoDB 缓冲池：内存管理的分区革命与 NUMA 陷阱|读书笔记 04]]，判据上只需记住：读放大的时候，命中率再高也只是把慢变成「慢得均匀」。
 
-当客户端执行 `COMMIT`（或者在 autocommit 模式下，语句执行完成即隐式提交）时，MySQL 使用**内部 XA 事务的两阶段提交（2PC）** 协议来保证 Redo Log 和 Binlog 的一致性：
+### 6.4 单条语句的 Read 指纹
 
-| 阶段 | 操作 | 目的 |
-|------|------|------|
-| **Prepare 阶段** | InnoDB 将 Redo Log 刷盘（fsync），并在 Redo Log 中标记事务状态为 `PREPARE` | 保证 Redo Log 已持久化 |
-| **Commit 阶段（第一步）** | Server 层将 Binlog Cache 中的内容刷盘（fsync） | 保证 Binlog 已持久化 |
-| **Commit 阶段（第二步）** | InnoDB 在 Redo Log 中将事务状态标记为 `COMMIT` | 完成事务提交 |
+全局计数器只回答「整体在扫表」，落到具体语句要靠 8.0.14 起的 `log_slow_extra`（默认关闭，仅对 `log_output=FILE` 生效）：它把 `Bytes_sent`、`Bytes_received` 与 `Read_first`、`Read_key`、`Read_next`、`Read_rnd`、`Read_rnd_next` 等按语句写进慢日志，Handler 指纹不必再靠差分猜。配合下调后的 `long_query_time`，这是定位执行环节最省事的手段。
+
+```text
+# 示意：启用 log_slow_extra 后，慢日志头部会多出按语句统计的计数字段，
+# 字段名与顺序以对应版本文档为准
+# Query_time: 2.310000  Lock_time: 0.000120  Rows_sent: 100  Rows_examined: 486213
+# Read_first: 1  Read_key: 0  Read_next: 0  Read_rnd_next: 486213
+```
+
+| 判据 | 指标 | 阈值口径 | 该看哪张表 |
+| :--- | :--- | :--- | :--- |
+| 全表扫描为主 | `Handler_read_rnd_next` 占比 | 占读取总量多数 | `global_status`、`statements_with_full_table_scans` |
+| 索引命中不足 | `Handler_read_key`、`SUM_NO_INDEX_USED` | `key` 相对 `rnd_next` 极低，后者非零 | `events_statements_summary_by_digest` |
+| 排序回读 | `Handler_read_rnd`、`Sort_merge_passes` | 前者显著且后者同步上涨 | `global_status`、digest 表 |
+| 引擎读放大 | `Innodb_rows_read`、`SUM_ROWS_EXAMINED` | 两者比值远大于 1 | `global_status`、digest 表 |
+| 缓冲池未命中 | `Innodb_buffer_pool_reads` 与 `read_requests` 的比值 | 长期偏高说明热点不在内存 | `global_status` |
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#4A90D9', 'primaryTextColor': '#fff', 'primaryBorderColor': '#2A6CB8', 'lineColor': '#5C6BC0', 'secondaryColor': '#81C784', 'tertiaryColor': '#FFB74D'}}}%%
-sequenceDiagram
-    participant Exec as "执行器 (Server 层)"
-    participant InnoDB as "InnoDB"
-    participant RedoLog as "Redo Log (磁盘)"
-    participant BinlogDisk as "Binlog (磁盘)"
-
-    Note over Exec,BinlogDisk: 事务提交开始
-    
-    Exec->>InnoDB: "请求 Prepare"
-    InnoDB->>RedoLog: "写入 Redo Log, 状态=PREPARE, fsync"
-    RedoLog-->>InnoDB: "fsync 完成"
-    InnoDB-->>Exec: "Prepare 完成"
-
-    Exec->>BinlogDisk: "写入 Binlog, fsync"
-    BinlogDisk-->>Exec: "fsync 完成"
-
-    Exec->>InnoDB: "请求 Commit"
-    InnoDB->>RedoLog: "标记事务状态=COMMIT"
-    InnoDB-->>Exec: "Commit 完成"
-
-    Note over Exec,BinlogDisk: 事务提交结束
+%%{init: {'theme': 'dracula'}}%%
+flowchart TD
+    R["取两次采样的 Handler_read_* 差值"] --> Q1{"rnd_next 占读取总量多数?"}
+    Q1 -->|"是"| A1["全表扫描为主<br/>查 type=ALL 与可用索引"]
+    Q1 -->|"否"| Q2{"key 相对 next 很低?"}
+    Q2 -->|"是"| A2["索引命中少<br/>查隐式转换与最左前缀"]
+    Q2 -->|"否"| Q3{"rnd 显著增长?"}
+    Q3 -->|"是"| A3["排序后按位置回读<br/>查 filesort 与临时表"]
+    Q3 -->|"否"| A4["读取路径正常<br/>转向锁等待与日志环节"]
 ```
 
-**为什么需要两阶段提交？** 假设不做 2PC：
+---
 
-- **场景 A**：先写 Redo Log 成功，再写 Binlog 时 MySQL 崩溃。重启后 InnoDB 通过 Redo Log 恢复了这次修改（`name = '李四'`），但 Binlog 中没有这条记录。如果用 Binlog 做主从复制，从库会缺少这次修改——**主从数据不一致**。
-- **场景 B**：先写 Binlog 成功，再写 Redo Log 时 MySQL 崩溃。Binlog 中记录了修改，但 InnoDB 无法恢复（Redo Log 中没有）。如果用 Binlog 恢复数据，会多出一次修改——**数据不一致**。
+## 第 7 章 日志环节：写入慢的两条独立等待线
 
-两阶段提交通过引入 `PREPARE` 状态解决了这个问题：崩溃恢复时，如果 Redo Log 中的事务处于 `PREPARE` 状态且 Binlog 中有完整的对应记录，则提交该事务；如果 Binlog 中没有对应记录，则回滚该事务。这样就保证了两种日志的一致性。
+### 7.1 可观测点
 
-### 6.3 UPDATE 执行流程全景图
+日志环节只在写入路径上存在，它的可观测点集中在三处：redo 缓冲区是否够用（`Innodb_log_waits`、`innodb_log_buffer_size`）、刷盘频率与批量效率（`Innodb_os_log_written`、`Innodb_os_log_fsyncs`、`Innodb_log_writes`）、以及 redo 容量与检查点水位（8.0.30 起的 `Innodb_redo_log_capacity_resized`、`Innodb_redo_log_current_lsn`、`Innodb_redo_log_checkpoint_lsn`、`Innodb_redo_log_logical_size`）。
 
-将上述所有步骤串联成一个完整的时间线：
+### 7.2 判据一：`Innodb_log_waits` 非零且在涨
+
+`Innodb_log_waits` 的语义很窄：redo 缓冲区空间不足，用户线程必须等缓冲区被刷出去才能继续写。**它从零变成持续增长**，就说明日志缓冲区已是瓶颈，与 SQL 写得好不好无关，与并发写入量、单事务写入量、刷盘速度有关。调大 `innodb_log_buffer_size`（默认 16 MB）能立刻缓解，但那只是把等待推后——日志生成速率超过刷盘能力时，缓冲区再大也会填满，真正要动的是下游 I/O 或提交频率。
+
+### 7.3 判据二：每次 fsync 摊到多少字节
+
+把 `Innodb_os_log_written` 的增量除以 `Innodb_os_log_fsyncs` 的增量，得到每次 fsync 平均写入的字节数，这是组提交效率的直接度量：比值小说明每次 fsync 只带一点点日志，次数被白白放大；比值大说明多个事务的日志被攒在一起刷盘。判据不需要绝对阈值，只需横向对比：高峰期比值依然很小，说明并发没有形成有效攒批。
+
+`binlog_group_commit_sync_delay` 与 `binlog_group_commit_sync_no_delay_count` 是改变这个比值的两个旋钮，前者用固定的微秒级等待换攒批，后者在攒够一定事务数后立即提交。它们的代价是提交延迟上升，收益是 fsync 次数下降，属于典型的用延迟换吞吐。
+
+### 7.4 判据三：redo 容量与检查点
+
+8.0.30 起 `innodb_redo_log_capacity` 取代了 `innodb_log_file_size` 与 `innodb_log_files_in_group` 的组合，默认 100 MB，且可以在线调整。日志是环形的，最老日志对应的脏页被刷出去之后空间才能复用；容量越小，检查点推进越频繁，写事务越容易被同步刷脏拖住。判断是否逼近这条线，看 `Innodb_redo_log_logical_size` 与 `Innodb_redo_log_capacity_resized` 的比值，或者用 `Innodb_redo_log_current_lsn` 与 `Innodb_redo_log_checkpoint_lsn` 的差值估检查点年龄。比值长期处于高位，说明日志生成速度与刷脏速度已经接近平衡点，任何写入突增都会把它推向同步刷脏。
+
+这条线的机制细节——日志块结构、LSN 的几道水位、检查点怎么推进——在 [[中间件/MySQL/读书笔记-Mysql内核架构/07. 重做日志缓冲区与 WAL：InnoDB 持久性的实现基石|读书笔记 07：WAL]] 里已经拆到源码级，本列 [[中间件/MySQL/MySQL架构与底层原理/03 InnoDB 日志系统——WAL 协议与崩溃恢复的工程实现|03 篇]] 也从工程实现角度讲过一遍，这里只保留判据。
+
+### 7.5 反例：把写入等待当成 SQL 慢
+
+日志环节的慢出现在提交阶段，语句本身的 `Query_time` 可能并不高，事务提交延迟却很高，应用侧看到的是接口超时。此时优化写法、加索引全部无效，因为等待发生在 `COMMIT` 上。特征组合是：语句级延迟正常、提交延迟高、`Innodb_log_waits` 或 fsync 指标异常、磁盘队列深度高。
+
+| 参数 | 8.0 默认 | 调大的代价 | 调小的代价 | 对应判据 |
+| :--- | :--- | :--- | :--- | :--- |
+| `innodb_log_buffer_size` | 16M | 内存占用上升，恢复时待重放量更大 | `Innodb_log_waits` 增长，提交被缓冲区卡住 | `Innodb_log_waits` 持续非零 |
+| `innodb_redo_log_capacity` | 100M | 崩溃恢复时间变长，磁盘占用上升 | 检查点频繁，写事务被同步刷脏拖住 | 容量使用率长期高位 |
+| `innodb_flush_log_at_trx_commit` | 1 | 取 2 或 0 可放宽持久性，代价是崩溃可能丢最近一秒 | 已是最严，无更小取值 | 只能用 I/O 能力换，不能靠改 SQL |
+| `sync_binlog` | 1 | 取 N 可摊薄 fsync，代价是崩溃丢最多 N 个事务 | 已是最严 | 提交延迟随 fsync 次数上升 |
+| `binlog_group_commit_sync_delay` | 0 | 等待换攒批，提交延迟上升 | 每次提交都 fsync，fsync 次数高 | `Innodb_os_log_fsyncs` 与写入量比值偏小 |
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#4A90D9', 'primaryTextColor': '#fff', 'primaryBorderColor': '#2A6CB8', 'lineColor': '#5C6BC0', 'secondaryColor': '#81C784', 'tertiaryColor': '#FFB74D'}}}%%
-graph TD
-    A["1. 解析器: SQL → AST"] --> B["2. 优化器: 选择主键索引"]
-    B --> C["3. 执行器: 调用 InnoDB"]
-    C --> D["4. InnoDB: 对 id=42 加 X Lock"]
-    D --> E["5. InnoDB: 读取旧值, 写 Undo Log"]
-    E --> F["6. InnoDB: 修改 Buffer Pool 中的数据页"]
-    F --> G["7. InnoDB: 写 Redo Log Buffer"]
-    G --> H["8. 执行器: 写 Binlog Cache"]
-    H --> I["9. COMMIT: Redo Log fsync (PREPARE)"]
-    I --> J["10. COMMIT: Binlog fsync"]
-    J --> K["11. COMMIT: Redo Log 标记 COMMIT"]
-    K --> L["12. 释放行锁, 返回客户端"]
-
-    classDef server fill:#5C6BC0,stroke:#3F51B5,color:#fff
-    classDef innodb fill:#81C784,stroke:#4CAF50,color:#fff
-    classDef commit fill:#FFB74D,stroke:#F57C00,color:#333
-
-    class A,B,C,H server
-    class D,E,F,G innodb
-    class I,J,K,L commit
+%%{init: {'theme': 'dracula'}}%%
+flowchart LR
+    T["写入语句"] --> LB["写 redo log buffer"]
+    LB --> W1{"缓冲区满?"}
+    W1 -->|"是"| X1["Innodb_log_waits 增长<br/>用户线程等缓冲区空间"]
+    W1 -->|"否"| FL["提交时刷盘"]
+    FL --> W2{"检查点落后?"}
+    W2 -->|"是"| X2["同步刷脏<br/>写事务被拖住"]
+    W2 -->|"否"| OK["提交完成"]
 ```
 
-注意步骤 6 修改的是内存中的数据页，**此时磁盘上的数据文件（.ibd）还是旧数据**。脏页会在后台由 InnoDB 的刷脏线程（Page Cleaner Thread）按照 Checkpoint 机制异步刷回磁盘。这个"内存中修改 + 日志先行持久化"的策略，就是 InnoDB 能同时兼顾**高写入吞吐量**和**崩溃安全性**的根本原因。
+---
+
+## 第 8 章 返回环节：结果集与网络
+
+### 8.1 可观测点
+
+返回环节的观测量有三类：结果集规模（摘要表的 `SUM_ROWS_SENT`、慢日志的 `Rows_sent`）、网络吞吐（`Bytes_sent`、`Bytes_received`）、以及线程在发送阶段的停留（`sys.processlist` 的 `state` 与 `performance_schema.events_waits_current` 里的 socket 写等待）。
+
+### 8.2 判据：`rows_sent` 与 `Sending data` 的误读
+
+判据是 `SUM_ROWS_SENT` 的绝对值与它相对 `SUM_ROWS_EXAMINED` 的比值。返回行数本身很大，说明结果集没被收敛——缺 `LIMIT`、分页过宽，或者导出查询打到了线上库；返回行数小而 `rows_examined` 极大，问题在执行环节。两者分工不分清，就会出现「结果集才一百行怎么会慢」与「扫了一百万行结果集却很小」这两种互斥判断。
+
+这一环最容易踩的坑是 `State` 的语义。线程停在 `Sending data` 看着像网络卡住，其实这个阶段包含从引擎读行并处理，真正卡在网络发送的是 `Sending to client`。**把 `Sending data` 当网络问题查网卡**，是这里的经典误判。两条判据：`Sending data` 占比高且 Handler 读放大严重，问题在执行；`Sending to client` 占比高而 `Bytes_sent` 增速不匹配带宽，问题在客户端消费或网络。
+
+客户端消费慢被严重低估：服务端每写一行都要等 socket 可写，客户端读得慢就占住一个线程，表现为「CPU 不高、磁盘不忙、连接全在超时」。判据是连接数与吞吐量不匹配、`Sending to client` 线程数偏高、`Aborted_clients` 增长。
+
+| 判据 | 指标 | 口径 | 该看哪张表 |
+| :--- | :--- | :--- | :--- |
+| 结果集过大 | `SUM_ROWS_SENT`、`Rows_sent` | 绝对值大且与 `rows_examined` 接近 | digest 表、慢日志 |
+| 网络吞吐打满 | `Bytes_sent` 增速 | 与网卡带宽量级对比 | `global_status` |
+| 客户端消费慢 | 线程 `state` 为 `Sending to client` | 大量线程停在该状态 | `sys.processlist`、`events_waits_current` |
+| 传输中断 | `Aborted_clients`、`max_allowed_packet` 相关错误 | 断连计数增长，伴随应用侧报错 | `global_status`、错误日志 |
 
 ---
 
-## 第 7 章 `innodb_flush_log_at_trx_commit` 与持久性级别
+## 第 9 章 三个「看不出慢在哪」的成因
 
-### 7.1 三种刷盘策略
+### 9.1 观测链本身没打开
 
-前面提到事务提交时需要将 Redo Log "刷盘（fsync）"。但"每次提交都 fsync"的代价是巨大的——fsync 是一个昂贵的系统调用，需要等待数据真正写入磁盘的持久存储介质（而不是操作系统的文件系统缓存）。
+第一种情况最彻底：`performance_schema` 没有开启。8.0 的默认值是 ON，但不少实例在调优时被显式关掉过，也有一些托管服务默认不暴露。关掉之后，第二层与第三层工具全部落空，`sys` schema 的视图会返回空集而不报错——这一点比报错更危险，因为空集看起来像「没有问题」。检查只需要一条语句：`SELECT @@performance_schema`，返回 0 就先停下来把观测恢复，再谈定位；体温计摔坏了还拿着读数当真，结论只会更糟。
 
-MySQL 通过参数 `innodb_flush_log_at_trx_commit` 提供了三种策略：
+### 9.2 消费者被关掉一半
 
-| 值 | 行为 | 持久性 | 性能 |
-|----|------|--------|------|
-| **1**（默认） | 每次事务提交时，Redo Log 从 Redo Log Buffer 写入文件系统缓存（write），并立刻调用 fsync 刷到磁盘 | **最高**：MySQL 崩溃或操作系统崩溃都不会丢失已提交事务 | 最慢 |
-| **2** | 每次事务提交时 write 到文件系统缓存，但**不立刻 fsync**，由操作系统每秒自动 flush | MySQL 进程崩溃不丢数据，但**操作系统崩溃或断电可能丢失最近 1 秒内提交的事务** | 较快 |
-| **0** | 事务提交时什么都不做，Redo Log 留在 Redo Log Buffer 中，由 InnoDB 后台线程每秒 write + fsync | MySQL 进程崩溃或操作系统崩溃**都可能丢失最近 1 秒内提交的事务** | 最快 |
+第二种更隐蔽：实例开着 `performance_schema`，关键消费者却被关。默认 `events_statements_current`、`events_statements_history`、`statements_digest` 为 YES，`events_statements_history_long` 与各类 `events_waits_history_long` 为 NO，于是每条线程只看得到最近十条语句，流量稍有波动可疑语句就被冲走。判断办法是查 `performance_schema.setup_consumers` 里 `ENABLED='NO'` 的行；需要长窗口时临时打开 `history_long`，观察完立刻关掉，它的开销与流量成正比。
 
-类似地，Binlog 也有对应的参数 `sync_binlog`：
+### 9.3 慢查询的阈值设得太宽
 
-| 值 | 行为 |
-|----|------|
-| **1**（推荐） | 每次提交事务时 fsync Binlog |
-| **0** | 由操作系统决定何时 fsync |
-| **N > 1** | 每提交 N 个事务 fsync 一次 |
+第三种最常见：`slow_query_log` 默认 OFF，即便打开，`long_query_time` 默认也是 10 秒。这套默认值下绝大多数「用户觉得慢」的语句根本不进慢日志，`Slow_queries` 一直是 0，于是得出「没有慢查询」的结论。正确做法是把阈值降到 1 秒甚至更低，先看清延迟分布的形状，再用 `min_examined_row_limit` 过滤噪声；8.0.14 之后加开 `log_slow_extra`，还能顺带拿到每条语句的 Handler 指纹。
 
-> [!warning] 生产避坑
-> 生产环境的"数据安全黄金配置"是 `innodb_flush_log_at_trx_commit = 1` + `sync_binlog = 1`，通常简称为"双 1 配置"。这是唯一能保证在任何崩溃场景下都不丢失已提交数据的配置。非核心业务（如日志系统、临时数据）可以考虑降低配置以换取性能，但核心交易系统**绝不应该**牺牲持久性。
+| 盲区 | 检查语句 | 期望值 | 失效后果 |
+| :--- | :--- | :--- | :--- |
+| `performance_schema` 未开 | `SELECT @@performance_schema` | 1 | 第二、三层工具全部落空 |
+| 消费者被关闭 | `SELECT NAME FROM performance_schema.setup_consumers WHERE ENABLED='NO'` | 列表里没有 `statements_digest` 与 `events_statements_*` | digest 表为空，历史只有十条 |
+| 慢日志未开或阈值过大 | `SELECT @@slow_query_log, @@long_query_time` | ON 且 1 秒量级 | 语句不进日志，`Slow_queries` 恒为 0 |
 
----
-
-## 第 8 章 各层之间的信息流对比
-
-最后，让我们通过一张表来总结 SELECT 和 UPDATE 在各层的关键差异：
-
-| 阶段 | SELECT | UPDATE |
-|------|--------|--------|
-| **解析 + 优化** | 相同 | 相同 |
-| **加锁** | 普通 SELECT 不加锁（快照读） | 对修改行加排他锁 |
-| **Undo Log** | 读取 Undo Log 中的历史版本（MVCC） | 写入修改前的旧值 |
-| **Buffer Pool** | 读取数据页 | 修改数据页（产生脏页） |
-| **Redo Log** | 不写 | 写入修改的物理变化 |
-| **Binlog** | 不写 | 写入逻辑变更记录 |
-| **两阶段提交** | 不涉及 | Redo Log Prepare → Binlog fsync → Redo Log Commit |
-| **脏页刷盘** | 不涉及 | 后台异步完成 |
-
-这张对比表揭示了一个重要事实：**MySQL 的写入流程比读取复杂得多**。一条 UPDATE 语句要写三种日志（Undo Log、Redo Log、Binlog）、修改内存中的数据页、执行两次 fsync，还要管理锁的获取和释放。这也是为什么在数据库性能调优中，写入优化通常比读取优化更具挑战性。
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+flowchart TD
+    A["怀疑观测链失效"] --> B{"performance_schema 为 ON?"}
+    B -->|"否"| B1["打开并重启<br/>代价是内存与少量 CPU"]
+    B -->|"是"| C{"statements_digest 为 YES?"}
+    C -->|"否"| C1["打开消费者<br/>digest 表才有数据"]
+    C -->|"是"| D{"slow_query_log 为 ON 且阈值合理?"}
+    D -->|"否"| D1["开慢日志并把 long_query_time 降到 1 秒"]
+    D -->|"是"| E{"需要长历史窗口?"}
+    E -->|"需要"| E1["临时开 history_long，观察完关掉"]
+    E -->|"不需要"| F["观测链完整，进入环节判据"]
+```
 
 ---
 
-## 第 9 章 小结
+## 第 10 章 量化：时间、内存与 8.0 的变化
 
-本文构建了理解 MySQL 的全局地图：
+### 10.1 环节占比的示例推算
 
-1. **三层架构**：连接层管理连接与线程，Server 层处理 SQL 逻辑（解析 → 优化 → 执行），存储引擎层负责数据存取
-2. **Handler API**：是 Server 层与存储引擎的解耦接口，以"行"为交互单位，使得存储引擎可插拔
-3. **SELECT 的路径**：连接 → 解析 → 优化 → 执行器调用存储引擎 → B+Tree 查找 → Buffer Pool 缓存 → MVCC 可见性判断 → 返回结果
-4. **UPDATE 的路径**：在 SELECT 的基础上增加了加锁、写 Undo Log、修改脏页、写 Redo Log、写 Binlog、两阶段提交
-5. **WAL 协议**：用顺序写日志替代随机写数据页，是 InnoDB 高性能写入的核心
-6. **两阶段提交**：保证 Redo Log 和 Binlog 的一致性，是主从复制和崩溃恢复的正确性基石
+下面这张表不是实测基准，而是按各环节的物理成本结构做的示例推算，用来建立「哪一段可能吃掉多少时间」的量级感。真实占比必须在自己的实例上采样得到，任何脱离采样直接套用的百分比都是错的。
 
-后续专栏的每一篇文章，都是在这张地图上"放大"某一个局部区域的细节——Buffer Pool 的内存管理、Redo Log 的环形缓冲区设计、Undo Log 的版本链与 MVCC、B+Tree 的页分裂机制、锁系统的等待图算法、优化器的代价模型——有了全局视角，这些局部的深入才不会迷失方向。
+| 环节 | 点查（示例占比） | 范围扫描加排序（示例占比） | 批量更新（示例占比） | 推算依据 |
+| :--- | :--- | :--- | :--- | :--- |
+| 连接 | 3%-8% | 3%-8% | 2%-5% | 长连接下摊薄至接近零，短连接可达毫秒级 |
+| 解析 | 不足 1% | 不足 1% | 不足 1% | 单条解析是微秒级，除非反复重编 |
+| 优化 | 不足 1% | 2%-10% | 1%-3% | 表数与候选计划越多，占比越高 |
+| 执行 | 60%-80% | 50%-75% | 30%-50% | 取数、回表、排序与临时表都在此段 |
+| 日志 | 不适用 | 不适用 | 25%-50% | 缓冲区等待与 fsync 集中在提交路径 |
+| 返回 | 10%-30% | 10%-25% | 5%-10% | 结果集越大占比越高 |
+
+同一条语句在测试与生产的耗时差异，往往不是数据量涨了十倍，而是连接方式、结果集规模、提交频率同时变了。
+
+### 10.2 `performance_schema` 的内存开销
+
+`performance_schema` 的内存由各表行数上限与行宽相乘得到，`SHOW ENGINE PERFORMANCE_SCHEMA STATUS` 给出当前分配与峰值，`sys.memory_global_by_current_bytes` 里的 `memory/performance_schema/%` 事件则给出按模块的明细。
+
+```sql
+-- 实测 p_s 自身占了多少内存（单位字节，按降序）
+SELECT event_name, current_alloc
+FROM sys.memory_global_by_current_bytes
+WHERE event_name LIKE 'memory/performance_schema/%'
+ORDER BY current_alloc DESC
+LIMIT 10;
+```
+
+笔者按行数与行宽做一个示例推算：如果 `events_statements_history_long` 设为十万行，单行按数百字节估算，这一张表就是几十 MB；若把 `events_waits_history_long` 也开到同等规模，行宽更大、开销更高，两者叠加到几百 MB 在 8.0 上并不罕见。「全开」因此不可取：收益落在极短窗口内的偶发问题上，代价却是常驻内存与被放大的写入开销。
+
+### 10.3 8.0 之后观测面发生了什么变化
+
+最大的变化是查询缓存消失。它在 5.7.20 起已废弃，8.0 移除，连带「缓存命中率」这类指标一起消失。这块能力当初解决的是「同一条查询被反复执行」，8.0 之后交给应用层缓存与 Redis，数据库侧不再替你缓存，只保留**发现重复**的能力——摘要表把同类语句合并计数。从「替你缓存」退到「告诉你哪里重复」，是把缓存策略交还业务、把观测责任留在数据库。
+
+| 能力 | 5.7 的状态 | 8.0 / 8.4 的状态 | 对判据的影响 |
+| :--- | :--- | :--- | :--- |
+| 查询缓存 | 5.7.20 起废弃，默认关闭 | 8.0 移除 | 不再有缓存命中率类指标 |
+| `performance_schema` | 默认开启 | 默认开启 | 判据默认可用 |
+| 锁视图 | `information_schema.INNODB_LOCKS` 等 | 改为 `performance_schema.data_locks` 与 `data_lock_waits` | 锁等待判据要走 p_s |
+| 慢日志附加字段 | 只有三行头部 | 8.0.14 起 `log_slow_extra` | 单条语句可直接看 Read 指纹 |
+| 实际执行统计 | 无 | 8.0.18 起 `EXPLAIN ANALYZE` | 估算可信度可被直接量化 |
+| redo 观测 | 文件大小固定 | 8.0.30 起容量与水位指标 | 容量使用率与检查点可算 |
+| 默认认证插件 | `mysql_native_password` | 8.0.4 起 `caching_sha2_password`，8.4 移除前者 | 建连成本结构变化 |
+
+---
+
+## 第 11 章 反例与边界
+
+### 11.1 只看 `Slow_queries` 计数
+
+它只在语句**执行完成**且**超过阈值**时加一，不区分环节，不含解析前失败或超时断开的请求，也不含单条不慢却高频重复的语句。把它当结论，等于把「多少条语句超过阈值」当成「系统为什么慢」，中间隔着一整套环节判据。
+
+### 11.2 把累计值当瞬时值
+
+`Handler_read_rnd_next` 很大只能说明历史上扫过很多行，说明不了现在正在扫。判断当前状态必须做差，而做差先要确认 `Uptime` 没有变小。这类错误的后果是方向被历史数据带偏：刚重启的实例看起来「指标都很大」，长期运行的实例看起来「增长平稳」，结论恰好相反。
+
+### 11.3 把 `performance_schema` 全开
+
+全开的后果是内存常驻与写入路径上的额外开销，收益却集中在一个很窄的场景里。更麻烦的是它会引出相反的结论——「开了 p_s 变慢，所以 p_s 不能用」。正确做法是默认状态加临时打开：要长历史窗口才开 `history_long`，定位完即关；要等待事件细节按 instrument 前缀单开，不整族打开。
+
+### 11.4 判据失效的边界
+
+托管实例是第一类边界：部分云服务不暴露 `performance_schema` 或只暴露部分状态变量，此时第一层与第三层仍可用，第二层要换厂商等价视图。非 InnoDB 表是第二类：`Innodb_rows_read` 这类指标对它们无效，判据退回 `Handler_read_*`。锁等待与复制延迟是第三类，它们不属于六个环节中的任何一段，锁等待看 `data_lock_waits` 与 `sys.innodb_lock_waits`，复制判据见 [[中间件/MySQL/MySQL架构与底层原理/10 Binlog 与主从复制——数据同步的底层传动链|本列 10 篇]]。
+
+### 11.5 判据的优先级
+
+三类判据的可信度不同：计数器从零变成非零（`Connection_errors_max_connections`、`Innodb_log_waits`）是硬判据，出现即定性；指标间的比例关系（`rnd_next` 占比、`rows` 偏差倍数）是结构性判据，需结合业务形态解读；固定百分比（连接数到上限八成、优化阶段占比一成）只是经验口径，要用自己实例的基线校准。优先级搞反，就会出现拿经验阈值否定硬判据。
+
+---
+
+## 第 12 章 结语：先看清再谈看懂
+
+六个环节的判据合起来是一句话：**慢是六种等待之一**。连接环节等资源，解析环节等 CPU，优化环节等统计信息，执行环节等数据，日志环节等磁盘，返回环节等网络与客户端。每一种等待都有自己的计数器，也都有自己的硬判据；先把硬判据摆出来定性，再用结构性判据定位，最后才用经验阈值排序，这个顺序比任何单条阈值都重要。
+
+比判据更容易出错的是观测本身。p_s 没开、消费者被关、慢日志阈值太宽，这三种情况会让所有判据一起失灵，失灵的表现是「一切正常」。所以排查的第一步不是看指标，而是确认指标能不能被看见。
+
+---
+
+## 参考资料
+
+1. MySQL 8.0 Reference Manual, [Performance Schema](https://dev.mysql.com/doc/refman/8.0/en/performance-schema.html)
+2. MySQL 8.0 Reference Manual, [Performance Schema Statement Event Tables](https://dev.mysql.com/doc/refman/8.0/en/performance-schema-statement-tables.html)
+3. MySQL 8.0 Reference Manual, [Pre-Filtering by Consumer](https://dev.mysql.com/doc/refman/8.0/en/performance-schema-consumer-filtering.html)
+4. MySQL 8.0 Reference Manual, [The Slow Query Log](https://dev.mysql.com/doc/refman/8.0/en/slow-query-log.html)
+5. MySQL 8.0 Reference Manual, [Tracing the Optimizer](https://dev.mysql.com/doc/refman/8.0/en/optimizer-tracing.html)
+6. MySQL 8.0 Reference Manual, [Server Status Variables](https://dev.mysql.com/doc/refman/8.0/en/server-status-variables.html)
+7. MySQL 8.0 Reference Manual, [Redo Log](https://dev.mysql.com/doc/refman/8.0/en/innodb-redo-log.html)
+8. MySQL 8.0 Reference Manual, [The sys Schema](https://dev.mysql.com/doc/refman/8.0/en/sys-schema.html)
+9. MySQL 8.4 Reference Manual, [The optimizer_trace System Variable](https://dev.mysql.com/doc/refman/8.4/en/optimizer-trace-system-variable.html)
+10. MySQL 8.0 Reference Manual, [EXPLAIN Statement](https://dev.mysql.com/doc/refman/8.0/en/explain.html)
 
 ---
 
 > [!note] 思考题
-> 1. MySQL 的分层架构中，Server 层负责 SQL 解析、优化和执行，存储引擎层（如 InnoDB）负责数据存储和事务。这种分层使得 MySQL 可以支持多种存储引擎。但 Server 层的查询缓存（Query Cache）在 MySQL 8.0 中被移除——移除的原因是什么？在什么工作负载下 Query Cache 反而降低性能？
-> 2. MySQL 的连接管理使用'一个连接一个线程'模型。如果有 1000 个并发连接，就有 1000 个线程——线程切换和内存开销很大。MySQL 8.0 引入了线程池（Thread Pool）插件——将连接与线程解耦。线程池在什么场景下显著提升性能？与连接池（如 HikariCP）的关系是什么——两者能同时使用吗？
-> 3. `SHOW PROCESSLIST` 显示当前所有连接的状态。如果看到大量连接处于 `Sleep` 状态，说明应用层未及时关闭连接。`wait_timeout`（默认 8 小时）控制空闲连接的最大存活时间。在连接池场景中，这个参数应该如何与连接池的 `maxLifetime` 配合设置？
+> 1. 一条按主键的点查在生产环境稳定慢 2 秒，慢日志里 `Rows_examined` 为 1、`Lock_time` 近似为零，六个环节里你会按什么顺序排除？哪一段的耗时根本不会出现在慢日志里？
+> 2. `Handler_read_rnd_next` 的绝对值很大，能否据此判断当前正在全表扫描？如果不能，需要补哪两个信息才能下结论？
+> 3. `EXPLAIN ANALYZE` 显示某节点 `rows` 估算为 100、`actual rows` 为 12000，你会先动统计信息还是先改 SQL？如果改完统计信息后执行计划没有翻转，下一步查什么？
+> 4. 实例的 `Innodb_log_waits` 持续增长，把 `innodb_log_buffer_size` 调大后暂时缓解，一周后又出现。这个反复说明了什么，真正该动的是哪个方向？
+> 5. 把 `performance_schema` 全开之后，应用侧反馈偶发变慢。你会用哪几个指标判断开销落在哪里，又该如何设计一个「按需打开、定位即关」的采样方案？

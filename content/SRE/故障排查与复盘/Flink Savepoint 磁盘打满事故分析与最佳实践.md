@@ -1,8 +1,8 @@
 ---
 title: "Flink Savepoint 磁盘打满事故分析与最佳实践"
 date: 2026-07-26
-tags: [SRE]
-aliases: []
+tags: [SRE, Flink, 故障排查, 运维]
+aliases: ["Flink Savepoint 打满磁盘", "usercache 临时文件打满"]
 ---
 
 ## 引言
@@ -25,7 +25,9 @@ aliases: []
 - **资源异常**：自11:10分之后，对应的Checkpoint操作一直处于“进行中”状态，未能完成。同时，JobManager的活跃线程数激增，CPU负载飙升，系统性能严重下降。
 ![[Pasted image 20260122102001.png]]
 ### 事件时间轴
+
 ```mermaid
+%%{init: {'theme': 'dracula'}}%%
 timeline
     title 事故发生时间轴
     2024-11-21 : 作业启动 (Job Start)
@@ -36,6 +38,7 @@ timeline
                : 本地磁盘开始被大量临时文件填充
                : 12点20分 收到 NM 磁盘告警 (800GB Used)
 ```
+
 
 ## 深度根因分析
 
@@ -60,6 +63,7 @@ timeline
 下面的序列图清晰地展示了在配置缺失的情况下，一次Savepoint操作如何导致本地磁盘被打满。
 
 ```mermaid
+%%{init: {'theme': 'dracula'}}%%
 sequenceDiagram
     participant User as "用户"
     participant JM as "Flink JobManager"
@@ -86,6 +90,7 @@ sequenceDiagram
     
     JM--xUser: "Savepoint Timeout / Failed"
 ```
+
 
 ## 解决方案与长期治理
 

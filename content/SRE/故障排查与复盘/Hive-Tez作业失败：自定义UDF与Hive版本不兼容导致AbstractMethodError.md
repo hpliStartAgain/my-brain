@@ -1,8 +1,8 @@
 ---
 title: "Hive-Tez作业失败：自定义UDF与Hive版本不兼容导致AbstractMethodError"
 date: 2026-07-26
-tags: [SRE]
-aliases: []
+tags: [SRE, 故障排查, Hive]
+aliases: ["Tez 作业 AbstractMethodError", "UDF 与 hive-exec 版本不兼容"]
 ---
 
 **报告日期**: 2026年3月20日
@@ -59,14 +59,14 @@ aliases: []
 
 ### 2.2 失败链路
 
-```
-Map 4 (FAILED: OWN_TASK_FAILURE)
-  └─ 触发级联 KILL
-       ├─ Map 1    (KILLED: OTHER_VERTEX_FAILURE)
-       ├─ Map 5    (KILLED: OTHER_VERTEX_FAILURE)
-       ├─ Reducer 2 (KILLED: OTHER_VERTEX_FAILURE)
-       ├─ Reducer 3 (KILLED: OTHER_VERTEX_FAILURE)
-       └─ Reducer 6 (KILLED: OTHER_VERTEX_FAILURE)
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+flowchart TD
+    V0["Map 4 (FAILED: OWN_TASK_FAILURE)"] -->|触发级联 KILL| V1["Map 1 (KILLED: OTHER_VERTEX_FAILURE)"]
+    V0 --> V2["Map 5 (KILLED: OTHER_VERTEX_FAILURE)"]
+    V0 --> V3["Reducer 2 (KILLED: OTHER_VERTEX_FAILURE)"]
+    V0 --> V4["Reducer 3 (KILLED: OTHER_VERTEX_FAILURE)"]
+    V0 --> V5["Reducer 6 (KILLED: OTHER_VERTEX_FAILURE)"]
 ```
 
 DAG 最终状态：`FAILED`（1 个 Vertex FAILED，5 个 KILLED）
@@ -214,16 +214,13 @@ Hive 有两套 UDF 接口：
 
 当 SQL 中使用 `extends UDF` 的函数时，Hive 在运行时用 `GenericUDFBridge`（`GenericUDF` 的子类）将其包装：
 
-```
-parse_phone_no(content1)
-    ↓ 运行时替换
-GenericUDFBridge（包装 ParsePhoneNo）
-    ↓ 算子初始化时
-ExprNodeGenericFuncEvaluator.initialize()
-    ↓ 调用
-GenericUDFBridge.initializeAndFoldConstants(...)
-    ↓ 若父类 GenericUDF 中该方法为 abstract 且 GenericUDFBridge 未实现
-AbstractMethodError
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+flowchart TD
+    W0["parse_phone_no(content1)"] -->|运行时替换| W1["GenericUDFBridge（包装 ParsePhoneNo）"]
+    W1 -->|算子初始化时| W2["ExprNodeGenericFuncEvaluator.initialize()"]
+    W2 -->|调用| W3["GenericUDFBridge.initializeAndFoldConstants(...)"]
+    W3 -->|若父类 GenericUDF 中该方法为 abstract 且 GenericUDFBridge 未实现| W4["AbstractMethodError"]
 ```
 
 ### 4.2 `initializeAndFoldConstants` 的调用时机
@@ -232,14 +229,12 @@ AbstractMethodError
 
 ### 4.3 当前假设的根因链路
 
-```
-ParsePhoneNo extends UDF（旧接口）
-    ↓ 运行时
-GenericUDFBridge extends GenericUDF（包装器）
-    ↓ Tez 容器加载的 hive-exec 中
-GenericUDF.initializeAndFoldConstants = abstract
-    ↓ GenericUDFBridge 未实现该方法
-AbstractMethodError
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+flowchart TD
+    R0["ParsePhoneNo extends UDF（旧接口）"] -->|运行时| R1["GenericUDFBridge extends GenericUDF（包装器）"]
+    R1 -->|Tez 容器加载的 hive-exec 中| R2["GenericUDF.initializeAndFoldConstants = abstract"]
+    R2 -->|GenericUDFBridge 未实现该方法| R3["AbstractMethodError"]
 ```
 
 **未解的问题**：bigtop 路径的 hive-exec 中该方法是 concrete，但 Tez 容器实际加载的是 HS2 上传到 HDFS 的 hive-exec（路径由 `hive.jar.directory` 控制），该版本尚未确认。

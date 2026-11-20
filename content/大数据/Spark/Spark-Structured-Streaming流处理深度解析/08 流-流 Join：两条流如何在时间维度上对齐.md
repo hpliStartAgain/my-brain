@@ -1,8 +1,8 @@
 ---
 title: "流-流 Join：两条流如何在时间维度上对齐"
 date: 2026-11-19
-tags: [Spark, Structured Streaming, Watermark]
-keywords: [Symmetric Hash Join, Join Buffer, state watermark, 时间范围条件, 可空侧, matched 标记, RocksDBStateStore, State Store]
+tags: [Spark, Structured Streaming]
+keywords: [Symmetric Hash Join, Join Buffer, state watermark, 时间范围条件, 可空侧, matched 标记, RocksDBStateStore, State Store, Watermark]
 aliases: []
 ---
 

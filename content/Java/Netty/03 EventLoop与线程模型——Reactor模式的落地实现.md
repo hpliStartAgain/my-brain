@@ -1,16 +1,16 @@
 ---
 title: "EventLoop与线程模型——Reactor模式的落地实现"
-date: 2026-09-07
-tags: [Java, Netty]
+date: 2026-11-19
+tags: [Java, Netty, 并发编程]
 keywords: [ChannelFuture, EventLoop, NioEventLoop, Promise, Reactor, 无锁化, 线程模型]
-aliases: [EventLoop线程模型, Netty线程模型, Thread Confinement, NioEventLoop]
+aliases: []
 ---
 
 # EventLoop与线程模型——Reactor模式的落地实现
 
 **摘要：**
 
-`EventLoop` 是 Netty 线程模型的核心，也是其高性能的根本来源。Netty 做出了一个大胆的设计决定：一个 Channel 的整个生命周期中，所有 I/O 操作和事件处理都绑定在同一个 `EventLoop` 线程中执行，不切换线程。这个"单线程化"的设计彻底消除了 Channel 操作的锁竞争——不需要 `synchronized`，不需要 `ConcurrentHashMap`，数据天然线程安全。本文从多线程并发访问 Channel 的代价出发，深入剖析线程封闭（Thread Confinement）这一并发编程经典技术在 Netty 中的落地：`inEventLoop()` 的线程判断逻辑、任务队列的提交与执行机制、`ChannelFuture` 与 `Promise` 的异步结果通知、`EventLoop` 的懒启动与唤醒机制，以及 EventLoop 线程模型在实际开发中最容易踩的坑——在 Handler 中执行阻塞操作。最后讨论单线程模型的固有限制与设计权衡，揭示"无锁化"背后的代价与边界。
+`EventLoop` 是 Netty 线程模型的核心，也是其高性能的根本来源。Netty 做出了一个大胆的设计决定：一个 Channel 的整个生命周期中，所有 I/O 操作和事件处理都绑定在同一个 `EventLoop` 线程中执行，不切换线程。这个"单线程化"的设计彻底消除了 Channel 操作的锁竞争——不需要 `synchronized`，不需要 `ConcurrentHashMap`，数据天然线程安全。本文从多线程并发访问 Channel 的代价出发，深入剖析线程封闭（Thread Confinement）这一并发编程经典技术在 Netty 中的落地：`inEventLoop()` 的线程判断逻辑、任务队列的提交与执行机制、`ChannelFuture` 与 `Promise` 的异步结果通知、`EventLoop` 的懒启动与唤醒机制，以及 EventLoop 线程模型在实际开发中最容易踩的坑——在 Handler 中执行阻塞操作。最后讨论单线程模型的固有限制与设计权衡，揭示"无锁化"背后的代价与边界。文中会把几处常见说法落回源码：任务队列在什么条件下才会拒绝新任务、`runAllTasks` 的时间预算为什么以 64 条为粒度检查、`retain` 与 `Promise` 通知在并发下的唯一性如何保证，以及 Netty 4.1 到底有没有内置的"EventLoop 阻塞检测"。
 
 ---
 
@@ -113,6 +113,13 @@ channel.eventLoop().execute(() -> {
 
 第三类是定时任务，通过 `schedule()` 或 `scheduleAtFixedRate()` 提交的延迟或周期性任务，存放在按执行时间排序的优先队列（`PriorityQueue`）中。定时任务在 Netty 中有广泛的用途——心跳检测、连接超时检测、空闲检测、延迟重试等。
 
+| 任务类型 | 存放在哪 | 何时被消费 | 是否受 `ioRatio` 约束 | 被延迟的后果 |
+| --- | --- | --- | --- | --- |
+| I/O 就绪事件 | Selector 的 ready set | `processSelectedKeys()` 第一顺位 | 是，它的耗时反过来决定任务预算 | 连接读不到数据、写不出去，表现为延迟上升 |
+| 普通任务 | `taskQueue`（MPSC 队列） | `runAllTasks()` | 是 | `writeAndFlush` 结果延迟、跨线程回写堆积 |
+| 到期定时任务 | 先由 `scheduledTaskQueue` 搬进 `taskQueue` | 每轮 `runAllTasks` 开头搬运 | 是 | 心跳、超时检测、空闲检测整体后移 |
+| 尾部队列任务 | `tailTasks` | 每轮循环末尾 `afterRunningAllTasks()` | 否 | 用于统计、清理等"本轮收尾"动作 |
+
 ```java
 // 30 秒后执行心跳检测
 channel.eventLoop().schedule(() -> {
@@ -148,17 +155,41 @@ graph TD
 
 ### 2.3 MpscQueue：高效的多生产者单消费者队列
 
-Netty 对任务队列的性能非常敏感——多个外部线程可能同时向同一个 `EventLoop` 提交任务（多生产者），但只有 `EventLoop` 这一个线程消费任务（单消费者）。这是典型的 MPSC（Multi-Producer Single-Consumer）场景，Netty 使用 JCTools 库提供的 `MpscArrayQueue` 或 `MpscLinkedQueue` 来实现。
+Netty 对任务队列的性能非常敏感——多个外部线程可能同时向同一个 `EventLoop` 提交任务（多生产者），但只有 `EventLoop` 这一个线程消费任务（单消费者）。这是典型的 MPSC（Multi-Producer Single-Consumer）场景，Netty 用 JCTools 的实现来解决，并把相关类 shaded 进 `io.netty.util.internal.shaded.org.jctools` 以免和用户依赖的 JCTools 版本冲突。4.1 里 `PlatformDependent.newMpscQueue()` 默认给的是 `MpscUnboundedArrayQueue`——分块数组，容量按 chunk 增长；指定最大容量时换成 `MpscChunkedArrayQueue`，总容量有上限但每块仍是数组。更早的版本用过 `MpscLinkedQueue`，而定长数组的 `MpscArrayQueue` 并不出现在 Netty 的默认分配路径里。
 
-`MpscArrayQueue` 的核心设计是：多生产者通过 CAS（Compare-And-Swap）原语实现无锁入队，每个生产者先 CAS 抢占一个 slot，然后写入数据；单消费者通过简单的数组索引递增实现无锁出队，不需要 CAS。相比 `LinkedBlockingQueue`（使用 `ReentrantLock` 保护），`MpscArrayQueue` 在多生产者场景下的吞吐量显著更高——CAS 操作的代价远低于锁竞争，且不会导致线程调度（锁竞争失败时操作系统会挂起线程）。
+这类分块数组队列的核心设计是：每个生产者先 CAS 抢占一个 slot，再写入数据，写完更新 `producerIndex`；单消费者只读 `consumerIndex` 与 `producerIndex`，按索引出队，不需要任何锁或 CAS。相比 `LinkedBlockingQueue`（用 `ReentrantLock` 保护，竞争失败会把线程挂起），MPSC 队列在多生产者场景下的吞吐量显著更高——CAS 失败只是重试，不触发线程调度，也不产生链表节点的分配。代价是队列元素必须定长、扩容只能按 chunk 追加，以及"单消费者"这个前提一旦被破坏（多个线程同时 poll）就会出错。
 
-这是 Netty 性能优化的一个典型细节：在业务代码中不显眼，但在高并发场景下影响显著。当每秒有数万次跨线程任务提交时，`LinkedBlockingQueue` 的锁竞争会成为瓶颈，而 `MpscArrayQueue` 的无锁设计把这个瓶颈消除了。笔者在后续高性能篇中会详细剖析 MpscQueue 的实现原理。
+这是 Netty 性能优化的一个典型细节：在业务代码中不显眼，但在高并发场景下影响显著。当每秒有数万次跨线程任务提交时，`LinkedBlockingQueue` 的锁竞争会成为瓶颈，而无锁 MPSC 队列把这个瓶颈消除了。笔者在后续高性能篇中会详细剖析 MpscQueue 的实现原理。
 
-### 2.4 任务的拒绝策略
+### 2.4 任务队列的容量与拒绝边界
 
-当 `EventLoop` 进入关闭过渡期后，`execute()` 会拒绝新任务并抛出 `RejectedExecutionException`。这个行为和 `ThreadPoolExecutor` 的拒绝策略类似，但 Netty 的拒绝策略更简单——直接抛异常，不提供 `AbortPolicy`、`CallerRunsPolicy` 等可选策略。这是因为 Netty 的 `EventLoop` 关闭是一个有序的过程，不应该在关闭过程中还接受新任务——如果允许新任务进入，关闭过程可能永远无法完成。
+`execute()` 抛出 `RejectedExecutionException` 的情形不止"EventLoop 已关闭"一种。提交路径可以拆成三步：先 `offerTask(task)`，如果 `isShutdown()` 为真直接 `reject()`，否则把任务 `offer` 进队列；`offer` 失败同样 `reject()`；三步都通过后才考虑唤醒线程。也就是说拒绝有两个来源——关闭状态和队列满，而后者取决于队列容量。
 
-在应用层面，如果你需要在 `EventLoop` 关闭后还能处理某些"收尾任务"（如持久化最后的状态），应该在 `shutdownGracefully()` 之前完成这些操作，或者使用独立的线程池来执行收尾逻辑——不要依赖正在关闭的 `EventLoop` 来执行关闭后的任务。
+容量默认是"无界"的。`SingleThreadEventLoop.DEFAULT_MAX_PENDING_TASKS` 取 `io.netty.eventLoop.maxPendingTasks` 系统属性，未设置时为 `Integer.MAX_VALUE`；`NioEventLoop` 发现上限是 `Integer.MAX_VALUE` 就用 `PlatformDependent.newMpscQueue()`，拿到的实现是分块增长的 `MpscUnboundedArrayQueue`（JCTools 的 shaded 版本，按固定 chunk 扩容），而不是定长数组的 `MpscArrayQueue`——后者只在显式指定容量时才登场，对应 `MpscChunkedArrayQueue`。所以"Netty 的任务队列不会满"这个印象，在默认配置下成立，但只在默认配置下成立。
+
+一旦把 `io.netty.eventLoop.maxPendingTasks` 设成一个有限值（源码里会把这个值夹到不小于 16），队列就有界了，`offer` 失败会让 `execute()` 直接抛异常，而不是像 `ThreadPoolExecutor` 那样先排队再按策略处理。Netty 没有提供 `CallerRunsPolicy` 这类"回退到调用线程执行"的策略：如果提交方是业务线程，让它在自己的线程里执行一个本该在 EventLoop 里跑的任务，会破坏线程封闭这个根基。`RejectedExecutionHandlers` 只提供两个实现：`reject()` 直接抛异常，`backoff(retries, delay, unit)` 在外部线程提交时先 `wakeup` 再 `parkNanos` 等队列腾出空位，重试若干次仍失败才抛异常。后者本质上是让提交方阻塞等待，把压力转回调用线程，所以也不是默认选择——默认的抛异常把问题暴露在提交点，而不是悄悄积压。
+
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+graph TD
+    A["execute(task)"] --> B{"inEventLoop()?"}
+    B -->|是| C["直接 run()"]
+    B -->|否| D["offerTask(task)"]
+    D --> E{"isShutdown()?"}
+    E -->|是| F["reject() 抛 RejectedExecutionException"]
+    E -->|否| G{"queue.offer 成功?"}
+    G -->|否| F
+    G -->|是| H["startThread() 懒启动"]
+    H --> I{"addTaskWakesUp?"}
+    I -->|否| J["wakeup 唤醒 select"]
+    I -->|是| K["线程自然被唤醒"]
+```
+
+### 2.5 runAllTasks 的时间预算与 64 条粒度
+
+`ioRatio` 只在"本轮有就绪事件"时才用于换算任务预算：`ioRatio == 100` 时先 `processSelectedKeys()` 再 `runAllTasks()` 不限时；否则按 `ioTime * (100 - ioRatio) / ioRatio` 算出纳秒预算交给 `runAllTasks(timeoutNanos)`；本轮没有就绪事件时调用的是 `runAllTasks(0)`，它的语义是"至少执行一个任务"，而不是"一个都不执行"。
+
+`runAllTasks(timeoutNanos)` 内部先把到期的定时任务从 `scheduledTaskQueue` 搬到 `taskQueue`，然后循环取任务执行，每执行 64 条（`(runTasks & 0x3F) == 0`）才读一次 `System.nanoTime()` 与 deadline 比较。源码注释写明了原因：`nanoTime()` 相对昂贵，逐条比较会把这部分开销摊到每个任务上。副作用是预算可能被超出——如果前 64 个任务里有一个耗时很长，检查点之前不会被打断，`ioRatio` 因此只是参考比例而非硬限制。这一点在调优时必须知道：调小 `ioRatio` 无法阻止单个长任务拖住 EventLoop，它只能改变"长任务之后还有多少时间留给 I/O"。循环结束时把最后一次时间戳写进 `lastExecutionTime`，这个字段服务于优雅关闭的静默期判断，与"阻塞检测"无关，后文会展开。
 
 ---
 
@@ -219,6 +250,31 @@ protected void wakeup(boolean inEventLoop) {
 
 `Selector.wakeup()` 本身是一个相对昂贵的操作——在 Linux 上它通过向内部管道写一个字节来触发 `epoll_wait` 返回，涉及一次系统调用和管道写入。如果每秒有数千次任务提交，每次提交都调用 `wakeup()` 会产生数千次系统调用。Netty 的 `nextWakeupNanos` 优化把这个开销降到了最低——只有在 `EventLoop` 确实在 `select()` 阻塞时才真正调用 `selector.wakeup()`，否则只做一次 CAS 操作就返回。这个细节体现了 Netty 对性能的极致追求——每一个系统调用都被仔细审视，能省则省。
 
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+sequenceDiagram
+    participant T as 业务线程
+    participant Q as taskQueue
+    participant N as nextWakeupNanos
+    participant S as selector
+    participant E as EventLoop 线程
+
+    E->>N: 计算出下次唤醒时刻后置为 deadline
+    E->>S: select(timeout) 阻塞
+    T->>Q: offer(task)
+    T->>N: CAS AWAKE
+    alt 原值不是 AWAKE
+        T->>S: wakeup()
+        S-->>E: select 立即返回 0
+    else 已经是 AWAKE
+        Note over T: 跳过系统调用，只留队列里的任务
+    end
+    E->>Q: runAllTasks 取任务执行
+    E->>N: lazySet(AWAKE) 标记已醒
+```
+
+这里有个容易看漏的先后关系：`nextWakeupNanos` 在进入 `select` 之前被设为下次定时任务到期时刻，`select` 返回后才 `lazySet(AWAKE)`。中间的窗口正是"提交方能正确判断要不要 `wakeup`"的窗口——若 EventLoop 已经把状态置为 AWAKE，说明它马上要回到循环顶部重新检查任务，提交方省掉一次 `selector.wakeup()` 不会导致任务延迟；若还没置，说明线程真在阻塞，必须唤醒。用 `lazySet` 而不是 `set` 是因为这里只需要最终可见性，不需要与其他写操作建立 happens-before 关系，省掉一次内存屏障。
+
 ### 3.3 线程的创建与命名
 
 `EventLoop` 的线程创建通过 `ThreadFactory` 完成，默认使用 `FastThreadLocalThread` 而非普通 `Thread`。`FastThreadLocalThread` 是 Netty 自定义的线程类，它覆盖了 `FastThreadLocal` 的访问方式——普通 `Thread` 用 `ThreadLocalMap` 存储 `ThreadLocal` 变量，而 `FastThreadLocalThread` 用数组直接索引，访问速度从 O(n) 的哈希探测降为 O(1) 的数组访问。这个优化对 Netty 的性能至关重要，因为 Netty 内部大量使用 `FastThreadLocal`（如 `ByteBuf` 的线程本地缓存、`Recycler` 的对象池），如果用普通 `Thread`，每次 `FastThreadLocal` 访问都要走哈希探测，性能会显著下降。
@@ -226,6 +282,14 @@ protected void wakeup(boolean inEventLoop) {
 `EventLoop` 线程的命名遵循 `poolName-threadId` 的格式（如 `nioEventLoopGroup-2-1`），便于在线程 dump 和日志中识别。在排查生产问题时，线程名称是定位"哪个 `EventLoop` 出了问题"的第一线索——如果你在 jstack 中看到 `nioEventLoopGroup-2-3` 线程长时间阻塞在某个操作上，你就知道是 `WorkerGroup` 的第 3 个 `EventLoop` 出了问题，可以进一步排查该 `EventLoop` 上绑定了哪些 Channel。
 
 线程的 `UncaughtExceptionHandler` 也是 `EventLoop` 设计中需要关注的细节。`EventLoop` 线程的 `run()` 方法内部用 try-catch 包裹了所有操作，确保任何异常都不会导致线程退出——如果 `EventLoop` 线程因为一个未捕获的异常而退出，该线程上所有 Channel 将永远无法再被处理，相当于连接全部"失联"。Netty 在 `run()` 的 catch 块中记录异常日志后继续循环，确保 `EventLoop` 的"心跳"不会因为单个异常而停止。这个设计体现了"出错是必然，可靠系统由会死会重生的部件构成"的架构思想——`EventLoop` 不会因为单个操作的失败而崩溃，它会吞掉异常、记录日志、继续运转。
+
+### 3.4 线程中断不是关闭手段
+
+`NioEventLoop` 的循环里有一段专门处理中断的代码：`select` 返回后若发现 `Thread.interrupted()` 为真，会清掉中断标记、跳过 Selector 重建、并把"请使用 `shutdownGracefully()`"写进 debug 日志。原因是 JDK 的 `select` 被中断时会提前返回 0，如果不清中断标记，下一轮 `select` 又会立刻返回，形成忙循环；而清掉标记之后，被中断这件事就彻底丢失了，线程继续正常运转。
+
+这意味着一件事：对一个 `EventLoop` 线程调用 `interrupt()` 既不能让它退出，也不该被当作"优雅关闭"的替代品。真正的关闭路径是 `shutdownGracefully()`，它把状态推进到 `ST_SHUTTING_DOWN`，在循环末尾的 `finally` 块里关闭所有 Channel、等待静默期、排空任务，最后 `confirmShutdown()` 返回 true 才退出 `run()`。中断只适合一种场景：确认线程卡在 `select` 上无法通过任务唤醒时，作为调试手段把它从系统调用里打出来，此时日志里的警告就是提醒你"用错工具了"。
+
+如果线程真的被外部框架中断（例如容器调度器发信号、线程池关闭时 `shutdownNow()`），EventLoop 不会损坏，但会在下一次循环里把这个中断"吞掉"。对于依赖中断做协作式取消的上层代码，这会表现为"取消信号没有生效"——所以 Netty 的 Channel 生命周期结束一律走 `close()`，而不是指望线程中断。
 
 ---
 
@@ -281,6 +345,25 @@ future.addListener(f -> {
 ```
 
 这种"读写分离"的设计借鉴了 Scala 的 `Future`/`Promise` 模型——消费者只能读不能写，生产者才能写结果，职责清晰，防止了消费者意外修改操作状态。Java 8 的 `CompletableFuture` 也采用了类似的设计（`complete()` 和 `completeExceptionally()` 是生产者方法），但 Netty 的 `Promise` 比 `CompletableFuture` 更早出现，且更贴合网络编程的场景。
+
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+stateDiagram-v2
+    state "未完成（uncancellable=false）" as P
+    state "已完成：成功" as S
+    state "已完成：失败" as F
+    state "已取消" as C
+
+    [*] --> P
+    P --> S: setSuccess()
+    P --> F: setFailure(cause)
+    P --> C: cancel()
+    S --> S: 再次 set 被忽略或抛错
+    F --> F: 再次 set 被忽略或抛错
+    S --> [*]: 通知监听器后释放
+    F --> [*]: 通知监听器后释放
+    C --> [*]: 通知监听器后释放
+```
 
 `DefaultPromise` 的内部实现有一个值得注意的细节：监听器列表用 `listeners` 字段存储，初始为 `null`（没有监听器时不占内存），第一个监听器注册时直接赋值到 `listeners`，第二个监听器注册时才创建链表。这个"懒初始化"设计避免了每个 `Promise` 都预分配监听器列表的内存开销——在大多数 I/O 操作中，`Promise` 不会被添加监听器（操作很快完成，调用方直接检查结果），预分配列表是浪费。只有需要异步通知的场景才付出链表的内存代价，这是"按需分配"原则的微观体现。
 
@@ -340,7 +423,7 @@ if (!f.isSuccess()) {
 public class UserHandler extends SimpleChannelInboundHandler<Request> {
     @Override
     protected void messageReceived(ChannelHandlerContext ctx, Request request) {
-        // 错误！直接在 EventLoop 线程中查询数据库
+        // 错误：直接在 EventLoop 线程中查询数据库
         User user = userRepository.findById(request.getUserId());  // 可能耗时 10ms~500ms
         Response response = buildResponse(user);
         ctx.writeAndFlush(response);
@@ -350,7 +433,7 @@ public class UserHandler extends SimpleChannelInboundHandler<Request> {
 
 `messageReceived()` 在 `EventLoop` 线程中执行。`userRepository.findById()` 是一个数据库 I/O 操作，即使最快也需要几毫秒，极端情况下可能需要几秒（数据库高负载、网络延迟、锁等待）。在这段时间内，`EventLoop` 线程被完全占用，无法处理其他 Channel 的 I/O 事件。如果这个 `EventLoop` 管理了一千个连接，这一千个连接的所有事件都被阻塞——其他客户端的请求得不到处理，心跳包发不出去，连接超时检测也停止了。一个慢查询拖垮整个 `EventLoop` 上的所有连接，这就是"阻塞 `EventLoop`"的连锁反应。
 
-**正确做法是将阻塞操作卸载到业务线程池**：
+把阻塞操作卸载到业务线程池是正确做法：
 
 ```java
 // 正确的写法：使用独立的业务线程池处理阻塞操作
@@ -393,9 +476,19 @@ pipeline.addLast(businessPool, new UserHandler());  // 在 businessPool 线程�
 
 ### 5.2 如何检测 EventLoop 被阻塞
 
-Netty 提供了一个工具来检测 `EventLoop` 是否被阻塞：`EventLoop` 在每次循环迭代时记录 `lastExecutionTime`，如果两次迭代之间的间隔超过 `maxBlockingTime`（默认不检测，可通过 `io.netty.eventLoopMaxBlockingTime` 系统属性配置），Netty 会打印警告日志。这个机制可以帮助你在生产环境中发现"哪个 Handler 阻塞了 `EventLoop`"。
+Netty 4.1 并没有一个"打开就会报告阻塞"的开关。容易被误传的 `io.netty.eventLoopMaxBlockingTime` 在 4.1 的源码里并不存在，`SingleThreadEventExecutor.lastExecutionTime` 也不是为阻塞检测准备的——它记录的是最近一次任务循环的时间戳，服务于优雅关闭时"静默期内还有没有新任务"的判断。指望一个系统属性把阻塞问题暴露出来，方向就不对。
 
-更主动的检测方式是使用 `BlockingTaskHandler` 或自定义的 `EventExecutorGroup`，在任务执行前后记录耗时，超过阈值的任务记录调用栈。这种监控在生产环境中非常有价值——`EventLoop` 阻塞是 Netty 应用最常见的性能问题，但它的表现是"整体变慢"而非"某个请求报错"，不容易被传统的错误监控发现。
+可用的手段有三类，成本从低到高。最轻的是看线程名加 jstack：`EventLoop` 线程名是 `池名-序号` 的形式，连续两次采样都停在同一处调用栈，基本可以确定阻塞点。第二种是采样 `EventLoop.pendingTasks()`：这个数字持续增长而 I/O 事件处理没有相应增加，说明任务消费速度跟不上生产速度，原因要么是队列里混进了长任务，要么是 I/O 本身已经打满。第三种是 JVM 层拦截：Reactor 团队维护的 BlockHound 用 instrumentation 在"被标记为不可阻塞"的线程上拦截 `Thread.sleep`、阻塞 I/O、锁等待等调用并直接抛错，它自带 Netty 集成可以把 EventLoop 线程标记为不可阻塞，能在测试阶段把"Handler 里查数据库"这类问题挡在发布之前（具体接入方式以对应版本文档为准）。
+
+想在线上定位到具体 Handler，还得靠应用层埋点：用一个包装过的 `EventExecutor` 记录每个任务的开始时间与耗时，超过阈值就把调用栈打到慢日志。这类埋点的价值在于把"整体变慢"翻译成"哪个 Handler、哪一行"，EventLoop 阻塞之所以难查，恰恰因为它的表现是吞吐下降而不是某个请求报错，传统错误监控看不到它。
+
+| 手段 | 成本 | 能回答的问题 | 局限 |
+| --- | --- | --- | --- |
+| jstack 连续采样 | 低，可随时执行 | "这个 EventLoop 线程卡在哪一行" | 只对持续数十毫秒以上的阻塞有效，瞬时慢调用抓不到 |
+| `pendingTasks()` 采样 | 低，暴露成指标即可 | "任务生产速度是否超过消费速度" | 区分不了"任务多"和"线程被占住" |
+| BlockHound 拦截 | 中，需接入 agent | "有没有代码在不可阻塞线程里调用阻塞 API" | 更适合测试与预发阶段，线上开启开销不可接受 |
+| 任务耗时埋点 | 中，需要包装执行器 | "哪个 Handler 的哪个回调耗时超标" | 需要提前埋点，事后加不上 |
+| 线程名搭配日志时间戳 | 低 | "慢请求是否集中落在某个 EventLoop" | 只能定位到线程粒度，仍需二次排查 |
 
 另一个常见的阻塞来源是 `Thread.sleep()` 和 `Object.wait()`。有些程序员在 Handler 中用 `Thread.sleep()` 来实现"延迟响应"或"限流"，这在 `EventLoop` 线程中是灾难性的——`Thread.sleep()` 会阻塞当前线程，`EventLoop` 在 sleep 期间无法处理任何 I/O 事件。正确的做法是用 `eventLoop.schedule()` 提交延迟任务，让 `EventLoop` 在延迟期间继续处理其他事件。同理，`Object.wait()` 和 `CountDownLatch.await()` 也应该避免在 `EventLoop` 线程中使用——它们都会阻塞线程，破坏 `EventLoop` 的事件循环。
 
@@ -444,7 +537,7 @@ workerGroup.shutdownGracefully(2, TimeUnit.SECONDS, 15, TimeUnit.SECONDS);
 
 资源释放的顺序很重要：先关闭 Channel（释放网络资源），再关闭 Selector（释放 epoll 实例），最后释放线程（归还线程栈）。如果顺序反了——先释放线程再关闭 Channel——会导致 Channel 关闭操作无法执行（没有线程来执行），造成连接泄漏。Netty 的关闭流程严格遵循了这个顺序，确保每一步的资源释放都有对应的线程来执行。
 
-在实际生产中，优雅关闭经常遇到的问题是"关闭超时"——`shutdownGracefully()` 的 `timeout` 到了但任务队列还没排空，导致强制关闭。这通常是因为某个任务卡在了外部调用上（如等待远程服务的响应），无法在合理时间内完成。排查方法是查看 `EventLoop` 的任务队列中还有哪些任务未执行，定位到卡住的任务并修复其超时逻辑。预防方法是在设计阶段就确保所有提交到 `EventLoop` 的任务都是短时操作——如果有长时操作，应该用独立的线程池执行，而非直接提交到 `EventLoop`。
+线上环境里，优雅关闭经常遇到的问题是"关闭超时"——`shutdownGracefully()` 的 `timeout` 到了但任务队列还没排空，导致强制关闭。这通常是因为某个任务卡在了外部调用上（如等待远程服务的响应），无法在合理时间内完成。排查方法是查看 `EventLoop` 的任务队列中还有哪些任务未执行，定位到卡住的任务并修复其超时逻辑。预防方法是在设计阶段就确保所有提交到 `EventLoop` 的任务都是短时操作——如果有长时操作，应该用独立的线程池执行，而非直接提交到 `EventLoop`。
 
 ---
 
@@ -454,13 +547,13 @@ workerGroup.shutdownGracefully(2, TimeUnit.SECONDS, 15, TimeUnit.SECONDS);
 
 Netty `EventLoop` 单线程模型在带来简洁性和性能的同时，也有固有的限制，理解这些限制才能在实践中扬长避短。
 
-**限制一：单个 EventLoop 的处理能力上限是有限的。** 如果一台服务器有十万个连接，均匀分配到 16 个 `EventLoop`，每个 `EventLoop` 管理约 6250 个连接。如果某个 `EventLoop` 管理的连接都非常活跃（如 WebSocket 推送），单个线程的 CPU 可能成为瓶颈——即使没有阻塞操作，纯粹的事件处理也可能跟不上 I/O 事件的到达速度。解决方案是适当增加 `WorkerGroup` 的线程数（超过 CPU 核数乘 2），或将计算密集型工作卸载到业务线程池。
+**限制一**：单个 EventLoop 的处理能力上限是有限的。 如果一台服务器有十万个连接，均匀分配到 16 个 `EventLoop`，每个 `EventLoop` 管理约 6250 个连接。如果某个 `EventLoop` 管理的连接都非常活跃（如 WebSocket 推送），单个线程的 CPU 可能成为瓶颈——即使没有阻塞操作，纯粹的事件处理也可能跟不上 I/O 事件的到达速度。解决方案是适当增加 `WorkerGroup` 的线程数（超过 CPU 核数乘 2），或将计算密集型工作卸载到业务线程池。
 
 **限制二：Channel 一旦绑定 EventLoop，不会迁移。** Netty 不支持将 Channel 从一个 `EventLoop` 迁移到另一个。这意味着负载均衡只能在连接建立时（分配阶段）进行，一旦建立就不能重新平衡。如果某些 Channel 比其他 Channel 活跃得多，可能导致 `EventLoop` 间负载不均——轮询分配策略无法感知 Channel 的实际活跃度。这个限制是线程封闭设计的直接代价——迁移 Channel 意味着切换线程，而 Handler 中的状态数据可能依赖当前线程的上下文（如 `FastThreadLocal`），迁移会破坏这些隐含的线程亲和性。
 
 **限制三：对 GC 的敏感性。** Stop-The-World GC 暂停会同时影响所有 `EventLoop` 线程，导致所有连接在 GC 期间无响应。对延迟敏感的应用需要使用 G1、ZGC 或 Shenandoah 等低停顿 GC，并合理调整堆大小。这个问题不是 Netty 特有的——任何多线程 Java 应用都受 GC 暂停影响——但 Netty 的影响面更大，因为一个 `EventLoop` 管理数千个连接，一次 GC 暂停影响的是数千个连接的响应延迟。
 
-**限制四：串行化带来的队头阻塞。** `EventLoop` 的所有操作是串行的——如果某个 Channel 的事件处理耗时较长，排在后面的 Channel 的事件必须等待。这就是"队头阻塞"（Head-of-Line Blocking）问题。在 HTTP/1.1 的 pipelining 场景中，如果第一个请求的处理耗时，后续请求即使已经到达也必须等待——因为 `EventLoop` 在处理第一个请求时无法处理后续请求的 I/O 事件。HTTP/2 通过多路复用（stream）在协议层面缓解了这个问题，但在 `EventLoop` 层面，队头阻塞依然是单线程串行处理的固有代价。
+**限制四**：串行化带来的队头阻塞。 `EventLoop` 的所有操作是串行的——如果某个 Channel 的事件处理耗时较长，排在后面的 Channel 的事件必须等待。这就是"队头阻塞"（Head-of-Line Blocking）问题。在 HTTP/1.1 的 pipelining 场景中，如果第一个请求的处理耗时，后续请求即使已经到达也必须等待——因为 `EventLoop` 在处理第一个请求时无法处理后续请求的 I/O 事件。HTTP/2 通过多路复用（stream）在协议层面缓解了这个问题，但在 `EventLoop` 层面，队头阻塞依然是单线程串行处理的固有代价。
 
 ### 7.2 与传统线程池模型的对比
 
@@ -484,6 +577,16 @@ Netty 的 EventLoop 模型和 Erlang/Akka 的 Actor 模型在理念上有相似�
 ### 7.4 ioRatio 的调优实践
 
 `ioRatio` 的调优在实践中需要结合监控数据来决定。Netty 提供了 `EventLoop` 的运行时统计（通过 `SingleThreadEventExecutor` 的 `pendingTasks()` 方法和 `ioRatio` 配置），可以帮助你判断 `EventLoop` 的负载特征。如果 `pendingTasks()` 经常返回较大的值，说明任务队列积压严重，可能需要降低 `ioRatio` 让 `EventLoop` 花更多时间处理任务；如果 I/O 事件处理经常超时（通过 `processSelectedKeys()` 的执行时间监控），可能需要提高 `ioRatio` 让 `EventLoop` 花更多时间在 I/O 上。
+
+| `ioRatio` 取值 | 行为 | 适合的负载 | 代价 |
+| --- | --- | --- | --- |
+| 100 | 先处理完就绪 I/O，再不限时跑完任务队列 | 任务很少、I/O 密集 | 任务多时 I/O 被压到下一轮，延迟抖动大 |
+| 70 | I/O 耗时与任务耗时约为 7 : 3 | 网关、代理这类 I/O 占主导的服务 | 任务积压时回收不及时 |
+| 50（默认） | 1 : 1 | 大多数业务混合负载 | 没有明显偏好，两端都不极端 |
+| 20 | I/O 耗时与任务耗时约为 2 : 8 | 有大量定时任务或写回任务 | I/O 处理被压缩，高吞吐时更容易丢事件 |
+| 0 或其他越界值 | `setIoRatio` 抛 `IllegalArgumentException` | 无 | 合法范围是 1..100，写错会在启动阶段暴露 |
+
+`setIoRatio` 的校验范围是 1 到 100，这一点在阅读配置代码时值得留意：`ioRatio = 0` 不是"全给任务"，而是非法值。想观察"完全不限制 I/O"只能用 100，而 100 的含义恰好相反——它不限制任务，把 I/O 放在前面一次性处理完。
 
 但 `ioRatio` 的调优效果是有限的——它只是调整 I/O 处理和任务执行之间的时间比例，不能从根本上解决性能问题。如果 `EventLoop` 被阻塞（Handler 中有耗时操作），无论 `ioRatio` 怎么调都无法解决。`ioRatio` 调优适用于"I/O 和任务都很快但比例不合适"的场景，不适用于"某个操作很慢"的场景——后者需要从代码层面优化或卸载到业务线程池。盲目调 `ioRatio` 而不解决根本的阻塞问题，只是治标不治本，最终性能瓶颈依然存在。
 
@@ -509,7 +612,7 @@ Handler 中禁止阻塞操作是最重要的实践原则：数据库查询、HTT
 4. `io.netty.channel.nio.NioEventLoop` 源码
 5. `io.netty.util.concurrent.SingleThreadEventExecutor` 源码
 6. `io.netty.util.concurrent.DefaultPromise` 源码
-7. JCTools library: `MpscArrayQueue` 源码
+7. JCTools library: `MpscUnboundedArrayQueue`、`MpscChunkedArrayQueue` 源码
 
 ---
 
@@ -517,3 +620,4 @@ Handler 中禁止阻塞操作是最重要的实践原则：数据库查询、HTT
 > 1. Netty 的 `EventLoop` 保证了一个 Channel 的所有操作都在同一线程中执行，消除了锁竞争。但如果业务 Handler 中有一个耗时操作（如数据库查询），会阻塞 `EventLoop` 线程，影响该线程上所有 Channel 的处理。使用 `DefaultEventExecutorGroup` 将耗时操作卸载到业务线程池是一种方案，但这引入了线程切换开销和 `ctx.writeAndFlush()` 的跨线程提交。在什么场景下，直接在 `EventLoop` 线程中执行耗时操作反而是更好的选择？
 > 2. `ChannelFuture` 的监听器默认在 `EventLoop` 线程中回调。如果监听器中有耗时操作，会阻塞 `EventLoop`。Netty 提供了 `promise.addListener(listener, executor)` 允许指定监听器在别的线程池中执行。为什么 Netty 默认在 `EventLoop` 线程中回调监听器，而不是默认使用独立线程池？这个默认选择的权衡是什么？
 > 3. Netty 的 `EventLoop` 不支持将 Channel 从一个 `EventLoop` 迁移到另一个。这意味着如果某些 Channel 比其他 Channel 活跃得多，可能导致 `EventLoop` 间负载不均。如果让你设计一个支持 Channel 迁移的机制，需要考虑哪些问题？迁移过程中 Handler 的状态数据（如 `FastThreadLocal`）如何处理？
+> 4. `NioEventLoop` 的任务队列默认是无界的，`io.netty.eventLoop.maxPendingTasks` 一旦设置成有限值，队列满时 `execute()` 会直接抛 `RejectedExecutionException`。在"提交方是业务线程、任务又不能丢"的场景下，你会在提交侧做什么样的限流或降级，而不是简单catch异常？

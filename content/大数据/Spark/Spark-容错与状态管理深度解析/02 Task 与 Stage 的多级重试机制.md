@@ -1,468 +1,458 @@
 ---
 title: "Task 与 Stage 的多级重试机制"
-date: 2026-02-28
-tags: [Spark, 容错]
-keywords: [DAGScheduler, FetchFailedException, Stage重试, TaskScheduler, Task重试, 推测执行]
+date: 2026-11-19
+tags: [Spark, 大数据, 容错, 性能优化]
+keywords: [spark.task.maxFailures, maxConsecutiveAttempts, excludeOnFailure, 黑名单配比, FetchFailedException, 重试放大, maxAppAttempts, 推测执行预算]
 aliases: []
 ---
 
 # 02 Task 与 Stage 的多级重试机制
 
-## 摘要
+**摘要：**
 
-Spark 的调度容错体系是一套严格分层的防御机制。最底层是 **Task 级别重试**（换一个节点重跑同一个分区），中间层是**推测执行（Speculative Execution）**（不等失败，对"慢 Task"提前启动副本），最上层是 **Stage 级别回滚**（当 Shuffle 数据不可达时，回退上游 Stage 重新产出 Shuffle 文件）。这三层机制分别应对三类不同的失败模式：节点故障（Task 硬失败）、性能异常（Task 软失败/慢任务）、数据不可达（Shuffle Fetch 失败）。理解这三层机制的触发条件、判断逻辑和相互关系，是诊断 Spark 作业不稳定、任务重试风暴、Stage 反复失败等生产问题的前提。本文系统梳理 `TaskSchedulerImpl`、`TaskSetManager`、`DAGScheduler` 的核心代码路径，以及生产中的参数调优建议。
+重试是容错体系里最容易被当成免费午餐的一层。机器会坏、网络会抖、磁盘会慢，所以失败就再跑一次——这套直觉在单机程序里成立，在一套按秒计费、按 slot 排队的集群上不成立。本章把重试当成有配额的预算来读，按"重算什么"切成四层：task 级重算一个分区，stage 级重算缺失的那几个分区连同上游 Shuffle，executor 级换一台机器，application 级把整个作业从零再跑一遍。
 
----
+四层各有配置项，而四个默认值之间藏着一组没人明写的配比：`spark.task.maxFailures` 给分区四次机会，黑名单的 `maxTaskAttemptsPerExecutor` 只给同一分区在同一台机器上一次机会。前者是预算，后者是路线，路线不通时预算再多也是空转。这个配比一旦倒过来，重试就从修复动作退化成时间税。
 
-## 第 1 章 为什么需要多级重试
-
-### 1.1 单层重试的局限
-
-如果只有一层容错——"Task 失败就重跑"——在现实中会遭遇以下困境：
-
-**困境一：Task 重跑无法解决数据不可达**
-
-`FetchFailedException` 不是因为 Reduce Task 自身出问题，而是因为它要读取的 Shuffle 数据不见了（Map 节点宕机）。无论 Reduce Task 在多少个不同节点上重跑，结果都是一样的失败——因为问题的根源在上游 Map Stage，而不在 Reduce Task 本身。
-
-单纯的 Task 级重试对这类问题束手无策，必须回退到 Map Stage 重新产出数据，才能让 Reduce Task 成功。这就需要 **Stage 级别的感知和回滚**。
-
-**困境二：慢 Task 不失败，普通重试没有触发点**
-
-在一个 1000 个 Task 的 Stage 中，某个 Task 因为所在节点磁盘写入变慢，运行时间是其他 Task 的 5 倍。这个 Task 不会抛出异常，不会"失败"——它只是很慢。
-
-普通的失败重试逻辑无法处理这种情况，因为没有失败事件可以触发重试。整个 Stage 必须等待这个最慢的 Task 完成，所有其他 999 个已完成的 Task 只能空等，集群资源白白浪费。这是**推测执行**（Speculative Execution）的价值所在。
-
-**困境三：重试风暴导致集群雪崩**
-
-如果不加控制，一个节点宕机可能导致该节点上所有 Task 同时失败，触发大量重试请求同时涌向其他节点。重试的 Task 占用资源，正常的新 Task 得不到资源，整个集群陷入"重试挤压正常任务"的恶性循环。
-
-多级重试体系通过明确的重试上限（`spark.task.maxFailures`）和 Stage 级别的失败计数（`spark.stage.maxConsecutiveAttempts`）防止这种雪崩。
-
-### 1.2 调度组件的职责边界
-
-在深入各机制之前，先明确三个核心组件的分工：
-
-**`DAGScheduler`（DAG 调度器）**：高层调度器，负责将 RDD DAG 切分成 Stage，管理 Stage 的依赖关系，监控 Stage 级别的成功/失败，处理 `FetchFailedException` 触发的 Stage 回滚。`DAGScheduler` 处理的是**数据依赖层面**的问题——"哪个 Stage 的输出丢失了？"
-
-**`TaskScheduler`（Task 调度器）**：底层调度器（实现类为 `TaskSchedulerImpl`），负责将 `DAGScheduler` 提交的 `TaskSet` 分发给各个 Executor，监控 Task 的执行状态，处理 Task 级别的失败重试和推测执行。`TaskScheduler` 处理的是**执行层面**的问题——"这个分区的 Task 在哪里运行？运行失败了怎么办？"
-
-**`TaskSetManager`**：`TaskScheduler` 为每个 `TaskSet`（一个 Stage 的所有 Task 构成一个 TaskSet）创建的管理对象，维护该 TaskSet 中每个 Task 的运行状态（待运行/运行中/成功/失败）、重试次数、推测执行候选列表。它是 Task 重试和推测执行的实际决策者。
+本章还要回答另一半问题：什么情况下重试会越试越糟。数据本身有问题时，重试只是把一次确定的失败摊成四次；机器只是慢而不是坏时，黑名单会把还能干活的机器一起踢掉；到了 `FetchFailedException`，一次重试会反过来要求上游重算几十个分区。判据因此不是"重试几次合适"，而是**重试的成功率会不会随次数上升**。
 
 ---
 
-## 第 2 章 Task 级别重试：第一道防线
+## 第 1 章 四个默认值写下的前提
 
-### 2.1 Task 失败的类型
+### 1.1 上限不是算出来的
 
-并非所有 Task 失败都值得重试。`TaskSchedulerImpl` 在处理失败的 Task 时，首先区分失败类型：
+翻 Spark 的容错配置会发现一个耐人寻味的现象：四层重试的默认上限反复出现 4、2、1 这几个很小的整数，而它们之间没有任何一条公式联系起来。task 级给四次尝试，stage 级给四次连续失败，YARN 侧给两次应用尝试，黑名单把"同一分区在同一台机器上失败两次"当成换机器的信号。这些数字是十余年里从事故中攒出来的经验值，默认了一个前提：故障是偶发的、彼此独立的、与数据无关的。前提在多数日子里成立，默认值看起来就一直很好；一旦变了，比如一批 Spot 实例在同一分钟被回收，或者几个分区大到能把 executor 撑爆，这组数字就会同时朝坏的方向合力，把一次局部故障放大成一次作业失败。
 
-**可重试的失败（Retriable Failures）**：
-- 节点宕机（Executor 失联）
-- 普通的运行时异常（`NullPointerException`、`IOException`、临时性 OOM）
-- Task 被 YARN 或 K8s 抢占（Preemption）
+重试怎么实现的那一侧——`handleFailedTask` 的三段主干、`countTowardsTaskFailures` 的取舍、Stage 重提的三层去抖——在 [[大数据/Spark/读书笔记-spark内核/04_存储与容错机制/4. Spark容错机制与Runtime生命周期|Spark 容错机制与 Runtime 生命周期]] 里已按判据与动作逐层拆开，本文不复述。这里只问四件事：各层重算什么、代价量级差多少、阈值之间该保持什么比例、什么时候应当干脆不重试。
 
-这些失败通常是偶发性的，换一个节点重跑很可能成功。
+### 1.2 按"重算什么"切四层
 
-**不可重试的失败（Non-Retriable / Fatal Failures）**：
-- `TaskKilledException`：Task 被主动 Kill（如 Driver 调用 `sc.cancelJob()`）
-- `FetchFailedException`：Shuffle Fetch 失败（这是特殊情况，不走 Task 级重试，直接上报给 `DAGScheduler` 处理）
-- 用户代码中显式抛出的 `SparkException` 带有特定标记
+把四层并列摆出来，最要紧的一列不是配置项，而是"重算什么"。同样是"再试一次"，四层动用的资源差着数量级。
 
-### 2.2 重试决策流程
+| 层级 | 生效配置 | 默认值 | 重算什么 | 由谁判定 | 单次代价量级（示例推算） |
+|---|---|---|---|---|---|
+| task 级 | `spark.task.maxFailures` | 4 | 该分区的计算，一条血缘链算到该分区 | `TaskSetManager` | 一个分区耗时，数十秒 |
+| stage 级 | `spark.stage.maxConsecutiveAttempts` | 4 | 账本上缺失的那些 map 分区，连同上游 Shuffle | `DAGScheduler` | 缺失分区耗时之和，分钟级 |
+| executor 级 | `spark.excludeOnFailure.*` | 关闭 | 不重算，只改派；失败分区换机器再试 | `TaskSchedulerImpl` 与排除账本 | 一次调度往返，秒级到数十秒 |
+| application 级 | `spark.yarn.maxAppAttempts` | 跟随 YARN 全局配置 | 整个作业从读取开始全量重跑 | 集群管理器，Spark 侧只提请求 | 整个作业墙钟，小时级 |
 
-当一个 Task 失败时，`TaskSetManager.handleFailedTask()` 方法执行如下判断：
+第一行与第二行的差别常被含糊过去：task 重试是"这一格重画"，stage 重提是"这一片重画"，第三行根本不重画，只换一支笔。这个区别决定了黑名单的性质——它不是重试，而是重试的路由策略，阈值只能与 `maxFailures` 比大小。
 
-```
-Task 失败事件到达 TaskSetManager
-  │
-  ├─ 是 FetchFailedException？
-  │   └─ 是 → 上报给 DAGScheduler，不做 Task 级重试（走 Stage 回滚路径）
-  │
-  ├─ 是不可重试失败（Kill 等）？
-  │   └─ 是 → 标记 TaskSet 为失败，上报 DAGScheduler 放弃整个 Stage
-  │
-  └─ 是可重试失败？
-      ├─ 该 Task 的失败次数 < spark.task.maxFailures（默认4）？
-      │   └─ 是 → 重新加入待调度队列，换一个节点重新提交
-      └─ 否 → 该 Task 已达最大重试次数，上报 DAGScheduler 中止作业
-```
-
-**关键参数：`spark.task.maxFailures`（默认 4）**
-
-这个参数的语义是：**同一个 Task（同一个分区的计算）最多允许运行失败 4 次**，第 5 次失败时放弃该 Task，整个作业失败。
-
-注意：这里"4 次"是总失败次数，包括第一次失败在内。因此实际上允许 **3 次重试**（第 1 次失败 + 3 次重试 = 4 次尝试）。
-
-> [!warning] 生产避坑
-> `spark.task.maxFailures` 是 Task 级别的参数，与推测执行的副本 Task 无关。如果一个 Task 在节点 A 失败 1 次，推测执行在节点 B 启动了副本但也失败了 1 次，这两次失败都累加到同一个"分区"的失败计数器上。在节点大量故障的场景（如云上 Spot 实例被批量回收），`maxFailures=4` 可能很快被耗尽，导致作业失败。此时应适当调大：`spark.task.maxFailures=10`。
-
-### 2.3 重试的调度策略：数据本地性降级
-
-Task 重试时，`TaskScheduler` 不是随机选择一个可用节点，而是遵循**数据本地性（Data Locality）**优先原则，按以下优先级依次尝试：
-
-1. **PROCESS_LOCAL**：数据已在目标 Executor 的内存或磁盘缓存中（最高优先级）
-2. **NODE_LOCAL**：数据在目标节点上（HDFS 本地副本或 Executor 已缓存）
-3. **NO_PREF**：数据无本地性偏好（如从远端 S3 读取）
-4. **RACK_LOCAL**：数据在同一机架的其他节点上
-5. **ANY**：任意节点（最低优先级，当高优先级等待超时后降级）
-
-每个优先级都有等待超时时间（`spark.locality.wait` 系列参数，默认 3 秒）。如果等待高优先级节点超时，则降级到下一个优先级。
-
-对于 Task 重试，如果原来的节点宕机（数据本地性丧失），`TaskScheduler` 会在等待本地性超时后，将 Task 调度到 ANY 节点执行。
-
----
-
-## 第 3 章 推测执行：不等失败的主动防御
-
-### 3.1 慢 Task 问题的本质
-
-在大型 Spark 作业中，"慢 Task"（Straggler Task）是比"失败 Task"更常见的性能杀手。一个 Stage 的完成时间取决于最慢的那个 Task，哪怕只有 0.1% 的 Task 运行极慢，也会让整个 Stage 等待。
-
-慢 Task 的常见成因：
-- **硬件问题**：节点磁盘写入变慢（磁盘坏道、RAID 降级）、网络带宽被其他进程占用
-- **数据倾斜**：某个分区的数据量远超其他分区（详见 Shuffle 专栏第 03 章）
-- **GC 停顿**：某个 Executor 频繁 Full GC，Task 线程被暂停
-- **资源争抢**：同一节点上运行了其他重负载进程（如 HDFS DataNode 的大量 I/O）
-
-### 3.2 推测执行的工作原理
-
-推测执行（Speculative Execution）的核心思路：**在一个运行中的 Task 被判定为"可疑地慢"时，在另一个节点上同时启动该 Task 的副本（Speculative Task），哪个先完成就用哪个的结果，另一个被 Kill 掉**。
-
-**开启方式**：
-```
-spark.speculation=true       # 开启推测执行（默认 false）
-spark.speculation.interval=100ms  # 检查间隔（默认100ms）
-spark.speculation.multiplier=1.5  # 慢 Task 判定倍数（默认1.5）
-spark.speculation.quantile=0.75   # 参考完成比例（默认0.75）
-```
-
-**判定逻辑（`TaskSetManager.checkSpeculatableTasks()`）**：
-
-每隔 `spark.speculation.interval`（100ms），`TaskSetManager` 执行一次推测检查：
-
-1. 统计当前 TaskSet 中已完成 Task 的数量。如果完成比例 < `spark.speculation.quantile`（默认 0.75），则跳过检查——推测执行需要有足够多的"参考样本"（已完成的 Task 的运行时间）才能做出可靠的"慢"判断
-
-2. 计算已完成 Task 的**运行时间中位数**（Median Duration）
-
-3. 对于所有仍在运行中的 Task，判断其已运行时间是否 > `中位数 × spark.speculation.multiplier`（默认 1.5 倍）
-
-4. 如果满足条件，且该 Task 还没有启动过推测副本，则将其加入推测候选列表，等待下一个资源空闲的 Executor 来执行
-
-**示例**：一个 TaskSet 有 1000 个 Task：
-- 当前已完成 750 个（≥75%，满足检查条件）
-- 已完成 Task 的运行时间中位数 = 30 秒
-- 判定阈值 = 30 × 1.5 = 45 秒
-- 已运行超过 45 秒但还未完成的 Task → 启动推测副本
+下面的图把四层按"触发概率递减、代价递增"排成一道漏斗，虚线是层与层之间真正的耦合路径。
 
 ```mermaid
-%%{init: {"theme": "dracula", "themeVariables": {"primaryColor": "#6272a4", "primaryTextColor": "#f8f8f2", "primaryBorderColor": "#bd93f9", "lineColor": "#ff79c6", "secondaryColor": "#44475a", "tertiaryColor": "#282a36"}}}%%
-graph TD
-    subgraph "正常 Task 执行"
-        T1["Task 0~998</br>在各 Executor 执行"]
-        T1 --> D1["750 个完成</br>中位数 = 30s"]
+%%{init: {'theme': 'dracula'}}%%
+flowchart TD
+    F["一次 Task 失败"] --> Q1{"计入分区预算？"}
+    Q1 -- "否：取消、执行器丢失" --> R0["重新入队，不扣预算"]
+    Q1 -- "是" --> Q2{"该分区是否<br/>已达 maxFailures"}
+    Q2 -- "未达" --> L1["第一层 · task 重试<br/>重算这一个分区<br/>代价数十秒"]
+    Q2 -- "已达" --> Q3{"Stage 连续失败<br/>是否已达上限"}
+    Q3 -- "未达" --> L2["第二层 · stage 重提<br/>重算缺失分区<br/>代价分钟级"]
+    Q3 -- "已达" --> Q4{"机器是否<br/>已被排除"}
+    Q4 -- "是" --> L3["第三层 · executor 改派<br/>换 executor、换节点<br/>代价一次调度往返"]
+    Q4 -- "否" --> L4["第四层 · application 重启<br/>整作业重跑<br/>代价小时级"]
+    L1 -. "同一机器反复失败" .-> L3
+    L2 -. "机器持续掉线" .-> L3
+    L3 -. "机器被排干净" .-> L4
+```
+
+三条虚线的用法是反向的：作业慢而不死，虚线通常在起作用；作业反复失败，箭头往往已经走到底了。
+
+### 1.3 与机制篇的分工
+
+内核系列按"谁在判"切过一遍：Task、Executor、Stage、Job、Driver 五级，落点是指挥链与 Runtime 生命周期。本文按"重算什么"切，得到 task、stage、executor、application 四级，落点是配置配比与代价。两刀切出来的边界并不重合，最明显的一处是 application 一级：在内核篇里它是"Driver 那道不可恢复的悬崖"，在本文里它是一个可配置、可观测、可以刻意关掉的重试层级。
+
+重试"量"的那一侧——丢失分区数、血缘长度、扇出怎样相乘——在 [[大数据/Spark/读书笔记-spark内核/04_存储与容错机制/5. Spark错误容忍机制|Spark 容错的代价与失败模式]] 里用四本账算过，本文只取结论当常数，不复述推导。
+
+### 1.4 换邮差，还是改地址
+
+把重试想成投递失败后的二次派送。快递公司能做的有两件事：换一个邮差再送一次，或者认定地址本身写错了，退回去让寄件人核对。换邮差解决"这个人今天走错了路"，改地址解决"信封上写的就是错的"，两者在成本与收效上毫无可比性。
+
+Spark 的四层重试都在做换邮差。体系里没有改地址的机制，没有哪个开关能说"这个分区跳过吧"。这个缺失不是疏忽，跳过分区会让结果悄悄少一块，比作业失败更危险；但它意味着**当失败原因落在数据那一侧时，四层重试全部失效**。
+
+### 1.5 一个贯穿全文的集群
+
+为了让算术有对象，笔者设一个场景：某离线数仓集群 300 个节点、日均提交约 2000 个作业，跑在 YARN 上。核心作业 `user_tag_daily` 每晚读两张 ODS 表做 join，再按用户维度聚合打标，两次 Shuffle，输出两千个分区，正常四十分钟跑完。两千个分区足以让分区级重试的统计效应显现，四十分钟又长到任何一次 Stage 重提都会被下游感知，后文的算例都落在它身上。
+
+---
+
+## 第 2 章 task 级：预算按分区记
+
+### 2.1 四次尝试，不是四次重试
+
+`spark.task.maxFailures` 默认 4，常被口头说成"最多重试四次"，这个说法错了一格。计数在失败之后自增，自增到与上限相等时就地把整个 TaskSet 判死，所以四次是尝试总数：第一次运行加三次重试。日志里 `Task 77 in stage 12 failed 4 times; aborting job` 的 4，含义是"已经失败了四次"。
+
+这个偏差在调参时会被放大。想"多给一次机会"就把 4 改成 5，实际增加的是第五次尝试，成本是一轮排队加一轮重算；想把容错关掉就改成 1，实际效果是任何一次计入预算的失败都直接让作业失败，连一次重试都没有。
+
+### 2.2 计数归属：一格一格记，互不挪用
+
+失败次数按分区累计，这是整套重试逻辑的记账基础。一个两千分区的 Stage，如果每个分区各失败一次，计数器里两千格都停在 1，没有一格达到 4，于是这个 Stage 一次都不会熔断——它在 UI 上显示成"两千个 Task 失败后又成功"，作业照常结束。反过来，如果一个分区连续失败四次，熔断立刻发生。
+
+同一个参数在同一种失败分布下表现出相反的后果，靠的就是"计数按格"这个设计。下表把两种形态并列，这也是排查时最该先分清的一件事。
+
+| 失败分布形态 | 计数器形态 | Stage 是否熔断 | 结局 | 判定含义 |
+|---|---|---|---|---|
+| 两千个分区各失败一次 | 两千格各为 1 | 否 | 成功，耗时被拖长 | 集群持续抖动，问题在机器与网络 |
+| 一个分区失败四次 | 一格为 4 | 是 | Job 失败 | 数据或逻辑有问题，重试无解 |
+| 一个分区三次、另一个两次 | 最高格为 3 | 否 | 成功，但反复重排 | 局部劣化，通常是单机或单盘 |
+| 大量分区失败后在别处成功 | 多格为一到二 | 否 | 成功，Stage 耗时翻倍 | 一批机器同时劣化，看黑名单是否开启 |
+
+第二行是本章最要紧的一条：**一个分区能把整个 Stage 拖死**。两千个分区里出问题的概率并不低，只要有一个分区的数据形状特殊——单条记录超过序列化缓冲、字段类型与 schema 不符、join 键在一侧缺失——它每次都会失败，四次之后 Stage 熔断，前面四十分钟白跑。
+
+### 2.3 哪些失败不扣预算
+
+不是所有失败都消耗这四格。判断依据写在 `TaskFailedReason` 的 `countTowardsTaskFailures` 字段上，执行器丢失、任务被取消、输出提交被拒这三类都不扣预算，但照样重新入队。这条区别在排查时极有用：executor 反复掉线的集群上，日志里失败行非常多，计数器却一直是零，作业跑很久都不熔断，只是变慢。
+
+### 2.4 调大与调小的代价
+
+| 参数动作 | 换来什么 | 调大与调小的代价 | 适用前提 |
+|---|---|---|---|
+| `maxFailures` 由 4 调到 8 到 10 | 偶发的、与机器相关的失败更容易熬过去 | 确定性失败暴露时间翻倍；毒分区每次运行多烧四到六轮重算 | 失败原因确认为机器相关且偶发，且已开黑名单 |
+| `maxFailures` 由 4 调到 1 到 2 | 失败暴露快，不浪费时间 | task 级容错基本关闭，一次抖动即上升为 Job 失败 | 调试期，或数据质量已有强校验 |
+| 保持 4，只改黑名单阈值 | 同样预算内换更多机器试，成功率上升而预算不变 | 多维护一套排除账本；误排除损失容量 | 失败与机器强相关，集群规模够大 |
+
+第三行是本文的立场：默认值够用，前提是背后还配着一套换机器的路线。把**路线**修好，比把**预算**加大划算得多。**
+
+### 2.5 一次重试花多少钱
+
+一次 task 重试的成本有三段。第一段是排队，失败的分区重新入队后要等空闲 slot，在 300 节点、常态几十个作业排队的集群上，这段等待从几秒到几十秒，完全取决于当时负载。第二段是重算，也就是这个分区从最近的可恢复点算到出结果的时间，对 `user_tag_daily` 这种带两次 Shuffle 的作业，单分区重算会连带触发上游对应分区的重算，量级数十秒。第三段是本地性降级带来的额外读取，原节点挂掉之后数据要走网络。三段相加，一次 task 重试在数十秒量级（示例推算）。四次尝试就是两三分钟，一个分区失败一次与失败四次之间的差额，往往就是下游看到的延迟抖动。
+
+---
+
+## 第 3 章 stage 级：重提不是"再试一次 Stage"
+
+### 3.1 两道上限，取 max 的关系
+
+Stage 级有两把尺子。`spark.stage.maxConsecutiveAttempts` 自 2.2.0 起存在，默认 4，度量"连续失败了几次"，Stage 成功一次就清零；`spark.stage.maxAttempts` 自 3.5.0 起存在，默认 `Int.MaxValue`，度量"一共尝试过几次"，编号只增不减。两者不是各判各的，而是先取较大值再参与判断：连续上限是硬底线，总量上限只能在它之上再加一道，不能把它放松。
+
+这个键在不少内部规范与老文档里被简写成 `maxFailure`，grep 配置时两种写法都会撞见，真正生效的是 `maxConsecutiveAttempts`。
+
+连续与总量的区别在运维里很实在。一个跑八小时的作业，中间因 executor 抖动零星重提十几次，每次之间隔着几十分钟正常计算，连续上限不会命中，因为每次重提后 Stage 都成功过，账清零了；但某个 Stage 连续四次在几分钟内失败，说明故障是持续性的，继续重试只是把同一次失败重演。
+
+### 3.2 重算范围由缺失账本决定
+
+"Stage 重试就是重算整个 Stage"是流传最广的一句错话。`submitMissingTasks` 一进来只问一件事：这个 Stage 这次要算哪些分区。ShuffleMapStage 去问 `MapOutputTracker` 还有哪些 map 分区没有地址，ResultStage 去看本次 Job 的完成标记取反。首跑返回全集，重提只返回被划掉的那几格。
+
+这句话错得有市场，是因为它的最坏情况确实等于全量。三种情形会让缺失账本一次划掉一大片：整台机器消失，该机上所有 map 输出同时作废；Stage 被标记为输出不确定，重提前整体回滚，缺失集合直接变成全集；缺失的那格恰好是全 Stage 最大的一个，重算它一个的代价超过其余全部。判断一次重提贵不贵，看的不是 Stage 有多少分区，而是这次脏了多少格。
+
+### 3.3 调大上限只抬高天花板
+
+这是本章的核心判据：`maxConsecutiveAttempts` 从 4 调到 10，改的是"最多允许失败几次"，不是"每次失败便宜一点"。单次重提的成本一分没降，只是把可承受的总损失抬高了。
+
+算一笔账。设单次重提的代价是六分钟（示例推算：两千分区里三百个缺失，每个平均一点二秒），作业总预算四十分钟。上限为 4 时最坏允许烧掉二十四分钟；调到 10 之后最坏允许烧一小时，作业墙钟直接翻倍，而它最终能否成功完全取决于第 7 到第 10 次重提时故障是否已经消失。故障若是"某台机器网络间歇丢包"，抬高上限确实有用；故障若是"上游 Shuffle 所在的磁盘阵列降级"，抬高上限只是让作业在失败之前多跑一小时，可观测上的效果是失败来得更晚、更难归因。
+
+### 3.4 Fetch 失败的两层重试
+
+`FetchFailedException` 是唯一必须回到 Driver 处理的 Task 失败，但它的前置还有一层网络重试：reduce 端拉取某 map 分区时，先按 `spark.shuffle.io.maxRetries`（默认 3）与 `spark.shuffle.io.retryWait`（默认 5 秒）自行重试，三次都失败才抛出异常，再由 `DAGScheduler` 决定是否重提上游。
+
+两层的关系常被混淆。网络层重试很便宜，它不重算任何东西，只是等一会儿再连一次，代价约十几秒；Stage 层重提很贵，它要重算上游分区。调大 `maxRetries` 是用零重算成本的等待去换免于一次昂贵重提的机会，调大 `maxConsecutiveAttempts` 则是用昂贵重算硬扛。前者通常更划算，除非失败原因根本不是瞬时抖动。
+
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+flowchart LR
+    A["reduce 端拉取<br/>某个 map 分区"] --> B{"io 层重试<br/>maxRetries = 3"}
+    B -- "连上" --> C["继续计算"]
+    B -- "三次都失败" --> D["抛出 FetchFailed<br/>上报 Driver"]
+    D --> E["抹掉该 map 分区地址<br/>缺失账本多一格"]
+    E --> F{"连续失败次数<br/>是否达上限"}
+    F -- "未达" --> G["重提上游 Stage<br/>重算缺失分区"]
+    F -- "已达" --> H["Job 失败"]
+    G --> I["新一轮 TaskSet<br/>attempt 号加一"]
+    I --> A
+```
+
+这条回路每转一圈代价都在放大：重算期间若又有机器掉线，第二圈要补的分区会比第一圈更多，因为上一圈刚算好、还没被下游读走的输出也一并作废。
+
+---
+
+## 第 4 章 executor 级：黑名单的四个阈值与配比
+
+### 4.1 黑名单不是重试，是改派
+
+黑名单（`spark.blacklist.*`，3.1 起更名为 `spark.excludeOnFailure.*`，旧键以弃用别名形式保留，以对应版本文档为准）一次计算都不重做，它把"下一次尝试落到哪台机器"这个决定从随机改成有记忆：某台机器上同一个分区已经失败过，就别再往那儿派。
+
+性质不同，讨论方式就不同。重试的阈值要和作业能承受的损失比，黑名单的阈值要和重试的预算比，因为**黑名单唯一的价值是在预算被同一台坏机器吃光之前把它排除掉**。
+
+### 4.2 四个阈值，两个口径
+
+| 配置项 | 默认值 | 计量对象 | 触发后的效果 | 调小的代价 | 调大的代价 |
+|---|---|---|---|---|---|
+| `task.maxTaskAttemptsPerExecutor` | 1 | 同一分区在同一 executor 上的尝试次数 | 该 executor 不再接收这个分区 | 一次抖动就换机，本地性丢失 | 坏机器多吃预算，重试空转 |
+| `task.maxTaskAttemptsPerNode` | 2 | 同一分区在同一节点上的尝试次数 | 该节点不再接收这个分区 | 多 executor 节点被过早放弃 | 节点上第二个 executor 仍在试错 |
+| `stage.maxFailedTasksPerExecutor` | 2 | 一个 Stage 内该 executor 上失败的任务数 | 整个 Stage 不再用这个 executor | 繁忙节点被误排除，容量损失 | 坏节点在 Stage 内持续消耗算力 |
+| `stage.maxFailedExecutorsPerNode` | 2 | 一个 Stage 内该节点被排除的 executor 数 | 整个节点在 Stage 内不可用 | 大节点过早整机下线 | 内存有问题的机器只被局部排除 |
+
+前两行与后两行的口径完全不同，这是最容易搞错的地方。前两行按分区记：某个分区在这台机器上试了几次；后两行按 Stage 记：这台机器在这个 Stage 里总共害了几个任务失败。前者回答"这个分区该不该换地方"，后者回答"这台机器该不该整体停用"。
+
+口径差异对应故障形态。单分区毒数据只触发前两行，换机器没用，它到哪都失败，最终把四格预算耗光；机器级故障很快触发后两行，因为这台机器上任何任务都不稳定。看到分区号固定就往第一组看，看到任务号四处开花、机器号固定就往第二组看。
+
+### 4.3 配比判据：必须比预算更早触发
+
+现在可以把两本账摆到一起。设 `F` 为 `spark.task.maxFailures`（默认 4），`e` 为 `maxTaskAttemptsPerExecutor`（默认 1），`n` 为 `maxTaskAttemptsPerNode`（默认 2）。
+
+一个分区在整个预算期内的失败次数上限是 `F`。要让黑名单在预算被吃光之前起作用，必须 **`e < F` 且 `n < F`**。默认值满足且宽松地满足：`e = 1` 意味着同一分区在同一台机器上的第二次尝试已经被换走，`n = 2` 意味着它在同一节点上最多失败两次就必须跨节点。四次预算因此可以摊到至少两台节点、三台 executor 上。
+
+把这个关系倒过来看，就知道什么配置是白开的。假如把 `e` 也设成 4，同一分区要在同一台 executor 上失败四次才会被换走，而四次正好是预算的全部——黑名单在预算耗尽那一刻才动手，等于从未生效。这不是极端假设：把 `maxFailures` 从 4 调到 100 的集群上，如果不同步下调 `e`，得到的就是这种配比，一百次机会里前几次全在同一台坏机器上烧掉。
+
+反过来还有一个上界。`e` 最小是 1，也可以把 `n` 调到 1，让分区一次失败就跨节点，代价是任何瞬时抖动都触发跨机重算。判据可写成一条经验比例：`F / e` 不应超过集群可用 executor 的合理份额。默认 4/1 在 300 节点上毫无压力；在只有 6 个 executor 的小集群上，一个分区可能试遍一半容量，反而把仅有的几台机器都染上嫌疑。
+
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+flowchart TD
+    subgraph GOOD["配比正确：e=1, n=2, F=4"]
+        G1["第 1 次失败<br/>executor A"] --> G2["第 2 次失败<br/>A 被排除，换 B"]
+        G2 --> G3["第 3 次失败<br/>B 被排除，跨节点换 C"]
+        G3 --> G4["第 4 次成功<br/>预算还剩一格"]
     end
-
-    subgraph "推测执行检测"
-        D1 --> CHK["每 100ms 检查</br>剩余运行 Task"]
-        CHK --> CMP{"已运行时间 ></br>30s × 1.5 = 45s?"}
-        CMP -- "是" --> SPEC["Task 999 已运行 60s</br>加入推测候选"]
-        CMP -- "否" --> WAIT["继续等待"]
+    subgraph BAD["配比倒挂：e=4, F=4"]
+        B1["第 1 次失败<br/>executor A"] --> B2["第 2 次失败<br/>仍在 A"]
+        B2 --> B3["第 3 次失败<br/>仍在 A"]
+        B3 --> B4["第 4 次失败<br/>预算耗尽，Job 失败<br/>A 此时才被排除"]
     end
-
-    subgraph "推测副本执行"
-        SPEC --> LAUNCH["在空闲 Executor 上</br>启动 Task 999 副本"]
-        LAUNCH --> RACE["原 Task 999 vs 副本 Task 999</br>竞速执行"]
-        RACE --> WIN["副本先完成</br>原 Task 被 Kill"]
-        RACE --> WIN2["原 Task 先完成</br>副本被 Kill"]
-    end
-
-    classDef normal fill:#6272a4,stroke:#bd93f9,color:#f8f8f2
-    classDef check fill:#282a36,stroke:#ff79c6,color:#ff79c6
-    classDef spec fill:#44475a,stroke:#50fa7b,color:#f8f8f2
-
-    class T1,D1 normal
-    class CHK,CMP,WAIT check
-    class SPEC,LAUNCH,RACE,WIN,WIN2 spec
 ```
 
-### 3.3 推测执行的代价与风险
+第二条路径的荒谬之处在于，排除动作发生在结果已经没有意义之后，它唯一的作用是让复盘时日志里多一行 `executor excluded`，容易被误读成机制生效了。
 
-推测执行不是免费的：
+### 4.4 三个连带配置
 
-**代价一：额外的资源占用**
+`enabled` 默认为假，这决定了本章所有讨论在默认配置下都不发生，第三层是关着的。开启它的动机很明确：只要集群偶发机器级故障，这一层的收益就大于维护成本。
 
-每个推测副本需要占用一个 Executor 的 CPU 和内存。在集群资源紧张时，启动大量推测副本会抢占正常 Task 的资源，可能导致整体吞吐量下降。
+`timeout` 默认一小时，被排除的 executor 与节点一小时后自动解禁。这个值要跟故障的持续性对齐：硬件坏掉等运维换件，一小时够；网络分区这类会自行恢复的故障，一小时太长，排除期内的容量白损失；云上 Spot 批量回收，十几分钟就够，因为那批机器不会再回来。
 
-**代价二：非幂等写操作的风险**
+`killExcludedExecutors` 默认为假，被排除的 executor 并不会被杀，只是不再接收新任务，已跑着的任务继续跑完。开启之后容量才真正释放，但回收动作是否计入集群管理器的 executor 失败上限，要在自己版本上核对——这条直接决定 application 级的上限会不会被排除动作自己顶穿。
 
-如果 Task 包含写操作（如写 HDFS、写 Kafka），原 Task 和推测副本 Task 可能同时写出数据，导致数据重复。
+### 4.5 阈值的取舍与规模效应
 
-Spark 通过 **Task Attempt ID（`attemptNumber`）** 来区分同一分区的不同尝试。支持推测执行的输出格式（如 Parquet、ORC）会在文件名中嵌入 attemptId，最终 commit 时只保留先完成的那个 Task 的文件。
-
-但对于不支持幂等写的自定义 Sink（如直接写 MySQL 的 `foreachPartition`），推测执行可能导致数据重复写入。**此时应关闭推测执行或在写操作中实现幂等性**。
-
-**代价三：误判慢 Task 为需要推测的 Task**
-
-数据倾斜导致的慢 Task 不是"偶发的慢"，而是"必然的慢"（该分区就是有更多数据）。在这种情况下，推测副本依然要处理同样多的数据，与原 Task 同样慢，推测执行只是多消耗了一份资源，没有加速效果。
-
-对于数据倾斜场景，正确的解法是消除倾斜（Salting、Broadcast Join），而不是依赖推测执行。
-
-> [!info] 核心概念
-> 推测执行（Speculative Execution）的设计灵感来自 Google MapReduce 论文（2004 年）中的"Backup Task"机制。原始论文中提到，当一个 MapReduce 作业接近完成时，启动剩余 Task 的"备份副本"，使整体完成时间从"最慢 Task 的时间"缩短为"第二慢 Task 的时间"。Spark 的 Speculative Execution 是这一思想的直接继承，但增加了"完成比例门槛"和"倍数判定"两个精细化条件，以避免过于激进地启动副本。
+| 调整方向 | 收益 | 风险 | 前提 |
+|---|---|---|---|
+| `e` 由 1 调到 2 | 减少因一次瞬时失败就跨机的本地性损失 | 坏机器多消耗一格预算 | 网络抖动频繁、本地性敏感 |
+| `stage.maxFailedTasksPerExecutor` 调到 3 到 4 | 避免繁忙节点被少量偶发失败误排除 | 坏节点在 Stage 内多害几个任务 | 单机 executor 多、Stage 任务数大 |
+| `timeout` 由 1 小时调到 15 分钟 | 排除期容量损失更小 | 未修复的机器很快解禁，故障复现 | 故障多为瞬时，修复由编排层自动完成 |
 
 ---
 
-## 第 4 章 Stage 级别重试：FetchFailedException 的完整处理链路
+## 第 5 章 application 级：整作业重启是谁的权力
 
-### 4.1 FetchFailedException 是什么
+### 5.1 最粗的一层不在 Spark 手里
 
-`FetchFailedException` 是 Spark 容错体系中最特殊的一类异常，因为它不是由当前 Task 本身的错误引起的，而是由**上游 Stage 的输出不可达**引起的。
+`spark.yarn.maxAppAttempts` 控制 ApplicationMaster 的尝试次数，默认跟随 YARN 侧全局配置 `yarn.resourcemanager.am.max-attempts`（社区默认 2，以集群侧配置为准）。这一层的特殊之处在于**判断与动作都不在 Spark 进程里**：AM 死了，Spark 侧没有代码在跑，是 ResourceManager 决定要不要再拉起一次，Spark 只能提交"我希望最多试几次"的请求，且不能超过 YARN 的全局上限。
 
-当 Reduce Task 的 `ShuffleBlockFetcherIterator` 尝试从 Map 节点拉取 Shuffle 数据时，经过 `spark.shuffle.io.maxRetries`（默认 3）次重试后仍然失败，就会抛出 `FetchFailedException`，携带如下信息：
-- `shuffleId`：哪个 Shuffle
-- `mapId`：哪个 Map Task 的输出不可达
-- `reduceId`：当前 Reduce Task 的分区号
-- `message`：具体失败原因（连接拒绝、超时等）
+它算作第四层的理由是它确实在重试，而且是最贵的一种。AM 重启不是断点续跑：新 AM 会重建 `SparkContext`、Stage 图与 Shuffle 账本，之前算完的 Stage 全部作废，机制细节见内核篇第 6 章与第 7 章。结论是**application 级重试的代价约等于作业全量重跑**，次数上限该按"作业可承受的总时长"来设。
 
-**关键设计决定**：`FetchFailedException` 不走 Task 级别重试路径，而是直接上报给 `DAGScheduler`。原因是：重试同一个 Reduce Task 无法解决问题，因为 Map 端的数据已经不在了。
+### 5.2 executor 失败上限与它的窗口
 
-### 4.2 DAGScheduler 的 FetchFailure 处理
+YARN 模式下还有一个与重试直接耦合的上限：`spark.yarn.max.executor.failures`，控制 AM 在杀掉整个应用之前容忍多少个 executor 失败，默认按申请的 executor 数量推算（申请数乘二，最少三个，以对应版本文档为准）。配套的窗口参数决定失败计数是否随时间重置。
 
-`DAGScheduler.handleTaskCompletion()` 中对 `FetchFailedException` 的处理逻辑（简化版）：
+这组参数与黑名单之间有一条隐蔽的因果链。黑名单把机器排除、任务重新排队、新 executor 被申请、又一台机器被排除；如果排除后的回收被计成 executor 失败，一个坏机架可以在几分钟内把失败计数顶到上限，AM 主动退出，application 级重试被触发，整个作业从头再来。排除机制本意是止损，配比不当反而成了触发最贵那层重试的扳机。
 
-```
-收到 FetchFailedException(shuffleId, mapId, reduceId)
-  │
-  ├─ 找到对应的 ShuffleMapStage（上游 Map Stage）
-  ├─ 将该 ShuffleMapStage 标记为 output locations lost
-  │   （即：mapId 对应的 Map Task 输出位置无效）
-  │
-  ├─ 将当前的 Reduce Stage 标记为失败（需要重新提交）
-  │
-  ├─ 检查 ShuffleMapStage 的重试次数
-  │   ├─ < spark.stage.maxConsecutiveAttempts（默认4）→ 重新提交 ShuffleMapStage
-  │   └─ ≥ 上限 → 放弃作业，Job 失败
-  │
-  └─ ShuffleMapStage 完成后，重新提交 Reduce Stage
-```
+算一笔量级账。300 个 executor 的集群，上限约六百次失败（示例推算）。一次机架级故障可能同时带走二十台机器，每台都计一次失败就是二十次，五六次这样的抖动就能把上限顶穿。判断这条链是否成立，看 AM 日志里失败计数的增长曲线：如果退出原因写着 executor 失败数超限，而同期排除日志很密集，就成立。
 
-**为什么通常是重提整个 Map Stage，而不仅仅是失败的那个 Map Partition？**
+### 5.3 四级代价的对照
 
-从理论上说，只需要重新计算丢失的 Map Partition（`mapId` 指向的那一个），其他 Map Partition 的 Shuffle 文件还在。但 Spark 在实现上选择了一个相对保守的策略：
-
-1. 当节点宕机时，通常不只有一个 Map Partition 丢失——该节点上所有 Map Task 的 Shuffle 文件都不可访问。逐个判断哪些 Partition 丢失的代价反而比整体重提高。
-
-2. `MapOutputTracker`（维护所有 Map Task 输出位置的注册表）会将宕机节点上的所有 Map 输出标记为无效，触发对整个 Stage 的重提。
-
-3. Spark 3.x 通过**Push-based Shuffle（RSS）**（见 Shuffle 专栏第 11 篇）在一定程度上缓解了这个问题——Shuffle 数据存在独立的 RSS Worker 上，不随节点宕机而丢失。
-
-### 4.3 Stage 重试的限制：maxConsecutiveAttempts
-
-`spark.stage.maxConsecutiveAttempts`（默认 4）控制同一个 Stage 的最大**连续**失败重试次数。注意"连续"这个关键词：
-
-- 如果 Stage A 失败了 3 次，第 4 次成功，计数器重置为 0
-- 如果 Stage A 连续失败了 4 次，不再重试，整个 Job 失败
-
-"连续失败"通常意味着系统性问题，而不是偶发故障——例如：
-- 某个 Stage 所需的特定资源始终不可用
-- 作业逻辑本身有 Bug，每次运行到相同位置都失败
-- 数据损坏，导致特定分区的计算总是失败
-
-在这些情况下，继续重试没有意义，`maxConsecutiveAttempts` 是防止无效重试消耗集群资源的安全阀。
-
-> [!warning] 生产避坑
-> 在集群节点频繁宕机（如使用大量 Spot 实例被批量回收）的场景中，`spark.stage.maxConsecutiveAttempts=4` 可能太保守。当一个 Stage 重试 4 次期间，节点宕机反复发生，第 4 次重试的 Shuffle 数据再次丢失，整个 Job 失败。  
-> 应对策略：  
-> 1. 调大 `spark.stage.maxConsecutiveAttempts=10`  
-> 2. 启用 ExternalShuffleService（ESS）或 RSS，使 Shuffle 数据不随 Executor 生命周期消失  
-> 3. 在宽依赖前设置 RDD Checkpoint，使上游计算结果持久化到 HDFS，即使 Executor 崩溃也不需要重算
+| 层级 | 单次代价（示例推算） | 恢复的粒度 | 什么时候值得 |
+|---|---|---|---|
+| task 重试 | 数十秒 | 一个分区 | 失败偶发、与机器相关 |
+| stage 重提 | 分钟级 | 缺失分区集合 | 上游输出丢失，且缺失范围小 |
+| executor 改派 | 秒级到数十秒 | 不重算，只换落点 | 失败与特定机器相关 |
+| application 重启 | 小时级 | 全量 | 故障已排除，且重跑比修更快 |
 
 ---
 
-## 第 5 章 三层机制的协作与优先级
+## 第 6 章 越重试越糟：三种情形
 
-### 5.1 三层机制的调用链
+### 6.1 数据本身有问题
 
-三层容错机制在调用链上有清晰的优先级：
+第一种情形最直白：失败原因是确定性的，重试的成功概率为零。
 
+判据可以收敛成四条：同一个分区号反复出现；失败分布跨越三台以上不同机器；异常类型与堆栈每次都相同；重算耗时与首次运行基本一致。四条同时成立，基本可判定为数据或计算逻辑问题，再试一百次也是同一个结果。
+
+这类失败消耗的不是重试次数，而是时间。四格预算意味着同一份脏数据要被完整解析失败四次，每次都要经历排队与重算。两千分区的 Stage 上，一个毒分区可以把作业从四十分钟拖到一个半小时，最后依然失败；把 `maxFailures` 调成 1，这个作业会在第一次失败时立刻报错，四十分钟就拿到明确的失败信号。
+
+正确的处理不在重试参数上，而在数据入口：schema 强校验、超长记录预检、join 键空值过滤。这些动作放在读取之后、Shuffle 之前，成本是每个分区多一次扫描，收益是把"每次运行随机失败"变成"每次运行确定地知道哪几条记录有问题"。
+
+### 6.2 机器慢而不是坏
+
+第二种情形更隐蔽：机器没有坏，它只是慢。磁盘老了、带宽被同机其他进程吃掉、CPU 被邻居容器挤占，任务没有失败，只是比同类任务慢三到五倍。
+
+黑名单的判据在这里会误伤，它**只看失败率，不看时长**。一台健康但繁忙的节点因承载更多任务而累计更多失败，会被优先排除；一台安静但缓慢的节点因任务少、失败也少，一直留在池子里。排除之后容量下降，剩余节点负载更重，失败更多，下一轮排除更激进——这是一条自我强化的退化回路。
+
+判断这条回路是否启动，看三个量：被排除的 executor 数量随时间的变化、排除发生前后的平均任务时长、剩余容量的水位。如果排除数量在上升而平均时长没有下降，说明排掉的不是病因。
+
+### 6.3 Fetch 失败与重算放大
+
+第三种情形最贵：`FetchFailedException` 触发的重试会放大故障。
+
+一次 executor 掉线会在几十个 reduce 任务上同时引发取数失败，因为那台机上的所有 map 输出同时不可达。去抖会把它们合并成一轮重提，但若重提期间又有机器掉线，第二轮算出的输出还没被下游读走就又作废了。放大倍数取决于两个量：单机上承载的 map 分区数，以及从产出到被消费的时间窗。
+
+`user_tag_daily` 这类带两次 Shuffle 的作业，第一个 Shuffle 有两千个 map 分区分布在三百台机器上，单机平均七格。一次掉线脏掉七格，重算七格；如果掉线发生在 reduce 阶段刚开始时，第二个 Shuffle 还没产出可复用的中间结果，这七格的重算会连带把对应的 reduce 分区重算一遍。一次几秒钟的 GC 停顿造成的误判掉线，可以换来几分钟的重算。
+
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+flowchart TD
+    A["单台 executor 掉线<br/>或心跳超时"] --> B["该机所有 map 输出作废<br/>缺失账本脏掉数格"]
+    B --> C["下游几十个 reduce<br/>同时抛 FetchFailed"]
+    C --> D["去抖合并为<br/>一轮 Stage 重提"]
+    D --> E["重算缺失分区<br/>集群负载短时升高"]
+    E --> F{"重算期间是否有<br/>新的 executor 掉线"}
+    F -- "是" --> B
+    F -- "否" --> G["重提完成，作业继续"]
+    E --> H["负载升高导致<br/>更多心跳超时"]
+    H --> A
 ```
-Task 失败事件
-   │
-   ▼
-TaskSetManager.handleFailedTask()
-   │
-   ├─ 是 FetchFailedException？
-   │   └─ 直接上报 DAGScheduler（跳过 Task 重试）
-   │       └─ DAGScheduler.handleTaskCompletion()
-   │           └─ 触发 Stage 级回滚
-   │
-   └─ 是普通失败？
-       ├─ 失败次数 < maxFailures？
-       │   └─ 加入重试队列（Task 级重试）
-       │
-       └─ 失败次数 ≥ maxFailures？
-           └─ 上报 DAGScheduler → Job 失败
 
-（并行运行，独立于失败处理）
-TaskSetManager.checkSpeculatableTasks()（每 100ms）
-   └─ 对慢 Task 启动推测副本（不等失败，主动触发）
-```
+断开这个环的办法不在重试参数上，而在两处：把 Shuffle 输出从 executor 生命周期里摘出去（外部 Shuffle 服务或远端 Shuffle 服务），以及把心跳超时窗口按 GC 停顿的现实调宽。前者消除"机器掉线即数据丢失"这个前提，后者减少误判。
 
-### 5.2 三层机制应对不同场景的效果
+### 6.4 一条共同的判据
 
-| 失败场景 | 触发机制 | 恢复路径 | 用户可见影响 |
-|---------|---------|---------|------------|
-| **单节点偶发宕机** | Task 重试 | 换节点重跑失败 Task | 轻微延迟（通常 < 1 分钟） |
-| **节点磁盘变慢（Task 不失败但极慢）** | 推测执行 | 副本先完成，慢 Task 被 Kill | Stage 时间缩短 |
-| **Map 节点宕机（Shuffle 文件丢失）** | Stage 回滚 | Map Stage 重算 + Reduce Stage 重算 | 显著延迟（分钟级到十分钟级） |
-| **网络抖动（Shuffle Fetch 超时）** | Task 重试（FetchRetry） + Stage 回滚 | 先在 Task 层重试 Fetch，超过 `maxRetries` 后触发 Stage 回滚 | 取决于重试次数和等待时间 |
-| **数据倾斜（某 Task 极慢）** | 推测执行（无效！）| 副本同样慢，无法加速 | 倾斜 Task 仍然是瓶颈 |
-| **Executor OOM** | Task 重试 | 换节点重跑 | 轻微延迟；若反复 OOM 则 Job 失败 |
+三种情形指向同一条判据：重试的价值取决于**成功率是否随次数上升**。
 
-### 5.3 推测执行与 Task 重试的互斥处理
-
-一个 Task 可以同时有"正在重试的 Task"和"推测副本 Task"在运行。`TaskSetManager` 通过 **Task Attempt（任务尝试）** 来区分同一分区的不同运行实例：
-
-- 原始 Task：`attemptNumber = 0`
-- 第 1 次重试：`attemptNumber = 1`
-- 推测副本：`attemptNumber = 1`（与第 1 次重试共享编号）或 `attemptNumber = 2`（视具体情况）
-
-当某个 Attempt 完成时，`TaskSetManager` 会：
-1. 将该分区标记为已完成（成功）
-2. 向所有其他仍在运行的同分区 Attempt 发送 Kill 信号
-3. 通知 `DAGScheduler` 该 Task 成功
-
-这确保同一分区的数据只被处理一次，结果的确定性不受并发执行的影响（前提是 Task 的计算是确定性的——相同输入、相同输出）。
+偶发的、与机器相关的失败，第一次说明环境有问题，换机器成功率显著上升，重试划算。确定性的数据失败，每次都是同一结果，成功率恒定为零，重试纯粹是时间税。慢机器导致的失败，成功率随集群负载波动，比"重试几次"更重要的是"换机器的规则对不对"。
 
 ---
 
-## 第 6 章 关键参数与生产调优
+## 第 7 章 推测执行也在花同一份预算
 
-### 6.1 Task 重试相关参数
+推测执行（Speculative Execution）常被当成与重试并列的另一种容错手段，但从预算角度看，它是重试的消费者。副本执行失败会走同一条失败处理路径，同样按分区计入 `numFailures`，同样消耗那四格预算。
 
-| 参数 | 默认值 | 说明 | 调优建议 |
-|------|--------|------|---------|
-| `spark.task.maxFailures` | 4 | 同一分区 Task 的最大失败次数（含第一次） | Spot 实例场景调大到 8-10 |
-| `spark.blacklist.enabled` | false | 是否开启节点/Executor 黑名单 | 节点频繁失败时开启 |
-| `spark.blacklist.task.maxTaskAttemptsPerExecutor` | 1 | 某 Executor 上同一 Task 的最大失败次数 | 默认合理 |
-| `spark.blacklist.task.maxTaskAttemptsPerNode` | 2 | 某 Node 上同一 Task 的最大失败次数 | 默认合理 |
-| `spark.locality.wait` | 3s | 等待数据本地性的总超时时间 | 数据本地性要求不强时可调小到 1s |
-
-### 6.2 推测执行相关参数
-
-| 参数 | 默认值 | 说明 | 调优建议 |
-|------|--------|------|---------|
-| `spark.speculation` | false | 是否开启推测执行 | 生产环境建议开启（除非有非幂等写） |
-| `spark.speculation.interval` | 100ms | 推测检查间隔 | 默认合理；长 Task 场景可调大到 1s |
-| `spark.speculation.multiplier` | 1.5 | 判定"慢"的倍数阈值 | Task 时间差异较大时调大到 2-3 |
-| `spark.speculation.quantile` | 0.75 | 启用推测检查所需的完成比例 | 作业末尾慢 Task 多时调小到 0.5 |
-
-**推测执行的适用场景**：
-
-开启推测执行能显著改善性能的场景：
-- 硬件异常导致的偶发慢节点（非数据倾斜）
-- 大量小 Task（Task 数 >> Executor 数），某几个 Task 慢不会导致严重数据倾斜，但会拖慢整体进度
-- 批量 ETL 作业，对完成时间敏感，对资源成本不敏感
-
-不建议开启推测执行的场景：
-- 有非幂等写操作（`foreachPartition` 写 MySQL、写 Kafka 非事务模式等）
-- 严重数据倾斜（推测执行无效，只浪费资源）
-- 资源非常紧张的集群（推测副本会加剧资源争抢）
-
-### 6.3 Stage 重试相关参数
-
-| 参数 | 默认值 | 说明 | 调优建议 |
-|------|--------|------|---------|
-| `spark.stage.maxConsecutiveAttempts` | 4 | Stage 最大连续失败重试次数 | 节点不稳定时调大到 8-10 |
-| `spark.shuffle.io.maxRetries` | 3 | Shuffle Fetch 最大重试次数 | 网络不稳定时调大到 10 |
-| `spark.shuffle.io.retryWait` | 5s | Shuffle Fetch 重试等待时间 | GC 导致超时时调大到 30s |
-
-### 6.4 诊断慢 Task 和重试风暴的方法
-
-**在 Spark UI 诊断**：
-
-1. **Stages 页面 → Task 时间分布**：查看 `Max / P75 / Median` 的比值，Max/Median > 3 说明有显著慢 Task
-
-2. **Task 详情页的 `Attempt` 列**：同一 Task ID 出现多条记录（Attempt 0、1、2...）说明该 Task 发生了重试；如果有两个 `Attempt` 同时处于 Running 状态，说明推测执行已触发
-
-3. **Executors 页面**：某个 Executor 的 `Failed Tasks` 计数异常高，说明该节点有问题，考虑手动将其加入黑名单或从集群摘除
-
-**在日志中诊断**：
-
-```
-# Task 重试日志
-WARN TaskSetManager: Lost task 5.0 in stage 2.0 (TID 25):
-  java.io.IOException: ...
-INFO TaskSetManager: Starting task 5.1 in stage 2.0 (TID 125, worker-3, ...
-
-# 推测执行日志
-INFO TaskSetManager: Starting speculative task 99.1 in stage 2.0 (TID 201, ...)
-
-# Stage 回滚日志
-INFO DAGScheduler: Resubmitting ShuffleMapStage 1 (map at ...) due to fetch failure
-WARN DAGScheduler: Marking Stage 2 (reduce at ...) as failed due to a fetch failure from Stage 1
-```
+这条关系在配比上有直接影响。开启推测之后，一个分区的尝试次数不再只由失败驱动，还由"太慢"驱动。设 `spark.speculation.multiplier` 为 1.5、`quantile` 为 0.75，一个 Stage 里可能有四分之一的分区被判定为慢并启动副本，副本若失败，预算照扣。在高失败率环境下，副本与重试叠加，预算消耗速度接近翻倍——原本能撑四次的预算，可能两次实质失败之后就耗尽了。
 
 ---
 
-## 第 7 章 Executor 黑名单机制
+## 第 8 章 从症状到层级
 
-### 7.1 黑名单的设计动机
+### 8.1 一张排查表
 
-Task 重试机制有一个隐患：如果一个节点本身有硬件问题（磁盘故障、内存 ECC 错误），发到这个节点的 Task 会反复失败，消耗大量重试资源。在极端情况下，一个"坏节点"会持续消耗整个集群的重试资源，严重拖慢整体进度。
+四层在运维中的表现差别很大，症状与层级之间的映射相对稳定。下表按"看到的第一个异常"组织，最后一列是区分本层与下一层的判据。
 
-**黑名单（Blacklist/Exclude）机制**是对这种场景的防御：当一个 Executor 或 Node 上的 Task 失败次数超过阈值，将其加入黑名单，后续 Task 不再调度到该 Executor/Node 上。
+| 症状 | 先看哪里 | 归属层级 | 区分判据 |
+|---|---|---|---|
+| 作业反复重启，每次从零开始 | YARN 应用页 attempt 列表、AM 退出原因 | application 级 | attempt 号大于 1，每次在不同阶段失败，日志里没有 Stage 连续失败记录 |
+| 某 Stage 的 attempt 号持续增长 | Stages 页 attempt 表、`Resubmitting failed stages` 日志 | stage 级 | 同一 Stage 有多个 attempt，且每次 Task 数不同（缺失集合在变） |
+| 同一分区号反复失败 | Task 详情页按分区号过滤 | task 级 | 分区号固定，Stage 总分区数不变，堆栈每次都相同 |
+| 大量分区各失败一两次又成功 | Executors 页 Failed Tasks 列 | task 级，集群抖动 | 失败分散、无固定分区号、执行器数量在波动 |
+| executor 反复被排除 | Executors 页排除标记、黑名单日志 | executor 级 | 被排除的多是同一批机器或同一机架，作业变慢但仍推进 |
+| 作业慢而不死，最终超时 | Stage 时长分布、executor 掉线次数 | stage 级与 executor 级叠加 | 无明确失败，只有大量重提与容量波动 |
 
-> [!info] 核心概念
-> Spark 3.1+ 将"Blacklist"改名为"Exclude"（排除机制），相关参数从 `spark.blacklist.*` 统一改为 `spark.excludeOnFailure.*`，但含义相同。本文沿用"黑名单"这一习惯用语。
+第一行与第二行的区分最有价值。application 级重试的特征是"从零开始"，日志里会出现新的 `SparkContext` 初始化、新的 Stage 图，前面 attempt 里跑过的 Stage 一个都没留下；stage 级重提则保留上下文，`MapOutputTracker` 的账本还在，只是缺了几格。
 
-### 7.2 黑名单的层次
+### 8.2 一段日志的读法
 
-黑名单分两个粒度：
+四层各有一句标志性日志，认出它们比记住参数名更实用。
 
-**Executor 黑名单**：某个 Executor 被加入黑名单后，新的 Task 不会调度到该 Executor（但该 Executor 本身还在运行，其他作业的 Task 不受影响）
+```text
+# task 级：某分区失败并重新排队
+WARN TaskSetManager: Lost task 5.0 in stage 2.0 (TID 25): java.io.IOException: ...
+INFO TaskSetManager: Starting task 5.1 in stage 2.0 (TID 125, worker-3, ...)
 
-**Node 黑名单**：某个节点上的所有 Executor 都被加入黑名单后，该节点整体被标记为不可用
+# task 级熔断：四次尝试耗尽
+ERROR TaskSetManager: Task 5 in stage 2.0 failed 4 times; aborting job
 
-黑名单有超时时间（`spark.blacklist.timeout`，默认 1 小时），超时后自动解除黑名单状态。
+# stage 级：取数失败引发的重提
+INFO DAGScheduler: Resubmitting stage 1 (map at ...) due to fetch failure
+WARN DAGScheduler: Marking stage 2 (reduce at ...) as failed due to a fetch failure
 
-**关键参数**：
+# executor 级：排除账本动手
+INFO TaskSetManager: excluding executor 12 for this task
+INFO BlacklistTracker: excluding node worker-7 for this stage
+
+# application 级：AM 被判失败后重新拉起
+INFO ApplicationMaster: Application attempt 2 started
 ```
-spark.blacklist.enabled=true
-spark.blacklist.task.maxTaskAttemptsPerExecutor=1   # 同一 Task 在某 Executor 上最多失败1次
-spark.blacklist.task.maxTaskAttemptsPerNode=2       # 同一 Task 在某 Node 上最多失败2次
-spark.blacklist.stage.maxFailedTasksPerExecutor=2  # 某 Stage 中某 Executor 上最多失败2个 Task
-spark.blacklist.application.maxFailedTasksPerExecutor=2  # 整个作业中某 Executor 上最多失败2个 Task
-spark.blacklist.timeout=1h                         # 黑名单超时时间
+
+### 8.3 一条决策路径
+
+把排查顺序画成决策树，从最外层症状往里收敛。
+
+```mermaid
+%%{init: {'theme': 'dracula'}}%%
+flowchart TD
+    S["作业失败或异常变慢"] --> A{"是否出现新的 SparkContext<br/>或 attempt 号大于 1"}
+    A -- "是" --> A1["application 级<br/>看 AM 退出原因与 executor 失败计数"]
+    A -- "否" --> B{"Stage attempt 号<br/>是否大于 1"}
+    B -- "是" --> B1["stage 级<br/>看缺失分区数与上游是否掉线"]
+    B -- "否" --> C{"失败的分区号<br/>是否固定"}
+    C -- "固定" --> C1["数据或计算逻辑<br/>重试无效，查数据形状"]
+    C -- "不固定" --> D{"被排除的机器<br/>是否集中在少数节点"}
+    D -- "是" --> D1["机器级故障<br/>核对黑名单配比与超时"]
+    D -- "否" --> D2["集群整体抖动<br/>查容量水位与超时窗口"]
 ```
+
+第三与第四个判断之间的分岔就是本章的落点：分区号固定与不固定，是数据问题与机器问题的分水岭，也是"该不该重试"的分水岭。
 
 ---
 
-## 小结
+## 第 9 章 反例与一份配比清单
 
-Spark 的三层容错机制协同工作，覆盖了分布式执行中的三类核心失败模式：
+### 9.1 反例：把 `maxFailures` 调到 100
 
-- **Task 重试**（`TaskSetManager`）：应对节点宕机、临时异常等硬失败。参数 `spark.task.maxFailures`（默认4）控制单分区的最大失败次数。失败换节点重跑，遵循数据本地性优先降级
-- **推测执行**（`TaskSetManager.checkSpeculatableTasks`）：应对慢 Task 的软失败。每 100ms 检查，完成比例 ≥ 75% 且某 Task 运行时间 > 中位数 × 1.5 时启动副本。对数据倾斜无效，对非幂等写有风险
-- **Stage 回滚**（`DAGScheduler`）：应对 `FetchFailedException`（Shuffle 数据不可达）。将 Map Stage 标记为需重提交，重算后重新提交 Reduce Stage。参数 `spark.stage.maxConsecutiveAttempts`（默认4）控制最大连续重试次数
+这个动作的动机通常是"让作业更不容易失败"，实际效果是把预算放大二十五倍，路线却一寸没改。
 
-三层机制优先级：`FetchFailedException` → Stage 回滚（最高优先级）；普通失败 → Task 重试；慢 Task → 推测执行（并行独立触发）。
+后果有三层。其一，毒分区的暴露时间从四次尝试变成一百次，作业不会更快失败，只会更晚失败，期间一直占着 slot。其二，黑名单的相对位置失效：一百次预算里如果 `e` 仍为 1，机器会被快速换掉，但换到第二十几台都失败之后，问题显然不在机器上，剩下七八十次尝试全是浪费。其三，作业平均墙钟被拉长，排队时间上升，影响的不只是这一个作业。
 
-第 03 篇将讲解 RDD Checkpoint 机制——当 Lineage 过深、宽依赖前计算代价极高，或 Driver 崩溃重启时需要恢复状态时，如何通过在 HDFS 上物化中间 RDD 来截断 Lineage，从根本上降低容错的重算代价。
+需要调大这个值的场景很窄：失败原因确认与机器相关且偶发，且黑名单已开启、配比正确。黑名单关着的时候调大 `maxFailures`，等于把预算喂给同一批坏机器。
+
+### 9.2 反例：把黑名单关掉
+
+默认配置就是关的，所以"关掉"往往不是主动选择，而是没人打开。代价在正常日子里看不出来：一台坏机器持续接收任务并持续失败，四格预算被它吃掉大半，最终表现为"某些作业总比预期慢两三分钟"。
+
+这个代价难归因，是因为它不产生错误，只产生延迟。判断方法很直接：如果开启排除机制之后作业失败率没变但平均时长下降，说明之前一直在为看不见的坏机器付费。
+
+### 9.3 反例：不区分确定性失败与偶发失败
+
+两种失败对重试的响应完全相反，用同一套参数对付它们，必然在其中一边浪费。
+
+| 失败类型 | 重试成功率趋势 | 调大预算的效果 | 正确动作 |
+|---|---|---|---|
+| 偶发、与机器相关 | 随次数上升 | 有效，成功率提升 | 保持默认预算，把黑名单配好 |
+| 确定性、与数据相关 | 恒定为零 | 只延后失败时间 | 预算调小，把校验前移 |
+| 与负载相关 | 随集群水位波动 | 不稳定，取决于重试落点 | 先降负载与调超时，不调重试 |
+
+两类作业并存时，正确的做法不是找一组通用参数，而是按作业分类：对时效敏感、数据质量有保障的用默认值甚至更小；对完成时间不敏感、机器抖动多的长跑批作业，才值得加大预算并配好排除。
+
+### 9.4 反例：四层同时拉满
+
+把四个层级的上限一起调大，是"提高稳定性"这个直觉最常见的落地方式，效果通常是反的：预算变大让失败更晚暴露，排除变激进让容量抖动，应用级上限变大让作业在失败前多耗几个小时。
+
+| 参数 | 默认 | 稳妥值 | 调大的代价 | 调小的代价 |
+|---|---|---|---|---|
+| `spark.task.maxFailures` | 4 | 4 到 6 | 确定性失败暴露延迟，槽位空转 | 一次抖动即 Job 失败 |
+| `spark.stage.maxConsecutiveAttempts` | 4 | 4，机器不稳时 6 到 10 | 单次故障墙钟放大，最长可到数小时 | 偶发掉线即作业失败 |
+| `spark.excludeOnFailure.enabled` | false | true | 误排除导致容量抖动 | 坏机器持续消耗预算 |
+| `task.maxTaskAttemptsPerExecutor` | 1 | 1 | 坏机器吃预算，排除失效 | 本地性丢失，跨机读取增多 |
+| `stage.maxFailedTasksPerExecutor` | 2 | 2 到 3 | 坏节点在 Stage 内多害任务 | 繁忙节点被误排除 |
+| `excludeOnFailure.timeout` | 1h | 15 到 30 分钟 | 排除期容量损失 | 未修复机器很快复现 |
+| `spark.yarn.maxAppAttempts` | 跟随 YARN | 2 | 全量重跑次数上限抬高，成本失控 | 一次 AM 故障即作业丢失 |
+
+这份清单的读法是：前两行决定"失败多快暴露"，后五行决定"失败落到哪里"。先调后五行（路线），再考虑前两行（预算）；顺序反过来，就是本文反复说的那件事——把重试当成免费的，然后为它付账。
+
+---
+
+## 第 10 章 落点
+
+回到开头那个问题：重试到底在买什么。四层机制买的是同一样东西——一次重新抽签的机会，抽的是这次落到的机器、这段执行时间窗口、这份内存布局与上次不同。抽签能改变结果，前提是结果本身依赖这些环境因素；一旦结果只由输入数据决定，抽多少次都是同一张签。
+
+这条判断把四层的适用范围划得很清楚。task 级与 executor 级买的是环境重抽，在机器相关故障上有效，在数据问题上无效；stage 级买的是"上游输出重新可用"，只在缺失范围小时划算；application 级买的是"整个作业重来一次"，最贵，也该最少被动用。
+
+配置配比的本质，是让四层的动用顺序与代价顺序一致：先用最便宜的改派，再用次便宜的 task 重试，然后才是 Stage 重提，最后才是整作业重启。默认值大致表达了这层意思，但它们分属四个配置命名空间、由四个组件读取，没有任何一处文档把关系写下来。于是最常见的失误不是某个值设错，而是四个值各自看起来都合理、合起来却让最便宜的那层永远不生效。
+
+---
+
+## 参考资料
+
+1. Zaharia M., Chowdhury M., Das T., et al. Resilient Distributed Datasets: A Fault-Tolerant Abstraction for In-Memory Cluster Computing. NSDI 2012. https://www.usenix.org/system/files/conference/nsdi12/nsdi12-final138.pdf
+2. Apache Spark 配置文档（4.3.0）：`spark.task.maxFailures`、`spark.stage.maxConsecutiveAttempts`、`spark.stage.maxAttempts`、`spark.excludeOnFailure.*`。https://spark.apache.org/docs/latest/configuration.html
+3. Apache Spark 源码（4.3.0）：`core/src/main/scala/org/apache/spark/scheduler/TaskSetManager.scala`，`handleFailedTask` 与排除账本更新入口。https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/scheduler/TaskSetManager.scala
+4. Apache Spark 源码（4.3.0）：`core/src/main/scala/org/apache/spark/scheduler/BlacklistTracker.scala`，四个排除阈值的口径。https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/scheduler/BlacklistTracker.scala
+5. Apache Spark 源码（4.3.0）：`core/src/main/scala/org/apache/spark/scheduler/DAGScheduler.scala`，`stageAbortReason` 与 `resubmitFailedStages`。https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/scheduler/DAGScheduler.scala
+6. Apache Hadoop YARN 默认配置：`yarn.resourcemanager.am.max-attempts` 与 `spark.yarn.maxAppAttempts` 的约束关系。https://hadoop.apache.org/docs/stable/hadoop-yarn/hadoop-yarn-common/yarn-default.xml
 
 ---
 
 > [!note] 思考题
-> 1. Task 失败后，`TaskSetManager` 会将该 Task 重新加入调度队列进行重试。重试时的数据本地性策略会发生什么变化？如果原来可以做到 `NODE_LOCAL`（数据在本地），但原节点已经宕机，重试的 Task 会被调度到哪里？这对重试 Task 的执行时间有什么影响？
-> 2. `spark.task.maxFailures` 默认为 4，即一个 Task 最多重试 4 次。如果超过这个次数，整个作业会以失败状态终止。但有些故障是瞬时的（如网络抖动），有些是持久的（如数据本身有问题导致 Task 始终 OOM）。如何区分这两类故障并设置合理的重试策略？有没有机制能跳过无法处理的"毒数据"分区？
-> 3. 推测执行（Speculative Execution）会对慢 Task 启动一个"备份副本"，两者竞速完成。但推测执行假设 Task 是幂等的——相同输入总是产生相同输出且没有副作用。如果 Task 内部包含写外部系统的操作（如写数据库），推测执行可能导致重复写入。`spark.speculation` 的默认值是 `false`，在什么前提条件满足的情况下，才能安全地开启推测执行？
-
-## 参考资料
-
-- [Spark Scheduler 内部原理剖析（腾讯云）](https://cloud.tencent.com/developer/article/1004904)
-- [Spark 推测执行详解（CSDN）](https://blog.csdn.net/littlePYR/article/details/104828121)
-- [浅析 Spark 推测执行机制（Hackx's Blog）](https://untitled-life.github.io/blog/2019/04/30/a-brief-analysis-of-sparks-speculative-execution-mechanism/)
-- [Spark 容错机制（liyichao.github.io）](https://liyichao.github.io/posts/spark-%E5%AE%B9%E9%94%99%E6%9C%BA%E5%88%B6.html)
-- Apache Spark 源码：`org.apache.spark.scheduler.TaskSetManager`
-- Apache Spark 源码：`org.apache.spark.scheduler.DAGScheduler`
-- Apache Spark 源码：`org.apache.spark.scheduler.TaskSchedulerImpl`
+> 1. 两千分区的 Stage 里每个分区各失败一次，Stage 不会熔断，作业照常成功。这个设计在什么情况下会掩盖真正的故障？如果要为这个集群设计一条告警，你会选"分区失败次数"还是"失败分区的离散度"？
+> 2. 黑名单的 `maxTaskAttemptsPerExecutor` 默认为 1，同一分区在同一机器上第二次失败就换机器。调到 2 能减少跨机读取，代价是坏机器多消耗一格预算，这个取舍在什么规模上值得做？
+> 3. `maxConsecutiveAttempts` 调大只抬高上限、不降单次成本。若单次重提六分钟、作业时效窗口四十分钟，这个上限最多能设到几，为什么答案不取决于你有多想让它成功？
+> 4. 推测副本与重试共享同一份分区预算。在推测开启、失败率又偏高的作业上，先关推测还是先调预算？两种做法分别会掩盖什么现象？
+> 5. 本章说 application 级的判断权不在 Spark 手里，在 Kubernetes 上这个缺口更明显：Spark 自身没有这一层。从 YARN 迁来的作业若没在提交器里补重试策略，会表现成什么症状？

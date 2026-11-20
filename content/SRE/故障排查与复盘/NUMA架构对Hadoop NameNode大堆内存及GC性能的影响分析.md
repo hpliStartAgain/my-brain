@@ -1,8 +1,8 @@
 ---
 title: "NUMA架构对Hadoop NameNode大堆内存及GC性能的影响分析"
 date: 2026-07-26
-tags: [SRE]
-aliases: []
+tags: [SRE, JVM, GC, Hadoop]
+aliases: ["NUMA 对 NameNode GC 的影响", "大堆 NameNode NUMA 适配"]
 ---
 
 ## 一、背景与现象
@@ -25,7 +25,9 @@ aliases: []
 NUMA（Non-Uniform Memory Access，非一致性内存访问）架构中，CPU访问本地节点（Local Node）的内存延迟低于访问远程节点（Remote Node）的内存延迟。
 
 ### 2.2 Linux的默认内存分配策略
+
 ```mermaid
+%%{init: {'theme': 'dracula'}}%%
 flowchart TD
     A["NameNode进程启动<br>分配至Node 1 CPU"] --> B["JVM申请虚拟内存"]
     B --> C["触发缺页中断<br>分配物理页"]
@@ -37,6 +39,7 @@ flowchart TD
     G --> H
     H --> I["资源失衡：Node 1满，Node 0空闲"]
 ```
+
 
 1. **默认本地分配策略**：Linux内核在进行内存分配时，默认遵循本地化原则。当NameNode进程启动并由调度器分配至某一组CPU核心（例如Node 1所属的CPU）执行时，JVM向操作系统申请的虚拟内存，在实际触发缺页并分配物理页时，会优先从Node 1获取。
 
@@ -59,6 +62,7 @@ NameNode维护着整个HDFS的目录树和数据块映射，对象引用关系�
 在G1触发Concurrent Mark后，会进入Mixed GC阶段。此阶段的核心操作之一是扫描老年代Region的RSet（Scan RS）。
 
 ```mermaid
+%%{init: {'theme': 'dracula'}}%%
 sequenceDiagram
     participant GC as "G1 GC线程"
     participant OS as "操作系统"
@@ -83,6 +87,8 @@ sequenceDiagram
         MEM-->>GC: 返回数据
         Note right of GC: 停顿放大至数十秒甚至数分钟
     end
+
+
 ```
 
 ### 3.3 Swap对GC性能的影响机制
@@ -108,7 +114,9 @@ export HADOOP_NAMENODE_OPTS="numactl --interleave=all -Xms204800m -Xmx204800m ..
 `--interleave=all`策略覆盖了Linux默认的本地分配机制。它强制操作系统在为JVM分配物理内存页时，以轮询（Round-Robin）的方式在Node 0和Node 1之间交替分配。
 
 #### 预期效果
+
 ```mermaid
+%%{init: {'theme': 'dracula'}}%%
 flowchart LR
     subgraph "优化前"
         direction LR
@@ -128,6 +136,7 @@ flowchart LR
         K --> L["每个Node预留约28GB空闲内存"]
     end
 ```
+
 
 - 200GB的堆内存将被均匀分布，每个Node承担约100GB
 - 每个Node（总容量128GB）都会预留出约28GB的空闲物理内存供OS和Page Cache使用
