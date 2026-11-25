@@ -1,5 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "astro",
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
   "cleanUrls": true,
   "trailingSlash": false,
   "headers": [
@@ -22,7 +25,7 @@
       ]
     },
     {
-      "source": "/static/navigationIndex.json",
+      "source": "/search-meta.json",
       "headers": [
         {
           "key": "X-Robots-Tag",
@@ -31,7 +34,7 @@
       ]
     },
     {
-      "source": "/static/searchIndex.json",
+      "source": "/popover-index.json",
       "headers": [
         {
           "key": "X-Robots-Tag",
@@ -49,25 +52,7 @@
       ]
     },
     {
-      "source": "/static/searchContent.json",
-      "headers": [
-        {
-          "key": "X-Robots-Tag",
-          "value": "noindex, nofollow, noarchive, nosnippet"
-        }
-      ]
-    },
-    {
-      "source": "/static/contentIndex.json",
-      "headers": [
-        {
-          "key": "X-Robots-Tag",
-          "value": "noindex, nofollow, noarchive, nosnippet"
-        }
-      ]
-    },
-    {
-      "source": "/static/resource-(.*)",
+      "source": "/_astro/(.*)",
       "headers": [
         {
           "key": "Cache-Control",
@@ -76,37 +61,13 @@
       ]
     },
     {
-      "source": "/static/scripts/(.*)",
+      "source": "/pagefind/(.*)",
       "headers": [
         {
           "key": "Cache-Control",
-          "value": "public, max-age=31536000, immutable"
+          "value": "public, max-age=86400"
         }
       ]
-    },
-    {
-      "source": "/component-(.*).css",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "public, max-age=31536000, immutable"
-        }
-      ]
-    },
-    {
-      "source": "/static/katex/(.*)",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "public, max-age=31536000, immutable"
-        }
-      ]
-    }
-  ],
-  "rewrites": [
-    {
-      "source": "/robots.txt",
-      "destination": "/static/robots.txt"
     }
   ],
   "routes": [

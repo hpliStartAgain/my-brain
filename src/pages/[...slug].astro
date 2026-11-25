@@ -1,0 +1,144 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro"
+import ArticleLayout from "../layouts/ArticleLayout.astro"
+import { getVaultGraph, type VaultFolder, type VaultNote } from "../lib/vault"
+import { renderArticle } from "../lib/markdown"
+
+export async function getStaticPaths() {
+  const graph = getVaultGraph()
+  const paths: Array<{
+    params: { slug: string }
+    props: { kind: "note"; note: VaultNote } | { kind: "folder"; folder: VaultFolder }
+  }> = []
+
+  const seen = new Set<string>()
+
+  for (const note of graph.notes) {
+    if (note.isHome || !note.slug) continue
+    if (seen.has(note.slug)) continue
+    seen.add(note.slug)
+    paths.push({
+      params: { slug: note.slug },
+      props: { kind: "note", note },
+    })
+  }
+
+  for (const folder of graph.folders.values()) {
+    if (!folder.slug) continue
+    if (seen.has(folder.slug)) continue
+    seen.add(folder.slug)
+    paths.push({
+      params: { slug: folder.slug },
+      props: { kind: "folder", folder },
+    })
+  }
+
+  return paths
+}
+
+const graph = getVaultGraph()
+const props = Astro.props
+
+let rendered: Awaited<ReturnType<typeof renderArticle>> | null = null
+if (props.kind === "note") {
+  rendered = await renderArticle(props.note, graph)
+}
+
+const folder = props.kind === "folder" ? props.folder : null
+const childFolders = folder
+  ? folder.childFolders
+      .map((cf) => graph.folders.get(cf))
+      .filter((x): x is VaultFolder => Boolean(x))
+  : []
+const introNote = folder?.introNoteSlug ? graph.bySlug.get(folder.introNoteSlug) : null
+
+const folderCrumbs = folder
+  ? folder.folderPath.split("/").map((part, idx, arr) => {
+      const fPath = arr.slice(0, idx + 1).join("/")
+      return {
+        label: part,
+        href: graph.folders.get(fPath)?.href ?? "/",
+      }
+    })
+  : []
+---
+
+{
+  props.kind === "note" && rendered ? (
+    <ArticleLayout note={props.note} graph={graph} html={rendered.html} toc={rendered.toc} />
+  ) : (
+    folder && (
+      <BaseLayout
+        title={folder.name}
+        description={`「${folder.name}」专栏目录，共 ${folder.totalNotes} 篇笔记`}
+        canonicalPath={folder.href}
+        activeDomain={folder.domain}
+      >
+        <main class="listing-container">
+          <nav class="breadcrumbs" aria-label="面包屑">
+            <a href="/">首页</a>
+            {folderCrumbs.map((c) => (
+              <>
+                <span class="sep">/</span>
+                <a href={c.href}>{c.label}</a>
+              </>
+            ))}
+          </nav>
+
+          <header class="listing-header">
+            <h1 class="listing-title">{folder.name}</h1>
+            <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:0.8rem">
+              <span style="font-size:0.9rem;color:var(--text-muted)">
+                本目录共收录 {folder.totalNotes} 篇文章
+              </span>
+              {introNote && (
+                <a href={introNote.href} class="pill-link">
+                  从专栏导览开始阅读 →
+                </a>
+              )}
+            </div>
+          </header>
+
+          {childFolders.length > 0 && (
+            <section style="margin-bottom:2.2rem">
+              <h2 class="section-heading" style="font-size:1.15rem;margin-bottom:0.9rem">
+                下级专栏
+              </h2>
+              <div class="subfolder-grid">
+                {childFolders.map((cf) => (
+                  <a href={cf.href} class="subfolder-card">
+                    <span class="subfolder-name">{cf.name}</span>
+                    <span class="subfolder-meta">{cf.totalNotes} 篇文章</span>
+                  </a>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {folder.notes.length > 0 && (
+            <section>
+              <h2 class="section-heading" style="font-size:1.15rem;margin-bottom:0.9rem">
+                章节列表
+              </h2>
+              <ul class="chapter-list">
+                {folder.notes.map((item) => (
+                  <li class="chapter-row">
+                    <a href={item.href}>
+                      <div class="chapter-row-top">
+                        <span class="chapter-row-title">{item.title}</span>
+                        <span class="chapter-row-meta">
+                          {item.readingMinutes} 分钟 · {item.date}
+                        </span>
+                      </div>
+                      {item.summary && <p class="chapter-row-summary">{item.summary}</p>}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+        </main>
+      </BaseLayout>
+    )
+  )
+}

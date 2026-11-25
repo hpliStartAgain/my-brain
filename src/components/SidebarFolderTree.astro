@@ -1,0 +1,87 @@
+---
+import type { VaultFolder, VaultGraph } from "../lib/vault"
+
+interface Props {
+  folder: VaultFolder
+  graph: VaultGraph
+  activeSlug: string
+  activeFolderPath: string
+  depth?: number
+}
+
+const { folder, graph, activeSlug, activeFolderPath, depth = 0 } = Astro.props
+
+const childFolders = folder.childFolders
+  .map((cf) => graph.folders.get(cf))
+  .filter((x): x is VaultFolder => Boolean(x))
+
+const isBranchActive = (fPath: string) =>
+  activeFolderPath === fPath || activeFolderPath.startsWith(`${fPath}/`)
+---
+
+{
+  folder.notes.length > 0 && (
+    <ul class="sidebar-nav-list">
+      {folder.notes.map((item) => (
+        <li>
+          <a
+            href={item.href}
+            class:list={["sidebar-nav-link", { "is-active": item.slug === activeSlug }]}
+          >
+            {item.title}
+          </a>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+{
+  childFolders.length > 0 && (
+    <div class:list={["sidebar-subcols", { "is-root-subcols": depth === 0 && folder.notes.length > 0 }]}>
+      {depth === 0 && folder.notes.length > 0 && (
+        <div class="sidebar-section-label">下级专栏</div>
+      )}
+      {childFolders.map((cf) => {
+        const shouldOpen = isBranchActive(cf.folderPath)
+        return (
+          <details class="sidebar-subcol" open={shouldOpen}>
+            <summary class="sidebar-subcol-summary">
+              <svg
+                class="sidebar-chevron"
+                viewBox="0 0 24 24"
+                width="14"
+                height="14"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path d="m9 18 6-6-6-6" />
+              </svg>
+              <span class="sidebar-subcol-name">{cf.name}</span>
+              <span class="sidebar-subcol-count">{cf.totalNotes}</span>
+              <a
+                href={cf.href}
+                class="sidebar-subcol-jump"
+                title={`打开「${cf.name}」专栏目录页`}
+                aria-label={`打开「${cf.name}」专栏目录页`}
+                onclick="event.stopPropagation()"
+              >
+                ↗
+              </a>
+            </summary>
+            <div class="sidebar-subcol-body">
+              <Astro.self
+                folder={cf}
+                graph={graph}
+                activeSlug={activeSlug}
+                activeFolderPath={activeFolderPath}
+                depth={depth + 1}
+              />
+            </div>
+          </details>
+        )
+      })}
+    </div>
+  )
+}

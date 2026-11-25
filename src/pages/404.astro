@@ -1,0 +1,14 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro"
+---
+
+<BaseLayout title="页面未找到" canonicalPath="/404" noindex={true}>
+  <main class="listing-container" style="text-align:center;padding-top:6rem;padding-bottom:8rem">
+    <div style="font-family:var(--font-serif);font-size:3.5rem;font-weight:700;color:var(--accent)">404</div>
+    <h1 class="listing-title" style="margin-top:0.5rem">这页笔记还没有找到</h1>
+    <p style="color:var(--text-muted);max-width:46ch;margin:0.8rem auto 2rem">
+      可能是路径调整或尚未发布。你可以回到首页，或者按 <kbd>⌘K</kbd> 搜索关键词。
+    </p>
+    <a href="/" class="pill-link">返回知识库首页</a>
+  </main>
+</BaseLayout>

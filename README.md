@@ -4,34 +4,23 @@
 
 内容覆盖 Linux 内核与系统性能工程、Golang / Java 运行时与并发、中间件与存储引擎、分布式架构与大数据、云原生、可观测性与 SRE、LLM 与 Agent 基础设施，以及若干英文技术书的翻译与精读。
 
-## 仓库结构
+## 技术栈与仓库结构
+
+站点基于 **Astro 5** + **Pagefind** + **Shiki** + **Mermaid** 构建（原 Quartz v5 归档于 Git tag `quartz-v5-final`），零改动兼容 Obsidian 双源 `content/` 目录。
 
 | 路径                       | 说明                                                                                              |
 | -------------------------- | ------------------------------------------------------------------------------------------------- |
-| `content/`                 | 知识库正文（Obsidian 与 Quartz 双源，`index.md` 为首页）                                          |
-| `quartz.config.yaml`       | 站点配置：主题色、字体、插件与布局                                                                |
-| `quartz/`                  | Quartz v5 核心（含少量本地修改，如 `components/Head.tsx` 的 SEO 与字体异步加载）                  |
-| `plugins/`                 | 本地插件与对社区插件的 fork（见下表）                                                             |
-| `scripts/`                 | 维护脚本：标签受控词表收敛 `converge_tags.py`、缺失 frontmatter 补齐 `add_missing_frontmatter.py` |
+| `content/`                 | 知识库正文（Obsidian 与 Astro 双源，`index.md` 为首页）                                           |
+| `src/lib/vault.ts`         | Vault 索引器：frontmatter 解析、Obsidian 最短路径/别名双链解析、反向链接与自然序号专栏树          |
+| `src/lib/markdown.ts`      | `unified` 渲染管线：标题去重、Callout、Mermaid 容器、Shiki 双主题代码高亮、KaTeX 公式             |
+| `src/lib/mermaid-normalizer.ts` | 统一 Mermaid 暖色调编辑风语义重映射引擎（亮/暗双模式自适应）                                 |
+| `src/scripts/`             | 客户端增强：Mermaid 懒渲染与全屏 Pan/Zoom Lightbox、Pagefind 分片检索、双链悬浮预览、阅读偏好     |
+| `src/layouts/` / `src/pages/` | 三栏阅读布局（Scoped 专栏目录 + 正文 + 粘性 TOC）、专栏目录页、标签页与 RSS                    |
+| `scripts/sync-assets.mjs`  | 硬链接同步 `content/` 下的图片/媒体到 `public/_vault-assets/`                                     |
+| `scripts/`                 | 内容维护脚本：标签受控词表收敛 `converge_tags.py`、缺失 frontmatter 补齐等                       |
 | `AGENTS.md`                | 写作与维护规范（专栏交付标准、frontmatter、标签词表）                                             |
-| `CHANGELOG.md` / `TODO.md` | 内容变更记录 / 进行中的大型任务                                                                   |
 
-### 本地插件
-
-| 插件                                                                 | 作用                                                                |
-| -------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| `content-polish`                                                     | 构建期去掉与标题重复的正文 H1；从「摘要」生成中文 meta description  |
-| `content-index`（fork）                                              | 元数据索引与全文拆分，全文只在打开搜索时加载                        |
-| `search`（fork）                                                     | 渐进式索引：打开搜索即用标题 / 标签秒出结果，全文后台加载后增量补入 |
-| `explorer`（fork）                                                   | 按文件名序号排序章节；修复定位当前文章时连带滚动整个窗口的问题      |
-| `folder-page`（fork）                                                | 专栏目录页按文件名序号排序                                          |
-| `footer`（fork）                                                     | 中文版权页脚                                                        |
-| `obsidian-flavored-markdown-fork`                                    | Mermaid 配色定制；Mermaid 多 CDN 回退（含国内镜像）                 |
-| `article-carousel` / `tag-pills` / `article-tools` / `scroll-reveal` | 首页随机推荐、标签入口、阅读进度与复制正文、首页渐显动效            |
-
-fork 插件直接维护预编译的 `dist/`，修改处均以 `[my-brain fork]` 或中文注释标出。自写插件修改源码后在插件目录执行 `npx tsc -p tsconfig.json`（`article-carousel` 用 `npx tsup`）重新生成 `dist/`。
-
-## 本地构建
+## 本地构建与预览
 
 需要 Node.js 22+。
 
@@ -40,11 +29,9 @@ npm ci
 ```
 
 ```bash
-NODE_OPTIONS=--max-old-space-size=8192 npx quartz build --serve
+npm run dev      # 同步资源并启动热更新开发服务器
+npm run build    # 构建全部静态页到 dist/ 并生成 Pagefind 中文搜索索引
+npm run preview  # 本地预览完整 dist/ 产物（含 Pagefind 全文搜索）
 ```
 
-构建产物输出到 `public/`，部署在 Vercel（`vercel.json` 配置了 clean URL、标签页 noindex 与 AI 训练爬虫屏蔽）。
-
-## 致谢
-
-站点基于 [Quartz](https://quartz.jzhao.xyz/)（MIT License）构建。
+部署于 Vercel（`vercel.json` 配置了 `astro` 框架、`cleanUrls`、标签页 `noindex` 与 AI 训练爬虫屏蔽）。
