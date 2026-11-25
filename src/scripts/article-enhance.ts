@@ -108,10 +108,31 @@ export function initArticleEnhancements() {
     }
   })
 
-  // 5. Image Lightbox using shared modal
+  // 5. Shared Lightbox Modal close + Image Lightbox
   const modal = document.getElementById("diagram-modal")
   const canvas = modal?.querySelector<HTMLElement>("[data-modal-canvas]")
   const viewport = modal?.querySelector<HTMLElement>("[data-modal-viewport]")
+  const closeBtn = modal?.querySelector<HTMLButtonElement>("[data-modal-close]")
+
+  const closeSharedModal = () => {
+    if (!modal || modal.hidden) return
+    modal.hidden = true
+    document.body.style.overflow = ""
+    if (canvas) {
+      canvas.innerHTML = ""
+      canvas.style.transform = ""
+    }
+    window.dispatchEvent(new CustomEvent("diagram-modal-close"))
+  }
+
+  closeBtn?.addEventListener("click", closeSharedModal)
+  modal?.addEventListener("click", (e) => {
+    if (e.target === modal) closeSharedModal()
+  })
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && modal && !modal.hidden) closeSharedModal()
+  })
+
   document.querySelectorAll<HTMLImageElement>(".prose img[data-lightbox-img]").forEach((img) => {
     img.addEventListener("click", () => {
       if (!modal || !canvas || !viewport) return

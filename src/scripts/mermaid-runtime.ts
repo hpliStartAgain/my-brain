@@ -150,8 +150,8 @@ function attachPanZoom(viewport: HTMLElement, canvas: HTMLElement): PanZoomContr
     const vpRect = viewport.getBoundingClientRect()
     const svgRect = svg.getBoundingClientRect()
     if (svgRect.width > 0 && svgRect.height > 0) {
-      const ratio = Math.min((vpRect.width * 0.88) / svgRect.width, (vpRect.height * 0.86) / svgRect.height, 2.2)
-      scale = Math.max(0.4, ratio)
+      const ratio = Math.min((vpRect.width * 0.88) / svgRect.width, (vpRect.height * 0.86) / svgRect.height, 2.0)
+      scale = Math.max(0.15, ratio)
       tx = 0
       ty = 0
       apply()
@@ -159,7 +159,7 @@ function attachPanZoom(viewport: HTMLElement, canvas: HTMLElement): PanZoomContr
   }
 
   const zoomAt = (factor: number, clientX?: number, clientY?: number) => {
-    const next = Math.min(Math.max(scale * factor, 0.25), 5)
+    const next = Math.min(Math.max(scale * factor, 0.12), 5)
     if (clientX !== undefined && clientY !== undefined) {
       const rect = viewport.getBoundingClientRect()
       const ox = clientX - rect.left - rect.width / 2
@@ -310,39 +310,49 @@ export function initMermaidRuntime() {
   const modal = document.getElementById("diagram-modal")
   const viewport = modal?.querySelector<HTMLElement>("[data-modal-viewport]")
   const canvas = modal?.querySelector<HTMLElement>("[data-modal-canvas]")
-  const closeBtn = modal?.querySelector<HTMLButtonElement>("[data-modal-close]")
   let controller: PanZoomController | null = null
 
-  const closeModal = () => {
-    if (!modal || !canvas) return
-    modal.hidden = true
-    document.body.style.overflow = ""
+  window.addEventListener("diagram-modal-close", () => {
     controller?.destroy()
     controller = null
-    canvas.innerHTML = ""
-  }
+  })
 
   const openModalWithSvg = (svg: SVGElement) => {
     if (!modal || !viewport || !canvas) return
     controller?.destroy()
+    controller = null
     canvas.innerHTML = ""
+    canvas.style.transform = ""
+
     const clone = svg.cloneNode(true) as SVGElement
+    const origId = svg.getAttribute("id")
+    if (origId) {
+      const modalId = `${origId}-modal`
+      clone.setAttribute("id", modalId)
+      clone.querySelectorAll("style").forEach((styleEl) => {
+        if (styleEl.textContent) {
+          styleEl.textContent = styleEl.textContent.replaceAll(`#${origId}`, `#${modalId}`)
+        }
+      })
+    }
+
+    const vb = (svg as SVGSVGElement).viewBox?.baseVal
+    const rect = svg.getBoundingClientRect()
+    const natW = Math.round(vb && vb.width > 0 ? vb.width : rect.width || 800)
+    const natH = Math.round(vb && vb.height > 0 ? vb.height : rect.height || 500)
+
+    clone.setAttribute("width", String(natW))
+    clone.setAttribute("height", String(natH))
+    clone.style.width = `${natW}px`
+    clone.style.height = `${natH}px`
     clone.style.maxWidth = "none"
-    clone.style.width = "auto"
-    clone.style.height = "auto"
+    clone.style.display = "block"
+
     canvas.appendChild(clone)
     modal.hidden = false
     document.body.style.overflow = "hidden"
     controller = attachPanZoom(viewport, canvas)
   }
-
-  closeBtn?.addEventListener("click", closeModal)
-  modal?.addEventListener("click", (e) => {
-    if (e.target === modal) closeModal()
-  })
-  window.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && modal && !modal.hidden) closeModal()
-  })
 
   for (const figure of blocks) {
     const zoomBtn = figure.querySelector<HTMLButtonElement>("[data-mermaid-zoom]")
