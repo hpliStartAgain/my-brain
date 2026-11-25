@@ -8,17 +8,40 @@ const totalWords = graph.notes.reduce((acc, n) => acc + n.wordCount, 0)
 const recent = graph.recentNotes.slice(0, 8)
 const topTags = Array.from(graph.tags.entries())
   .sort((a, b) => b[1].length - a[1].length)
-  .slice(0, 18)
+  .slice(0, 24)
 
-const seedRandom = graph.notes
-  .filter((n) => !n.isHome && n.summary.length >= 25)
-  .slice(0, 60)
-  .map((n) => ({
-    href: n.href,
-    title: n.title,
-    column: n.folderPath || n.domain,
-    summary: n.summary,
-  }))
+// Build cross-domain seed pool for SSR first paint (round-robin across domains)
+const byDomain = new Map<string, typeof graph.notes>()
+for (const n of graph.notes) {
+  if (n.isHome || n.summary.length < 25) continue
+  const d = n.domain || "随笔"
+  const list = byDomain.get(d) ?? []
+  list.push(n)
+  byDomain.set(d, list)
+}
+const seedNotes: typeof graph.notes = []
+let round = 0
+while (seedNotes.length < 48) {
+  let pushed = false
+  for (const list of byDomain.values()) {
+    if (round < list.length) {
+      seedNotes.push(list[round])
+      pushed = true
+      if (seedNotes.length >= 48) break
+    }
+  }
+  if (!pushed) break
+  round++
+}
+
+const seedRandom = seedNotes.map((n, idx) => ({
+  href: n.href,
+  title: n.title,
+  domain: n.domain || "随笔",
+  column: n.folderPath || n.domain || "随笔",
+  summary: n.summary,
+  num: idx + 1,
+}))
 
 const DOMAIN_CARDS = [
   {
@@ -144,33 +167,75 @@ const resolvedCards = DOMAIN_CARDS.map((card) => {
 <BaseLayout title="汀的知识碎片" canonicalPath="/">
   <main class="home-container">
     <section class="hero-section">
-      <div class="hero-eyebrow">SYSTEMS ENGINEERING · DIGITAL GARDEN</div>
-      <h1 class="hero-title">李浩鹏（汀）</h1>
-      <p class="hero-lead">
-        基础设施研发 / SRE，现居北京。关注云原生沙箱运行时、分布式存储与计算集群、可观测体系与系统级性能工程。
-      </p>
+      <div class="hero-grid">
+        <div class="hero-intro">
+          <div class="hero-eyebrow">SYSTEMS ENGINEERING · DIGITAL GARDEN</div>
+          <h1 class="hero-title">李浩鹏（汀）</h1>
+          <p class="hero-lead">
+            基础设施研发 / SRE，现居北京。关注云原生沙箱运行时、分布式存储与计算集群、可观测体系与系统级性能工程。
+          </p>
 
-      <div class="hero-bio">
-        <p>
-          这里是我梳理系统认知与工程实践的数字花园。支撑我一路敲代码与钻研的，往往不是宏大的职业叙事，而是从小就有的、对「事物底层究竟如何运转」的原始好奇。
-        </p>
-        <p>
-          这里的专栏不搬运零散的速成笔记，也不做居高临下的布道，只记录我真正拆解过、在生产中踩坑验证过，或深入源码搞清楚的硬核机理——从
-          Linux 内核子系统与并发模型，到分布式协议、大数据引擎与现代沙箱隔离。
-        </p>
-      </div>
+          <div class="hero-bio">
+            <p>
+              这里是我梳理系统认知与工程实践的数字花园。支撑我一路敲代码与钻研的，往往不是宏大的职业叙事，而是从小就有的、对「事物底层究竟如何运转」的原始好奇。
+            </p>
+            <p>
+              这里的专栏不搬运零散的速成笔记，也不做居高临下的布道，只记录我真正拆解过、在生产中踩坑验证过，或深入源码搞清楚的硬核机理——从
+              Linux 内核子系统与并发模型，到分布式协议、大数据引擎与现代沙箱隔离。
+            </p>
+          </div>
 
-      <div class="hero-actions">
-        <a href="/Linux" class="pill-link">从操作系统开始 →</a>
-        <a href="/分布式架构" class="pill-link">分布式系统专栏</a>
-        <a href="/tags" class="pill-link">按标签浏览</a>
-        <a href="/index.xml" class="pill-link">RSS 订阅</a>
-      </div>
+          <div class="hero-actions">
+            <a href="/Linux" class="pill-link">从操作系统开始 →</a>
+            <a href="/分布式架构" class="pill-link">分布式系统专栏</a>
+            <a href="/tags" class="pill-link">按标签浏览</a>
+            <a href="/index.xml" class="pill-link">RSS 订阅</a>
+          </div>
 
-      <div class="stats-strip">
-        <span><strong>{totalNotes.toLocaleString("zh-CN")}</strong> 篇深度笔记</span>
-        <span><strong>{graph.domains.length}</strong> 个知识领域</span>
-        <span><strong>{Math.round(totalWords / 10000).toLocaleString("zh-CN")} 万+</strong> 总字数</span>
+          <div class="stats-strip">
+            <span><strong>{totalNotes.toLocaleString("zh-CN")}</strong> 篇深度笔记</span>
+            <span><strong>{graph.domains.length}</strong> 个知识领域</span>
+            <span><strong>{Math.round(totalWords / 10000).toLocaleString("zh-CN")} 万+</strong> 总字数</span>
+          </div>
+        </div>
+
+        <aside class="shards-board" aria-label="随机知识碎片">
+          <div class="shards-board-head">
+            <div class="shards-board-title">
+              <span class="shard-diamond" aria-hidden="true"></span>
+              <span>随机碎片</span>
+              <span class="shards-board-meta">全库 {totalNotes} 篇随机漫游</span>
+            </div>
+            <button type="button" id="shuffle-random-btn" class="shards-refresh-btn">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.1">
+                <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
+                <path d="M21 3v5h-5" />
+                <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
+                <path d="M8 16H3v5" />
+              </svg>
+              <span>换一批</span>
+            </button>
+          </div>
+
+          <div id="random-cards-box" class="shards-stage">
+            {
+              seedRandom.slice(0, 4).map((item, idx) => (
+                <a href={item.href} class:list={["shard-card", `shard-slot-${idx}`]}>
+                  <div class="shard-card-top">
+                    <span class="shard-pin" aria-hidden="true" />
+                    <span class="shard-col">{item.column}</span>
+                  </div>
+                  <div class="shard-title">{item.title}</div>
+                  <div class="shard-summary">{item.summary}</div>
+                  <div class="shard-foot">
+                    <span>SHARD · {String(item.num).padStart(3, "0")}</span>
+                    <span class="shard-arrow">→</span>
+                  </div>
+                </a>
+              ))
+            }
+          </div>
+        </aside>
       </div>
     </section>
 
@@ -232,37 +297,19 @@ const resolvedCards = DOMAIN_CARDS.map((card) => {
 
       <div>
         <div class="section-heading-row" style="margin-top:0">
-          <h2 class="section-heading">随机碎片</h2>
-          <button type="button" id="shuffle-random-btn" class="mm-btn">换一批</button>
+          <h2 class="section-heading">按标签逛逛</h2>
+          <a href="/tags" class="section-sub">查看全部标签 →</a>
         </div>
-        <div id="random-cards-box" class="random-cards">
+        <div class="tag-cloud" style="margin-top:0">
           {
-            seedRandom.slice(0, 4).map((item) => (
-              <a href={item.href} class="random-card">
-                <div class="random-card-col">{item.column}</div>
-                <div class="random-card-title">{item.title}</div>
-                <div class="random-card-summary">{item.summary}</div>
+            topTags.map(([tag, list]) => (
+              <a href={`/tags/${encodeURIComponent(tag)}`} class="tag-chip">
+                #{tag}
+                <span>{list.length}</span>
               </a>
             ))
           }
         </div>
-      </div>
-    </section>
-
-    <section aria-label="热门标签">
-      <div class="section-heading-row">
-        <h2 class="section-heading">按标签逛逛</h2>
-        <a href="/tags" class="section-sub">查看全部标签 →</a>
-      </div>
-      <div class="tag-cloud">
-        {
-          topTags.map(([tag, list]) => (
-            <a href={`/tags/${encodeURIComponent(tag)}`} class="tag-chip">
-              #{tag}
-              <span>{list.length}</span>
-            </a>
-          ))
-        }
       </div>
     </section>
   </main>
@@ -271,26 +318,109 @@ const resolvedCards = DOMAIN_CARDS.map((card) => {
     const btn = document.getElementById("shuffle-random-btn")
     const box = document.getElementById("random-cards-box")
     if (btn && box && Array.isArray(seedRandom) && seedRandom.length > 0) {
-      btn.addEventListener("click", () => {
-        const pool = seedRandom.slice()
-        for (let i = pool.length - 1; i > 0; i--) {
+      let fullPool = null
+      let lastHrefs = new Set(seedRandom.slice(0, 4).map((x) => x.href))
+
+      const BASE_ROTS = [-1.8, 1.9, 1.4, -2.1]
+      const BASE_TYS = [2, 10, -2, 6]
+
+      const esc = (s) =>
+        String(s)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+
+      const ensurePool = async () => {
+        if (fullPool) return fullPool
+        try {
+          const res = await fetch("/search-meta.json")
+          if (!res.ok) return seedRandom
+          const docs = await res.json()
+          const filtered = docs
+            .map((d, idx) => ({
+              href: d.href,
+              title: d.title,
+              domain: d.domain || "随笔",
+              column: d.column || d.domain || "随笔",
+              summary: d.summary || "",
+              num: idx + 1,
+            }))
+            .filter((d) => d.summary.length >= 20)
+          if (filtered.length >= 16) {
+            fullPool = filtered
+            return fullPool
+          }
+        } catch {}
+        return seedRandom
+      }
+
+      const pickDiverseFour = (pool) => {
+        const candidates = pool.filter((item) => !lastHrefs.has(item.href))
+        const source = candidates.length >= 4 ? candidates : pool.slice()
+        for (let i = source.length - 1; i > 0; i--) {
           const j = Math.floor(Math.random() * (i + 1))
-          const tmp = pool[i]
-          pool[i] = pool[j]
-          pool[j] = tmp
+          const tmp = source[i]
+          source[i] = source[j]
+          source[j] = tmp
         }
-        const picked = pool.slice(0, 4)
-        box.innerHTML = picked
-          .map((item) => {
-            const esc = (s) =>
-              String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-            return `<a href="${esc(item.href)}" class="random-card">
-              <div class="random-card-col">${esc(item.column)}</div>
-              <div class="random-card-title">${esc(item.title)}</div>
-              <div class="random-card-summary">${esc(item.summary)}</div>
+
+        const picked = []
+        const seenDomains = new Set()
+        for (const item of source) {
+          if (!seenDomains.has(item.domain)) {
+            picked.push(item)
+            seenDomains.add(item.domain)
+            if (picked.length === 4) break
+          }
+        }
+        if (picked.length < 4) {
+          for (const item of source) {
+            if (!picked.includes(item)) {
+              picked.push(item)
+              if (picked.length === 4) break
+            }
+          }
+        }
+        return picked
+      }
+
+      const renderShards = (items, animate) => {
+        lastHrefs = new Set(items.map((x) => x.href))
+        box.innerHTML = items
+          .map((item, idx) => {
+            const jitter = animate ? (Math.random() - 0.5) * 1.3 : 0
+            const rot = (BASE_ROTS[idx % 4] + jitter).toFixed(2)
+            const ty = BASE_TYS[idx % 4]
+            const delay = idx * 45
+            return `<a href="${esc(item.href)}" class="shard-card shard-slot-${idx}${animate ? " is-entering" : ""}" style="--rot:${rot}deg;--ty:${ty}px;--delay:${delay}ms">
+              <div class="shard-card-top">
+                <span class="shard-pin" aria-hidden="true"></span>
+                <span class="shard-col">${esc(item.column)}</span>
+              </div>
+              <div class="shard-title">${esc(item.title)}</div>
+              <div class="shard-summary">${esc(item.summary)}</div>
+              <div class="shard-foot">
+                <span>SHARD · ${String(item.num).padStart(3, "0")}</span>
+                <span class="shard-arrow">→</span>
+              </div>
             </a>`
           })
           .join("")
+      }
+
+      // Immediately refresh once from full vault pool so each page load gets fresh shards
+      ensurePool().then((pool) => {
+        if (pool && pool.length > 8) {
+          renderShards(pickDiverseFour(pool), false)
+        }
+      })
+
+      btn.addEventListener("click", async () => {
+        btn.classList.add("is-spinning")
+        const pool = await ensurePool()
+        renderShards(pickDiverseFour(pool), true)
+        window.setTimeout(() => btn.classList.remove("is-spinning"), 360)
       })
     }
   </script>

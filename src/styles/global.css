@@ -1404,15 +1404,28 @@ details.callout[open] .callout-fold {
    Home & Index / Folder / Tag Pages
    ========================================================================== */
 .home-container {
-  max-width: 1120px;
+  max-width: 1180px;
   margin: 0 auto;
-  padding: 2.6rem 1.25rem 4.5rem;
+  padding: 2.5rem 1.25rem 4.5rem;
 }
 
 .hero-section {
-  padding-bottom: 2.2rem;
+  padding-bottom: 2.4rem;
   margin-bottom: 2.4rem;
   border-bottom: 1px solid var(--border-subtle);
+}
+
+.hero-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.04fr) minmax(0, 1fr);
+  gap: 2.2rem;
+  align-items: stretch;
+}
+
+.hero-intro {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
 .hero-eyebrow {
@@ -1662,49 +1675,245 @@ details.callout[open] .callout-fold {
   flex-shrink: 0;
 }
 
-.random-cards {
+.shards-board {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 0.7rem;
+  padding: 1.1rem 1.15rem 1.25rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-subtle);
+  background-color: var(--bg-surface);
+  background-image: radial-gradient(
+    color-mix(in srgb, var(--border-strong) 55%, transparent) 1px,
+    transparent 1px
+  );
+  background-size: 16px 16px;
 }
 
-.random-card {
-  display: block;
-  padding: 0.9rem 1rem;
+.shards-board-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.shards-board-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.48rem;
+  font-family: var(--font-serif);
+  font-size: 1.02rem;
+  font-weight: 700;
+  color: var(--text-strong);
+}
+
+.shard-diamond {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  background: var(--accent);
+  transform: rotate(45deg);
+  flex-shrink: 0;
+}
+
+.shards-board-meta {
+  font-family: var(--font-sans);
+  font-size: 0.74rem;
+  font-weight: 500;
+  color: var(--text-faint);
+  margin-left: 0.2rem;
+}
+
+.shards-refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.32rem 0.74rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+  color: var(--text-body);
+  font-size: 0.78rem;
+  font-family: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+}
+
+.shards-refresh-btn:hover {
+  border-color: var(--accent-line);
+  color: var(--accent);
+  background: var(--bg-elevated);
+}
+
+.shards-refresh-btn svg {
+  transition: transform 0.35s ease;
+}
+
+.shards-refresh-btn.is-spinning svg {
+  transform: rotate(180deg);
+}
+
+.shards-stage {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.9rem;
+  align-content: center;
+  padding: 0.35rem 0.15rem 0.55rem;
+}
+
+.shard-card {
+  --rot: 0deg;
+  --ty: 0px;
+  --pin: var(--accent);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 0.85rem 0.92rem 0.75rem;
   border-radius: var(--radius-md);
   border: 1px solid var(--border-subtle);
   background: var(--bg-elevated);
-  transition: all 0.15s ease;
+  box-shadow: var(--shadow-md);
+  transform: rotate(var(--rot)) translateY(var(--ty));
+  transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.22s ease,
+    border-color 0.2s ease;
+  z-index: 1;
+  min-width: 0;
 }
 
-.random-card:hover {
+.shard-slot-0 {
+  --rot: -1.8deg;
+  --ty: 2px;
+  --pin: #c96442;
+}
+.shard-slot-1 {
+  --rot: 1.9deg;
+  --ty: 10px;
+  --pin: #5c8c66;
+}
+.shard-slot-2 {
+  --rot: 1.4deg;
+  --ty: -2px;
+  --pin: #527a9c;
+}
+.shard-slot-3 {
+  --rot: -2.1deg;
+  --ty: 6px;
+  --pin: #bf842e;
+}
+
+[data-theme="dark"] .shard-slot-0 {
+  --pin: #df8060;
+}
+[data-theme="dark"] .shard-slot-1 {
+  --pin: #79ab83;
+}
+[data-theme="dark"] .shard-slot-2 {
+  --pin: #7ea6c7;
+}
+[data-theme="dark"] .shard-slot-3 {
+  --pin: #d9a252;
+}
+
+.shard-card:hover {
+  transform: rotate(0deg) translateY(-5px) scale(1.02);
   border-color: var(--accent-line);
-  transform: translateY(-1px);
+  box-shadow: var(--shadow-lg);
+  z-index: 5;
 }
 
-.random-card-col {
-  font-size: 0.74rem;
-  color: var(--accent);
+.shard-card.is-entering {
+  animation: shardScatterIn 0.34s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: var(--delay, 0ms);
+}
+
+@keyframes shardScatterIn {
+  from {
+    opacity: 0;
+    transform: rotate(calc(var(--rot) * 1.8)) translateY(calc(var(--ty) + 12px)) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: rotate(var(--rot)) translateY(var(--ty)) scale(1);
+  }
+}
+
+.shard-card-top {
+  display: flex;
+  align-items: center;
+  gap: 0.42rem;
+  margin-bottom: 0.42rem;
+}
+
+.shard-pin {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--pin);
+  box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--pin) 20%, transparent);
+  flex-shrink: 0;
+}
+
+.shard-col {
+  font-size: 0.71rem;
   font-weight: 600;
-  margin-bottom: 0.2rem;
-}
-
-.random-card-title {
-  font-family: var(--font-serif);
-  font-size: 0.98rem;
-  font-weight: 600;
-  color: var(--text-strong);
-  margin-bottom: 0.25rem;
-}
-
-.random-card-summary {
-  font-size: 0.82rem;
   color: var(--text-muted);
-  line-height: 1.55;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.shard-title {
+  font-family: var(--font-serif);
+  font-size: 0.94rem;
+  font-weight: 700;
+  line-height: 1.38;
+  color: var(--text-strong);
+  margin-bottom: 0.35rem;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.shard-card:hover .shard-title {
+  color: var(--accent);
+}
+
+.shard-summary {
+  flex: 1;
+  font-size: 0.78rem;
+  line-height: 1.55;
+  color: var(--text-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin-bottom: 0.55rem;
+}
+
+.shard-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 0.42rem;
+  border-top: 1px dashed var(--border-subtle);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--text-faint);
+}
+
+.shard-arrow {
+  color: var(--accent);
+  transition: transform 0.15s ease;
+}
+
+.shard-card:hover .shard-arrow {
+  transform: translateX(3px);
 }
 
 .tag-cloud {
@@ -2038,6 +2247,13 @@ details.callout[open] .callout-fold {
   }
 }
 
+@media (max-width: 960px) {
+  .hero-grid {
+    grid-template-columns: 1fr;
+    gap: 1.6rem;
+  }
+}
+
 @media (max-width: 880px) {
   .header-domains {
     display: none;
@@ -2072,6 +2288,14 @@ details.callout[open] .callout-fold {
   }
   .home-split-grid {
     grid-template-columns: 1fr;
+  }
+  .shards-stage {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+  .shard-card {
+    --rot: 0deg;
+    --ty: 0px;
   }
   .chapter-pager {
     grid-template-columns: 1fr;

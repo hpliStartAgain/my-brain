@@ -4,6 +4,8 @@ import GithubSlugger from "github-slugger"
 import { unified } from "unified"
 import remarkParse from "remark-parse"
 import remarkGfm from "remark-gfm"
+import remarkCjkFriendly from "remark-cjk-friendly"
+import remarkCjkFriendlyGfmStrikethrough from "remark-cjk-friendly-gfm-strikethrough"
 import remarkMath from "remark-math"
 import remarkRehype from "remark-rehype"
 import rehypeRaw from "rehype-raw"
@@ -572,20 +574,111 @@ function stripFrontmatterSafe(raw: string): string {
   }
 }
 
+/**
+ * Normalizes multiline `$$...$$` display math blocks whose opening or closing `$$`
+ * shares a line with formula content (e.g. `$$P_n = \n...\n\end{cases}$$`).
+ * `micromark-extension-math` treats opening `$$...` as a mathFlow fence with a `meta`
+ * string and only closes on a line containing standalone `$$`, otherwise swallowing
+ * the entire rest of the document into one `<span class="katex-error">`.
+ */
+function normalizeMultilineDisplayMath(markdown: string): string {
+  const lines = markdown.split(/\r?\n/)
+  const out: string[] = []
+  let fenceChar: string | null = null
+  let fenceLen = 0
+  let i = 0
+
+  while (i < lines.length) {
+    const line = lines[i]
+    const fenceMatch = line.match(/^[ ]{0,3}(`{3,}|~{3,})(.*)$/)
+    if (!fenceChar && fenceMatch) {
+      const marker = fenceMatch[1]
+      const info = fenceMatch[2]
+      if (marker[0] !== "`" || !info.includes("`")) {
+        fenceChar = marker[0]
+        fenceLen = marker.length
+      }
+      out.push(line)
+      i++
+      continue
+    }
+    if (fenceChar) {
+      const closeMatch = line.match(/^[ ]{0,3}(`{3,}|~{3,})[ \t]*$/)
+      if (closeMatch && closeMatch[1][0] === fenceChar && closeMatch[1].length >= fenceLen) {
+        fenceChar = null
+        fenceLen = 0
+      }
+      out.push(line)
+      i++
+      continue
+    }
+
+    const openMatch = line.match(/^([ \t]{0,3})\$\$(.+)$/)
+    if (openMatch && !openMatch[2].includes("$$")) {
+      const indent = openMatch[1]
+      // Scan forward within the same non-empty block for a closing `$$`
+      let closeIdx = -1
+      for (let j = i + 1; j < lines.length && j <= i + 60; j++) {
+        const candidate = lines[j]
+        if (candidate.trim() === "" || /^[ ]{0,3}(`{3,}|~{3,})/.test(candidate)) {
+          break
+        }
+        if (/^[ \t]*\$\$[ \t]*$/.test(candidate)) {
+          closeIdx = j
+          break
+        }
+        if (/^.*\S[ \t]*\$\$[ \t]*$/.test(candidate) && !candidate.slice(0, candidate.lastIndexOf("$$")).includes("$$")) {
+          closeIdx = j
+          break
+        }
+      }
+
+      if (closeIdx !== -1) {
+        out.push(`${indent}$$`)
+        out.push(`${indent}${openMatch[2].trimStart()}`)
+        for (let k = i + 1; k < closeIdx; k++) {
+          const inner = lines[k]
+          out.push(indent && !inner.startsWith(indent) ? `${indent}${inner.trimStart()}` : inner)
+        }
+        const closeLine = lines[closeIdx]
+        if (/^[ \t]*\$\$[ \t]*$/.test(closeLine)) {
+          out.push(`${indent}$$`)
+        } else {
+          const idx = closeLine.lastIndexOf("$$")
+          const bodyPart = closeLine.slice(0, idx).trimEnd()
+          if (bodyPart) {
+            out.push(indent && !bodyPart.startsWith(indent) ? `${indent}${bodyPart.trimStart()}` : bodyPart)
+          }
+          out.push(`${indent}$$`)
+        }
+        i = closeIdx + 1
+        continue
+      }
+    }
+
+    out.push(line)
+    i++
+  }
+
+  return out.join("\n")
+}
+
 export async function renderArticle(note: VaultNote, graph: VaultGraph): Promise<RenderedArticle> {
   const raw = fs.readFileSync(note.absPath, "utf-8")
-  const markdown = stripFrontmatterSafe(raw)
+  const markdown = normalizeMultilineDisplayMath(stripFrontmatterSafe(raw))
   const highlighter = await getShikiHighlighter()
   const toc: TocItem[] = []
 
   const processor = unified()
     .use(remarkParse)
+    .use(remarkGfm)
+    .use(remarkCjkFriendly)
+    .use(remarkCjkFriendlyGfmStrikethrough)
+    .use(remarkMath)
     .use(remarkDedupeTitle(note.title))
     .use(remarkMermaidBlocks())
     .use(remarkObsidianCallouts())
     .use(remarkObsidianSyntax(graph, note))
-    .use(remarkGfm)
-    .use(remarkMath)
     .use(remarkRehype, { allowDangerousHtml: true })
     .use(rehypeRaw)
     .use(rehypeSlug)
