@@ -1,0 +1,35 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro"
+import { getVaultGraph } from "../../lib/vault"
+
+const graph = getVaultGraph()
+const sortedTags = Array.from(graph.tags.entries()).sort((a, b) => b[1].length - a[1].length)
+---
+
+<BaseLayout title="全部标签" canonicalPath="/tags" noindex={true}>
+  <main class="listing-container">
+    <nav class="breadcrumbs" aria-label="面包屑">
+      <a href="/">首页</a>
+      <span class="sep">/</span>
+      <span>全部标签</span>
+    </nav>
+
+    <header class="listing-header">
+      <h1 class="listing-title">全部标签</h1>
+      <span style="font-size:0.9rem;color:var(--text-muted)">
+        共 {sortedTags.length} 个主题标签
+      </span>
+    </header>
+
+    <div class="tag-cloud" style="gap:0.6rem">
+      {
+        sortedTags.map(([tag, list]) => (
+          <a href={`/tags/${encodeURIComponent(tag)}`} class="tag-chip" style="padding:0.42rem 0.9rem;font-size:0.88rem">
+            #{tag}
+            <span>{list.length}</span>
+          </a>
+        ))
+      }
+    </div>
+  </main>
+</BaseLayout>

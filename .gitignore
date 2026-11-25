@@ -1,26 +1,19 @@
 .DS_Store
 .gitignore
 node_modules
-public
-prof
+dist
+.astro
+public/_vault-assets/
+public/pagefind/
+public/search-meta.json
+public/popover-index.json
 tsconfig.tsbuildinfo
 .obsidian
-.quartz-cache
 private/
-.replit
-replit.nix
-.quartz/
-quartz/cli/tui/dist/
-
-# Scratch / build artifacts
-toc_list.txt
-audit_columns.ps1
 .claude/worktrees/
 content/.claude/
 content/.claudian/
 content/.smtcmp_json_db/
-plugins/*/node_modules/
-
 
 # 电子书原始 PDF (版权 + 超 GitHub 100MB 限制，仅本地保留)
 content/电子书/*.pdf

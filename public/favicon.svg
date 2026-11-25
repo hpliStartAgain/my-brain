@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" fill="none">
+  <defs>
+    <linearGradient id="bgGrad" x1="8" y1="4" x2="56" y2="60" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#272521" />
+      <stop offset="100%" stop-color="#141413" />
+    </linearGradient>
+    <linearGradient id="clayGrad" x1="39" y1="12" x2="52" y2="25" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#ec9677" />
+      <stop offset="100%" stop-color="#c96442" />
+    </linearGradient>
+    <linearGradient id="waveGrad" x1="16" y1="48" x2="48" y2="48" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#c96442" stop-opacity="0.6" />
+      <stop offset="50%" stop-color="#e58866" />
+      <stop offset="100%" stop-color="#c96442" stop-opacity="0.6" />
+    </linearGradient>
+  </defs>
+
+  <!-- Warm charcoal rounded square -->
+  <rect x="2" y="2" width="60" height="60" rx="15" fill="url(#bgGrad)" />
+  <rect x="2.75" y="2.75" width="58.5" height="58.5" rx="14.25" stroke="#faf9f5" stroke-opacity="0.1" stroke-width="1.5" />
+
+  <!-- Architectural T monogram -->
+  <rect x="15" y="18.5" width="22" height="6" rx="3" fill="#faf9f5" />
+  <rect x="23" y="22.5" width="6" height="20" rx="3" fill="#faf9f5" />
+
+  <!-- Floating clay knowledge shard with clean negative space -->
+  <rect
+    x="41"
+    y="13.5"
+    width="9.5"
+    height="9.5"
+    rx="2"
+    transform="rotate(45 45.75 18.25)"
+    fill="url(#clayGrad)"
+  />
+
+  <!-- Subtle shore/water horizon arc (汀) -->
+  <path
+    d="M16 49 Q32 44.2 48 49"
+    stroke="url(#waveGrad)"
+    stroke-width="3"
+    stroke-linecap="round"
+  />
+</svg>

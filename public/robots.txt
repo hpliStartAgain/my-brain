@@ -1,0 +1,18 @@
+User-agent: *
+Allow: /
+Disallow: /tags/
+Disallow: /pagefind/
+
+User-agent: GPTBot
+Disallow: /
+
+User-agent: ClaudeBot
+Disallow: /
+
+User-agent: CCBot
+Disallow: /
+
+User-agent: Bytespider
+Disallow: /
+
+Sitemap: https://ting.is-a.dev/sitemap-index.xml

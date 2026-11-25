@@ -1,0 +1,57 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro"
+import { getVaultGraph, type VaultNote } from "../../lib/vault"
+
+export async function getStaticPaths() {
+  const graph = getVaultGraph()
+  const paths: Array<{
+    params: { tag: string }
+    props: { tag: string; notes: VaultNote[] }
+  }> = []
+
+  for (const [tag, notes] of graph.tags.entries()) {
+    paths.push({
+      params: { tag },
+      props: { tag, notes },
+    })
+  }
+  return paths
+}
+
+const { tag, notes } = Astro.props
+---
+
+<BaseLayout title={`标签：#${tag}`} canonicalPath={`/tags/${encodeURIComponent(tag)}`} noindex={true}>
+  <main class="listing-container">
+    <nav class="breadcrumbs" aria-label="面包屑">
+      <a href="/">首页</a>
+      <span class="sep">/</span>
+      <a href="/tags">全部标签</a>
+      <span class="sep">/</span>
+      <span>#{tag}</span>
+    </nav>
+
+    <header class="listing-header">
+      <h1 class="listing-title">#{tag}</h1>
+      <span style="font-size:0.9rem;color:var(--text-muted)">共 {notes.length} 篇文章</span>
+    </header>
+
+    <ul class="chapter-list">
+      {
+        notes.map((item) => (
+          <li class="chapter-row">
+            <a href={item.href}>
+              <div class="chapter-row-top">
+                <span class="chapter-row-title">{item.title}</span>
+                <span class="chapter-row-meta">
+                  {item.folderPath || item.domain} · {item.date}
+                </span>
+              </div>
+              {item.summary && <p class="chapter-row-summary">{item.summary}</p>}
+            </a>
+          </li>
+        ))
+      }
+    </ul>
+  </main>
+</BaseLayout>
