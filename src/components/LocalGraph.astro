@@ -1,0 +1,118 @@
+---
+import type { VaultNote } from "../lib/vault"
+
+interface Props {
+  centerTitle: string
+  outgoing: VaultNote[]
+  incoming: VaultNote[]
+}
+
+const { centerTitle, outgoing, incoming } = Astro.props
+
+type RelationKind = "both" | "out" | "in"
+
+interface GraphNode {
+  slug: string
+  href: string
+  title: string
+  shortLabel: string
+  kind: RelationKind
+  x: number
+  y: number
+}
+
+const outSet = new Set(outgoing.map((n) => n.slug))
+const inSet = new Set(incoming.map((n) => n.slug))
+
+const mergedMap = new Map<string, { note: VaultNote; kind: RelationKind }>()
+for (const n of outgoing) {
+  mergedMap.set(n.slug, { note: n, kind: inSet.has(n.slug) ? "both" : "out" })
+}
+for (const n of incoming) {
+  if (!mergedMap.has(n.slug)) {
+    mergedMap.set(n.slug, { note: n, kind: outSet.has(n.slug) ? "both" : "in" })
+  }
+}
+
+const merged = Array.from(mergedMap.values()).slice(0, 10)
+const cx = 116
+const cy = 96
+const rx = 76
+const ry = 66
+
+function truncateLabel(text: string, max = 9): string {
+  const clean = text.replace(/^\d+[\s.\-_]*/, "").trim() || text
+  return clean.length > max ? clean.slice(0, max - 1) + "…" : clean
+}
+
+const nodes: GraphNode[] = merged.map((entry, idx) => {
+  const angle = -Math.PI / 2 + (idx * 2 * Math.PI) / Math.max(merged.length, 1)
+  const x = Math.round((cx + Math.cos(angle) * rx) * 10) / 10
+  const y = Math.round((cy + Math.sin(angle) * ry) * 10) / 10
+  return {
+    slug: entry.note.slug,
+    href: entry.note.href,
+    title: entry.note.title,
+    shortLabel: truncateLabel(entry.note.title),
+    kind: entry.kind,
+    x,
+    y,
+  }
+})
+---
+
+{
+  nodes.length > 0 && (
+    <section class="local-graph-card" aria-label="1 跳局部关系微图谱">
+      <div class="local-graph-head">
+        <span class="toc-heading" style="margin:0;padding:0">
+          关联图谱 · 1 跳
+        </span>
+        <span class="local-graph-legend">
+          <i class="lg-dot is-out" />引用
+          <i class="lg-dot is-in" />被引用
+        </span>
+      </div>
+
+      <svg class="local-graph-svg" viewBox="0 0 232 192" width="232" height="192" role="img" aria-label={`与《${centerTitle}》直接关联的 ${nodes.length} 篇笔记`}>
+        {nodes.map((node) => (
+          <line
+            x1={cx}
+            y1={cy}
+            x2={node.x}
+            y2={node.y}
+            class:list={["lg-edge", `is-${node.kind}`]}
+            stroke-dasharray={node.kind === "in" ? "3 3" : undefined}
+          />
+        ))}
+
+        <g class="lg-center">
+          <circle cx={cx} cy={cy} r="9" />
+          <circle cx={cx} cy={cy} r="14" class="lg-halo" />
+        </g>
+
+        {nodes.map((node) => (
+          <a
+            href={node.href}
+            class:list={["lg-node", `is-${node.kind}`]}
+            data-lg-title={node.title}
+            data-lg-kind={node.kind === "both" ? "双向关联" : node.kind === "out" ? "本文引用 →" : "← 引用本文"}
+          >
+            <circle cx={node.x} cy={node.y} r="6.2" />
+            <text
+              x={node.x}
+              y={node.y < cy ? node.y - 10 : node.y + 16}
+              text-anchor="middle"
+            >
+              {node.shortLabel}
+            </text>
+          </a>
+        ))}
+      </svg>
+
+      <div class="local-graph-caption" data-lg-caption>
+        悬停节点查看完整标题，点击直达（共 {nodes.length} 条关联）
+      </div>
+    </section>
+  )
+}

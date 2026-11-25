@@ -186,7 +186,8 @@ const resolvedCards = DOMAIN_CARDS.map((card) => {
           </div>
 
           <div class="hero-actions">
-            <a href="/Linux" class="pill-link">从操作系统开始 →</a>
+            <a href="/roadmap" class="pill-link">学习路线图 →</a>
+            <a href="/Linux" class="pill-link">从操作系统开始</a>
             <a href="/分布式架构" class="pill-link">分布式系统专栏</a>
             <a href="/tags" class="pill-link">按标签浏览</a>
             <a href="/index.xml" class="pill-link">RSS 订阅</a>
@@ -315,11 +316,18 @@ const resolvedCards = DOMAIN_CARDS.map((card) => {
   </main>
 
   <script define:vars={{ seedRandom }}>
-    const btn = document.getElementById("shuffle-random-btn")
-    const box = document.getElementById("random-cards-box")
-    if (btn && box && Array.isArray(seedRandom) && seedRandom.length > 0) {
-      let fullPool = null
-      let lastHrefs = new Set(seedRandom.slice(0, 4).map((x) => x.href))
+    window.__tingSeedRandom = seedRandom
+
+    function bootHomeShards() {
+      const btn = document.getElementById("shuffle-random-btn")
+      const box = document.getElementById("random-cards-box")
+      const seeds = window.__tingSeedRandom
+      if (!btn || !box || !Array.isArray(seeds) || seeds.length === 0) return
+      if (btn.dataset.bound === "true") return
+      btn.dataset.bound = "true"
+
+      let fullPool = window.__tingFullPool || null
+      let lastHrefs = new Set(seeds.slice(0, 4).map((x) => x.href))
 
       const BASE_ROTS = [-1.8, 1.9, 1.4, -2.1]
       const BASE_TYS = [2, 10, -2, 6]
@@ -335,7 +343,7 @@ const resolvedCards = DOMAIN_CARDS.map((card) => {
         if (fullPool) return fullPool
         try {
           const res = await fetch("/search-meta.json")
-          if (!res.ok) return seedRandom
+          if (!res.ok) return seeds
           const docs = await res.json()
           const filtered = docs
             .map((d, idx) => ({
@@ -349,10 +357,11 @@ const resolvedCards = DOMAIN_CARDS.map((card) => {
             .filter((d) => d.summary.length >= 20)
           if (filtered.length >= 16) {
             fullPool = filtered
+            window.__tingFullPool = filtered
             return fullPool
           }
         } catch {}
-        return seedRandom
+        return seeds
       }
 
       const pickDiverseFour = (pool) => {
@@ -409,7 +418,6 @@ const resolvedCards = DOMAIN_CARDS.map((card) => {
           .join("")
       }
 
-      // Immediately refresh once from full vault pool so each page load gets fresh shards
       ensurePool().then((pool) => {
         if (pool && pool.length > 8) {
           renderShards(pickDiverseFour(pool), false)
@@ -423,5 +431,11 @@ const resolvedCards = DOMAIN_CARDS.map((card) => {
         window.setTimeout(() => btn.classList.remove("is-spinning"), 360)
       })
     }
+
+    if (!window.__tingHomeShardsBound) {
+      window.__tingHomeShardsBound = true
+      document.addEventListener("astro:page-load", bootHomeShards)
+    }
+    bootHomeShards()
   </script>
 </BaseLayout>

@@ -1,7 +1,10 @@
 ---
+import { ClientRouter } from "astro:transitions"
 import "../styles/global.css"
 import "katex/dist/katex.min.css"
 import { getVaultGraph } from "../lib/vault"
+import { getOgImageForDomain } from "../lib/og"
+import Analytics from "../components/Analytics.astro"
 
 interface Props {
   title: string
@@ -35,6 +38,7 @@ const graph = getVaultGraph()
 const siteUrl = "https://ting.is-a.dev"
 const fullTitle = title === "汀的知识碎片" ? title : `${title} · 汀的知识碎片`
 const canonicalUrl = new URL(canonicalPath, siteUrl).toString()
+const ogImageUrl = new URL(getOgImageForDomain(activeDomain), siteUrl).toString()
 
 const TOP_DOMAINS = graph.domains
 
@@ -76,6 +80,16 @@ const jsonLd = isArticle
     <meta property="og:title" content={fullTitle} />
     <meta property="og:description" content={description} />
     <meta property="og:url" content={canonicalUrl} />
+    <meta property="og:image" content={ogImageUrl} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={fullTitle} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImageUrl} />
+
+    <ClientRouter />
+    <Analytics />
 
     {jsonLd && <script type="application/ld+json" set:html={JSON.stringify(jsonLd).replace(/</g, "\\u003c")} />}
 
@@ -95,26 +109,55 @@ const jsonLd = isArticle
       />
     </noscript>
 
-    <!-- Prevent theme & reading prefs flash -->
+    <!-- Prevent theme & reading prefs flash across cold load and View Transitions -->
     <script is:inline>
       ;(function () {
-        try {
-          var root = document.documentElement
-          var savedTheme = localStorage.getItem("ting-theme")
-          var theme =
-            savedTheme === "dark" || savedTheme === "light"
-              ? savedTheme
-              : window.matchMedia("(prefers-color-scheme: dark)").matches
-                ? "dark"
-                : "light"
-          root.setAttribute("data-theme", theme)
-          var fs = localStorage.getItem("ting-font-size")
-          if (fs === "sm" || fs === "md" || fs === "lg") root.setAttribute("data-font-size", fs)
-          var wd = localStorage.getItem("ting-width")
-          if (wd === "normal" || wd === "wide") root.setAttribute("data-width", wd)
-          var fc = localStorage.getItem("ting-focus")
-          if (fc === "true") root.setAttribute("data-focus", "true")
-        } catch (e) {}
+        function applyPrefs(targetDoc) {
+          try {
+            var root = (targetDoc || document).documentElement
+            var savedTheme = localStorage.getItem("ting-theme")
+            var theme =
+              savedTheme === "dark" || savedTheme === "light"
+                ? savedTheme
+                : window.matchMedia("(prefers-color-scheme: dark)").matches
+                  ? "dark"
+                  : "light"
+            root.setAttribute("data-theme", theme)
+            var fs = localStorage.getItem("ting-font-size")
+            if (fs === "sm" || fs === "md" || fs === "lg") root.setAttribute("data-font-size", fs)
+            var wd = localStorage.getItem("ting-width")
+            if (wd === "normal" || wd === "wide") root.setAttribute("data-width", wd)
+            var fc = localStorage.getItem("ting-focus")
+            if (fc === "true") root.setAttribute("data-focus", "true")
+          } catch (e) {}
+        }
+
+        applyPrefs(document)
+
+        if (!window.__tingPrefsSwapBound) {
+          window.__tingPrefsSwapBound = true
+          document.addEventListener("astro:before-swap", function (ev) {
+            applyPrefs(ev.newDocument)
+            try {
+              var sb = document.querySelector(".column-sidebar")
+              var colRoot = sb && sb.getAttribute("data-col-root")
+              if (sb && colRoot) {
+                sessionStorage.setItem("ting-sb-scroll:" + colRoot, String(sb.scrollTop))
+              }
+            } catch (e) {}
+          })
+          document.addEventListener("astro:after-swap", function () {
+            applyPrefs(document)
+            try {
+              var sb = document.querySelector(".column-sidebar")
+              var colRoot = sb && sb.getAttribute("data-col-root")
+              if (sb && colRoot) {
+                var savedY = sessionStorage.getItem("ting-sb-scroll:" + colRoot)
+                if (savedY) sb.scrollTop = Number(savedY) || 0
+              }
+            } catch (e) {}
+          })
+        }
       })()
     </script>
   </head>
@@ -252,8 +295,10 @@ const jsonLd = isArticle
       <div class="site-footer-inner">
         <span>© {new Date().getFullYear()} 李浩鹏（汀）</span>
         <div class="footer-links">
+          <a href="/roadmap">学习路线图</a>
           <a href="/tags">全部标签</a>
           <a href="/index.xml">RSS 订阅</a>
+          <a href="/llms.txt">llms.txt</a>
           <a href="https://github.com/hpliStartAgain" target="_blank" rel="noopener noreferrer">GitHub</a>
           <a href="https://github.com/hpliStartAgain/my-brain" target="_blank" rel="noopener noreferrer">站点源码</a>
         </div>
@@ -310,13 +355,60 @@ const jsonLd = isArticle
       import { initReadingPrefs } from "../scripts/reading-prefs"
       import { initSearchModal } from "../scripts/search-modal"
       import { initArticleEnhancements } from "../scripts/article-enhance"
+      import { initReadingTracker } from "../scripts/reading-tracker"
 
-      initReadingPrefs()
-      initSearchModal()
-      initArticleEnhancements()
+      let pageAbort: AbortController | null = null
 
-      if (document.querySelector("[data-mermaid-block]")) {
-        import("../scripts/mermaid-runtime").then((mod) => mod.initMermaidRuntime())
+      function bindLocalGraphHover(signal: AbortSignal) {
+        const caption = document.querySelector<HTMLElement>("[data-lg-caption]")
+        if (!caption) return
+        const defaultText = caption.textContent ?? ""
+        document.querySelectorAll<SVGAElement>("[data-lg-title]").forEach((node) => {
+          node.addEventListener(
+            "mouseenter",
+            () => {
+              const kind = node.getAttribute("data-lg-kind") ?? ""
+              const title = node.getAttribute("data-lg-title") ?? ""
+              caption.textContent = `${kind}：${title}`
+            },
+            { signal },
+          )
+          node.addEventListener(
+            "mouseleave",
+            () => {
+              caption.textContent = defaultText
+            },
+            { signal },
+          )
+        })
+      }
+
+      function bootPage() {
+        pageAbort?.abort()
+        pageAbort = new AbortController()
+        const sig = pageAbort.signal
+
+        document.body.classList.remove("mobile-drawer-open")
+        initReadingPrefs(sig)
+        initSearchModal(sig)
+        initArticleEnhancements(sig)
+        initReadingTracker(sig)
+        bindLocalGraphHover(sig)
+
+        if (document.querySelector("[data-mermaid-block]")) {
+          import("../scripts/mermaid-runtime").then((mod) => {
+            if (!sig.aborted) mod.initMermaidRuntime(sig)
+          })
+        }
+      }
+
+      if (!(window as any).__tingLifecycleBound) {
+        ;(window as any).__tingLifecycleBound = true
+        document.addEventListener("astro:before-swap", () => {
+          pageAbort?.abort()
+          pageAbort = null
+        })
+        document.addEventListener("astro:page-load", bootPage)
       }
     </script>
   </body>

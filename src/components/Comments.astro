@@ -1,0 +1,88 @@
+---
+const repo = import.meta.env.PUBLIC_GISCUS_REPO
+const repoId = import.meta.env.PUBLIC_GISCUS_REPO_ID
+const category = import.meta.env.PUBLIC_GISCUS_CATEGORY
+const categoryId = import.meta.env.PUBLIC_GISCUS_CATEGORY_ID
+const enabled = Boolean(repo && repoId && category && categoryId)
+---
+
+{
+  enabled && (
+    <section
+      id="giscus-comments"
+      class="comments-section"
+      aria-label="文章评论"
+      data-repo={repo}
+      data-repo-id={repoId}
+      data-category={category}
+      data-category-id={categoryId}
+    >
+      <h2 class="backlinks-title">交流与讨论</h2>
+      <div id="giscus-mount" class="giscus-mount" />
+    </section>
+  )
+}
+
+{
+  enabled && (
+    <script>
+      function mountGiscus() {
+        const host = document.getElementById("giscus-comments")
+        const mount = document.getElementById("giscus-mount")
+        if (!host || !mount || mount.dataset.loaded === "true") return
+
+        const currentTheme = () =>
+          document.documentElement.getAttribute("data-theme") === "dark" ? "dark_dimmed" : "light"
+
+        const loadScript = () => {
+          if (mount.dataset.loaded === "true") return
+          mount.dataset.loaded = "true"
+          const s = document.createElement("script")
+          s.src = "https://giscus.app/client.js"
+          s.async = true
+          s.crossOrigin = "anonymous"
+          s.setAttribute("data-repo", host.dataset.repo || "")
+          s.setAttribute("data-repo-id", host.dataset.repoId || "")
+          s.setAttribute("data-category", host.dataset.category || "")
+          s.setAttribute("data-category-id", host.dataset.categoryId || "")
+          s.setAttribute("data-mapping", "pathname")
+          s.setAttribute("data-strict", "0")
+          s.setAttribute("data-reactions-enabled", "1")
+          s.setAttribute("data-emit-metadata", "0")
+          s.setAttribute("data-input-position", "top")
+          s.setAttribute("data-theme", currentTheme())
+          s.setAttribute("data-lang", "zh-CN")
+          mount.appendChild(s)
+        }
+
+        if ("IntersectionObserver" in window) {
+          const io = new IntersectionObserver(
+            (entries) => {
+              if (entries.some((e) => e.isIntersecting)) {
+                io.disconnect()
+                loadScript()
+              }
+            },
+            { rootMargin: "320px 0px" },
+          )
+          io.observe(host)
+        } else {
+          loadScript()
+        }
+
+        if (!(window as any).__tingGiscusThemeBound) {
+          ;(window as any).__tingGiscusThemeBound = true
+          window.addEventListener("theme-change", () => {
+            const iframe = document.querySelector<HTMLIFrameElement>("iframe.giscus-frame")
+            iframe?.contentWindow?.postMessage(
+              { giscus: { setConfig: { theme: currentTheme() } } },
+              "https://giscus.app",
+            )
+          })
+        }
+      }
+
+      document.addEventListener("astro:page-load", mountGiscus)
+    </script>
+  )
+}

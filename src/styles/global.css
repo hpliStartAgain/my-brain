@@ -2339,3 +2339,557 @@ details.callout[open] .callout-fold {
     break-inside: avoid;
   }
 }
+
+
+/* ==========================================================================
+   Advanced Enhancements:
+   - Sidebar Read Checkmarks & Column Progress Bar
+   - Resume Reading Toast
+   - Code Diff / Highlight / Collapsible Long Blocks
+   - Tufte Inline Sidenotes
+   - 1-Hop Local Relation Graph
+   - Learning Roadmap Page
+   - Comments & View Transitions Polish
+   ========================================================================== */
+.sidebar-col-count-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 0.2rem;
+}
+
+.sidebar-col-count-row .sidebar-col-count {
+  margin-top: 0;
+}
+
+.sidebar-progress-text {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.sidebar-progress-track {
+  height: 3px;
+  margin-top: 0.5rem;
+  border-radius: var(--radius-pill);
+  background: var(--border-subtle);
+  overflow: hidden;
+}
+
+.sidebar-progress-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(90deg, #5c8c66, var(--accent));
+  transition: width 0.25s ease;
+}
+
+.sidebar-nav-link {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.4rem;
+}
+
+.sidebar-nav-link.is-read::after {
+  content: "✓";
+  flex-shrink: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #5c8c66;
+  margin-top: 0.1rem;
+}
+
+[data-theme="dark"] .sidebar-nav-link.is-read::after {
+  color: #79ab83;
+}
+
+.article-header-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.42rem;
+}
+
+.copy-article-btn.is-read {
+  border-color: rgba(92, 140, 102, 0.45);
+  background: rgba(92, 140, 102, 0.1);
+  color: #4b7d55;
+}
+
+[data-theme="dark"] .copy-article-btn.is-read {
+  color: #84b38d;
+  border-color: rgba(132, 179, 141, 0.4);
+  background: rgba(132, 179, 141, 0.12);
+}
+
+/* Resume reading toast */
+.resume-toast {
+  position: fixed;
+  right: 1.25rem;
+  bottom: 1.25rem;
+  z-index: 210;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.62rem 0.85rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-strong);
+  background: color-mix(in srgb, var(--bg-elevated) 95%, transparent);
+  backdrop-filter: blur(12px);
+  box-shadow: var(--shadow-lg);
+  font-size: 0.82rem;
+  color: var(--text-body);
+}
+
+.resume-jump-btn {
+  border: none;
+  border-radius: var(--radius-pill);
+  padding: 0.24rem 0.66rem;
+  background: var(--accent);
+  color: #faf9f5;
+  font-size: 0.76rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.resume-jump-btn:hover {
+  background: var(--accent-hover);
+}
+
+.resume-close-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 0.2rem;
+}
+
+/* Enhanced Code Blocks: header meta, diff/highlight lines, collapsible long blocks */
+.code-header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.code-lines {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-faint);
+}
+
+.code-block.is-collapsible .code-body {
+  position: relative;
+}
+
+.code-block.is-collapsible.is-collapsed .code-body {
+  max-height: 460px;
+  overflow: hidden;
+}
+
+.code-block.is-collapsible.is-collapsed .code-body::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 76px;
+  background: linear-gradient(to bottom, transparent, var(--bg-code) 92%);
+  pointer-events: none;
+}
+
+.code-fade-bar {
+  display: flex;
+  justify-content: center;
+  padding: 0.45rem 0.8rem;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+}
+
+.code-expand-btn {
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  font-family: inherit;
+  padding: 0.24rem 0.85rem;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.code-expand-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent-line);
+}
+
+.shiki .line.diff-add {
+  display: inline-block;
+  width: 100%;
+  background: rgba(92, 140, 102, 0.14);
+  box-shadow: inset 3px 0 0 #5c8c66;
+}
+
+.shiki .line.diff-remove {
+  display: inline-block;
+  width: 100%;
+  background: rgba(196, 90, 75, 0.14);
+  box-shadow: inset 3px 0 0 #c45a4b;
+}
+
+.shiki .line.line-highlight {
+  display: inline-block;
+  width: 100%;
+  background: rgba(201, 100, 66, 0.12);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+/* Inline Tufte Sidenote Card */
+.sidenote-card {
+  margin: -0.6rem 0 1.4rem;
+  padding: 0.78rem 1rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--accent);
+  background: var(--bg-surface);
+  font-size: 0.88rem;
+  line-height: 1.65;
+  color: var(--text-body);
+}
+
+.sidenote-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--accent);
+  margin-bottom: 0.3rem;
+}
+
+.sidenote-close {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 1rem;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.sidenote-body p:last-child {
+  margin-bottom: 0;
+}
+
+/* 1-Hop Local Graph Card */
+.local-graph-card {
+  margin-top: 1.65rem;
+  padding: 0.85rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+}
+
+.local-graph-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  margin-bottom: 0.4rem;
+}
+
+.local-graph-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.38rem;
+  font-size: 0.68rem;
+  color: var(--text-faint);
+}
+
+.lg-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+.lg-dot.is-out {
+  background: #527a9c;
+}
+.lg-dot.is-in {
+  background: #5c8c66;
+}
+
+.local-graph-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.lg-edge {
+  stroke: var(--border-strong);
+  stroke-width: 1.2;
+}
+.lg-edge.is-both {
+  stroke: var(--accent);
+  stroke-opacity: 0.55;
+}
+
+.lg-center circle {
+  fill: var(--accent);
+}
+.lg-center .lg-halo {
+  fill: var(--accent);
+  opacity: 0.16;
+}
+
+.lg-node circle {
+  transition: transform 0.15s ease, r 0.15s ease;
+}
+.lg-node.is-out circle {
+  fill: #527a9c;
+}
+.lg-node.is-in circle {
+  fill: #5c8c66;
+}
+.lg-node.is-both circle {
+  fill: var(--accent);
+}
+.lg-node text {
+  font-size: 9.2px;
+  fill: var(--text-muted);
+  transition: fill 0.15s ease;
+}
+.lg-node:hover circle {
+  r: 8;
+}
+.lg-node:hover text {
+  fill: var(--accent);
+  font-weight: 600;
+}
+
+.local-graph-caption {
+  margin-top: 0.35rem;
+  padding-top: 0.45rem;
+  border-top: 1px dashed var(--border-subtle);
+  font-size: 0.72rem;
+  line-height: 1.4;
+  color: var(--text-muted);
+  min-height: 2.1em;
+}
+
+/* Learning Roadmap Page */
+.roadmap-container {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 2.2rem 1.25rem 4.5rem;
+}
+
+.roadmap-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1.2rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: 1.5rem;
+}
+
+.roadmap-overall {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  padding: 0.72rem 1.05rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+}
+
+.roadmap-overall-label {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.roadmap-overall strong {
+  font-family: var(--font-serif);
+  font-size: 1.25rem;
+  color: var(--accent);
+}
+
+.roadmap-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-bottom: 2rem;
+}
+
+.roadmap-tab {
+  padding: 0.38rem 0.85rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.roadmap-tab:hover {
+  color: var(--text-strong);
+  border-color: var(--border-strong);
+}
+
+.roadmap-tab.is-active {
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.roadmap-tracks {
+  display: flex;
+  flex-direction: column;
+  gap: 2.6rem;
+}
+
+.roadmap-track-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.roadmap-track-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 1.32rem;
+  color: var(--text-strong);
+}
+
+.roadmap-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.roadmap-track-desc {
+  margin: 0.3rem 0 0;
+  font-size: 0.88rem;
+  color: var(--text-muted);
+}
+
+.roadmap-track-stat {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.roadmap-steps-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 0.95rem;
+}
+
+.roadmap-step-card {
+  display: flex;
+  flex-direction: column;
+  padding: 1.05rem 1.15rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+  transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.roadmap-step-card:hover {
+  border-color: var(--accent-line);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.roadmap-step-card.is-completed {
+  border-color: rgba(92, 140, 102, 0.45);
+}
+
+.roadmap-step-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.45rem;
+}
+
+.roadmap-stage-badge {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.14rem 0.52rem;
+  border-radius: var(--radius-pill);
+  background: var(--bg-surface);
+  color: var(--text-muted);
+}
+
+.roadmap-step-num {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-faint);
+}
+
+.roadmap-step-title {
+  margin: 0 0 0.35rem;
+  font-family: var(--font-serif);
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-strong);
+}
+
+.roadmap-step-desc {
+  flex: 1;
+  margin: 0 0 0.85rem;
+  font-size: 0.84rem;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+.roadmap-step-foot {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  color: var(--text-muted);
+}
+
+.roadmap-step-bar {
+  flex: 1;
+  height: 5px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-surface);
+  overflow: hidden;
+}
+
+.roadmap-step-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: var(--radius-pill);
+  transition: width 0.25s ease;
+}
+
+/* Comments Section */
+.comments-section {
+  margin-top: 2.6rem;
+  padding-top: 1.6rem;
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* Smooth View Transitions fade */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 0.16s;
+}

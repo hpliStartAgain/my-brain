@@ -459,6 +459,10 @@ function remarkMermaidBlocks() {
 }
 
 function rehypeShikiCode(highlighter: Highlighter) {
+  const DIFF_ADD_RE = /\s*(?:\/\/|#|--|;)\s*\[!code \+\+\]\s*$/
+  const DIFF_DEL_RE = /\s*(?:\/\/|#|--|;)\s*\[!code --\]\s*$/
+  const HL_RE = /\s*(?:\/\/|#|--|;)\s*\[!code highlight\]\s*$/
+
   return () => (tree: any) => {
     visit(tree, "element", (node: any, index: number | undefined, parent: any) => {
       if (!parent || index === undefined || node.tagName !== "pre") return
@@ -476,7 +480,27 @@ function rehypeShikiCode(highlighter: Highlighter) {
       const shikiLang = SUPPORTED_LANG_SET.has(mapped) ? mapped : "text"
       const displayLang = rawLang === "text" || rawLang === "plaintext" ? "TEXT" : rawLang.toUpperCase()
 
-      const codeText = hastNodeText(codeChild).replace(/\n$/, "")
+      const rawText = hastNodeText(codeChild).replace(/\n$/, "")
+      const rawLines = rawText.split("\n")
+      const lineAnnotations = new Map<number, "add" | "remove" | "highlight">()
+      const cleanedLines = rawLines.map((ln, idx) => {
+        if (DIFF_ADD_RE.test(ln)) {
+          lineAnnotations.set(idx + 1, "add")
+          return ln.replace(DIFF_ADD_RE, "")
+        }
+        if (DIFF_DEL_RE.test(ln)) {
+          lineAnnotations.set(idx + 1, "remove")
+          return ln.replace(DIFF_DEL_RE, "")
+        }
+        if (HL_RE.test(ln)) {
+          lineAnnotations.set(idx + 1, "highlight")
+          return ln.replace(HL_RE, "")
+        }
+        return ln
+      })
+      const codeText = cleanedLines.join("\n")
+      const lineCount = cleanedLines.length
+
       let renderedHtml: string
       try {
         renderedHtml = highlighter.codeToHtml(codeText, {
@@ -486,14 +510,34 @@ function rehypeShikiCode(highlighter: Highlighter) {
             dark: "vitesse-dark",
           },
           defaultColor: false,
+          transformers:
+            lineAnnotations.size > 0
+              ? [
+                  {
+                    line(lineNode, lineNo) {
+                      const kind = lineAnnotations.get(lineNo)
+                      if (kind === "add") this.addClassToHast(lineNode, "diff-add")
+                      else if (kind === "remove") this.addClassToHast(lineNode, "diff-remove")
+                      else if (kind === "highlight") this.addClassToHast(lineNode, "line-highlight")
+                    },
+                  },
+                ]
+              : undefined,
         })
       } catch {
         renderedHtml = `<pre class="shiki"><code>${escapeHtmlAttr(codeText)}</code></pre>`
       }
 
+      const collapsible = lineCount > 35
+      const blockClass = collapsible ? "code-block is-collapsible is-collapsed" : "code-block"
+      const expandFooter = collapsible
+        ? `<div class="code-fade-bar"><button type="button" class="code-expand-btn" data-expand-code>展开全部代码（共 ${lineCount} 行）</button></div>`
+        : ""
+      const lineMeta = lineCount >= 8 ? `<span class="code-lines">${lineCount} 行</span>` : ""
+
       parent.children[index] = {
         type: "raw",
-        value: `<div class="code-block" data-lang="${escapeHtmlAttr(displayLang)}"><div class="code-header"><span class="code-lang">${escapeHtmlAttr(displayLang)}</span><button type="button" class="code-copy-btn" data-copy-code>复制</button></div>${renderedHtml}</div>`,
+        value: `<div class="${blockClass}" data-lang="${escapeHtmlAttr(displayLang)}" data-lines="${lineCount}"><div class="code-header"><div class="code-header-left"><span class="code-lang">${escapeHtmlAttr(displayLang)}</span>${lineMeta}</div><button type="button" class="code-copy-btn" data-copy-code>复制</button></div><div class="code-body">${renderedHtml}</div>${expandFooter}</div>`,
       }
     })
   }

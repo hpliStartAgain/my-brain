@@ -1,0 +1,252 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro"
+import { getVaultGraph } from "../lib/vault"
+
+const graph = getVaultGraph()
+
+interface TrackStep {
+  title: string
+  folderPath: string
+  stage: "先修筑基" | "核心机理" | "生产实战"
+  desc: string
+}
+
+interface TrackDef {
+  id: string
+  name: string
+  tagline: string
+  accent: string
+  steps: TrackStep[]
+}
+
+const TRACKS: TrackDef[] = [
+  {
+    id: "linux",
+    name: "Linux 内核与系统性能",
+    tagline: "从进程调度、虚拟内存、VFS、网络协议栈一路打通到系统级性能工程与 KVM",
+    accent: "#c96442",
+    steps: [
+      { title: "进程管理与调度器", folderPath: "Linux/进程管理", stage: "先修筑基", desc: "task_struct、CFS/EEVDF 与上下文切换成本" },
+      { title: "虚拟内存与 Slab 分配器", folderPath: "Linux/内存管理", stage: "先修筑基", desc: "多级页表、缺页异常、Page Reclaim 与 OOM" },
+      { title: "文件系统与 Page Cache", folderPath: "Linux/文件系统", stage: "核心机理", desc: "VFS 抽象、脏页回写、Direct IO 与 ext4/xfs" },
+      { title: "网络协议栈与 epoll", folderPath: "Linux/网络协议栈与IO", stage: "核心机理", desc: "sk_buff、TCP 状态机、epoll 唤醒与零拷贝" },
+      { title: "系统性能工程实战", folderPath: "Linux/系统性能工程实战", stage: "生产实战", desc: "USE 方法论、火焰图剖析与生产瓶颈定位" },
+      { title: "KVM 虚拟化与性能工程", folderPath: "Linux/KVM虚拟化与性能工程", stage: "生产实战", desc: "VMX、EPT 二级页表、virtio 数据面与调优" },
+    ],
+  },
+  {
+    id: "distributed",
+    name: "分布式系统与存储引擎",
+    tagline: "掌握异步网络本质、共识协议、事务隔离级别与主流存储内核权衡",
+    accent: "#7d6ba3",
+    steps: [
+      { title: "分布式系统原理与协议", folderPath: "分布式架构/分布式系统原理与协议", stage: "先修筑基", desc: "两将军、FLP、CAP、Paxos、Raft 与 ZAB" },
+      { title: "数据密集型系统架构实战", folderPath: "分布式架构/数据密集型系统架构实战", stage: "核心机理", desc: "存储引擎、复制分片、分布式事务与架构权衡" },
+      { title: "MySQL InnoDB 与 MVCC", folderPath: "中间件/MySQL/MySQL架构与底层原理", stage: "核心机理", desc: "Buffer Pool、Redo/Undo、MVCC 与锁协议" },
+      { title: "etcd 账本与控制面", folderPath: "中间件/ETCD", stage: "核心机理", desc: "Raft 日志、BoltDB MVCC 与大规模 Watch 机制" },
+      { title: "分布式锁深度剖析", folderPath: "分布式架构/分布式锁", stage: "生产实战", desc: "Redis/ZK/DB 锁实现、Fencing Token 与 Redlock 争议" },
+      { title: "Ceph 分布式存储引擎", folderPath: "中间件/Ceph", stage: "生产实战", desc: "CRUSH 算法、PG 状态机、BlueStore 与 RBD 延迟" },
+    ],
+  },
+  {
+    id: "cloud",
+    name: "云原生与 Kubernetes",
+    tagline: "深入控制面对象设计、API Server、调度器以及底层容器与云网络数据面",
+    accent: "#5c8c66",
+    steps: [
+      { title: "Docker 容器与运行时", folderPath: "云原生/Docker", stage: "先修筑基", desc: "Namespace、Cgroups、OverlayFS 与容器安全边界" },
+      { title: "K8s 架构深度剖析", folderPath: "云原生/Kubernetes/Kubernetes架构深度剖析", stage: "先修筑基", desc: "声明式 API 哲学、etcd 状态流转与生产管控" },
+      { title: "K8s API Server 深度解析", folderPath: "云原生/Kubernetes/kubernetes之API Server", stage: "核心机理", desc: "认证鉴权、准入控制、Informer 与 List-Watch" },
+      { title: "K8s 控制器和调度器", folderPath: "云原生/Kubernetes/kubernetes控制器和调度器", stage: "核心机理", desc: "Reconcile 调谐循环、Predicates 与 Priorities" },
+      { title: "K8s 网络原理与 CNI 插件", folderPath: "云原生/Kubernetes/kubernetes网络原理与插件", stage: "生产实战", desc: "veth、Bridge、Overlay、Calico BGP 与 Cilium" },
+      { title: "云网络数据面与故障定位", folderPath: "云原生/云网络数据面与故障定位", stage: "生产实战", desc: "OVS 流表、Conntrack 丢包与跨宿主链路排查" },
+    ],
+  },
+  {
+    id: "ai-sre",
+    name: "可观测性、SRE 与 AI 沙箱",
+    tagline: "从监控指标、日志追踪到生产故障复盘，再走向现代 Coding Agent 与隔离沙箱",
+    accent: "#527a9c",
+    steps: [
+      { title: "指标与 VictoriaMetrics", folderPath: "可观测/指标", stage: "先修筑基", desc: "时序倒排索引、PromQL 与高基数治理" },
+      { title: "日志与 Grafana Loki", folderPath: "可观测/日志", stage: "先修筑基", desc: "Alloy 采集流水线、标签索引与大集群存储" },
+      { title: "CVM 集群可靠性工程", folderPath: "SRE/CVM集群可靠性工程", stage: "核心机理", desc: "宿主机稳定性、Masakari 与 OpenStack 一致性" },
+      { title: "生产故障排查与复盘", folderPath: "SRE/故障排查与复盘", stage: "生产实战", desc: "真实生产事故根因定位全链路拆解" },
+      { title: "Agent 沙箱技术", folderPath: "LLM/Agent沙箱技术", stage: "核心机理", desc: "MicroVM/gVisor/Kata/LSM 六层栈与 Egress 安全" },
+      { title: "Agent 技术与运行范式", folderPath: "LLM/Agent技术", stage: "生产实战", desc: "Tool Use、Context 工程与 Coding Agent 实践" },
+    ],
+  },
+]
+
+function collectFolderSlugs(folderPath: string): { href: string; slugs: string[] } {
+  const f = graph.folders.get(folderPath)
+  if (!f) return { href: "/", slugs: [] }
+  const slugs: string[] = []
+  const walk = (node: typeof f) => {
+    for (const n of node.notes) slugs.push(n.slug)
+    for (const cp of node.childFolders) {
+      const child = graph.folders.get(cp)
+      if (child) walk(child)
+    }
+  }
+  walk(f)
+  return { href: f.introNoteSlug ? `/${f.introNoteSlug}` : f.href, slugs }
+}
+
+const resolvedTracks = TRACKS.map((t) => ({
+  ...t,
+  steps: t.steps.map((s) => {
+    const info = collectFolderSlugs(s.folderPath)
+    return {
+      ...s,
+      href: info.href,
+      slugs: info.slugs,
+    }
+  }),
+}))
+---
+
+<BaseLayout
+  title="系统学习路线图"
+  description="Linux 内核、分布式系统、Kubernetes 与 AI Agent 沙箱基础设施体系化学习路线与个人阅读进度追踪"
+  canonicalPath="/roadmap"
+>
+  <main class="roadmap-container">
+    <nav class="breadcrumbs" aria-label="面包屑">
+      <a href="/">首页</a>
+      <span class="sep">/</span>
+      <span>学习路线图</span>
+    </nav>
+
+    <header class="roadmap-header">
+      <div>
+        <div class="hero-eyebrow">STRUCTURED LEARNING PATHS</div>
+        <h1 class="listing-title">体系化学习路线图</h1>
+        <p style="color:var(--text-muted);max-width:64ch;margin:0.45rem 0 0">
+          按「先修筑基 → 核心机理 → 生产实战」串联主要技术专栏。阅读进度自动与浏览器本地已读记录实时同步。
+        </p>
+      </div>
+      <div class="roadmap-overall" id="roadmap-overall">
+        <span class="roadmap-overall-label">路线总掌握度</span>
+        <strong id="roadmap-overall-pct">0%</strong>
+      </div>
+    </header>
+
+    <div class="roadmap-tabs" role="tablist" aria-label="路线筛选">
+      <button type="button" class="roadmap-tab is-active" data-track-filter="all">全部主线</button>
+      {
+        resolvedTracks.map((t) => (
+          <button type="button" class="roadmap-tab" data-track-filter={t.id}>
+            {t.name}
+          </button>
+        ))
+      }
+    </div>
+
+    <div class="roadmap-tracks">
+      {
+        resolvedTracks.map((track) => {
+          const trackAllSlugs = track.steps.flatMap((s) => s.slugs)
+          return (
+            <section class="roadmap-track" data-track-id={track.id} data-track-slugs={JSON.stringify(trackAllSlugs)}>
+              <div class="roadmap-track-head">
+                <div>
+                  <h2 class="roadmap-track-title">
+                    <span class="roadmap-dot" style={`background:${track.accent}`} />
+                    {track.name}
+                  </h2>
+                  <p class="roadmap-track-desc">{track.tagline}</p>
+                </div>
+                <div class="roadmap-track-stat" data-track-stat>
+                  0 / {trackAllSlugs.length} 篇
+                </div>
+              </div>
+
+              <div class="roadmap-steps-grid">
+                {track.steps.map((step, idx) => (
+                  <a
+                    href={step.href}
+                    class="roadmap-step-card"
+                    data-step-slugs={JSON.stringify(step.slugs)}
+                  >
+                    <div class="roadmap-step-top">
+                      <span class="roadmap-stage-badge">{step.stage}</span>
+                      <span class="roadmap-step-num">STEP {String(idx + 1).padStart(2, "0")}</span>
+                    </div>
+                    <h3 class="roadmap-step-title">{step.title}</h3>
+                    <p class="roadmap-step-desc">{step.desc}</p>
+                    <div class="roadmap-step-foot">
+                      <span data-step-stat>0 / {step.slugs.length} 篇</span>
+                      <div class="roadmap-step-bar">
+                        <div class="roadmap-step-fill" data-step-fill style={`background:${track.accent}`} />
+                      </div>
+                    </div>
+                  </a>
+                ))}
+              </div>
+            </section>
+          )
+        })
+      }
+    </div>
+  </main>
+
+  <script>
+    import { getReadSlugs } from "../scripts/reading-tracker"
+
+    function initRoadmapPage() {
+      const container = document.querySelector(".roadmap-container")
+      if (!container) return
+
+      const readSet = getReadSlugs()
+      const allUnique = new Set<string>()
+      let readUnique = 0
+
+      document.querySelectorAll<HTMLElement>("[data-track-slugs]").forEach((trackEl) => {
+        const slugs: string[] = JSON.parse(trackEl.dataset.trackSlugs || "[]")
+        let done = 0
+        for (const s of slugs) {
+          if (!allUnique.has(s)) {
+            allUnique.add(s)
+            if (readSet.has(s)) readUnique++
+          }
+          if (readSet.has(s)) done++
+        }
+        const statEl = trackEl.querySelector("[data-track-stat]")
+        if (statEl) statEl.textContent = `已读 ${done} / ${slugs.length} 篇`
+      })
+
+      document.querySelectorAll<HTMLElement>("[data-step-slugs]").forEach((stepEl) => {
+        const slugs: string[] = JSON.parse(stepEl.dataset.stepSlugs || "[]")
+        const done = slugs.filter((s) => readSet.has(s)).length
+        const pct = slugs.length > 0 ? Math.round((done / slugs.length) * 100) : 0
+        const statEl = stepEl.querySelector("[data-step-stat]")
+        const fillEl = stepEl.querySelector<HTMLElement>("[data-step-fill]")
+        if (statEl) statEl.textContent = `${done} / ${slugs.length} 篇`
+        if (fillEl) fillEl.style.width = `${pct}%`
+        stepEl.classList.toggle("is-completed", slugs.length > 0 && done === slugs.length)
+      })
+
+      const overallEl = document.getElementById("roadmap-overall-pct")
+      if (overallEl) {
+        const total = allUnique.size
+        const pct = total > 0 ? Math.round((readUnique / total) * 100) : 0
+        overallEl.textContent = `${pct}% (${readUnique}/${total})`
+      }
+
+      const tabs = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-track-filter]"))
+      const sections = Array.from(document.querySelectorAll<HTMLElement>("[data-track-id]"))
+      tabs.forEach((tab) => {
+        tab.addEventListener("click", () => {
+          const target = tab.dataset.trackFilter
+          tabs.forEach((t) => t.classList.toggle("is-active", t === tab))
+          sections.forEach((sec) => {
+            sec.hidden = target !== "all" && sec.dataset.trackId !== target
+          })
+        })
+      })
+    }
+
+    document.addEventListener("astro:page-load", initRoadmapPage)
+  </script>
+</BaseLayout>

@@ -5,8 +5,50 @@ interface PanZoomController {
   destroy: () => void
 }
 
+const SVG_MEM_CACHE = new Map<string, string>()
+const SESSION_PREFIX = "ting-mm:"
+const MAX_MEM_CACHE = 100
+
 function getCurrentTheme(): ThemeMode {
   return document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light"
+}
+
+function hashKey(str: string): string {
+  let h = 5381
+  for (let i = 0; i < str.length; i++) {
+    h = ((h << 5) + h) ^ str.charCodeAt(i)
+  }
+  return (h >>> 0).toString(36)
+}
+
+function getCachedSvg(cacheKey: string): string | null {
+  const mem = SVG_MEM_CACHE.get(cacheKey)
+  if (mem) return mem
+  try {
+    const ss = sessionStorage.getItem(SESSION_PREFIX + cacheKey)
+    if (ss) {
+      SVG_MEM_CACHE.set(cacheKey, ss)
+      return ss
+    }
+  } catch {
+    // ignore
+  }
+  return null
+}
+
+function setCachedSvg(cacheKey: string, svg: string) {
+  if (SVG_MEM_CACHE.size >= MAX_MEM_CACHE) {
+    const firstKey = SVG_MEM_CACHE.keys().next().value
+    if (firstKey !== undefined) SVG_MEM_CACHE.delete(firstKey)
+  }
+  SVG_MEM_CACHE.set(cacheKey, svg)
+  try {
+    if (svg.length < 180_000) {
+      sessionStorage.setItem(SESSION_PREFIX + cacheKey, svg)
+    }
+  } catch {
+    // ignore storage quota errors
+  }
 }
 
 let renderIdCounter = 0
@@ -64,6 +106,44 @@ function configureMermaid(mode: ThemeMode) {
   })
 }
 
+function applySvgSizing(figure: HTMLElement, stage: HTMLElement, svgEl: SVGSVGElement) {
+  figure.classList.remove("is-tall")
+  figure.querySelector(".mermaid-tall-hint")?.remove()
+
+  const vb = svgEl.viewBox?.baseVal
+  const vbW = vb && vb.width > 0 ? vb.width : Number.parseFloat(svgEl.style.maxWidth || "0")
+  const vbH = vb && vb.height > 0 ? vb.height : 0
+
+  svgEl.removeAttribute("width")
+  svgEl.removeAttribute("height")
+
+  if (vbW > 0) {
+    let scale = 1
+    if (vbH > 560 && vbH <= 900) {
+      scale = Math.max(0.75, 560 / vbH)
+    } else if (vbH > 900) {
+      scale = 0.88
+      figure.classList.add("is-tall")
+      const hint = document.createElement("button")
+      hint.type = "button"
+      hint.className = "mermaid-tall-hint"
+      hint.textContent = "纵向架构图较长 · 可在框内滚动浏览，或点击全屏缩放查看 ↗"
+      hint.addEventListener("click", () => {
+        figure.querySelector<HTMLButtonElement>("[data-mermaid-zoom]")?.click()
+      })
+      figure.appendChild(hint)
+    }
+    const targetW = Math.round(vbW * scale)
+    svgEl.style.width = `${targetW}px`
+    svgEl.style.maxWidth = "100%"
+    svgEl.style.height = "auto"
+  } else {
+    svgEl.style.maxWidth = "100%"
+    svgEl.style.height = "auto"
+  }
+  stage.dataset.ready = "true"
+}
+
 async function renderBlock(figure: HTMLElement, mode: ThemeMode) {
   const stage = figure.querySelector<HTMLElement>("[data-mermaid-stage]")
   const sourceEl = figure.querySelector<HTMLScriptElement>("script.mermaid-source")
@@ -73,49 +153,25 @@ async function renderBlock(figure: HTMLElement, mode: ThemeMode) {
   if (!rawSource) return
 
   const normalized = normalizeMermaidSource(rawSource, mode)
+  const cacheKey = `${mode}:${hashKey(normalized)}`
+  const cached = getCachedSvg(cacheKey)
+  if (cached) {
+    stage.innerHTML = cached
+    const svgEl = stage.querySelector("svg") as SVGSVGElement | null
+    if (svgEl) applySvgSizing(figure, stage, svgEl)
+    figure.setAttribute("data-rendered-theme", mode)
+    return
+  }
+
   const id = `mm-svg-${++renderIdCounter}`
 
   try {
     const { svg, bindFunctions } = await mermaid.render(id, normalized)
+    setCachedSvg(cacheKey, svg)
     stage.innerHTML = svg
-    figure.classList.remove("is-tall")
-    figure.querySelector(".mermaid-tall-hint")?.remove()
-
-    const svgEl = stage.querySelector("svg")
+    const svgEl = stage.querySelector("svg") as SVGSVGElement | null
     if (svgEl) {
-      const vb = svgEl.viewBox?.baseVal
-      const vbW = vb && vb.width > 0 ? vb.width : Number.parseFloat(svgEl.style.maxWidth || "0")
-      const vbH = vb && vb.height > 0 ? vb.height : 0
-
-      svgEl.removeAttribute("width")
-      svgEl.removeAttribute("height")
-
-      if (vbW > 0) {
-        let scale = 1
-        if (vbH > 560 && vbH <= 900) {
-          scale = Math.max(0.75, 560 / vbH)
-        } else if (vbH > 900) {
-          scale = 0.88
-          figure.classList.add("is-tall")
-          const hint = document.createElement("button")
-          hint.type = "button"
-          hint.className = "mermaid-tall-hint"
-          hint.textContent = "纵向架构图较长 · 可在框内滚动浏览，或点击全屏缩放查看 ↗"
-          hint.addEventListener("click", () => {
-            figure.querySelector<HTMLButtonElement>("[data-mermaid-zoom]")?.click()
-          })
-          figure.appendChild(hint)
-        }
-        // Keep intrinsic ceiling so narrow vertical graphs never blow up to full prose width
-        const targetW = Math.round(vbW * scale)
-        svgEl.style.width = `${targetW}px`
-        svgEl.style.maxWidth = "100%"
-        svgEl.style.height = "auto"
-      } else {
-        svgEl.style.maxWidth = "100%"
-        svgEl.style.height = "auto"
-      }
-
+      applySvgSizing(figure, stage, svgEl)
       bindFunctions?.(stage)
     }
     figure.setAttribute("data-rendered-theme", mode)
@@ -249,7 +305,7 @@ function attachPanZoom(viewport: HTMLElement, canvas: HTMLElement): PanZoomContr
   }
 }
 
-export function initMermaidRuntime() {
+export function initMermaidRuntime(signal: AbortSignal) {
   const blocks = Array.from(document.querySelectorAll<HTMLElement>("[data-mermaid-block]"))
   if (blocks.length === 0) return
 
@@ -260,9 +316,9 @@ export function initMermaidRuntime() {
   let flushing = false
 
   const flushQueue = async () => {
-    if (flushing) return
+    if (flushing || signal.aborted) return
     flushing = true
-    while (renderQueue.size > 0) {
+    while (renderQueue.size > 0 && !signal.aborted) {
       const next = renderQueue.values().next().value as HTMLElement
       renderQueue.delete(next)
       await renderBlock(next, activeMode)
@@ -271,12 +327,12 @@ export function initMermaidRuntime() {
   }
 
   const enqueue = (el: HTMLElement) => {
+    if (signal.aborted) return
     if (el.getAttribute("data-rendered-theme") === activeMode) return
     renderQueue.add(el)
     void flushQueue()
   }
 
-  // Render visible diagrams lazily as reader scrolls
   if ("IntersectionObserver" in window) {
     const io = new IntersectionObserver(
       (entries) => {
@@ -286,33 +342,61 @@ export function initMermaidRuntime() {
           }
         }
       },
-      { rootMargin: "450px 0px" },
+      { rootMargin: "500px 0px" },
     )
     for (const b of blocks) io.observe(b)
+    signal.addEventListener("abort", () => io.disconnect())
   } else {
     for (const b of blocks) enqueue(b)
   }
 
-  // Re-render rendered diagrams on theme switch
-  window.addEventListener("theme-change", () => {
-    const nextMode = getCurrentTheme()
-    if (nextMode === activeMode) return
-    activeMode = nextMode
-    configureMermaid(activeMode)
+  // Idle pre-warm remaining offscreen diagrams so scrolling feels instant
+  const idleWarm = () => {
     for (const b of blocks) {
-      if (b.hasAttribute("data-rendered-theme")) {
+      if (!signal.aborted && !b.hasAttribute("data-rendered-theme")) {
         enqueue(b)
       }
     }
-  })
+  }
+  if (typeof (window as any).requestIdleCallback === "function") {
+    const idleId = (window as any).requestIdleCallback(idleWarm, { timeout: 2000 })
+    signal.addEventListener("abort", () => (window as any).cancelIdleCallback(idleId))
+  } else {
+    const t = globalThis.setTimeout(idleWarm, 1200)
+    signal.addEventListener("abort", () => globalThis.clearTimeout(t))
+  }
 
-  // Setup modal & button actions
+  window.addEventListener(
+    "theme-change",
+    () => {
+      const nextMode = getCurrentTheme()
+      if (nextMode === activeMode) return
+      activeMode = nextMode
+      configureMermaid(activeMode)
+      for (const b of blocks) {
+        if (b.hasAttribute("data-rendered-theme")) {
+          enqueue(b)
+        }
+      }
+    },
+    { signal },
+  )
+
   const modal = document.getElementById("diagram-modal")
   const viewport = modal?.querySelector<HTMLElement>("[data-modal-viewport]")
   const canvas = modal?.querySelector<HTMLElement>("[data-modal-canvas]")
   let controller: PanZoomController | null = null
 
-  window.addEventListener("diagram-modal-close", () => {
+  window.addEventListener(
+    "diagram-modal-close",
+    () => {
+      controller?.destroy()
+      controller = null
+    },
+    { signal },
+  )
+
+  signal.addEventListener("abort", () => {
     controller?.destroy()
     controller = null
   })
@@ -361,39 +445,55 @@ export function initMermaidRuntime() {
     const stage = figure.querySelector<HTMLElement>("[data-mermaid-stage]")
     const sourceEl = figure.querySelector<HTMLScriptElement>("script.mermaid-source")
 
-    zoomBtn?.addEventListener("click", () => {
-      const svg = stage?.querySelector("svg")
-      if (svg) openModalWithSvg(svg)
-    })
+    zoomBtn?.addEventListener(
+      "click",
+      () => {
+        const svg = stage?.querySelector("svg")
+        if (svg) openModalWithSvg(svg)
+      },
+      { signal },
+    )
 
-    stage?.addEventListener("click", (e) => {
-      if ((e.target as HTMLElement).closest("a")) return
-      const svg = stage.querySelector("svg")
-      if (svg) openModalWithSvg(svg)
-    })
+    stage?.addEventListener(
+      "click",
+      (e) => {
+        if ((e.target as HTMLElement).closest("a")) return
+        const svg = stage.querySelector("svg")
+        if (svg) openModalWithSvg(svg)
+      },
+      { signal },
+    )
 
-    copyBtn?.addEventListener("click", async () => {
-      const raw = (sourceEl?.textContent ?? "").replace(/<\\\/script/gi, "</script").trim()
-      if (!raw) return
-      await navigator.clipboard.writeText(raw)
-      const orig = copyBtn.textContent
-      copyBtn.textContent = "已复制"
-      setTimeout(() => {
-        copyBtn.textContent = orig
-      }, 1500)
-    })
+    copyBtn?.addEventListener(
+      "click",
+      async () => {
+        const raw = (sourceEl?.textContent ?? "").replace(/<\\\/script/gi, "</script").trim()
+        if (!raw) return
+        await navigator.clipboard.writeText(raw)
+        const orig = copyBtn.textContent
+        copyBtn.textContent = "已复制"
+        setTimeout(() => {
+          copyBtn.textContent = orig
+        }, 1500)
+      },
+      { signal },
+    )
 
-    downloadBtn?.addEventListener("click", () => {
-      const svg = stage?.querySelector("svg")
-      if (!svg) return
-      const serializer = new XMLSerializer()
-      const blob = new Blob([serializer.serializeToString(svg)], { type: "image/svg+xml;charset=utf-8" })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement("a")
-      a.href = url
-      a.download = "diagram.svg"
-      a.click()
-      URL.revokeObjectURL(url)
-    })
+    downloadBtn?.addEventListener(
+      "click",
+      () => {
+        const svg = stage?.querySelector("svg")
+        if (!svg) return
+        const serializer = new XMLSerializer()
+        const blob = new Blob([serializer.serializeToString(svg)], { type: "image/svg+xml;charset=utf-8" })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement("a")
+        a.href = url
+        a.download = "diagram.svg"
+        a.click()
+        URL.revokeObjectURL(url)
+      },
+      { signal },
+    )
   }
 }

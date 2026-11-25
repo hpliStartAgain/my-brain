@@ -68,7 +68,7 @@ function renderResults(container: HTMLElement, hits: SearchHit[], query: string)
     .join("")
 }
 
-export function initSearchModal() {
+export function initSearchModal(signal: AbortSignal) {
   const modal = document.getElementById("search-modal")
   const input = document.getElementById("search-input") as HTMLInputElement | null
   const resultsEl = document.getElementById("search-results")
@@ -77,6 +77,11 @@ export function initSearchModal() {
 
   let debounceTimer: number | undefined
   let activeIndex = 0
+
+  signal.addEventListener("abort", () => {
+    window.clearTimeout(debounceTimer)
+    document.body.style.overflow = ""
+  })
 
   const open = () => {
     modal.hidden = false
@@ -95,45 +100,64 @@ export function initSearchModal() {
     document.body.style.overflow = ""
   }
 
-  triggerBtn?.addEventListener("click", open)
-  modal.addEventListener("click", (e) => {
-    if (e.target === modal) close()
-  })
+  triggerBtn?.addEventListener("click", open, { signal })
+  modal.addEventListener(
+    "click",
+    (e) => {
+      if (e.target === modal) close()
+    },
+    { signal },
+  )
 
-  window.addEventListener("keydown", (e) => {
-    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
-      e.preventDefault()
-      if (modal.hidden) open()
-      else close()
-      return
-    }
-    if (modal.hidden) return
-    if (e.key === "Escape") {
-      close()
-      return
-    }
-
-    const items = Array.from(resultsEl.querySelectorAll<HTMLAnchorElement>(".search-result-item"))
-    if (items.length === 0) return
-
-    if (e.key === "ArrowDown") {
-      e.preventDefault()
-      activeIndex = (activeIndex + 1) % items.length
-      items.forEach((el, i) => el.classList.toggle("is-selected", i === activeIndex))
-      items[activeIndex]?.scrollIntoView({ block: "nearest" })
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault()
-      activeIndex = (activeIndex - 1 + items.length) % items.length
-      items.forEach((el, i) => el.classList.toggle("is-selected", i === activeIndex))
-      items[activeIndex]?.scrollIntoView({ block: "nearest" })
-    } else if (e.key === "Enter") {
-      const target = items[activeIndex]
-      if (target) {
-        e.preventDefault()
-        window.location.href = target.href
+  resultsEl.addEventListener(
+    "click",
+    (e) => {
+      if ((e.target as HTMLElement).closest(".search-result-item")) {
+        close()
       }
-    }
-  })
+    },
+    { signal },
+  )
+
+  window.addEventListener(
+    "keydown",
+    (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault()
+        if (modal.hidden) open()
+        else close()
+        return
+      }
+      if (modal.hidden) return
+      if (e.key === "Escape") {
+        close()
+        return
+      }
+
+      const items = Array.from(resultsEl.querySelectorAll<HTMLAnchorElement>(".search-result-item"))
+      if (items.length === 0) return
+
+      if (e.key === "ArrowDown") {
+        e.preventDefault()
+        activeIndex = (activeIndex + 1) % items.length
+        items.forEach((el, i) => el.classList.toggle("is-selected", i === activeIndex))
+        items[activeIndex]?.scrollIntoView({ block: "nearest" })
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault()
+        activeIndex = (activeIndex - 1 + items.length) % items.length
+        items.forEach((el, i) => el.classList.toggle("is-selected", i === activeIndex))
+        items[activeIndex]?.scrollIntoView({ block: "nearest" })
+      } else if (e.key === "Enter") {
+        const target = items[activeIndex]
+        if (target) {
+          e.preventDefault()
+          close()
+          target.click()
+        }
+      }
+    },
+    { signal },
+  )
 
   const runSearch = async (query: string) => {
     const q = query.trim()
@@ -192,10 +216,14 @@ export function initSearchModal() {
     )
   }
 
-  input.addEventListener("input", () => {
-    window.clearTimeout(debounceTimer)
-    debounceTimer = window.setTimeout(() => {
-      void runSearch(input.value)
-    }, 110)
-  })
+  input.addEventListener(
+    "input",
+    () => {
+      window.clearTimeout(debounceTimer)
+      debounceTimer = window.setTimeout(() => {
+        void runSearch(input.value)
+      }, 110)
+    },
+    { signal },
+  )
 }

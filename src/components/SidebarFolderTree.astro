@@ -26,9 +26,10 @@ const isBranchActive = (fPath: string) =>
         <li>
           <a
             href={item.href}
+            data-nav-slug={item.slug}
             class:list={["sidebar-nav-link", { "is-active": item.slug === activeSlug }]}
           >
-            {item.title}
+            <span>{item.title}</span>
           </a>
         </li>
       ))}

@@ -1,6 +1,8 @@
 ---
 import BaseLayout from "./BaseLayout.astro"
 import SidebarFolderTree from "../components/SidebarFolderTree.astro"
+import LocalGraph from "../components/LocalGraph.astro"
+import Comments from "../components/Comments.astro"
 import type { VaultFolder, VaultGraph, VaultNote } from "../lib/vault"
 import type { TocItem } from "../lib/markdown"
 
@@ -15,22 +17,12 @@ const { note, graph, html, toc } = Astro.props
 
 const currentFolder = graph.folders.get(note.folderPath)
 
-// If current folder sits inside a multi-module column (not a top-level domain)
-// and that column has a reasonable size (<= 60 notes), promote sidebar root to
-// the column root so all sibling modules are directly expandable in the sidebar.
 let sidebarRootFolder: VaultFolder | undefined = currentFolder
 if (currentFolder?.parentPath && currentFolder.parentPath.includes("/")) {
   const parentCandidate = graph.folders.get(currentFolder.parentPath)
   if (parentCandidate && parentCandidate.totalNotes <= 60) {
     sidebarRootFolder = parentCandidate
   }
-} else if (
-  currentFolder?.parentPath &&
-  !currentFolder.parentPath.includes("/") &&
-  currentFolder.folderPath.split("/").length === 3
-) {
-  // Depth-3 folders like "LLM/Agent沙箱技术/隔离原语": parent is "LLM/Agent沙箱技术"
-  // (already handled by parentPath.includes("/") above). Keep explicit clarity.
 }
 
 const parentOfRoot = sidebarRootFolder?.parentPath
@@ -52,6 +44,10 @@ const prevNote = currentIndex > 0 ? columnNotes[currentIndex - 1] : null
 const nextNote =
   currentIndex >= 0 && currentIndex < columnNotes.length - 1 ? columnNotes[currentIndex + 1] : null
 
+const outgoingNotes = note.outgoingSlugs
+  .map((s) => graph.bySlug.get(s))
+  .filter((x): x is VaultNote => Boolean(x))
+  .slice(0, 8)
 const backlinkNotes = (graph.backlinks.get(note.slug) ?? []).slice(0, 12)
 
 const pathParts = note.folderPath ? note.folderPath.split("/") : []
@@ -63,6 +59,8 @@ const crumbs = pathParts.map((part, idx) => {
     href: fObj?.href ?? "/",
   }
 })
+
+const sidebarRootKey = sidebarRootFolder?.folderPath || note.folderPath || "root"
 ---
 
 <BaseLayout
@@ -82,7 +80,7 @@ const crumbs = pathParts.map((part, idx) => {
 
   <div class="article-shell">
     <!-- Left Expandable Scoped Column Sidebar -->
-    <aside class="column-sidebar" aria-label="本专栏目录">
+    <aside class="column-sidebar" data-col-root={sidebarRootKey} aria-label="本专栏目录">
       <div class="sidebar-col-head">
         {
           parentOfRoot ? (
@@ -98,8 +96,14 @@ const crumbs = pathParts.map((part, idx) => {
         <a href={sidebarRootFolder?.href ?? "/"} class="sidebar-col-title">
           {sidebarRootFolder?.name || note.domain || "专栏文章"}
         </a>
-        <div class="sidebar-col-count">
-          本栏共 {columnNotes.length} 篇{currentIndex >= 0 ? ` · 当前第 ${currentIndex + 1} 篇` : ""}
+        <div class="sidebar-col-count-row">
+          <span class="sidebar-col-count">
+            本栏共 {columnNotes.length} 篇{currentIndex >= 0 ? ` · 第 ${currentIndex + 1} 篇` : ""}
+          </span>
+          <span id="sidebar-progress-text" class="sidebar-progress-text">已读 0/{columnNotes.length}</span>
+        </div>
+        <div class="sidebar-progress-track" aria-hidden="true">
+          <div id="sidebar-progress-fill" class="sidebar-progress-fill"></div>
         </div>
       </div>
 
@@ -114,8 +118,8 @@ const crumbs = pathParts.map((part, idx) => {
         ) : (
           <ul class="sidebar-nav-list">
             <li>
-              <a href={note.href} class="sidebar-nav-link is-active">
-                {note.title}
+              <a href={note.href} data-nav-slug={note.slug} class="sidebar-nav-link is-active">
+                <span>{note.title}</span>
               </a>
             </li>
           </ul>
@@ -124,7 +128,7 @@ const crumbs = pathParts.map((part, idx) => {
     </aside>
 
     <!-- Center Prose -->
-    <main class="article-main" data-pagefind-body>
+    <main class="article-main" data-pagefind-body data-note-slug={note.slug}>
       <span hidden data-pagefind-meta={`column:${note.folderPath || note.domain || "随笔"}`}></span>
 
       <nav class="breadcrumbs" aria-label="面包屑">
@@ -160,13 +164,35 @@ const crumbs = pathParts.map((part, idx) => {
             <span class="meta-pill">·</span>
             <span class="meta-pill">预计阅读 {note.readingMinutes} 分钟</span>
           </div>
-          <button type="button" id="copy-article-btn" class="copy-article-btn">
-            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
-              <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
-              <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
-            </svg>
-            <span>复制正文</span>
-          </button>
+          <div class="article-header-tools">
+            <button type="button" id="toggle-read-btn" class="copy-article-btn">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2">
+                <path d="M20 6 9 17l-5-5" />
+              </svg>
+              <span>标为已读</span>
+            </button>
+            <button
+              type="button"
+              id="copy-article-btn"
+              class="copy-article-btn"
+              data-md-href={`${note.href}.md`}
+            >
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+                <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+                <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+              </svg>
+              <span>复制 Markdown</span>
+            </button>
+            <a
+              href={`${note.href}.md`}
+              target="_blank"
+              rel="noopener noreferrer"
+              class="copy-article-btn"
+              title="查看纯 Markdown 原文"
+            >
+              MD
+            </a>
+          </div>
         </div>
       </header>
 
@@ -205,13 +231,15 @@ const crumbs = pathParts.map((part, idx) => {
           </nav>
         )
       }
+
+      <Comments />
     </main>
 
-    <!-- Right Sticky TOC -->
-    <aside class="toc-sidebar" aria-label="文章大纲">
+    <!-- Right Sticky TOC + 1-Hop Local Graph -->
+    <aside class="toc-sidebar" aria-label="文章大纲与关联图谱">
       {
         toc.length > 0 && (
-          <>
+          <div class="toc-block">
             <div class="toc-heading">本页大纲</div>
             <ul class="toc-list">
               {toc.map((item) => (
@@ -222,9 +250,11 @@ const crumbs = pathParts.map((part, idx) => {
                 </li>
               ))}
             </ul>
-          </>
+          </div>
         )
       }
+
+      <LocalGraph centerTitle={note.title} outgoing={outgoingNotes} incoming={backlinkNotes} />
     </aside>
   </div>
 </BaseLayout>
